@@ -1,0 +1,49 @@
+FROM php:8.4-cli-alpine
+
+RUN apk add --no-cache \
+    libpq-dev \
+    libzip-dev \
+    libxml2-dev \
+    oniguruma-dev \
+    zip \
+    unzip \
+    git \
+    curl \
+    freetype-dev \
+    libjpeg-turbo-dev \
+    libpng-dev \
+    && docker-php-ext-configure gd --with-freetype --with-jpeg \
+    && docker-php-ext-install \
+        pdo \
+        pdo_pgsql \
+        zip \
+        mbstring \
+        bcmath \
+        pcntl \
+        xml \
+        dom \
+        gd \
+        fileinfo
+
+RUN curl -sS https://getcomposer.org/installer | php -- \
+    --install-dir=/usr/local/bin --filename=composer
+
+WORKDIR /var/www/html
+
+COPY composer.json composer.lock ./
+RUN composer install --no-dev --optimize-autoloader --no-interaction --no-scripts
+
+COPY . .
+
+RUN composer dump-autoload --optimize
+
+RUN mkdir -p storage/framework/sessions storage/framework/views \
+        storage/framework/cache storage/logs bootstrap/cache \
+    && chmod -R 775 storage bootstrap/cache
+
+COPY docker-entrypoint.sh /usr/local/bin/docker-entrypoint.sh
+RUN chmod +x /usr/local/bin/docker-entrypoint.sh
+
+EXPOSE 8000
+
+ENTRYPOINT ["/usr/local/bin/docker-entrypoint.sh"]

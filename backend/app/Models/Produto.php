@@ -1,0 +1,45 @@
+<?php
+declare(strict_types=1);
+
+namespace App\Models;
+
+use App\Tenancy\HasTenantScope;
+use Illuminate\Database\Eloquent\Model;
+use Illuminate\Support\Str;
+
+class Produto extends Model
+{
+    use HasTenantScope;
+
+    protected $table = 'produtos';
+    protected $primaryKey = 'id';
+    public $incrementing = false;
+    protected $keyType = 'string';
+    public $timestamps = false;
+
+    protected $fillable = [
+        'nome', 'sku', 'categoria', 'unidade',
+        'qty_atual', 'qty_minima', 'preco_custo', 'preco_venda', 'ativo', 'oficina_id',
+    ];
+
+    protected $casts = [
+        'ativo'       => 'boolean',
+        'criado_em'   => 'datetime',
+        'preco_custo' => 'float',
+        'preco_venda' => 'float',
+    ];
+
+    protected static function boot(): void
+    {
+        parent::boot();
+        static::creating(fn($m) => $m->id = $m->id ?: (string) Str::uuid());
+    }
+
+    public function getStatusEstoqueAttribute(): string
+    {
+        if ($this->qty_atual <= 0)                       return 'SEM_ESTOQUE';
+        if ($this->qty_atual < $this->qty_minima * 0.4) return 'CRITICO';
+        if ($this->qty_atual < $this->qty_minima)        return 'BAIXO';
+        return 'NORMAL';
+    }
+}
