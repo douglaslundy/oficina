@@ -19,6 +19,7 @@ const NAV_ITEMS: NavItem[] = [
   { href: '/agendamentos',     label: 'Agendamento',       icon: '📅' },
   { href: '/fiscal/emitir',    label: 'Emitir NF',         icon: '🧾' },
   { href: '/fiscal/historico', label: 'Histórico NF',      icon: '📋' },
+  { href: '/relatorios',       label: 'Relatórios',        icon: '📈' },
   { href: '/usuarios',         label: 'Usuários',          icon: '👤' },
   { href: '/empresa',          label: 'Empresa',           icon: '🏢' },
   { href: '/configuracoes',    label: 'Configurações',     icon: '⚙️' },
