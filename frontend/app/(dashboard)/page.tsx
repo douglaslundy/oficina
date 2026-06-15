@@ -63,6 +63,7 @@ export default function DashboardPage() {
           value={data.stats.clientes_ativos}
           icon="👥"
           color="var(--info)"
+          href="/clientes"
         />
         <StatCard
           title="Dívidas em Aberto"
@@ -70,12 +71,14 @@ export default function DashboardPage() {
           icon="⚠"
           color="var(--danger)"
           subtitle="Total em débito"
+          href="/clientes?status=DEVEDOR,DIVIDA_VENCIDA"
         />
         <StatCard
           title="Faturamento do Mês"
           value={formatarMoeda(data.stats.faturamento_mes)}
           icon="💰"
           color="var(--success)"
+          href="/os?status=CONCLUIDA"
         />
         <StatCard
           title="NF Emitidas"
@@ -83,6 +86,7 @@ export default function DashboardPage() {
           icon="🧾"
           color="var(--info)"
           subtitle="Este mês"
+          href="/fiscal/historico"
         />
       </div>
 

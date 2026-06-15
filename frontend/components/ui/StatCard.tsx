@@ -1,17 +1,26 @@
+import Link from 'next/link'
+
 interface StatCardProps {
   title: string
   value: string | number
   icon: string
   color: string
   subtitle?: string
+  href?: string
 }
 
-export function StatCard({ title, value, icon, color, subtitle }: StatCardProps) {
-  return (
-    <div style={{
-      background: 'var(--card)', borderRadius: 12, border: '1px solid var(--border)',
-      padding: 24, position: 'relative', overflow: 'hidden',
-    }}>
+export function StatCard({ title, value, icon, color, subtitle, href }: StatCardProps) {
+  const inner = (
+    <div
+      style={{
+        background: 'var(--card)', borderRadius: 12, border: '1px solid var(--border)',
+        padding: 24, position: 'relative', overflow: 'hidden',
+        cursor: href ? 'pointer' : 'default',
+        transition: href ? 'border-color 0.15s' : undefined,
+      }}
+      onMouseEnter={href ? e => { (e.currentTarget as HTMLDivElement).style.borderColor = color } : undefined}
+      onMouseLeave={href ? e => { (e.currentTarget as HTMLDivElement).style.borderColor = 'var(--border)' } : undefined}
+    >
       <div style={{ position: 'absolute', top: 0, left: 0, right: 0, height: 2, background: color }} />
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
         <div>
@@ -23,4 +32,13 @@ export function StatCard({ title, value, icon, color, subtitle }: StatCardProps)
       </div>
     </div>
   )
+
+  if (href) {
+    return (
+      <Link href={href} style={{ textDecoration: 'none', display: 'block' }}>
+        {inner}
+      </Link>
+    )
+  }
+  return inner
 }
