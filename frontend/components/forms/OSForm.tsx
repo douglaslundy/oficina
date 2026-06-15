@@ -96,20 +96,28 @@ export function OSForm({ initialData, onSuccess }: OSFormProps) {
   const [veiculos, setVeiculos] = useState<Veiculo[]>([])
   const [veiculoManual, setVeiculoManual] = useState(false)
 
+  const formItens: OsItem[] = (initialData?.itens ?? []).map(i => ({
+    tipo: i.tipo,
+    produto_id: i.produto_id,
+    descricao: i.descricao,
+    quantidade: i.quantidade,
+    valor_unitario: i.valor_unitario,
+  }))
+
   const { register, handleSubmit, control, watch, setValue, formState: { isSubmitting } } = useForm<OSFormData>({
     defaultValues: {
-      status: 'ABERTA',
-      venda_a_prazo: false,
-      itens: [],
-      ...initialData,
-      // itens from API have extra fields; cast to form shape
-      itens: (initialData?.itens ?? []).map(i => ({
-        tipo: i.tipo,
-        produto_id: i.produto_id,
-        descricao: i.descricao,
-        quantidade: i.quantidade,
-        valor_unitario: i.valor_unitario,
-      })),
+      status: initialData?.status ?? 'ABERTA',
+      cliente_id: initialData?.cliente_id ?? '',
+      mecanico_id: initialData?.mecanico_id ?? '',
+      veiculo_descricao: initialData?.veiculo_descricao ?? '',
+      veiculo_placa: initialData?.veiculo_placa ?? '',
+      problema_relatado: initialData?.problema_relatado ?? '',
+      forma_pagamento: initialData?.forma_pagamento ?? '',
+      prazo_entrega: initialData?.prazo_entrega ?? '',
+      valor_pago: initialData?.valor_pago ?? 0,
+      venda_a_prazo: initialData?.venda_a_prazo ?? false,
+      prazo_pagamento_dias: initialData?.prazo_pagamento_dias,
+      itens: formItens,
     },
   })
 
