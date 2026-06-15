@@ -125,4 +125,46 @@ class ClienteStatusServiceTest extends TestCase
         $this->assertSame('REGULAR', $statusRegular);
         $this->assertSame('REGULAR', $cliente->fresh()->status);
     }
+
+    public function test_status_divida_vencida(): void
+    {
+        $cliente = $this->criarCliente();
+
+        $this->criarOs([
+            'cliente_id'              => $cliente->id,
+            'status'                  => 'CONCLUIDA',
+            'valor_total'             => 600,
+            'valor_pago'              => 0,
+            'venda_a_prazo'           => true,
+            'prazo_pagamento_dias'    => 30,
+            'data_vencimento_pagamento' => now()->subDays(1)->toDateString(),
+        ]);
+
+        $resultado = $this->service->recalcular($cliente->id);
+
+        $this->assertSame('DIVIDA_VENCIDA', $resultado);
+        $this->assertSame('DIVIDA_VENCIDA', $cliente->fresh()->status);
+    }
+
+    public function test_devedor_nao_vencido_permanece_devedor(): void
+    {
+        $cliente = $this->criarCliente();
+
+        // Venda a prazo ainda dentro do prazo (vence amanhã)
+        $this->criarOs([
+            'cliente_id'              => $cliente->id,
+            'status'                  => 'CONCLUIDA',
+            'valor_total'             => 500,
+            'valor_pago'              => 0,
+            'venda_a_prazo'           => true,
+            'prazo_pagamento_dias'    => 30,
+            'data_vencimento_pagamento' => now()->addDays(1)->toDateString(),
+        ]);
+
+        $resultado = $this->service->recalcular($cliente->id);
+
+        // Dentro do prazo → DEVEDOR, não DIVIDA_VENCIDA
+        $this->assertSame('DEVEDOR', $resultado);
+        $this->assertSame('DEVEDOR', $cliente->fresh()->status);
+    }
 }
