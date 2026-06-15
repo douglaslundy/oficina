@@ -22,6 +22,7 @@ const NAV_ITEMS: NavItem[] = [
   { href: '/relatorios',       label: 'Relatórios',        icon: '📈' },
   { href: '/usuarios',         label: 'Usuários',          icon: '👤' },
   { href: '/empresa',          label: 'Empresa',           icon: '🏢' },
+  { href: '/auditoria',        label: 'Auditoria',         icon: '🔍' },
   { href: '/configuracoes',    label: 'Configurações',     icon: '⚙️' },
 ]
 

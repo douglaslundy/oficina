@@ -1,6 +1,7 @@
 'use client'
 
 import { useState, useEffect, useCallback } from 'react'
+import Link from 'next/link'
 import saasApi from '@/lib/saas-api'
 
 // ─── Types ────────────────────────────────────────────────────────────────────
@@ -568,7 +569,7 @@ export default function OficinasPage() {
     fetchOficinas(page)
   }
 
-  const TABLE_COLS = ['Nome', 'CNPJ', 'Plano', 'Status', 'Usuários', 'OS/mês', 'Ações']
+  const TABLE_COLS = ['Nome', 'CNPJ', 'Plano', 'Status', 'Usuários', 'OS/mês', 'Ações', '']
 
   return (
     <>
@@ -955,6 +956,12 @@ export default function OficinasPage() {
                           ) : (
                             <span style={{ color: 'var(--muted)', fontSize: 13 }}>—</span>
                           )}
+                        </td>
+                        <td style={{ padding: '12px 16px' }}>
+                          <Link href={`/saas-admin/oficinas/${oficina.id}`}
+                            style={{ fontSize: 13, color: 'var(--info)', textDecoration: 'none', fontWeight: 600 }}>
+                            Detalhes →
+                          </Link>
                         </td>
                       </tr>
                     )

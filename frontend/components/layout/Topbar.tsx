@@ -17,6 +17,7 @@ const BREADCRUMBS: Record<string, string> = {
   '/empresa':             'Empresa',
   '/configuracoes':       'Configurações',
   '/relatorios':          'Relatórios',
+  '/auditoria':           'Auditoria',
 }
 
 const ACTION_BUTTONS: Record<string, { label: string; href: string }> = {
