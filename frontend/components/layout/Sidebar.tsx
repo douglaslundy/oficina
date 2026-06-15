@@ -28,9 +28,12 @@ const NAV_ITEMS: NavItem[] = [
 interface SidebarProps {
   clientesDevedores?: number
   produtosAlerta?: number
+  isMobile?: boolean
+  isOpen?: boolean
+  onClose?: () => void
 }
 
-export function Sidebar({ clientesDevedores = 0, produtosAlerta = 0 }: SidebarProps) {
+export function Sidebar({ clientesDevedores = 0, produtosAlerta = 0, isMobile = false, isOpen = false, onClose }: SidebarProps) {
   const pathname = usePathname()
   const { logout, getUser } = useAuth()
   const [user, setUser] = useState<AuthUser | null>(null)
@@ -52,6 +55,8 @@ export function Sidebar({ clientesDevedores = 0, produtosAlerta = 0 }: SidebarPr
       width: 230, height: '100vh', position: 'fixed', left: 0, top: 0,
       background: 'var(--surface)', borderRight: '1px solid var(--border)',
       display: 'flex', flexDirection: 'column', zIndex: 100,
+      transform: isMobile ? (isOpen ? 'translateX(0)' : 'translateX(-100%)') : 'translateX(0)',
+      transition: 'transform 0.25s ease',
     }}>
       {/* Logo */}
       <div style={{ padding: '20px 20px 16px', borderBottom: '1px solid var(--border)' }}>
@@ -69,7 +74,7 @@ export function Sidebar({ clientesDevedores = 0, produtosAlerta = 0 }: SidebarPr
         {itemsWithBadges.map(item => {
           const active = pathname === item.href || (item.href !== '/' && pathname.startsWith(item.href))
           return (
-            <Link key={item.href} href={item.href}
+            <Link key={item.href} href={item.href} onClick={isMobile ? onClose : undefined}
               style={{
                 display: 'flex', alignItems: 'center', gap: 10,
                 padding: '9px 16px', textDecoration: 'none',

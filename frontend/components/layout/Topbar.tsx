@@ -15,17 +15,24 @@ const BREADCRUMBS: Record<string, string> = {
   '/usuarios':            'Usuários',
   '/empresa':             'Empresa',
   '/configuracoes':       'Configurações',
+  '/relatorios':          'Relatórios',
 }
 
 const ACTION_BUTTONS: Record<string, { label: string; href: string }> = {
   '/clientes':         { label: '+ Novo Cliente', href: '/clientes/novo' },
   '/produtos':         { label: '+ Novo Produto', href: '/produtos/novo' },
   '/os':               { label: '+ Nova OS',      href: '/os/nova' },
+  '/relatorios':       { label: 'Exportar XLSX',  href: '/relatorios?export=true' },
   '/usuarios':         { label: '+ Novo Usuário', href: '/usuarios/novo' },
   '/fiscal/historico': { label: 'Emitir NF',      href: '/fiscal/emitir' },
 }
 
-export function Topbar() {
+interface TopbarProps {
+  onMenuClick?: () => void
+  isMobile?: boolean
+}
+
+export function Topbar({ onMenuClick, isMobile = false }: TopbarProps) {
   const pathname = usePathname()
   const breadcrumb = BREADCRUMBS[pathname] ?? pathname.split('/').filter(Boolean).join(' / ')
   const action = ACTION_BUTTONS[pathname]
@@ -37,6 +44,18 @@ export function Topbar() {
       display: 'flex', alignItems: 'center', justifyContent: 'space-between',
       padding: '0 24px', position: 'sticky', top: 0, zIndex: 50,
     }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+        {isMobile && (
+          <button
+            onClick={onMenuClick}
+            style={{
+              background: 'none', border: 'none', color: 'var(--muted)',
+              cursor: 'pointer', fontSize: 20, padding: '4px 8px', lineHeight: 1,
+            }}
+          >
+            ☰
+          </button>
+        )}
       <nav style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
         {breadcrumb.split(' / ').map((part, i, arr) => (
           <span key={i} style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
@@ -50,6 +69,7 @@ export function Topbar() {
           </span>
         ))}
       </nav>
+      </div>
       {action && (
         <Link href={action.href} className="font-display"
           style={{
