@@ -152,9 +152,10 @@ Route::middleware(['tenant', 'auth:sanctum', 'role:ADMIN,FINANCEIRO'])->group(fu
 
 // ─── Usuários — somente ADMIN ─────────────────────────────────────────────────
 Route::middleware(['tenant', 'auth:sanctum', 'role:ADMIN'])->group(function () {
-    Route::get('usuarios',      [UsuarioController::class, 'index']);
-    Route::post('usuarios',     [UsuarioController::class, 'store']);
-    Route::put('usuarios/{id}', [UsuarioController::class, 'update']);
+    Route::get('usuarios',          [UsuarioController::class, 'index']);
+    Route::get('usuarios/{id}',     [UsuarioController::class, 'show']);
+    Route::post('usuarios',         [UsuarioController::class, 'store']);
+    Route::put('usuarios/{id}',     [UsuarioController::class, 'update']);
 });
 
 // ─── Configurações — somente ADMIN ───────────────────────────────────────────

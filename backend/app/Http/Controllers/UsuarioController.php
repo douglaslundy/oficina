@@ -20,6 +20,12 @@ class UsuarioController extends Controller
         return response()->json(['data' => $users]);
     }
 
+    public function show(string $id): JsonResponse
+    {
+        $usuario = Usuario::findOrFail($id);
+        return response()->json(['data' => $usuario->only(['id', 'nome', 'email', 'cpf', 'telefone', 'role', 'status', 'ultimo_acesso'])]);
+    }
+
     public function store(Request $request): JsonResponse
     {
         $this->planLimit->verificarLimiteUsuarios();

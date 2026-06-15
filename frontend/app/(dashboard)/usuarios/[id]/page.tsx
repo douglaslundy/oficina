@@ -32,12 +32,9 @@ export default function UsuarioDetailPage() {
 
   const fetchUsuario = () => {
     setLoading(true)
-    api.get('/usuarios')
-      .then(r => {
-        const u = (r.data.data as Usuario[]).find(u => u.id === id)
-        setUsuario(u ?? null)
-      })
-      .catch(() => {})
+    api.get(`/usuarios/${id}`)
+      .then(r => setUsuario(r.data.data as Usuario))
+      .catch(() => setUsuario(null))
       .finally(() => setLoading(false))
   }
 
