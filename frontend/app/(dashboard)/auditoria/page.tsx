@@ -43,9 +43,10 @@ interface Usuario {
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
 const EVENTO_CONFIG: Record<string, { label: string; bg: string; color: string }> = {
-  created: { label: 'Criado',    bg: 'rgba(67,160,71,.15)',  color: 'var(--success)' },
-  updated: { label: 'Alterado',  bg: 'rgba(30,136,229,.15)', color: 'var(--info)'    },
-  deleted: { label: 'Excluído',  bg: 'rgba(229,57,53,.15)',  color: 'var(--danger)'  },
+  created: { label: 'Criado',       bg: 'rgba(67,160,71,.15)',   color: 'var(--success)' },
+  updated: { label: 'Alterado',     bg: 'rgba(30,136,229,.15)',  color: 'var(--info)'    },
+  deleted: { label: 'Excluído',     bg: 'rgba(229,57,53,.15)',   color: 'var(--danger)'  },
+  viewed:  { label: 'Visualizado',  bg: 'rgba(245,166,35,.12)',  color: 'var(--accent)'  },
 }
 
 function eventoCfg(evento: string | null) {
@@ -69,6 +70,7 @@ const MODELOS = [
   { value: 'os',          label: 'Ordem de Serviço' },
   { value: 'nota_fiscal', label: 'Nota Fiscal' },
   { value: 'usuario',     label: 'Usuário' },
+  { value: 'veiculo',     label: 'Veículo' },
 ]
 
 const EVENTOS = [
@@ -76,6 +78,7 @@ const EVENTOS = [
   { value: 'created', label: 'Criado' },
   { value: 'updated', label: 'Alterado' },
   { value: 'deleted', label: 'Excluído' },
+  { value: 'viewed',  label: 'Visualizado' },
 ]
 
 // ─── DiffTable component ───────────────────────────────────────────────────────

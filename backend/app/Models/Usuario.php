@@ -39,6 +39,7 @@ class Usuario extends Authenticatable
         return LogOptions::defaults()
             ->logOnly(['nome', 'email', 'role', 'status'])
             ->logOnlyDirty()
+            ->dontLogEmptyChanges()
             ->useLogName(TenancyContext::getSlug() ?? 'default');
     }
 

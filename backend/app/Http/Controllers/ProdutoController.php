@@ -5,6 +5,7 @@ namespace App\Http\Controllers;
 
 use App\Http\Resources\ProdutoResource;
 use App\Models\Produto;
+use App\Tenancy\TenancyContext;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Http\Resources\Json\AnonymousResourceCollection;
@@ -64,7 +65,16 @@ class ProdutoController extends Controller
 
     public function show(string $id): ProdutoResource
     {
-        return new ProdutoResource(Produto::findOrFail($id));
+        $produto = Produto::findOrFail($id);
+
+        activity()
+            ->performedOn($produto)
+            ->causedBy(auth()->user())
+            ->event('viewed')
+            ->useLog(TenancyContext::getSlug() ?? 'default')
+            ->log('viewed');
+
+        return new ProdutoResource($produto);
     }
 
     public function update(Request $request, string $id): ProdutoResource

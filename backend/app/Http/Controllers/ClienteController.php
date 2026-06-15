@@ -8,6 +8,7 @@ use App\Models\Cliente;
 use App\Rules\Cnpj;
 use App\Rules\Cpf;
 use App\Services\ClienteStatusService;
+use App\Tenancy\TenancyContext;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Http\Resources\Json\AnonymousResourceCollection;
@@ -72,7 +73,16 @@ class ClienteController extends Controller
 
     public function show(string $id): ClienteResource
     {
-        return new ClienteResource(Cliente::with('veiculos')->findOrFail($id));
+        $cliente = Cliente::with('veiculos')->findOrFail($id);
+
+        activity()
+            ->performedOn($cliente)
+            ->causedBy(auth()->user())
+            ->event('viewed')
+            ->useLog(TenancyContext::getSlug() ?? 'default')
+            ->log('viewed');
+
+        return new ClienteResource($cliente);
     }
 
     public function update(Request $request, string $id): ClienteResource

@@ -28,6 +28,7 @@ class AuditController extends Controller
                 'os'            => \App\Models\OrdemServico::class,
                 'nota_fiscal'   => \App\Models\NotaFiscal::class,
                 'usuario'       => \App\Models\Usuario::class,
+                'veiculo'       => \App\Models\Veiculo::class,
             ];
             $class = $modelMap[$request->query('modelo')] ?? null;
             if ($class) {
@@ -82,7 +83,7 @@ class AuditController extends Controller
         $subjectLabel = $this->subjectLabel($a->subject_type ?? '');
         $causerNome   = $a->causer?->nome ?? 'Sistema';
 
-        $properties = $a->properties?->toArray() ?? [];
+        $properties = $a->attribute_changes?->toArray() ?? [];
         $old        = $properties['old'] ?? [];
         $new        = $properties['attributes'] ?? [];
 
@@ -113,7 +114,7 @@ class AuditController extends Controller
 
         if ($full) {
             $base['diff'] = $diff;
-            $base['propriedades'] = $properties;
+            $base['propriedades'] = $properties; // já lê de attribute_changes
         }
 
         return $base;
@@ -127,6 +128,7 @@ class AuditController extends Controller
             \App\Models\OrdemServico::class  => 'Ordem de Serviço',
             \App\Models\NotaFiscal::class    => 'Nota Fiscal',
             \App\Models\Usuario::class       => 'Usuário',
+            \App\Models\Veiculo::class       => 'Veículo',
             default                          => class_basename($class),
         };
     }

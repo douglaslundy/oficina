@@ -34,6 +34,7 @@ class Cliente extends Model
         return LogOptions::defaults()
             ->logFillable()
             ->logOnlyDirty()
+            ->dontLogEmptyChanges()
             ->useLogName(TenancyContext::getSlug() ?? 'default');
     }
 

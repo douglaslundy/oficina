@@ -8,6 +8,7 @@ use App\Models\OrdemServico;
 use App\Services\ClienteStatusService;
 use App\Services\EstoqueService;
 use App\Services\PlanLimitService;
+use App\Tenancy\TenancyContext;
 use Barryvdh\DomPDF\Facade\Pdf;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
@@ -105,9 +106,16 @@ class OrdemServicoController extends Controller
 
     public function show(string $id): OrdemServicoResource
     {
-        return new OrdemServicoResource(
-            OrdemServico::with(['cliente', 'mecanico', 'itens.produto'])->findOrFail($id)
-        );
+        $os = OrdemServico::with(['cliente', 'mecanico', 'itens.produto'])->findOrFail($id);
+
+        activity()
+            ->performedOn($os)
+            ->causedBy(auth()->user())
+            ->event('viewed')
+            ->useLog(TenancyContext::getSlug() ?? 'default')
+            ->log('viewed');
+
+        return new OrdemServicoResource($os);
     }
 
     public function update(Request $request, string $id): OrdemServicoResource

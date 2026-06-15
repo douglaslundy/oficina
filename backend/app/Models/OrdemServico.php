@@ -44,6 +44,7 @@ class OrdemServico extends Model
         return LogOptions::defaults()
             ->logOnly(['status', 'valor_total', 'valor_pago', 'forma_pagamento'])
             ->logOnlyDirty()
+            ->dontLogEmptyChanges()
             ->useLogName(TenancyContext::getSlug() ?? 'default');
     }
 
