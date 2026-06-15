@@ -4,12 +4,14 @@ declare(strict_types=1);
 namespace App\Http\Controllers;
 
 use App\Models\Usuario;
+use App\Services\PlanLimitService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Hash;
 
 class UsuarioController extends Controller
 {
+    public function __construct(private PlanLimitService $planLimit) {}
     public function index(Request $request): JsonResponse
     {
         $query = Usuario::query();
@@ -20,6 +22,8 @@ class UsuarioController extends Controller
 
     public function store(Request $request): JsonResponse
     {
+        $this->planLimit->verificarLimiteUsuarios();
+
         $validated = $request->validate([
             'nome'     => ['required', 'string', 'max:120'],
             'email'    => ['required', 'email', 'unique:usuarios,email'],

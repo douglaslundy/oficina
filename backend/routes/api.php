@@ -13,6 +13,7 @@ use App\Http\Controllers\NotaFiscalController;
 use App\Http\Controllers\OrdemServicoController;
 use App\Http\Controllers\ProdutoController;
 use App\Http\Controllers\AuditController;
+use App\Http\Controllers\PlanController;
 use App\Http\Controllers\RelatorioController;
 use App\Http\Controllers\UsuarioController;
 use App\Http\Controllers\VeiculoController;
@@ -82,7 +83,8 @@ Route::middleware(['tenant', 'auth:sanctum'])->prefix('auth')->group(function ()
 
 // ─── Dashboard — todos os roles ───────────────────────────────────────────────
 Route::middleware(['tenant', 'auth:sanctum'])->group(function () {
-    Route::get('dashboard', [DashboardController::class, 'index']);
+    Route::get('dashboard',      [DashboardController::class, 'index']);
+    Route::get('plano/limites',  [PlanController::class, 'limites']);
 });
 
 // ─── Clientes — leitura: todos; escrita: ADMIN, ATENDENTE ────────────────────

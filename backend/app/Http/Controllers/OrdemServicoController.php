@@ -7,6 +7,7 @@ use App\Http\Resources\OrdemServicoResource;
 use App\Models\OrdemServico;
 use App\Services\ClienteStatusService;
 use App\Services\EstoqueService;
+use App\Services\PlanLimitService;
 use Barryvdh\DomPDF\Facade\Pdf;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
@@ -17,7 +18,8 @@ class OrdemServicoController extends Controller
 {
     public function __construct(
         private readonly EstoqueService $estoqueService,
-        private readonly ClienteStatusService $clienteStatusService
+        private readonly ClienteStatusService $clienteStatusService,
+        private readonly PlanLimitService $planLimit,
     ) {}
 
     public function index(Request $request): AnonymousResourceCollection
@@ -55,6 +57,8 @@ class OrdemServicoController extends Controller
 
     public function store(Request $request): JsonResponse
     {
+        $this->planLimit->verificarLimiteOsMensal();
+
         $validated = $request->validate([
             'cliente_id'              => ['required', 'string', 'exists:clientes,id'],
             'mecanico_id'             => ['nullable', 'string', 'exists:usuarios,id'],

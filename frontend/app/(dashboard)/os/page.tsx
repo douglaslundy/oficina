@@ -4,6 +4,7 @@ import { useRouter } from 'next/navigation'
 import { DataTable, Column } from '@/components/ui/DataTable'
 import { StatusPill } from '@/components/ui/StatusPill'
 import { formatarMoeda, formatarData } from '@/lib/formatters'
+import { usePlanLimites } from '@/hooks/usePlanLimites'
 import api from '@/lib/api'
 
 interface OS {
@@ -25,11 +26,29 @@ const I: React.CSSProperties = {
 
 const STATUS_OPTIONS = ['ABERTA', 'EM_ANDAMENTO', 'AGUARDANDO_PECAS', 'CONCLUIDA', 'CANCELADA']
 
+function PlanUsageBar({ atual, limite, label }: { atual: number; limite: number; label: string }) {
+  if (limite === -1) return null
+  const pct = Math.min(100, Math.round((atual / limite) * 100))
+  const color = pct >= 100 ? 'var(--danger)' : pct >= 80 ? 'var(--accent)' : 'var(--success)'
+  return (
+    <div style={{ marginBottom: 16, padding: '12px 16px', borderRadius: 10, background: 'var(--card)', border: '1px solid var(--border)', maxWidth: 380 }}>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
+        <span style={{ color: 'var(--muted)', fontSize: 13 }}>{label}</span>
+        <span className="font-mono" style={{ fontSize: 13, color, fontWeight: 600 }}>{atual} / {limite}</span>
+      </div>
+      <div style={{ height: 6, borderRadius: 3, background: 'var(--border)', overflow: 'hidden' }}>
+        <div style={{ height: '100%', width: `${pct}%`, borderRadius: 3, background: color, transition: 'width .4s ease' }} />
+      </div>
+    </div>
+  )
+}
+
 export default function OSPage() {
   const router = useRouter()
   const [os, setOs] = useState<OS[]>([])
   const [loading, setLoading] = useState(true)
   const [search, setSearch] = useState('')
+  const { limites } = usePlanLimites()
   const [status, setStatus] = useState('')
   const [dataInicio, setDataInicio] = useState('')
   const [dataFim, setDataFim] = useState('')
@@ -68,6 +87,10 @@ export default function OSPage() {
       <h1 className="font-display" style={{ fontSize: 28, fontWeight: 800, color: 'var(--text)', marginBottom: 16 }}>
         Ordens de Serviço
       </h1>
+
+      {limites?.os_mes && (
+        <PlanUsageBar atual={limites.os_mes.atual} limite={limites.os_mes.limite} label="OS abertas este mês" />
+      )}
 
       {/* Filtros */}
       <div style={{ display: 'flex', gap: 10, marginBottom: 20, flexWrap: 'wrap', alignItems: 'center' }}>
