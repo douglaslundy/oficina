@@ -7,14 +7,22 @@ use App\Http\Resources\ClienteResource;
 use App\Models\Cliente;
 use App\Rules\Cnpj;
 use App\Rules\Cpf;
+use App\Services\ClienteStatusService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Http\Resources\Json\AnonymousResourceCollection;
 
 class ClienteController extends Controller
 {
+    public function __construct(private readonly ClienteStatusService $clienteStatusService) {}
+
     public function index(Request $request): AnonymousResourceCollection|JsonResponse
     {
+        // Recalcular clientes DEVEDOR que podem ter vencido desde o último acesso
+        $devedores = Cliente::whereIn('status', ['DEVEDOR'])->pluck('id');
+        foreach ($devedores as $id) {
+            $this->clienteStatusService->recalcular($id);
+        }
         $query = Cliente::with('veiculos');
 
         if ($request->has('status')) {
