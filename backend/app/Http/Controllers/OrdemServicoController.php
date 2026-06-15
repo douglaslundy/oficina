@@ -37,24 +37,34 @@ class OrdemServicoController extends Controller
     public function store(Request $request): JsonResponse
     {
         $validated = $request->validate([
-            'cliente_id'             => ['required', 'string', 'exists:clientes,id'],
-            'mecanico_id'            => ['nullable', 'string', 'exists:usuarios,id'],
-            'veiculo_descricao'      => ['nullable', 'string', 'max:100'],
-            'veiculo_placa'          => ['nullable', 'string', 'max:10'],
-            'problema_relatado'      => ['nullable', 'string'],
-            'status'                 => ['nullable', 'string'],
-            'forma_pagamento'        => ['nullable', 'string'],
-            'prazo_entrega'          => ['nullable', 'date'],
-            'itens'                  => ['nullable', 'array'],
-            'itens.*.tipo'           => ['required', 'in:SERVICO,PECA'],
-            'itens.*.produto_id'     => ['nullable', 'string', 'exists:produtos,id'],
-            'itens.*.descricao'      => ['required', 'string', 'max:200'],
-            'itens.*.quantidade'     => ['required', 'numeric', 'min:0.01'],
-            'itens.*.valor_unitario' => ['required', 'numeric', 'min:0'],
+            'cliente_id'              => ['required', 'string', 'exists:clientes,id'],
+            'mecanico_id'             => ['nullable', 'string', 'exists:usuarios,id'],
+            'veiculo_descricao'       => ['nullable', 'string', 'max:100'],
+            'veiculo_placa'           => ['nullable', 'string', 'max:10'],
+            'problema_relatado'       => ['nullable', 'string'],
+            'status'                  => ['nullable', 'string'],
+            'forma_pagamento'         => ['nullable', 'string'],
+            'prazo_entrega'           => ['nullable', 'date'],
+            'venda_a_prazo'           => ['nullable', 'boolean'],
+            'prazo_pagamento_dias'    => ['nullable', 'integer', 'min:1', 'max:365'],
+            'itens'                   => ['nullable', 'array'],
+            'itens.*.tipo'            => ['required', 'in:SERVICO,PECA'],
+            'itens.*.produto_id'      => ['nullable', 'string', 'exists:produtos,id'],
+            'itens.*.descricao'       => ['required', 'string', 'max:200'],
+            'itens.*.quantidade'      => ['required', 'numeric', 'min:0.01'],
+            'itens.*.valor_unitario'  => ['required', 'numeric', 'min:0'],
         ]);
 
         return DB::transaction(function () use ($validated) {
             $osData = collect($validated)->except('itens')->toArray();
+
+            // Calcular vencimento ao criar já como CONCLUIDA com prazo
+            if (($osData['status'] ?? 'ABERTA') === 'CONCLUIDA'
+                && !empty($osData['venda_a_prazo'])
+                && !empty($osData['prazo_pagamento_dias'])) {
+                $osData['data_vencimento_pagamento'] = now()->addDays($osData['prazo_pagamento_dias'])->toDateString();
+            }
+
             $os = OrdemServico::create($osData);
 
             $total = 0;
@@ -83,10 +93,12 @@ class OrdemServicoController extends Controller
         $novoStatus = $request->status;
 
         $validated = $request->validate([
-            'status'          => ['sometimes', 'string'],
-            'valor_pago'      => ['sometimes', 'numeric', 'min:0'],
-            'forma_pagamento' => ['sometimes', 'string'],
-            'prazo_entrega'   => ['sometimes', 'nullable', 'date'],
+            'status'               => ['sometimes', 'string'],
+            'valor_pago'           => ['sometimes', 'numeric', 'min:0'],
+            'forma_pagamento'      => ['sometimes', 'string'],
+            'prazo_entrega'        => ['sometimes', 'nullable', 'date'],
+            'venda_a_prazo'        => ['sometimes', 'boolean'],
+            'prazo_pagamento_dias' => ['sometimes', 'nullable', 'integer', 'min:1', 'max:365'],
         ]);
 
         return DB::transaction(function () use ($os, $validated, $novoStatus) {
@@ -94,6 +106,20 @@ class OrdemServicoController extends Controller
 
             if ($novoStatus === 'CONCLUIDA' && $wasNotConcluida) {
                 $this->estoqueService->baixarEstoqueOs($os);
+            }
+
+            // Calcular data de vencimento ao concluir com prazo
+            $vendaAPrazo  = $validated['venda_a_prazo'] ?? $os->venda_a_prazo;
+            $prazoDias    = $validated['prazo_pagamento_dias'] ?? $os->prazo_pagamento_dias;
+
+            if ($vendaAPrazo && $prazoDias) {
+                if ($novoStatus === 'CONCLUIDA' && $wasNotConcluida) {
+                    // Conclusão agora: vencimento a partir de hoje
+                    $validated['data_vencimento_pagamento'] = now()->addDays($prazoDias)->toDateString();
+                } elseif ($os->status === 'CONCLUIDA' && isset($validated['prazo_pagamento_dias'])) {
+                    // Alteração do prazo numa OS já concluída: recalcula a partir de hoje
+                    $validated['data_vencimento_pagamento'] = now()->addDays($prazoDias)->toDateString();
+                }
             }
 
             $os->update($validated);

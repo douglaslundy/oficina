@@ -1,6 +1,7 @@
 const STATUS_MAP: Record<string, { label: string; cls: string }> = {
   REGULAR:          { label: 'Regular',       cls: 'pill-success' },
   DEVEDOR:          { label: 'Devedor',        cls: 'pill-danger'  },
+  DIVIDA_VENCIDA:   { label: 'Dívida Vencida', cls: 'pill-danger'  },
   OS_ABERTA:        { label: 'OS Aberta',      cls: 'pill-accent'  },
   ATIVO:            { label: 'Ativo',          cls: 'pill-success' },
   INATIVO:          { label: 'Inativo',        cls: 'pill-muted'   },

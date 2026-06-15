@@ -17,6 +17,9 @@ interface OsData {
   forma_pagamento?: string
   prazo_entrega?: string
   valor_pago?: number
+  venda_a_prazo?: boolean
+  prazo_pagamento_dias?: number
+  data_vencimento_pagamento?: string
 }
 
 export default function OSDetailPage() {

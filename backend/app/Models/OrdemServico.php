@@ -23,14 +23,17 @@ class OrdemServico extends Model
         'cliente_id', 'mecanico_id', 'veiculo_descricao', 'veiculo_placa',
         'problema_relatado', 'status', 'forma_pagamento', 'prazo_entrega',
         'valor_total', 'valor_pago', 'numero', 'oficina_id',
+        'venda_a_prazo', 'prazo_pagamento_dias', 'data_vencimento_pagamento',
     ];
 
     protected $casts = [
-        'prazo_entrega' => 'date',
-        'criado_em'     => 'datetime',
-        'atualizado_em' => 'datetime',
-        'valor_total'   => 'float',
-        'valor_pago'    => 'float',
+        'prazo_entrega'              => 'date',
+        'data_vencimento_pagamento'  => 'date',
+        'criado_em'                  => 'datetime',
+        'atualizado_em'              => 'datetime',
+        'valor_total'                => 'float',
+        'valor_pago'                 => 'float',
+        'venda_a_prazo'              => 'boolean',
     ];
 
     protected static function boot(): void

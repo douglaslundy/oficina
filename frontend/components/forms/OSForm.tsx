@@ -33,11 +33,13 @@ interface OSFormData {
   forma_pagamento?: string
   prazo_entrega?: string
   valor_pago?: number
+  venda_a_prazo?: boolean
+  prazo_pagamento_dias?: number
   itens: OsItem[]
 }
 
 interface OSFormProps {
-  initialData?: Partial<OSFormData> & { id?: string }
+  initialData?: Partial<OSFormData> & { id?: string; data_vencimento_pagamento?: string }
   onSuccess?: (os: Record<string, unknown>) => void
 }
 
@@ -64,7 +66,7 @@ export function OSForm({ initialData, onSuccess }: OSFormProps) {
   const [veiculoManual, setVeiculoManual] = useState(false)
 
   const { register, handleSubmit, control, watch, setValue, formState: { isSubmitting } } = useForm<OSFormData>({
-    defaultValues: { status: 'ABERTA', itens: [], ...initialData },
+    defaultValues: { status: 'ABERTA', venda_a_prazo: false, itens: [], ...initialData },
   })
 
   const { fields, append, remove } = useFieldArray({ control, name: 'itens' })
@@ -261,6 +263,48 @@ export function OSForm({ initialData, onSuccess }: OSFormProps) {
             {PAGAMENTO_OPTIONS.map(p => <option key={p} value={p}>{p}</option>)}
           </select>
         </div>
+
+        {/* Venda a prazo */}
+        <div style={{ gridColumn: '1 / -1', display: 'flex', alignItems: 'center', gap: 24, padding: '12px 14px', background: 'var(--bg)', borderRadius: 8, border: '1px solid var(--border)' }}>
+          <label style={{ display: 'flex', alignItems: 'center', gap: 10, cursor: 'pointer', userSelect: 'none' as const }}>
+            <input type="checkbox" {...register('venda_a_prazo')} style={{ width: 16, height: 16, accentColor: 'var(--accent)', cursor: 'pointer' }} />
+            <span style={{ color: 'var(--text)', fontSize: 14, fontWeight: 600 }}>Venda a prazo</span>
+            <span style={{ color: 'var(--muted)', fontSize: 12 }}>— pagamento diferido com data de vencimento</span>
+          </label>
+          {watch('venda_a_prazo') && (
+            <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginLeft: 'auto' }}>
+              <label style={{ ...L, marginBottom: 0, whiteSpace: 'nowrap' as const }}>Prazo de pagamento</label>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                <input
+                  type="number"
+                  min={1}
+                  max={365}
+                  placeholder="30"
+                  {...register('prazo_pagamento_dias', { valueAsNumber: true })}
+                  style={{ ...S, width: 80, textAlign: 'center' as const }}
+                />
+                <span style={{ color: 'var(--muted)', fontSize: 13, whiteSpace: 'nowrap' as const }}>dias após conclusão</span>
+              </div>
+            </div>
+          )}
+        </div>
+
+        {/* Exibir data de vencimento quando já calculada pelo backend */}
+        {initialData?.data_vencimento_pagamento && (
+          <div style={{ gridColumn: '1 / -1' }}>
+            <div style={{
+              display: 'flex', alignItems: 'center', gap: 10,
+              padding: '10px 14px', borderRadius: 8,
+              background: 'rgba(229,57,53,0.08)', border: '1px solid var(--danger)',
+            }}>
+              <span style={{ fontSize: 16 }}>📅</span>
+              <span style={{ color: 'var(--muted)', fontSize: 13 }}>Vencimento do pagamento:</span>
+              <span className="font-mono" style={{ color: 'var(--danger)', fontWeight: 700, fontSize: 14 }}>
+                {initialData.data_vencimento_pagamento}
+              </span>
+            </div>
+          </div>
+        )}
       </div>
 
       {/* Itens */}
