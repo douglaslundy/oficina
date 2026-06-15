@@ -135,6 +135,70 @@ class OrdemServicoController extends Controller
         });
     }
 
+    public function addItem(Request $request, string $osId): JsonResponse
+    {
+        $os = OrdemServico::findOrFail($osId);
+
+        if (in_array($os->status, ['CONCLUIDA', 'CANCELADA'], true)) {
+            return response()->json(['message' => 'Não é possível editar itens de OS concluída ou cancelada.'], 422);
+        }
+
+        $validated = $request->validate([
+            'tipo'           => ['required', 'in:SERVICO,PECA'],
+            'produto_id'     => ['nullable', 'string', 'exists:produtos,id'],
+            'descricao'      => ['required', 'string', 'max:200'],
+            'quantidade'     => ['required', 'numeric', 'min:0.01'],
+            'valor_unitario' => ['required', 'numeric', 'min:0'],
+        ]);
+
+        $item = $os->itens()->create($validated);
+
+        $total = $os->itens()->sum(DB::raw('quantidade * valor_unitario'));
+        $os->update(['valor_total' => $total]);
+
+        return response()->json(['data' => $item], 201);
+    }
+
+    public function updateItem(Request $request, string $osId, string $itemId): JsonResponse
+    {
+        $os   = OrdemServico::findOrFail($osId);
+        $item = $os->itens()->findOrFail($itemId);
+
+        if (in_array($os->status, ['CONCLUIDA', 'CANCELADA'], true)) {
+            return response()->json(['message' => 'Não é possível editar itens de OS concluída ou cancelada.'], 422);
+        }
+
+        $validated = $request->validate([
+            'descricao'      => ['sometimes', 'string', 'max:200'],
+            'quantidade'     => ['sometimes', 'numeric', 'min:0.01'],
+            'valor_unitario' => ['sometimes', 'numeric', 'min:0'],
+        ]);
+
+        $item->update($validated);
+
+        $total = $os->itens()->sum(DB::raw('quantidade * valor_unitario'));
+        $os->update(['valor_total' => $total]);
+
+        return response()->json(['data' => $item->fresh()]);
+    }
+
+    public function removeItem(Request $request, string $osId, string $itemId): JsonResponse
+    {
+        $os   = OrdemServico::findOrFail($osId);
+        $item = $os->itens()->findOrFail($itemId);
+
+        if (in_array($os->status, ['CONCLUIDA', 'CANCELADA'], true)) {
+            return response()->json(['message' => 'Não é possível remover itens de OS concluída ou cancelada.'], 422);
+        }
+
+        $item->delete();
+
+        $total = $os->itens()->sum(DB::raw('quantidade * valor_unitario'));
+        $os->update(['valor_total' => $total]);
+
+        return response()->json(['message' => 'Item removido.']);
+    }
+
     public function pdf(string $id): \Illuminate\Http\Response
     {
         $os = OrdemServico::with(['cliente', 'mecanico', 'itens'])->findOrFail($id);
@@ -145,8 +209,22 @@ class OrdemServicoController extends Controller
         $pdf = Pdf::loadView('pdf.os', compact('os', 'empresa'))
             ->setPaper('a4', 'portrait');
 
-        $filename = 'OS-' . $os->numero . '.pdf';
+        return $pdf->download('OS-' . $os->numero . '.pdf');
+    }
 
-        return $pdf->download($filename);
+    public function recibo(string $id): \Illuminate\Http\Response
+    {
+        $os = OrdemServico::with(['cliente', 'mecanico'])->findOrFail($id);
+
+        if ($os->valor_pago <= 0) {
+            abort(422, 'Esta OS não possui pagamento registrado.');
+        }
+
+        $empresa = \App\Models\Configuracao::first()?->toArray() ?? [];
+
+        $pdf = Pdf::loadView('pdf.recibo', compact('os', 'empresa'))
+            ->setPaper('a4', 'portrait');
+
+        return $pdf->download('Recibo-OS-' . $os->numero . '.pdf');
     }
 }

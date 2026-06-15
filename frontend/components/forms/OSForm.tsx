@@ -216,6 +216,17 @@ export function OSForm({ initialData, onSuccess }: OSFormProps) {
     }
   }
 
+  async function handleRemoveItem(itemId: string) {
+    if (!confirm('Remover este item?')) return
+    try {
+      await api.delete(`/os/${initialData!.id}/itens/${itemId}`)
+      toast('Item removido.', 'success')
+      onSuccess?.({})
+    } catch {
+      toast('Erro ao remover item.', 'danger')
+    }
+  }
+
   async function onSubmit(data: OSFormData) {
     try {
       if (isEdit) {
@@ -417,19 +428,19 @@ export function OSForm({ initialData, onSuccess }: OSFormProps) {
         <h4 className="font-display" style={{ fontSize: 16, fontWeight: 700, color: 'var(--text)', margin: '0 0 12px' }}>Serviços e Peças</h4>
 
         {isEdit ? (
-          // Read-only list in edit mode
+          // Edit mode: read-only for CONCLUIDA/CANCELADA, editable otherwise
           <>
-            {(initialData?.itens ?? []).length === 0 ? (
+            {(initialData?.itens ?? []).length === 0 && ['CONCLUIDA', 'CANCELADA'].includes(watch('status')) ? (
               <p style={{ color: 'var(--muted)', fontSize: 14 }}>Nenhum item registrado.</p>
             ) : (
               <>
-                <div style={{ display: 'grid', gridTemplateColumns: '2fr 1fr 1fr 1fr', gap: 8, paddingBottom: 6, borderBottom: '1px solid var(--border)', marginBottom: 4 }}>
-                  {['Descrição', 'Qtd', 'Valor Unit.', 'Total'].map(h => (
+                <div style={{ display: 'grid', gridTemplateColumns: '2fr 1fr 1fr 1fr auto', gap: 8, paddingBottom: 6, borderBottom: '1px solid var(--border)', marginBottom: 4 }}>
+                  {['Descrição', 'Qtd', 'Valor Unit.', 'Total', ''].map(h => (
                     <span key={h} style={{ color: 'var(--muted)', fontSize: 11, fontWeight: 600, textTransform: 'uppercase' }}>{h}</span>
                   ))}
                 </div>
-                {(initialData!.itens!).map((item, i) => (
-                  <div key={i} style={{ display: 'grid', gridTemplateColumns: '2fr 1fr 1fr 1fr', gap: 8, padding: '8px 0', borderBottom: '1px solid var(--border)' }}>
+                {(initialData!.itens ?? []).map((item, i) => (
+                  <div key={item.id ?? i} style={{ display: 'grid', gridTemplateColumns: '2fr 1fr 1fr 1fr auto', gap: 8, padding: '8px 0', borderBottom: '1px solid var(--border)', alignItems: 'center' }}>
                     <span style={{ color: 'var(--text)', fontSize: 14 }}>
                       <span style={{ fontSize: 11, color: item.tipo === 'PECA' ? 'var(--accent)' : 'var(--info)', marginRight: 6, fontWeight: 700 }}>
                         {item.tipo === 'PECA' ? 'PEÇA' : 'SERV'}
@@ -438,7 +449,14 @@ export function OSForm({ initialData, onSuccess }: OSFormProps) {
                     </span>
                     <span className="font-mono" style={{ color: 'var(--muted)', fontSize: 14 }}>{item.quantidade}</span>
                     <span className="font-mono" style={{ color: 'var(--muted)', fontSize: 14 }}>{formatarMoeda(item.valor_unitario)}</span>
-                    <span className="font-mono" style={{ color: 'var(--text)', fontSize: 14, fontWeight: 600 }}>{formatarMoeda(item.quantidade * item.valor_unitario)}</span>
+                    <span className="font-mono" style={{ color: 'var(--text)', fontSize: 14, fontWeight: 600 }}>{formatarMoeda(Number(item.quantidade) * Number(item.valor_unitario))}</span>
+                    {!['CONCLUIDA', 'CANCELADA'].includes(watch('status')) && item.id ? (
+                      <button
+                        type="button"
+                        onClick={() => handleRemoveItem(item.id!)}
+                        style={{ background: 'none', border: 'none', color: 'var(--danger)', cursor: 'pointer', fontSize: 18, padding: '0 4px', lineHeight: 1 }}
+                      >×</button>
+                    ) : <span />}
                   </div>
                 ))}
                 <div style={{ textAlign: 'right', marginTop: 12, paddingTop: 8, borderTop: '1px solid var(--border)' }}>
@@ -447,6 +465,11 @@ export function OSForm({ initialData, onSuccess }: OSFormProps) {
                     {formatarMoeda(initialData?.valor_total ?? 0)}
                   </span>
                 </div>
+
+                {/* Formulário para adicionar novo item (apenas quando editável) */}
+                {!['CONCLUIDA', 'CANCELADA'].includes(watch('status')) && initialData?.id && (
+                  <NewItemInline osId={initialData.id} produtos={produtos} onAdded={onSuccess} />
+                )}
               </>
             )}
           </>
@@ -541,5 +564,89 @@ export function OSForm({ initialData, onSuccess }: OSFormProps) {
         </button>
       </div>
     </form>
+  )
+}
+
+function NewItemInline({ osId, produtos, onAdded }: {
+  osId: string
+  produtos: Array<{ id: string; nome: string; preco_venda: number | null }>
+  onAdded?: (data: Record<string, unknown>) => void
+}) {
+  const [tipo, setTipo] = useState<'SERVICO' | 'PECA'>('SERVICO')
+  const [produtoId, setProdutoId] = useState('')
+  const [descricao, setDescricao] = useState('')
+  const [quantidade, setQuantidade] = useState(1)
+  const [valorUnitario, setValorUnitario] = useState(0)
+  const [loading, setLoading] = useState(false)
+
+  function handleProdutoSelect(id: string) {
+    setProdutoId(id)
+    const p = produtos.find(x => x.id === id)
+    if (p) {
+      setDescricao(p.nome)
+      setValorUnitario(p.preco_venda ?? 0)
+    }
+  }
+
+  async function handleAdd() {
+    if (!descricao || quantidade <= 0) return
+    setLoading(true)
+    try {
+      await api.post(`/os/${osId}/itens`, {
+        tipo,
+        produto_id: produtoId || null,
+        descricao,
+        quantidade,
+        valor_unitario: valorUnitario,
+      })
+      toast('Item adicionado.', 'success')
+      setDescricao('')
+      setProdutoId('')
+      setQuantidade(1)
+      setValorUnitario(0)
+      onAdded?.({})
+    } catch {
+      toast('Erro ao adicionar item.', 'danger')
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  const SI: React.CSSProperties = {
+    padding: '7px 10px', borderRadius: 6, background: 'var(--bg)',
+    border: '1px solid var(--border)', color: 'var(--text)', fontSize: 13, outline: 'none',
+  }
+
+  return (
+    <div style={{ marginTop: 12, padding: 12, borderRadius: 8, border: '1px dashed var(--border)', background: 'var(--surface)' }}>
+      <p style={{ color: 'var(--muted)', fontSize: 12, marginBottom: 8, fontWeight: 600 }}>+ Adicionar item</p>
+      <div style={{ display: 'grid', gridTemplateColumns: '100px 1fr', gap: 8, marginBottom: 8 }}>
+        <select value={tipo} onChange={e => setTipo(e.target.value as 'SERVICO' | 'PECA')} style={SI}>
+          <option value="SERVICO">Serviço</option>
+          <option value="PECA">Peça</option>
+        </select>
+        {tipo === 'PECA' ? (
+          <select value={produtoId} onChange={e => handleProdutoSelect(e.target.value)} style={SI}>
+            <option value="">Selecionar peça...</option>
+            {produtos.map(p => <option key={p.id} value={p.id}>{p.nome}</option>)}
+          </select>
+        ) : (
+          <input value={descricao} onChange={e => setDescricao(e.target.value)}
+            placeholder="Descrição do serviço" style={SI} />
+        )}
+      </div>
+      <div style={{ display: 'grid', gridTemplateColumns: '80px 130px 1fr', gap: 8, alignItems: 'center' }}>
+        <input type="number" value={quantidade} min={0.01} step={0.01}
+          onChange={e => setQuantidade(Number(e.target.value))}
+          placeholder="Qtd" style={SI} />
+        <input type="number" value={valorUnitario} min={0} step={0.01}
+          onChange={e => setValorUnitario(Number(e.target.value))}
+          placeholder="Valor unit. (R$)" style={SI} />
+        <button type="button" onClick={handleAdd} disabled={loading}
+          style={{ padding: '7px 16px', background: 'var(--accent)', color: '#000', borderRadius: 6, border: 'none', cursor: loading ? 'not-allowed' : 'pointer', fontSize: 13, fontWeight: 700 }}>
+          {loading ? '...' : 'Adicionar'}
+        </button>
+      </div>
+    </div>
   )
 }
