@@ -4,6 +4,7 @@ import { useParams, useRouter } from 'next/navigation'
 import { ClienteForm } from '@/components/forms/ClienteForm'
 import { StatusPill } from '@/components/ui/StatusPill'
 import { formatarMoeda, formatarData } from '@/lib/formatters'
+import { toast } from '@/hooks/useToast'
 import api from '@/lib/api'
 
 interface OsResumo {
@@ -36,6 +37,14 @@ interface ClienteData {
   veiculo_placa?: string
 }
 
+interface Veiculo {
+  id: string
+  modelo: string
+  ano?: number | null
+  placa?: string | null
+  ativo: boolean
+}
+
 function diasParaVencimento(dataVenc: string): number {
   // dataVenc vem como dd/mm/yyyy
   const [d, m, y] = dataVenc.split('/')
@@ -50,18 +59,52 @@ export default function ClienteDetailPage() {
   const router = useRouter()
   const [cliente, setCliente] = useState<ClienteData | null>(null)
   const [os, setOs] = useState<OsResumo[]>([])
+  const [veiculos, setVeiculos] = useState<Veiculo[]>([])
   const [loading, setLoading] = useState(true)
+  const [addingVeiculo, setAddingVeiculo] = useState(false)
+  const [novoVeiculo, setNovoVeiculo] = useState({ modelo: '', ano: '', placa: '' })
 
   useEffect(() => {
     Promise.all([
       api.get(`/clientes/${id}`),
       api.get(`/os?cliente_id=${id}`),
-    ]).then(([c, o]) => {
+      api.get(`/clientes/${id}/veiculos`),
+    ]).then(([c, o, v]) => {
       setCliente(c.data.data)
       setOs(o.data.data ?? [])
+      setVeiculos(Array.isArray(v.data) ? v.data : (v.data?.data ?? []))
     }).catch(() => {})
     .finally(() => setLoading(false))
   }, [id])
+
+  async function handleAdicionarVeiculo() {
+    if (!novoVeiculo.modelo) return
+    try {
+      await api.post(`/clientes/${id}/veiculos`, {
+        modelo: novoVeiculo.modelo,
+        ano:    novoVeiculo.ano ? Number(novoVeiculo.ano) : null,
+        placa:  novoVeiculo.placa || null,
+      })
+      toast('Veículo adicionado.', 'success')
+      setNovoVeiculo({ modelo: '', ano: '', placa: '' })
+      setAddingVeiculo(false)
+      const res = await api.get(`/clientes/${id}/veiculos`)
+      setVeiculos(Array.isArray(res.data) ? res.data : (res.data?.data ?? []))
+    } catch {
+      toast('Erro ao adicionar veículo.', 'danger')
+    }
+  }
+
+  async function handleRemoverVeiculo(veiculoId: string) {
+    if (!confirm('Remover este veículo?')) return
+    try {
+      await api.delete(`/veiculos/${veiculoId}`)
+      toast('Veículo removido.', 'success')
+      setVeiculos(prev => prev.filter(v => v.id !== veiculoId))
+    } catch {
+      toast('Erro ao remover veículo.', 'danger')
+    }
+  }
 
   if (loading) return <p style={{ color: 'var(--muted)' }}>Carregando...</p>
   if (!cliente) return <p style={{ color: 'var(--danger)' }}>Cliente não encontrado.</p>
@@ -188,7 +231,8 @@ export default function ClienteDetailPage() {
           )}
         </div>
 
-        {/* Coluna direita: histórico de OS */}
+        {/* Coluna direita: histórico de OS + veículos */}
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
         <div style={{ background: 'var(--card)', borderRadius: 12, border: '1px solid var(--border)', padding: 24 }}>
           <h3 className="font-display" style={{ fontSize: 16, fontWeight: 700, color: 'var(--text)', marginBottom: 16 }}>Histórico de OS</h3>
           {os.length === 0 ? (
@@ -218,6 +262,80 @@ export default function ClienteDetailPage() {
               </div>
             ))
           )}
+        </div>
+
+        {/* Veículos */}
+        <div style={{ background: 'var(--card)', borderRadius: 12, border: '1px solid var(--border)', padding: 24 }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
+            <h3 className="font-display" style={{ fontSize: 16, fontWeight: 700, color: 'var(--text)', margin: 0 }}>Veículos</h3>
+            <button
+              onClick={() => setAddingVeiculo(v => !v)}
+              style={{ background: 'none', border: '1px solid var(--border)', color: 'var(--muted)', borderRadius: 6, padding: '4px 10px', cursor: 'pointer', fontSize: 12 }}
+            >
+              + Adicionar
+            </button>
+          </div>
+
+          {veiculos.filter(v => v.ativo).map(v => (
+            <div key={v.id} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '8px 0', borderBottom: '1px solid var(--border)' }}>
+              <div>
+                <p style={{ margin: 0, fontSize: 14, color: 'var(--text)', fontWeight: 600 }}>
+                  {v.modelo}{v.ano ? ` ${v.ano}` : ''}
+                </p>
+                {v.placa && <p style={{ margin: 0, fontSize: 12, color: 'var(--muted)' }}>{v.placa}</p>}
+              </div>
+              <button
+                onClick={() => handleRemoverVeiculo(v.id)}
+                style={{ background: 'none', border: 'none', color: 'var(--danger)', cursor: 'pointer', fontSize: 13 }}
+              >
+                Remover
+              </button>
+            </div>
+          ))}
+
+          {veiculos.filter(v => v.ativo).length === 0 && !addingVeiculo && (
+            <p style={{ color: 'var(--muted)', fontSize: 14 }}>Nenhum veículo cadastrado.</p>
+          )}
+
+          {addingVeiculo && (
+            <div style={{ marginTop: 12, display: 'flex', flexDirection: 'column', gap: 8 }}>
+              <input
+                placeholder="Modelo (ex: Honda Civic)"
+                value={novoVeiculo.modelo}
+                onChange={e => setNovoVeiculo(p => ({ ...p, modelo: e.target.value }))}
+                style={{ padding: '7px 10px', borderRadius: 6, background: 'var(--bg)', border: '1px solid var(--border)', color: 'var(--text)', fontSize: 13, outline: 'none' }}
+              />
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8 }}>
+                <input
+                  placeholder="Ano (ex: 2021)"
+                  value={novoVeiculo.ano}
+                  onChange={e => setNovoVeiculo(p => ({ ...p, ano: e.target.value }))}
+                  style={{ padding: '7px 10px', borderRadius: 6, background: 'var(--bg)', border: '1px solid var(--border)', color: 'var(--text)', fontSize: 13, outline: 'none' }}
+                />
+                <input
+                  placeholder="Placa (ex: ABC1234)"
+                  value={novoVeiculo.placa}
+                  onChange={e => setNovoVeiculo(p => ({ ...p, placa: e.target.value }))}
+                  style={{ padding: '7px 10px', borderRadius: 6, background: 'var(--bg)', border: '1px solid var(--border)', color: 'var(--text)', fontSize: 13, outline: 'none' }}
+                />
+              </div>
+              <div style={{ display: 'flex', gap: 8 }}>
+                <button
+                  onClick={handleAdicionarVeiculo}
+                  style={{ flex: 1, padding: '8px', background: 'var(--accent)', color: '#000', border: 'none', borderRadius: 6, cursor: 'pointer', fontWeight: 700, fontSize: 13 }}
+                >
+                  Salvar
+                </button>
+                <button
+                  onClick={() => { setAddingVeiculo(false); setNovoVeiculo({ modelo: '', ano: '', placa: '' }) }}
+                  style={{ padding: '8px 16px', background: 'transparent', color: 'var(--muted)', border: '1px solid var(--border)', borderRadius: 6, cursor: 'pointer', fontSize: 13 }}
+                >
+                  Cancelar
+                </button>
+              </div>
+            </div>
+          )}
+        </div>
         </div>
       </div>
     </div>
