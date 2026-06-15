@@ -30,6 +30,25 @@ class OrdemServicoController extends Controller
         if ($request->has('status')) {
             $query->whereIn('status', explode(',', (string)$request->status));
         }
+        if ($request->has('mecanico_id')) {
+            $query->where('mecanico_id', $request->mecanico_id);
+        }
+        if ($request->has('numero')) {
+            $query->where('numero', (int)$request->numero);
+        }
+        if ($request->has('data_inicio')) {
+            $query->whereDate('criado_em', '>=', $request->data_inicio);
+        }
+        if ($request->has('data_fim')) {
+            $query->whereDate('criado_em', '<=', $request->data_fim);
+        }
+        if ($request->has('search')) {
+            $search = $request->search;
+            $query->where(function ($q) use ($search) {
+                $q->whereHas('cliente', fn($c) => $c->where('nome', 'ilike', "%{$search}%"))
+                  ->orWhere('numero', is_numeric($search) ? (int)$search : 0);
+            });
+        }
 
         return OrdemServicoResource::collection($query->orderBy('criado_em', 'desc')->paginate(20));
     }
