@@ -40,9 +40,14 @@ class LoginController extends Controller
 
         $token = $usuario->createToken('auth-token')->plainTextToken;
 
+        $oficina_slug = $usuario->oficina_id
+            ? \App\Models\Oficina::where('id', $usuario->oficina_id)->value('slug')
+            : null;
+
         return response()->json([
-            'token' => $token,
-            'user'  => [
+            'token'        => $token,
+            'oficina_slug' => $oficina_slug,
+            'user'         => [
                 'id'    => $usuario->id,
                 'nome'  => $usuario->nome,
                 'email' => $usuario->email,

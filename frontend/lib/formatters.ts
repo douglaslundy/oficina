@@ -23,6 +23,7 @@ export const formatarPlaca = (v: string) => {
 
 export const formatarData = (iso?: string | null): string => {
   if (!iso) return '-'
+  if (/^\d{2}\/\d{2}\/\d{4}/.test(iso)) return iso.split(' ')[0]
   try {
     const d = new Date(iso.replace(' ', 'T'))
     return isNaN(d.getTime()) ? '-' : d.toLocaleDateString('pt-BR')

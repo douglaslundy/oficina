@@ -117,7 +117,7 @@ interface FieldProps {
 function Field({ label, required, hint, children }: FieldProps) {
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
-      <label style={{ fontSize: 13, fontWeight: 600, color: 'var(--muted)' }}>
+      <label style={{ fontSize: 12, fontWeight: 700, color: 'var(--muted)', textTransform: 'uppercase', letterSpacing: '0.06em' }}>
         {label}
         {required && <span style={{ color: 'var(--danger)', marginLeft: 3 }}>*</span>}
       </label>
@@ -167,7 +167,8 @@ function CreateModal({ planos, onClose, onSuccess }: CreateModalProps) {
 
   function handleChange(field: keyof CreateForm, value: string) {
     setForm((prev) => {
-      const next = { ...prev, [field]: value }
+      const processed = (field === 'nome' || field === 'admin_nome') ? value.toUpperCase() : value
+      const next = { ...prev, [field]: processed }
       if (field === 'nome' && !slugUserEdited) {
         next.slug = slugify(value)
       }
@@ -321,10 +322,10 @@ function CreateModal({ planos, onClose, onSuccess }: CreateModalProps) {
 
           <Field label="Nome da Oficina" required>
             <input
-              style={inputStyle}
+              style={{ ...inputStyle, textTransform: 'uppercase' }}
               value={form.nome}
               onChange={(e) => handleChange('nome', e.target.value)}
-              placeholder="Ex: Auto Centro do João"
+              placeholder="EX: AUTO CENTRO DO JOÃO"
               disabled={submitting}
             />
           </Field>
@@ -383,10 +384,10 @@ function CreateModal({ planos, onClose, onSuccess }: CreateModalProps) {
 
           <Field label="Nome Completo" required>
             <input
-              style={inputStyle}
+              style={{ ...inputStyle, textTransform: 'uppercase' }}
               value={form.admin_nome}
               onChange={(e) => handleChange('admin_nome', e.target.value)}
-              placeholder="João da Silva"
+              placeholder="JOÃO DA SILVA"
               disabled={submitting}
             />
           </Field>

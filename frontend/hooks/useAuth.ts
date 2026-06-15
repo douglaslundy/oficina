@@ -21,12 +21,12 @@ export function useAuth() {
     return raw ? JSON.parse(raw) : null
   }
 
-  async function login(email: string, senha: string, lembrar: boolean, oficina_slug: string) {
+  async function login(email: string, senha: string, lembrar: boolean) {
     setLoading(true)
     setError(null)
-    localStorage.setItem('oficina_slug', oficina_slug)
     try {
       const { data } = await api.post('/auth/login', { email, senha })
+      if (data.oficina_slug) localStorage.setItem('oficina_slug', data.oficina_slug)
       localStorage.setItem('auth_token', data.token)
       localStorage.setItem('auth_user', JSON.stringify(data.user))
       document.cookie = `auth_token=${data.token}; path=/; SameSite=Lax`

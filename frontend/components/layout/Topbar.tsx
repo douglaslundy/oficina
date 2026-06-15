@@ -21,7 +21,6 @@ const ACTION_BUTTONS: Record<string, { label: string; href: string }> = {
   '/clientes':         { label: '+ Novo Cliente', href: '/clientes/novo' },
   '/produtos':         { label: '+ Novo Produto', href: '/produtos/novo' },
   '/os':               { label: '+ Nova OS',      href: '/os/nova' },
-  '/agendamentos':     { label: '+ Agendar',      href: '/agendamentos?novo=1' },
   '/usuarios':         { label: '+ Novo Usuário', href: '/usuarios/novo' },
   '/fiscal/historico': { label: 'Emitir NF',      href: '/fiscal/emitir' },
 }

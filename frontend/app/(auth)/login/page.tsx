@@ -1,31 +1,23 @@
 'use client'
 import { useState, useEffect, Suspense } from 'react'
 import Link from 'next/link'
-import { useSearchParams } from 'next/navigation'
 import { useAuth } from '@/hooks/useAuth'
 
 function LoginForm() {
   const { login, loading, error } = useAuth()
-  const searchParams = useSearchParams()
-  const defaultTenant = process.env.NEXT_PUBLIC_DEFAULT_TENANT ?? ''
-  const [oficinaSlag, setOficinaSlag] = useState(defaultTenant)
   const [email, setEmail] = useState('')
   const [senha, setSenha] = useState('')
   const [showSenha, setShowSenha] = useState(false)
   const [lembrar, setLembrar] = useState(false)
-  const [fieldErrors, setFieldErrors] = useState<{ oficina_slug?: string; email?: string; senha?: string }>({})
+  const [fieldErrors, setFieldErrors] = useState<{ email?: string; senha?: string }>({})
 
   useEffect(() => {
     const remembered = localStorage.getItem('remember_email')
     if (remembered) { setEmail(remembered); setLembrar(true) }
-    const slugFromUrl = searchParams.get('oficina')
-    if (slugFromUrl) setOficinaSlag(slugFromUrl)
-  }, [searchParams])
+  }, [])
 
   function validate() {
-    const errs: { oficina_slug?: string; email?: string; senha?: string } = {}
-    if (!oficinaSlag.trim()) errs.oficina_slug = 'Informe o código da oficina'
-    else if (!/^[a-z0-9-]+$/.test(oficinaSlag)) errs.oficina_slug = 'Código inválido — use apenas letras minúsculas, números e hífens'
+    const errs: { email?: string; senha?: string } = {}
     if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) errs.email = 'Informe um e-mail válido'
     if (!senha.trim()) errs.senha = 'Informe sua senha'
     return errs
@@ -36,7 +28,7 @@ function LoginForm() {
     const errs = validate()
     if (Object.keys(errs).length) { setFieldErrors(errs); return }
     setFieldErrors({})
-    await login(email, senha, lembrar, oficinaSlag)
+    await login(email, senha, lembrar)
   }
 
   const inputStyle = (hasError: boolean): React.CSSProperties => ({
@@ -55,16 +47,6 @@ function LoginForm() {
       </p>
 
       <form onSubmit={handleSubmit} style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
-        {!defaultTenant && (
-          <div>
-            <label style={{ color: 'var(--muted)', fontSize: 13, marginBottom: 6, display: 'block' }}>Código da oficina</label>
-            <input type="text" value={oficinaSlag} onChange={e => setOficinaSlag(e.target.value)}
-              placeholder="minha-oficina" autoComplete="organization"
-              style={inputStyle(!!fieldErrors.oficina_slug)} />
-            {fieldErrors.oficina_slug && <p style={{ color: 'var(--danger)', fontSize: 12, marginTop: 4 }}>{fieldErrors.oficina_slug}</p>}
-          </div>
-        )}
-
         <div>
           <label style={{ color: 'var(--muted)', fontSize: 13, marginBottom: 6, display: 'block' }}>E-mail</label>
           <input type="email" value={email} onChange={e => setEmail(e.target.value)}
@@ -119,11 +101,11 @@ function LoginForm() {
       {process.env.NODE_ENV === 'development' && (
         <div style={{ marginTop: 32, padding: 16, background: 'var(--card)', borderRadius: 8, border: '1px solid var(--border)' }}>
           <p style={{ color: 'var(--muted)', fontSize: 12, marginBottom: 8 }}>Acesso rápido (demo):</p>
-          <button onClick={() => { setOficinaSlag('oficina-silva'); setEmail('admin@mecanicapro.com'); setSenha('admin123') }}
+          <button onClick={() => { setEmail('admin@mecanicapro.com'); setSenha('admin123') }}
             style={{ background: 'none', border: 'none', color: 'var(--accent)', fontSize: 13, cursor: 'pointer', padding: 0, display: 'block', marginBottom: 4, textAlign: 'left' }}>
             Admin → admin@mecanicapro.com / admin123
           </button>
-          <button onClick={() => { setOficinaSlag('oficina-silva'); setEmail('mecanico@mecanicapro.com'); setSenha('mec123') }}
+          <button onClick={() => { setEmail('mecanico@mecanicapro.com'); setSenha('mec123') }}
             style={{ background: 'none', border: 'none', color: 'var(--accent)', fontSize: 13, cursor: 'pointer', padding: 0, textAlign: 'left' }}>
             Mecânico → mecanico@mecanicapro.com / mec123
           </button>

@@ -1,5 +1,6 @@
 <?php
 
+use Illuminate\Support\Facades\Route;
 use App\Http\Controllers\Auth\LoginController;
 use App\Http\Controllers\Auth\ForgotPasswordController;
 use App\Http\Controllers\Auth\ResetPasswordController;
@@ -19,7 +20,9 @@ use App\Http\Controllers\SaaS\DashboardController as SaaSDashboardController;
 use App\Http\Controllers\SaaS\OficinaController as SaaSOficinaController;
 use App\Http\Controllers\SaaS\PlanoController as SaaSPlanoController;
 use App\Http\Controllers\SaaS\WebhookController as SaaSWebhookController;
-use Illuminate\Support\Facades\Route;
+
+// Health check — para docker-compose healthcheck e monitoramento
+Route::get('/health', fn() => response()->json(['status' => 'ok']));
 
 // Asaas webhook — público, validado pelo token no header
 Route::post('saas/webhooks/asaas', [SaaSWebhookController::class, 'asaas']);

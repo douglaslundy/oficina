@@ -35,11 +35,11 @@ RUN composer install --no-dev --optimize-autoloader --no-interaction --no-script
 
 COPY . .
 
-RUN composer dump-autoload --optimize
-
 RUN mkdir -p storage/framework/sessions storage/framework/views \
         storage/framework/cache storage/logs bootstrap/cache \
     && chmod -R 775 storage bootstrap/cache
+
+RUN composer dump-autoload --optimize
 
 COPY docker-entrypoint.sh /usr/local/bin/docker-entrypoint.sh
 RUN chmod +x /usr/local/bin/docker-entrypoint.sh
