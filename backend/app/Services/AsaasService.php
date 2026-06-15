@@ -54,6 +54,61 @@ class AsaasService
         return $response->successful();
     }
 
+    public function buscarSubscription(string $subscriptionId): array
+    {
+        $response = Http::withHeaders(['access_token' => $this->apiKey])
+            ->get("{$this->baseUrl}/subscriptions/{$subscriptionId}");
+
+        $this->throwIfFailed($response, 'buscar subscription');
+        return $response->json();
+    }
+
+    public function buscarPagamentos(string $subscriptionId, int $limit = 10): array
+    {
+        $response = Http::withHeaders(['access_token' => $this->apiKey])
+            ->get("{$this->baseUrl}/payments", [
+                'subscription' => $subscriptionId,
+                'limit'        => $limit,
+                'sort'         => 'dueDate',
+                'order'        => 'desc',
+            ]);
+
+        $this->throwIfFailed($response, 'buscar pagamentos');
+        return $response->json('data', []);
+    }
+
+    public function criarCobrancaAvulsa(string $customerId, float $value, string $dueDate): array
+    {
+        $response = Http::withHeaders(['access_token' => $this->apiKey])
+            ->post("{$this->baseUrl}/payments", [
+                'customer'    => $customerId,
+                'billingType' => 'BOLETO',
+                'value'       => $value,
+                'dueDate'     => $dueDate,
+                'description' => 'Cobrança avulsa — MecânicaPro',
+            ]);
+
+        $this->throwIfFailed($response, 'criar cobrança avulsa');
+        return $response->json();
+    }
+
+    public function cancelarPagamento(string $paymentId): bool
+    {
+        $response = Http::withHeaders(['access_token' => $this->apiKey])
+            ->delete("{$this->baseUrl}/payments/{$paymentId}");
+
+        return $response->successful();
+    }
+
+    public function buscarCustomer(string $customerId): array
+    {
+        $response = Http::withHeaders(['access_token' => $this->apiKey])
+            ->get("{$this->baseUrl}/customers/{$customerId}");
+
+        $this->throwIfFailed($response, 'buscar customer');
+        return $response->json();
+    }
+
     private function throwIfFailed(Response $response, string $operation): void
     {
         if ($response->failed()) {

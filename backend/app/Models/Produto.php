@@ -6,6 +6,7 @@ namespace App\Models;
 use App\Tenancy\HasTenantScope;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Support\Str;
+use App\Tenancy\TenancyContext;
 use Spatie\Activitylog\Models\Concerns\LogsActivity;
 use Spatie\Activitylog\Support\LogOptions;
 
@@ -33,7 +34,10 @@ class Produto extends Model
 
     public function getActivitylogOptions(): LogOptions
     {
-        return LogOptions::defaults()->logFillable()->logOnlyDirty();
+        return LogOptions::defaults()
+            ->logFillable()
+            ->logOnlyDirty()
+            ->useLogName(TenancyContext::getSlug() ?? 'default');
     }
 
     protected static function boot(): void

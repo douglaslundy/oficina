@@ -12,6 +12,7 @@ use App\Http\Controllers\EstoqueController;
 use App\Http\Controllers\NotaFiscalController;
 use App\Http\Controllers\OrdemServicoController;
 use App\Http\Controllers\ProdutoController;
+use App\Http\Controllers\AuditController;
 use App\Http\Controllers\RelatorioController;
 use App\Http\Controllers\UsuarioController;
 use App\Http\Controllers\VeiculoController;
@@ -51,8 +52,15 @@ Route::prefix('saas')->group(function () {
         Route::delete('planos/{id}', [SaaSPlanoController::class, 'destroy']);
 
         // Cobranças
-        Route::get('cobrancas',              [SaaSCobrancaController::class, 'index']);
-        Route::get('cobrancas/{oficina_id}', [SaaSCobrancaController::class, 'byOficina']);
+        Route::get('cobrancas',                [SaaSCobrancaController::class, 'index']);
+        Route::get('cobrancas/por/{oficina_id}', [SaaSCobrancaController::class, 'byOficina']);
+        Route::delete('cobrancas/{id}',        [SaaSCobrancaController::class, 'cancelar']);
+
+        // Oficinas — Asaas
+        Route::get('oficinas/{id}/asaas',                      [SaaSOficinaController::class, 'asaasStatus']);
+        Route::post('oficinas/{id}/sincronizar-cobrancas',     [SaaSOficinaController::class, 'sincronizarCobrancas']);
+        Route::post('oficinas/{id}/gerar-cobranca',            [SaaSOficinaController::class, 'gerarCobrancaAvulsa']);
+        Route::post('oficinas/{id}/cancelar-assinatura',       [SaaSOficinaController::class, 'cancelarAssinatura']);
 
         // Dashboard SaaS
         Route::get('dashboard', [SaaSDashboardController::class, 'index']);
@@ -159,4 +167,10 @@ Route::middleware(['tenant', 'auth:sanctum'])->group(function () {
     Route::apiResource('agendamentos', AgendamentoController::class);
     Route::post('agendamentos/{id}/confirmar', [AgendamentoController::class, 'confirmar']);
     Route::post('agendamentos/{id}/cancelar',  [AgendamentoController::class, 'cancelar']);
+});
+
+// ─── Auditoria — somente ADMIN ────────────────────────────────────────────────
+Route::middleware(['tenant', 'auth:sanctum', 'role:ADMIN'])->group(function () {
+    Route::get('auditoria',      [AuditController::class, 'index']);
+    Route::get('auditoria/{id}', [AuditController::class, 'show']);
 });

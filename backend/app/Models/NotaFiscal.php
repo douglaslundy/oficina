@@ -7,6 +7,7 @@ use App\Tenancy\HasTenantScope;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Support\Str;
+use App\Tenancy\TenancyContext;
 use Spatie\Activitylog\Models\Concerns\LogsActivity;
 use Spatie\Activitylog\Support\LogOptions;
 
@@ -35,7 +36,10 @@ class NotaFiscal extends Model
 
     public function getActivitylogOptions(): LogOptions
     {
-        return LogOptions::defaults()->logOnly(['status', 'numero', 'valor_total', 'chave_acesso'])->logOnlyDirty();
+        return LogOptions::defaults()
+            ->logOnly(['status', 'numero', 'valor_total', 'chave_acesso'])
+            ->logOnlyDirty()
+            ->useLogName(TenancyContext::getSlug() ?? 'default');
     }
 
     protected static function boot(): void

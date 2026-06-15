@@ -26,7 +26,7 @@ class InitializeTenancyByHeader
                 return response()->json(['message' => 'Esta oficina foi cancelada.'], 403);
             }
 
-            TenancyContext::set($oficina->id);
+            TenancyContext::set($oficina->id, $oficina->slug);
         }
 
         $response = $next($request);

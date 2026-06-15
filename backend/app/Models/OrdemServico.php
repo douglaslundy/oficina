@@ -8,6 +8,7 @@ use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Support\Str;
+use App\Tenancy\TenancyContext;
 use Spatie\Activitylog\Models\Concerns\LogsActivity;
 use Spatie\Activitylog\Support\LogOptions;
 
@@ -40,7 +41,10 @@ class OrdemServico extends Model
 
     public function getActivitylogOptions(): LogOptions
     {
-        return LogOptions::defaults()->logOnly(['status', 'valor_total', 'valor_pago', 'forma_pagamento'])->logOnlyDirty();
+        return LogOptions::defaults()
+            ->logOnly(['status', 'valor_total', 'valor_pago', 'forma_pagamento'])
+            ->logOnlyDirty()
+            ->useLogName(TenancyContext::getSlug() ?? 'default');
     }
 
     protected static function boot(): void

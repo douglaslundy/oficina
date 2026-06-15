@@ -4,9 +4,11 @@ declare(strict_types=1);
 namespace App\Http\Controllers\SaaS;
 
 use App\Http\Controllers\Controller;
+use App\Models\Cobranca;
 use App\Models\Oficina;
 use App\Models\OrdemServico;
 use App\Models\Usuario;
+use App\Services\AsaasService;
 use App\Services\TenantProvisionService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
@@ -14,7 +16,10 @@ use Illuminate\Support\Carbon;
 
 class OficinaController extends Controller
 {
-    public function __construct(private TenantProvisionService $provisionService) {}
+    public function __construct(
+        private TenantProvisionService $provisionService,
+        private AsaasService $asaas,
+    ) {}
 
     public function index(Request $request): JsonResponse
     {
@@ -114,6 +119,152 @@ class OficinaController extends Controller
             'message' => 'Oficina reativada com sucesso.',
             'data'    => ['id' => $oficina->id, 'status' => 'ATIVA'],
         ]);
+    }
+
+    public function asaasStatus(string $id): JsonResponse
+    {
+        $oficina = Oficina::findOrFail($id);
+
+        $subscription = null;
+        $customer     = null;
+        $pagamentos   = [];
+
+        try {
+            if ($oficina->asaas_customer_id) {
+                $customer = $this->asaas->buscarCustomer($oficina->asaas_customer_id);
+            }
+            if ($oficina->asaas_subscription_id) {
+                $subscription = $this->asaas->buscarSubscription($oficina->asaas_subscription_id);
+                $pagamentos   = $this->asaas->buscarPagamentos($oficina->asaas_subscription_id, 5);
+            }
+        } catch (\Throwable $e) {
+            return response()->json([
+                'error'   => true,
+                'message' => 'Falha ao consultar Asaas: ' . $e->getMessage(),
+            ], 502);
+        }
+
+        return response()->json([
+            'asaas_customer_id'      => $oficina->asaas_customer_id,
+            'asaas_subscription_id'  => $oficina->asaas_subscription_id,
+            'customer'               => $customer,
+            'subscription'           => $subscription,
+            'ultimos_pagamentos'     => $pagamentos,
+        ]);
+    }
+
+    public function sincronizarCobrancas(string $id): JsonResponse
+    {
+        $oficina = Oficina::findOrFail($id);
+
+        if (!$oficina->asaas_subscription_id) {
+            return response()->json(['message' => 'Oficina não possui assinatura no Asaas.'], 422);
+        }
+
+        try {
+            $pagamentos = $this->asaas->buscarPagamentos($oficina->asaas_subscription_id, 24);
+        } catch (\Throwable $e) {
+            return response()->json(['message' => 'Falha ao consultar Asaas: ' . $e->getMessage()], 502);
+        }
+
+        $sincronizados = 0;
+
+        foreach ($pagamentos as $p) {
+            $asaasStatus = match ($p['status'] ?? '') {
+                'RECEIVED', 'CONFIRMED' => 'PAGA',
+                'OVERDUE'               => 'VENCIDO',
+                default                 => 'PENDENTE',
+            };
+
+            $existing = Cobranca::where('asaas_payment_id', $p['id'])->first();
+
+            if ($existing) {
+                $existing->update(['status' => $asaasStatus, 'pago_em' => $asaasStatus === 'PAGA' ? ($p['paymentDate'] ?? now()) : null]);
+            } else {
+                Cobranca::create([
+                    'oficina_id'       => $oficina->id,
+                    'mes_referencia'   => Carbon::parse($p['dueDate'] ?? now())->startOfMonth(),
+                    'valor'            => $p['value'] ?? 0,
+                    'status'           => $asaasStatus,
+                    'asaas_payment_id' => $p['id'],
+                    'vencimento'       => $p['dueDate'] ?? null,
+                    'pago_em'          => $asaasStatus === 'PAGA' ? ($p['paymentDate'] ?? null) : null,
+                ]);
+                $sincronizados++;
+            }
+        }
+
+        return response()->json([
+            'message'       => "Sincronização concluída. {$sincronizados} nova(s) cobrança(s) importada(s).",
+            'sincronizados' => $sincronizados,
+            'total'         => count($pagamentos),
+        ]);
+    }
+
+    public function gerarCobrancaAvulsa(Request $request, string $id): JsonResponse
+    {
+        $oficina = Oficina::findOrFail($id);
+
+        if (!$oficina->asaas_customer_id) {
+            return response()->json(['message' => 'Oficina não possui customer no Asaas.'], 422);
+        }
+
+        $validated = $request->validate([
+            'valor'      => 'required|numeric|min:1',
+            'vencimento' => 'required|date|after:yesterday',
+        ]);
+
+        try {
+            $payment = $this->asaas->criarCobrancaAvulsa(
+                $oficina->asaas_customer_id,
+                (float) $validated['valor'],
+                $validated['vencimento'],
+            );
+        } catch (\Throwable $e) {
+            return response()->json(['message' => 'Falha ao criar cobrança no Asaas: ' . $e->getMessage()], 502);
+        }
+
+        $cobranca = Cobranca::create([
+            'oficina_id'       => $oficina->id,
+            'mes_referencia'   => Carbon::parse($validated['vencimento'])->startOfMonth(),
+            'valor'            => $validated['valor'],
+            'status'           => 'PENDENTE',
+            'asaas_payment_id' => $payment['id'],
+            'vencimento'       => $validated['vencimento'],
+        ]);
+
+        return response()->json([
+            'message'  => 'Cobrança avulsa criada com sucesso.',
+            'cobranca' => [
+                'id'               => $cobranca->id,
+                'asaas_payment_id' => $cobranca->asaas_payment_id,
+                'valor'            => number_format($cobranca->valor, 2, '.', ''),
+                'vencimento'       => $cobranca->vencimento?->toDateString(),
+                'status'           => $cobranca->status,
+            ],
+        ], 201);
+    }
+
+    public function cancelarAssinatura(string $id): JsonResponse
+    {
+        $oficina = Oficina::findOrFail($id);
+
+        if (!$oficina->asaas_subscription_id) {
+            return response()->json(['message' => 'Oficina não possui assinatura no Asaas.'], 422);
+        }
+
+        try {
+            $this->asaas->cancelarSubscription($oficina->asaas_subscription_id);
+        } catch (\Throwable $e) {
+            return response()->json(['message' => 'Falha ao cancelar no Asaas: ' . $e->getMessage()], 502);
+        }
+
+        $oficina->update([
+            'status'                 => 'CANCELADA',
+            'asaas_subscription_id'  => null,
+        ]);
+
+        return response()->json(['message' => 'Assinatura cancelada e oficina desativada.']);
     }
 
     private function formatOficina(Oficina $oficina, Carbon $inicioMes): array

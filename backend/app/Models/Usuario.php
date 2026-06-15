@@ -8,6 +8,7 @@ use Illuminate\Foundation\Auth\User as Authenticatable;
 use Illuminate\Notifications\Notifiable;
 use Illuminate\Support\Str;
 use Laravel\Sanctum\HasApiTokens;
+use App\Tenancy\TenancyContext;
 use Spatie\Activitylog\Models\Concerns\LogsActivity;
 use Spatie\Activitylog\Support\LogOptions;
 
@@ -35,7 +36,10 @@ class Usuario extends Authenticatable
 
     public function getActivitylogOptions(): LogOptions
     {
-        return LogOptions::defaults()->logOnly(['nome', 'email', 'role', 'status'])->logOnlyDirty();
+        return LogOptions::defaults()
+            ->logOnly(['nome', 'email', 'role', 'status'])
+            ->logOnlyDirty()
+            ->useLogName(TenancyContext::getSlug() ?? 'default');
     }
 
     protected static function boot(): void
