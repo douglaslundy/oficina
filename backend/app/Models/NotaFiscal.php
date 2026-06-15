@@ -7,10 +7,12 @@ use App\Tenancy\HasTenantScope;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Support\Str;
+use Spatie\Activitylog\Models\Concerns\LogsActivity;
+use Spatie\Activitylog\Support\LogOptions;
 
 class NotaFiscal extends Model
 {
-    use HasTenantScope;
+    use HasTenantScope, LogsActivity;
 
     protected $table = 'notas_fiscais';
     protected $primaryKey = 'id';
@@ -30,6 +32,11 @@ class NotaFiscal extends Model
         'emitido_em' => 'datetime',
         'criado_em'  => 'datetime',
     ];
+
+    public function getActivitylogOptions(): LogOptions
+    {
+        return LogOptions::defaults()->logOnly(['status', 'numero', 'valor_total', 'chave_acesso'])->logOnlyDirty();
+    }
 
     protected static function boot(): void
     {

@@ -7,11 +7,12 @@ use App\Tenancy\HasTenantScope;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Support\Str;
-
+use Spatie\Activitylog\Models\Concerns\LogsActivity;
+use Spatie\Activitylog\Support\LogOptions;
 
 class Cliente extends Model
 {
-    use HasTenantScope;
+    use HasTenantScope, LogsActivity;
 
     protected $table = 'clientes';
     protected $primaryKey = 'id';
@@ -26,6 +27,11 @@ class Cliente extends Model
     ];
 
     protected $casts = ['criado_em' => 'datetime'];
+
+    public function getActivitylogOptions(): LogOptions
+    {
+        return LogOptions::defaults()->logFillable()->logOnlyDirty();
+    }
 
     protected static function boot(): void
     {

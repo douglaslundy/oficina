@@ -8,10 +8,12 @@ use Illuminate\Foundation\Auth\User as Authenticatable;
 use Illuminate\Notifications\Notifiable;
 use Illuminate\Support\Str;
 use Laravel\Sanctum\HasApiTokens;
+use Spatie\Activitylog\Models\Concerns\LogsActivity;
+use Spatie\Activitylog\Support\LogOptions;
 
 class Usuario extends Authenticatable
 {
-    use HasApiTokens, Notifiable, HasTenantScope;
+    use HasApiTokens, Notifiable, HasTenantScope, LogsActivity;
 
     protected $table = 'usuarios';
     protected $primaryKey = 'id';
@@ -30,6 +32,11 @@ class Usuario extends Authenticatable
         'ultimo_acesso' => 'datetime',
         'criado_em'     => 'datetime',
     ];
+
+    public function getActivitylogOptions(): LogOptions
+    {
+        return LogOptions::defaults()->logOnly(['nome', 'email', 'role', 'status'])->logOnlyDirty();
+    }
 
     protected static function boot(): void
     {

@@ -8,10 +8,12 @@ use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Support\Str;
+use Spatie\Activitylog\Models\Concerns\LogsActivity;
+use Spatie\Activitylog\Support\LogOptions;
 
 class OrdemServico extends Model
 {
-    use HasTenantScope;
+    use HasTenantScope, LogsActivity;
 
     protected $table = 'ordens_servico';
     protected $primaryKey = 'id';
@@ -35,6 +37,11 @@ class OrdemServico extends Model
         'valor_pago'                 => 'float',
         'venda_a_prazo'              => 'boolean',
     ];
+
+    public function getActivitylogOptions(): LogOptions
+    {
+        return LogOptions::defaults()->logOnly(['status', 'valor_total', 'valor_pago', 'forma_pagamento'])->logOnlyDirty();
+    }
 
     protected static function boot(): void
     {
