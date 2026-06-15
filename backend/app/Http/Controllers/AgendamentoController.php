@@ -17,12 +17,11 @@ class AgendamentoController extends Controller
     {
         $query = Agendamento::with(['cliente', 'mecanico']);
 
-        // Filtrar por período (semana/mês)
-        if ($request->has('inicio') && $request->has('fim')) {
-            $query->whereBetween('data_hora_inicio', [
-                $request->inicio,
-                $request->fim,
-            ]);
+        // Filtrar por período (aceita inicio/fim ou data_inicio/data_fim)
+        $inicio = $request->input('inicio', $request->input('data_inicio'));
+        $fim    = $request->input('fim',    $request->input('data_fim'));
+        if ($inicio && $fim) {
+            $query->whereBetween('data_hora_inicio', [$inicio, $fim . ' 23:59:59']);
         }
 
         if ($request->has('status')) {
