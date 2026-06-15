@@ -1,6 +1,7 @@
 'use client'
 import { usePathname } from 'next/navigation'
 import Link from 'next/link'
+import { useTheme } from 'next-themes'
 
 const BREADCRUMBS: Record<string, string> = {
   '/':                    'Dashboard',
@@ -34,6 +35,7 @@ interface TopbarProps {
 
 export function Topbar({ onMenuClick, isMobile = false }: TopbarProps) {
   const pathname = usePathname()
+  const { theme, setTheme } = useTheme()
   const breadcrumb = BREADCRUMBS[pathname] ?? pathname.split('/').filter(Boolean).join(' / ')
   const action = ACTION_BUTTONS[pathname]
 
@@ -70,15 +72,28 @@ export function Topbar({ onMenuClick, isMobile = false }: TopbarProps) {
         ))}
       </nav>
       </div>
-      {action && (
-        <Link href={action.href} className="font-display"
+      <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+        <button
+          onClick={() => setTheme(theme === 'dark' ? 'light' : 'dark')}
+          title={theme === 'dark' ? 'Modo claro' : 'Modo escuro'}
           style={{
-            padding: '8px 16px', background: 'var(--accent)', color: '#000',
-            borderRadius: 8, textDecoration: 'none', fontWeight: 700, fontSize: 14,
-          }}>
-          {action.label}
-        </Link>
-      )}
+            background: 'none', border: '1px solid var(--border)',
+            color: 'var(--muted)', cursor: 'pointer', fontSize: 16,
+            borderRadius: 6, padding: '4px 8px', lineHeight: 1,
+          }}
+        >
+          {theme === 'dark' ? '☀️' : '🌙'}
+        </button>
+        {action && (
+          <Link href={action.href} className="font-display"
+            style={{
+              padding: '8px 16px', background: 'var(--accent)', color: '#000',
+              borderRadius: 8, textDecoration: 'none', fontWeight: 700, fontSize: 14,
+            }}>
+            {action.label}
+          </Link>
+        )}
+      </div>
     </header>
   )
 }

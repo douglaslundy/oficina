@@ -18,6 +18,15 @@
   --info:    #1e88e5;
 }
 
+[data-theme='light'] {
+  --bg:      #f4f5f7;
+  --surface: #ffffff;
+  --card:    #ffffff;
+  --border:  #e2e4e9;
+  --text:    #1a1c21;
+  --muted:   #6b7280;
+}
+
 @theme inline {
   --color-bg:      var(--bg);
   --color-surface: var(--surface);
