@@ -55,25 +55,29 @@ export default function OSDetailPage() {
     api.get(`/os/${id}`).then(r => setOs(r.data.data)).catch(() => {})
   }, [id])
 
-  async function downloadPdf() {
+  async function downloadFile(endpoint: string, filename: string) {
     try {
       const token = localStorage.getItem('auth_token')
+      const slug  = localStorage.getItem('oficina_slug')
       const response = await fetch(
-        `${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000'}/api/os/${id}/pdf`,
-        { headers: { Authorization: `Bearer ${token}` } }
+        `${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000'}/api/os/${id}/${endpoint}`,
+        { headers: { Authorization: `Bearer ${token}`, 'X-Tenant': slug ?? '' } }
       )
       if (!response.ok) throw new Error('Erro ao gerar PDF')
       const blob = await response.blob()
-      const url = URL.createObjectURL(blob)
+      const url  = URL.createObjectURL(blob)
       const a = document.createElement('a')
       a.href = url
-      a.download = `OS-${os?.numero ?? id}.pdf`
+      a.download = filename
       a.click()
       URL.revokeObjectURL(url)
     } catch {
       alert('Erro ao baixar PDF.')
     }
   }
+
+  const downloadPdf    = () => downloadFile('pdf',    `OS-${os?.numero ?? id}.pdf`)
+  const downloadRecibo = () => downloadFile('recibo', `Recibo-OS-${os?.numero ?? id}.pdf`)
 
   if (!os) return <p style={{ color: 'var(--muted)' }}>Carregando...</p>
 
@@ -102,6 +106,12 @@ export default function OSDetailPage() {
           style={{ padding: '6px 14px', background: 'transparent', border: '1px solid var(--border)', color: 'var(--muted)', borderRadius: 8, cursor: 'pointer', fontSize: 13 }}>
           📄 PDF
         </button>
+        {(os.valor_pago ?? 0) > 0 && (
+          <button onClick={downloadRecibo}
+            style={{ padding: '6px 14px', background: 'transparent', border: '1px solid var(--success)', color: 'var(--success)', borderRadius: 8, cursor: 'pointer', fontSize: 13 }}>
+            🧾 Recibo
+          </button>
+        )}
       </div>
       <div style={{ background: 'var(--card)', borderRadius: 12, border: '1px solid var(--border)', padding: 32 }}>
         <OSForm
