@@ -6,20 +6,44 @@ import { StatusPill } from '@/components/ui/StatusPill'
 import { formatarMoeda } from '@/lib/formatters'
 import api from '@/lib/api'
 
+interface OsItem {
+  id: string
+  tipo: 'SERVICO' | 'PECA'
+  produto_id?: string
+  descricao: string
+  quantidade: number
+  valor_unitario: number
+  valor_total?: number
+}
+
 interface OsData {
   id: string
   numero: number
   status: string
   saldo_devedor: number
+  valor_total?: number
+  valor_pago?: number
   cliente_id: string
+  cliente?: { id: string; nome: string; veiculo_placa?: string }
   mecanico_id?: string
+  mecanico?: { id: string; nome: string }
+  veiculo_descricao?: string
+  veiculo_placa?: string
   problema_relatado?: string
   forma_pagamento?: string
   prazo_entrega?: string
-  valor_pago?: number
   venda_a_prazo?: boolean
   prazo_pagamento_dias?: number
   data_vencimento_pagamento?: string
+  itens?: OsItem[]
+}
+
+function toInputDate(val?: string | null): string | undefined {
+  if (!val) return undefined
+  // dd/mm/YYYY → YYYY-MM-DD
+  const m = val.match(/^(\d{2})\/(\d{2})\/(\d{4})/)
+  if (m) return `${m[3]}-${m[2]}-${m[1]}`
+  return val
 }
 
 export default function OSDetailPage() {
@@ -53,6 +77,11 @@ export default function OSDetailPage() {
 
   if (!os) return <p style={{ color: 'var(--muted)' }}>Carregando...</p>
 
+  const formData = {
+    ...os,
+    prazo_entrega: toInputDate(os.prazo_entrega),
+  }
+
   return (
     <div style={{ maxWidth: 900, margin: '0 auto' }}>
       <div style={{ display: 'flex', alignItems: 'center', gap: 16, marginBottom: 24, flexWrap: 'wrap' }}>
@@ -76,7 +105,7 @@ export default function OSDetailPage() {
       </div>
       <div style={{ background: 'var(--card)', borderRadius: 12, border: '1px solid var(--border)', padding: 32 }}>
         <OSForm
-          initialData={os}
+          initialData={formData}
           onSuccess={updated => setOs(updated as unknown as OsData)}
         />
       </div>

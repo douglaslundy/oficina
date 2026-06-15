@@ -94,8 +94,9 @@ class OrdemServicoController extends Controller
 
         $validated = $request->validate([
             'status'               => ['sometimes', 'string'],
+            'mecanico_id'          => ['sometimes', 'nullable', 'string', 'exists:usuarios,id'],
             'valor_pago'           => ['sometimes', 'numeric', 'min:0'],
-            'forma_pagamento'      => ['sometimes', 'string'],
+            'forma_pagamento'      => ['sometimes', 'nullable', 'string'],
             'prazo_entrega'        => ['sometimes', 'nullable', 'date'],
             'venda_a_prazo'        => ['sometimes', 'boolean'],
             'prazo_pagamento_dias' => ['sometimes', 'nullable', 'integer', 'min:1', 'max:365'],
