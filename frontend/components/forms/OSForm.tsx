@@ -86,10 +86,17 @@ function veiculoLabel(v: Veiculo): string {
   return parts.join(' — ')
 }
 
+// Rótulo do produto no select, com a quantidade em estoque entre parênteses.
+// Ex.: "Correia dentada - (20un)"
+function produtoLabel(p: { nome: string; qty_atual: number; unidade?: string }): string {
+  const un = (p.unidade ?? 'un').toLowerCase()
+  return `${p.nome} - (${p.qty_atual}${un})`
+}
+
 export function OSForm({ initialData, onSuccess }: OSFormProps) {
   const isEdit = !!initialData?.id
   const [mecanicos, setMecanicos] = useState<Array<{ id: string; nome: string }>>([])
-  const [produtos, setProdutos] = useState<Array<{ id: string; nome: string; qty_atual: number; preco_venda: number | null }>>([])
+  const [produtos, setProdutos] = useState<Array<{ id: string; nome: string; qty_atual: number; unidade?: string; preco_venda: number | null }>>([])
 
   // New mode only
   const [clientes, setClientes] = useState<Array<{ id: string; nome: string; veiculo_modelo?: string; veiculo_ano?: number | null; veiculo_placa?: string }>>([])
@@ -521,7 +528,7 @@ export function OSForm({ initialData, onSuccess }: OSFormProps) {
                     >
                       <option value="">Selecionar peça...</option>
                       {produtos.map(p => (
-                        <option key={p.id} value={p.id}>{p.nome} (est: {p.qty_atual})</option>
+                        <option key={p.id} value={p.id}>{produtoLabel(p)}</option>
                       ))}
                     </select>
                   ) : (
@@ -569,7 +576,7 @@ export function OSForm({ initialData, onSuccess }: OSFormProps) {
 
 function NewItemInline({ osId, produtos, onAdded }: {
   osId: string
-  produtos: Array<{ id: string; nome: string; preco_venda: number | null }>
+  produtos: Array<{ id: string; nome: string; qty_atual: number; unidade?: string; preco_venda: number | null }>
   onAdded?: (data: Record<string, unknown>) => void
 }) {
   const [tipo, setTipo] = useState<'SERVICO' | 'PECA'>('SERVICO')
@@ -605,8 +612,9 @@ function NewItemInline({ osId, produtos, onAdded }: {
       setQuantidade(1)
       setValorUnitario(0)
       onAdded?.({})
-    } catch {
-      toast('Erro ao adicionar item.', 'danger')
+    } catch (err: unknown) {
+      const e = err as { response?: { data?: { message?: string } } }
+      toast(e.response?.data?.message ?? 'Erro ao adicionar item.', 'danger')
     } finally {
       setLoading(false)
     }
@@ -628,7 +636,7 @@ function NewItemInline({ osId, produtos, onAdded }: {
         {tipo === 'PECA' ? (
           <select value={produtoId} onChange={e => handleProdutoSelect(e.target.value)} style={SI}>
             <option value="">Selecionar peça...</option>
-            {produtos.map(p => <option key={p.id} value={p.id}>{p.nome}</option>)}
+            {produtos.map(p => <option key={p.id} value={p.id}>{produtoLabel(p)}</option>)}
           </select>
         ) : (
           <input value={descricao} onChange={e => setDescricao(e.target.value)}
