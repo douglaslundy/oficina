@@ -4,7 +4,10 @@ import { useParams, useRouter } from 'next/navigation'
 import { OSForm } from '@/components/forms/OSForm'
 import { StatusPill } from '@/components/ui/StatusPill'
 import { formatarMoeda } from '@/lib/formatters'
+import { toast } from '@/hooks/useToast'
 import api from '@/lib/api'
+
+const FORMAS_PAGAMENTO = ['Dinheiro', 'Cartão de Crédito', 'Cartão de Débito', 'PIX', 'Cheque', 'Transferência', 'Boleto']
 
 interface OsItem {
   id: string
@@ -14,6 +17,13 @@ interface OsItem {
   quantidade: number
   valor_unitario: number
   valor_total?: number
+}
+
+interface OsPagamento {
+  id: string
+  forma_pagamento: string
+  valor: number
+  criado_em: string
 }
 
 interface OsData {
@@ -36,6 +46,7 @@ interface OsData {
   prazo_pagamento_dias?: number
   data_vencimento_pagamento?: string
   itens?: OsItem[]
+  pagamentos?: OsPagamento[]
 }
 
 function toInputDate(val?: string | null): string | undefined {
@@ -83,6 +94,35 @@ export default function OSDetailPage() {
   const downloadPdf    = () => downloadFile('pdf',    `OS-${os?.numero ?? id}.pdf`)
   const downloadRecibo = () => downloadFile('recibo', `Recibo-OS-${os?.numero ?? id}.pdf`)
 
+  const [novoPag, setNovoPag] = useState({ forma: 'Dinheiro', valor: '' })
+  const [addingPag, setAddingPag] = useState(false)
+
+  async function handleAddPagamento() {
+    const valor = parseFloat(novoPag.valor)
+    if (!valor || valor <= 0) { toast('Informe um valor válido.', 'danger'); return }
+    setAddingPag(true)
+    try {
+      await api.post(`/os/${id}/pagamentos`, { forma_pagamento: novoPag.forma, valor })
+      toast('Pagamento registrado!', 'success')
+      setNovoPag({ forma: 'Dinheiro', valor: '' })
+      fetchOs()
+    } catch {
+      toast('Erro ao registrar pagamento.', 'danger')
+    } finally {
+      setAddingPag(false)
+    }
+  }
+
+  async function handleRemovePagamento(pagamentoId: string) {
+    try {
+      await api.delete(`/os/${id}/pagamentos/${pagamentoId}`)
+      toast('Pagamento removido.', 'success')
+      fetchOs()
+    } catch {
+      toast('Erro ao remover pagamento.', 'danger')
+    }
+  }
+
   if (!os) return <p style={{ color: 'var(--muted)' }}>Carregando...</p>
 
   const formData = {
@@ -123,6 +163,70 @@ export default function OSDetailPage() {
           onSuccess={() => fetchOs()}
         />
       </div>
+
+      {/* Pagamentos */}
+      {os.status !== 'CANCELADA' && (
+        <div style={{ marginTop: 24, background: 'var(--card)', borderRadius: 12, border: '1px solid var(--border)', padding: 24 }}>
+          <h2 className="font-display" style={{ fontSize: 18, fontWeight: 800, color: 'var(--text)', marginBottom: 16 }}>
+            Pagamentos
+          </h2>
+
+          {/* Lista de pagamentos */}
+          {(os.pagamentos ?? []).length > 0 ? (
+            <div style={{ marginBottom: 20 }}>
+              {(os.pagamentos ?? []).map(p => (
+                <div key={p.id} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '10px 0', borderBottom: '1px solid var(--border)' }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+                    <span style={{ color: 'var(--muted)', fontSize: 13 }}>{p.criado_em}</span>
+                    <span style={{ padding: '2px 10px', borderRadius: 999, background: 'rgba(30,136,229,.15)', color: 'var(--info)', fontSize: 12, fontWeight: 600 }}>{p.forma_pagamento}</span>
+                  </div>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+                    <span className="font-mono" style={{ color: 'var(--success)', fontWeight: 700 }}>{formatarMoeda(p.valor)}</span>
+                    {os.status !== 'CONCLUIDA' && (
+                      <button onClick={() => handleRemovePagamento(p.id)}
+                        style={{ background: 'none', border: 'none', color: 'var(--danger)', cursor: 'pointer', fontSize: 18, padding: '0 4px', lineHeight: 1 }}>
+                        ×
+                      </button>
+                    )}
+                  </div>
+                </div>
+              ))}
+              <div style={{ display: 'flex', justifyContent: 'space-between', paddingTop: 12, marginTop: 4 }}>
+                <span style={{ color: 'var(--muted)', fontSize: 13, fontWeight: 600 }}>Total pago</span>
+                <span className="font-mono" style={{ color: 'var(--success)', fontWeight: 700, fontSize: 15 }}>
+                  {formatarMoeda(os.valor_pago ?? 0)}
+                </span>
+              </div>
+            </div>
+          ) : (
+            <p style={{ color: 'var(--muted)', fontSize: 14, marginBottom: 20 }}>Nenhum pagamento registrado.</p>
+          )}
+
+          {/* Formulário novo pagamento */}
+          {os.status !== 'CONCLUIDA' && (
+            <div style={{ display: 'flex', gap: 10, alignItems: 'flex-end', flexWrap: 'wrap' }}>
+              <div>
+                <label style={{ color: 'var(--muted)', fontSize: 12, display: 'block', marginBottom: 4 }}>Forma</label>
+                <select value={novoPag.forma} onChange={e => setNovoPag(p => ({ ...p, forma: e.target.value }))}
+                  style={{ padding: '8px 12px', borderRadius: 8, background: 'var(--bg)', border: '1px solid var(--border)', color: 'var(--text)', fontSize: 14, outline: 'none' }}>
+                  {FORMAS_PAGAMENTO.map(f => <option key={f} value={f}>{f}</option>)}
+                </select>
+              </div>
+              <div>
+                <label style={{ color: 'var(--muted)', fontSize: 12, display: 'block', marginBottom: 4 }}>Valor (R$)</label>
+                <input type="number" step="0.01" min="0.01" value={novoPag.valor}
+                  onChange={e => setNovoPag(p => ({ ...p, valor: e.target.value }))}
+                  placeholder="0,00"
+                  style={{ padding: '8px 12px', borderRadius: 8, background: 'var(--bg)', border: '1px solid var(--border)', color: 'var(--text)', fontSize: 14, outline: 'none', width: 140 }} />
+              </div>
+              <button onClick={handleAddPagamento} disabled={addingPag} className="font-display"
+                style={{ padding: '9px 20px', background: addingPag ? 'var(--muted)' : 'var(--accent)', color: '#000', border: 'none', borderRadius: 8, fontWeight: 800, fontSize: 14, cursor: addingPag ? 'not-allowed' : 'pointer' }}>
+                {addingPag ? 'Registrando...' : '+ Registrar'}
+              </button>
+            </div>
+          )}
+        </div>
+      )}
     </div>
   )
 }

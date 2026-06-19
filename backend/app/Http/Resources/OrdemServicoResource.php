@@ -36,6 +36,12 @@ class OrdemServicoResource extends JsonResource
             'valor_total'                 => $this->valor_total,
             'valor_pago'                  => $this->valor_pago,
             'saldo_devedor'               => $this->saldo_devedor,
+            'pagamentos'       => $this->whenLoaded('pagamentos', fn() => $this->pagamentos->map(fn($p) => [
+                'id'              => $p->id,
+                'forma_pagamento' => $p->forma_pagamento,
+                'valor'           => $p->valor,
+                'criado_em'       => $p->criado_em?->format('d/m/Y H:i'),
+            ])),
             'itens'            => $this->whenLoaded('itens', fn() => $this->itens->map(fn($i) => [
                 'id'             => $i->id,
                 'tipo'           => $i->tipo,

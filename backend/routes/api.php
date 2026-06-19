@@ -125,9 +125,11 @@ Route::middleware(['tenant', 'auth:sanctum'])->group(function () {
 Route::middleware(['tenant', 'auth:sanctum', 'role:ADMIN,ATENDENTE,MECANICO'])->group(function () {
     Route::post('os',         [OrdemServicoController::class, 'store']);
     Route::put('os/{id}',     [OrdemServicoController::class, 'update']);
-    Route::post('os/{osId}/itens',            [OrdemServicoController::class, 'addItem']);
-    Route::put('os/{osId}/itens/{itemId}',    [OrdemServicoController::class, 'updateItem']);
-    Route::delete('os/{osId}/itens/{itemId}', [OrdemServicoController::class, 'removeItem']);
+    Route::post('os/{osId}/itens',                          [OrdemServicoController::class, 'addItem']);
+    Route::put('os/{osId}/itens/{itemId}',                  [OrdemServicoController::class, 'updateItem']);
+    Route::delete('os/{osId}/itens/{itemId}',               [OrdemServicoController::class, 'removeItem']);
+    Route::post('os/{id}/pagamentos',                        [OrdemServicoController::class, 'addPagamento']);
+    Route::delete('os/{id}/pagamentos/{pagamentoId}',        [OrdemServicoController::class, 'removePagamento']);
 });
 Route::middleware(['tenant', 'auth:sanctum', 'role:ADMIN'])->group(function () {
     Route::delete('os/{id}', [OrdemServicoController::class, 'destroy']);

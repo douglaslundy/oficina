@@ -5,6 +5,7 @@ namespace App\Http\Controllers;
 
 use App\Http\Resources\OrdemServicoResource;
 use App\Models\OrdemServico;
+use App\Models\OsPagamento;
 use App\Services\ClienteStatusService;
 use App\Services\EstoqueService;
 use App\Services\PlanLimitService;
@@ -112,7 +113,7 @@ class OrdemServicoController extends Controller
 
     public function show(string $id): OrdemServicoResource
     {
-        $os = OrdemServico::with(['cliente', 'mecanico', 'itens.produto'])->findOrFail($id);
+        $os = OrdemServico::with(['cliente', 'mecanico', 'itens.produto', 'pagamentos'])->findOrFail($id);
 
         activity()
             ->performedOn($os)
@@ -270,6 +271,54 @@ class OrdemServicoController extends Controller
         });
 
         return response()->json(['message' => 'Item removido.']);
+    }
+
+    public function addPagamento(Request $request, string $id): JsonResponse
+    {
+        $os = OrdemServico::findOrFail($id);
+
+        if (in_array($os->status, ['CANCELADA'], true)) {
+            return response()->json(['message' => 'Não é possível adicionar pagamento a OS cancelada.'], 422);
+        }
+
+        $validated = $request->validate([
+            'forma_pagamento' => ['required', 'string', 'max:30'],
+            'valor'           => ['required', 'numeric', 'min:0.01'],
+        ]);
+
+        $pagamento = DB::transaction(function () use ($os, $validated) {
+            $pagamento = OsPagamento::create([
+                'os_id'           => $os->id,
+                'forma_pagamento' => $validated['forma_pagamento'],
+                'valor'           => $validated['valor'],
+            ]);
+
+            $totalPago = $os->pagamentos()->sum('valor');
+            $os->update(['valor_pago' => $totalPago]);
+
+            $this->clienteStatusService->recalcular($os->cliente_id);
+
+            return $pagamento;
+        });
+
+        return response()->json(['data' => $pagamento], 201);
+    }
+
+    public function removePagamento(string $id, string $pagamentoId): JsonResponse
+    {
+        $os = OrdemServico::findOrFail($id);
+        $pagamento = $os->pagamentos()->findOrFail($pagamentoId);
+
+        DB::transaction(function () use ($os, $pagamento) {
+            $pagamento->delete();
+
+            $totalPago = $os->pagamentos()->sum('valor');
+            $os->update(['valor_pago' => $totalPago]);
+
+            $this->clienteStatusService->recalcular($os->cliente_id);
+        });
+
+        return response()->json(['message' => 'Pagamento removido.']);
     }
 
     public function pdf(string $id): \Illuminate\Http\Response
