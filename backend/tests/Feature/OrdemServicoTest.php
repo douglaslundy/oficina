@@ -40,28 +40,134 @@ class OrdemServicoTest extends TestCase
                  ->assertJsonStructure(['data' => ['id', 'numero', 'status']]);
     }
 
-    public function test_baixar_estoque_ao_concluir_os(): void
+    private function criarProduto(int $qtyAtual = 10): Produto
+    {
+        return Produto::create([
+            'nome' => 'Filtro', 'sku' => 'FLT01', 'categoria' => 'Filtros',
+            'qty_atual' => $qtyAtual, 'qty_minima' => 3, 'preco_venda' => 50,
+        ]);
+    }
+
+    public function test_estoque_baixa_ao_inserir_peca_na_os(): void
     {
         [$token, $mecId, $cliId] = $this->setupEntities();
+        $produto = $this->criarProduto(10);
 
-        $produto = Produto::create([
-            'nome' => 'Filtro', 'sku' => 'FLT01', 'categoria' => 'Filtros',
-            'qty_atual' => 10, 'qty_minima' => 3, 'preco_venda' => 50,
-        ]);
-
-        $os = $this->withToken($token)->postJson('/api/os', [
+        $this->withToken($token)->postJson('/api/os', [
             'cliente_id' => $cliId, 'mecanico_id' => $mecId,
             'problema_relatado' => 'Troca filtro', 'status' => 'ABERTA',
             'itens' => [[
                 'tipo' => 'PECA', 'produto_id' => $produto->id,
                 'descricao' => 'Filtro', 'quantidade' => 2, 'valor_unitario' => 50,
             ]],
+        ])->assertStatus(201);
+
+        // Baixa é imediata na criação, sem precisar concluir a OS.
+        $this->assertEquals(8, $produto->fresh()->qty_atual);
+    }
+
+    public function test_concluir_os_nao_baixa_estoque_em_duplicidade(): void
+    {
+        [$token, $mecId, $cliId] = $this->setupEntities();
+        $produto = $this->criarProduto(10);
+
+        $os = $this->withToken($token)->postJson('/api/os', [
+            'cliente_id' => $cliId, 'mecanico_id' => $mecId,
+            'status' => 'ABERTA',
+            'itens' => [[
+                'tipo' => 'PECA', 'produto_id' => $produto->id,
+                'descricao' => 'Filtro', 'quantidade' => 2, 'valor_unitario' => 50,
+            ]],
         ])->json('data');
 
-        $this->withToken($token)->patchJson("/api/os/{$os['id']}", [
+        // Já baixou para 8 na criação.
+        $this->assertEquals(8, $produto->fresh()->qty_atual);
+
+        $this->withToken($token)->putJson("/api/os/{$os['id']}", [
             'status' => 'CONCLUIDA', 'valor_pago' => 100,
-        ]);
+        ])->assertOk();
+
+        // Concluir não pode baixar de novo.
+        $this->assertEquals(8, $produto->fresh()->qty_atual);
+    }
+
+    public function test_adicionar_peca_via_endpoint_baixa_estoque(): void
+    {
+        [$token, $mecId, $cliId] = $this->setupEntities();
+        $produto = $this->criarProduto(10);
+
+        $os = $this->withToken($token)->postJson('/api/os', [
+            'cliente_id' => $cliId, 'mecanico_id' => $mecId, 'status' => 'ABERTA',
+        ])->json('data');
+
+        $this->withToken($token)->postJson("/api/os/{$os['id']}/itens", [
+            'tipo' => 'PECA', 'produto_id' => $produto->id,
+            'descricao' => 'Filtro', 'quantidade' => 3, 'valor_unitario' => 50,
+        ])->assertStatus(201);
+
+        $this->assertEquals(7, $produto->fresh()->qty_atual);
+    }
+
+    public function test_remover_peca_via_endpoint_devolve_estoque(): void
+    {
+        [$token, $mecId, $cliId] = $this->setupEntities();
+        $produto = $this->criarProduto(10);
+
+        $os = $this->withToken($token)->postJson('/api/os', [
+            'cliente_id' => $cliId, 'mecanico_id' => $mecId, 'status' => 'ABERTA',
+            'itens' => [[
+                'tipo' => 'PECA', 'produto_id' => $produto->id,
+                'descricao' => 'Filtro', 'quantidade' => 3, 'valor_unitario' => 50,
+            ]],
+        ])->json('data');
+
+        $this->assertEquals(7, $produto->fresh()->qty_atual);
+        $itemId = $os['itens'][0]['id'];
+
+        $this->withToken($token)->deleteJson("/api/os/{$os['id']}/itens/{$itemId}")
+            ->assertOk();
+
+        // Ao remover, o estoque volta.
+        $this->assertEquals(10, $produto->fresh()->qty_atual);
+    }
+
+    public function test_inserir_peca_sem_estoque_suficiente_retorna_422(): void
+    {
+        [$token, $mecId, $cliId] = $this->setupEntities();
+        $produto = $this->criarProduto(1);
+
+        $this->withToken($token)->postJson('/api/os', [
+            'cliente_id' => $cliId, 'mecanico_id' => $mecId, 'status' => 'ABERTA',
+            'itens' => [[
+                'tipo' => 'PECA', 'produto_id' => $produto->id,
+                'descricao' => 'Filtro', 'quantidade' => 5, 'valor_unitario' => 50,
+            ]],
+        ])->assertStatus(422)
+          ->assertJsonFragment(['message' => 'Estoque insuficiente para: Filtro']);
+
+        // Estoque não pode ter sido alterado (transação revertida).
+        $this->assertEquals(1, $produto->fresh()->qty_atual);
+    }
+
+    public function test_cancelar_os_devolve_estoque(): void
+    {
+        [$token, $mecId, $cliId] = $this->setupEntities();
+        $produto = $this->criarProduto(10);
+
+        $os = $this->withToken($token)->postJson('/api/os', [
+            'cliente_id' => $cliId, 'mecanico_id' => $mecId, 'status' => 'ABERTA',
+            'itens' => [[
+                'tipo' => 'PECA', 'produto_id' => $produto->id,
+                'descricao' => 'Filtro', 'quantidade' => 2, 'valor_unitario' => 50,
+            ]],
+        ])->json('data');
 
         $this->assertEquals(8, $produto->fresh()->qty_atual);
+
+        $this->withToken($token)->putJson("/api/os/{$os['id']}", [
+            'status' => 'CANCELADA',
+        ])->assertOk();
+
+        $this->assertEquals(10, $produto->fresh()->qty_atual);
     }
 }

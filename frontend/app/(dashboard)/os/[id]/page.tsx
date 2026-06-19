@@ -1,5 +1,5 @@
 'use client'
-import { useEffect, useState } from 'react'
+import { useCallback, useEffect, useState } from 'react'
 import { useParams, useRouter } from 'next/navigation'
 import { OSForm } from '@/components/forms/OSForm'
 import { StatusPill } from '@/components/ui/StatusPill'
@@ -51,9 +51,13 @@ export default function OSDetailPage() {
   const router = useRouter()
   const [os, setOs] = useState<OsData | null>(null)
 
-  useEffect(() => {
-    api.get(`/os/${id}`).then(r => setOs(r.data.data)).catch(() => {})
+  const fetchOs = useCallback(() => {
+    return api.get(`/os/${id}`).then(r => setOs(r.data.data)).catch(() => {})
   }, [id])
+
+  useEffect(() => {
+    fetchOs()
+  }, [fetchOs])
 
   async function downloadFile(endpoint: string, filename: string) {
     try {
@@ -116,7 +120,7 @@ export default function OSDetailPage() {
       <div style={{ background: 'var(--card)', borderRadius: 12, border: '1px solid var(--border)', padding: 32 }}>
         <OSForm
           initialData={formData}
-          onSuccess={updated => setOs(updated as unknown as OsData)}
+          onSuccess={() => fetchOs()}
         />
       </div>
     </div>

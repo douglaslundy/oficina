@@ -79,29 +79,35 @@ class OrdemServicoController extends Controller
             'itens.*.valor_unitario'  => ['required', 'numeric', 'min:0'],
         ]);
 
-        return DB::transaction(function () use ($validated) {
-            $osData = collect($validated)->except('itens')->toArray();
+        try {
+            return DB::transaction(function () use ($validated) {
+                $osData = collect($validated)->except('itens')->toArray();
 
-            // Calcular vencimento ao criar já como CONCLUIDA com prazo
-            if (($osData['status'] ?? 'ABERTA') === 'CONCLUIDA'
-                && !empty($osData['venda_a_prazo'])
-                && !empty($osData['prazo_pagamento_dias'])) {
-                $osData['data_vencimento_pagamento'] = now()->addDays($osData['prazo_pagamento_dias'])->toDateString();
-            }
+                // Calcular vencimento ao criar já como CONCLUIDA com prazo
+                if (($osData['status'] ?? 'ABERTA') === 'CONCLUIDA'
+                    && !empty($osData['venda_a_prazo'])
+                    && !empty($osData['prazo_pagamento_dias'])) {
+                    $osData['data_vencimento_pagamento'] = now()->addDays($osData['prazo_pagamento_dias'])->toDateString();
+                }
 
-            $os = OrdemServico::create($osData);
+                $os = OrdemServico::create($osData);
 
-            $total = 0;
-            foreach ($validated['itens'] ?? [] as $item) {
-                $os->itens()->create($item);
-                $total += $item['quantidade'] * $item['valor_unitario'];
-            }
-            $os->update(['valor_total' => $total]);
+                $total = 0;
+                foreach ($validated['itens'] ?? [] as $item) {
+                    $criado = $os->itens()->create($item);
+                    // Baixa imediata do estoque para itens de peça.
+                    $this->estoqueService->darSaidaItem($os, $criado);
+                    $total += $item['quantidade'] * $item['valor_unitario'];
+                }
+                $os->update(['valor_total' => $total]);
 
-            $this->clienteStatusService->recalcular($os->cliente_id);
+                $this->clienteStatusService->recalcular($os->cliente_id);
 
-            return (new OrdemServicoResource($os->load(['cliente', 'mecanico', 'itens'])))->response()->setStatusCode(201);
-        });
+                return (new OrdemServicoResource($os->load(['cliente', 'mecanico', 'itens'])))->response()->setStatusCode(201);
+            });
+        } catch (\RuntimeException $e) {
+            return response()->json(['message' => $e->getMessage()], 422);
+        }
     }
 
     public function show(string $id): OrdemServicoResource
@@ -136,8 +142,12 @@ class OrdemServicoController extends Controller
         return DB::transaction(function () use ($os, $validated, $novoStatus) {
             $wasNotConcluida = $os->status !== 'CONCLUIDA';
 
-            if ($novoStatus === 'CONCLUIDA' && $wasNotConcluida) {
-                $this->estoqueService->baixarEstoqueOs($os);
+            // O estoque é baixado no momento em que a peça é inserida na OS,
+            // portanto a conclusão NÃO deve baixar novamente (evita duplicidade).
+            // Ao cancelar uma OS que ainda não estava cancelada, devolvemos as
+            // peças ao estoque.
+            if ($novoStatus === 'CANCELADA' && $os->status !== 'CANCELADA') {
+                $this->estoqueService->devolverEstoqueOs($os);
             }
 
             // Calcular data de vencimento ao concluir com prazo
@@ -182,10 +192,20 @@ class OrdemServicoController extends Controller
             'valor_unitario' => ['required', 'numeric', 'min:0'],
         ]);
 
-        $item = $os->itens()->create($validated);
+        try {
+            $item = DB::transaction(function () use ($os, $validated) {
+                $item = $os->itens()->create($validated);
+                // Baixa imediata do estoque para peças.
+                $this->estoqueService->darSaidaItem($os, $item);
 
-        $total = $os->itens()->sum(DB::raw('quantidade * valor_unitario'));
-        $os->update(['valor_total' => $total]);
+                $total = $os->itens()->sum(DB::raw('quantidade * valor_unitario'));
+                $os->update(['valor_total' => $total]);
+
+                return $item;
+            });
+        } catch (\RuntimeException $e) {
+            return response()->json(['message' => $e->getMessage()], 422);
+        }
 
         return response()->json(['data' => $item], 201);
     }
@@ -205,10 +225,28 @@ class OrdemServicoController extends Controller
             'valor_unitario' => ['sometimes', 'numeric', 'min:0'],
         ]);
 
-        $item->update($validated);
+        try {
+            $item = DB::transaction(function () use ($os, $item, $validated) {
+                $eraPeca = $item->tipo === 'PECA' && !empty($item->produto_id);
 
-        $total = $os->itens()->sum(DB::raw('quantidade * valor_unitario'));
-        $os->update(['valor_total' => $total]);
+                // Ajuste de estoque: devolve a quantidade antiga e dá baixa da nova.
+                if ($eraPeca) {
+                    $this->estoqueService->devolverItem($os, $item);
+                }
+                $item->update($validated);
+                $item->refresh();
+                if ($eraPeca) {
+                    $this->estoqueService->darSaidaItem($os, $item);
+                }
+
+                $total = $os->itens()->sum(DB::raw('quantidade * valor_unitario'));
+                $os->update(['valor_total' => $total]);
+
+                return $item;
+            });
+        } catch (\RuntimeException $e) {
+            return response()->json(['message' => $e->getMessage()], 422);
+        }
 
         return response()->json(['data' => $item->fresh()]);
     }
@@ -222,10 +260,14 @@ class OrdemServicoController extends Controller
             return response()->json(['message' => 'Não é possível remover itens de OS concluída ou cancelada.'], 422);
         }
 
-        $item->delete();
+        DB::transaction(function () use ($os, $item) {
+            // Ao remover uma peça da OS, devolve a quantidade ao estoque.
+            $this->estoqueService->devolverItem($os, $item);
+            $item->delete();
 
-        $total = $os->itens()->sum(DB::raw('quantidade * valor_unitario'));
-        $os->update(['valor_total' => $total]);
+            $total = $os->itens()->sum(DB::raw('quantidade * valor_unitario'));
+            $os->update(['valor_total' => $total]);
+        });
 
         return response()->json(['message' => 'Item removido.']);
     }
