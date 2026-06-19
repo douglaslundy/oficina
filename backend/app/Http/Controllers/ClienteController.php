@@ -8,6 +8,7 @@ use App\Models\Cliente;
 use App\Rules\Cnpj;
 use App\Rules\Cpf;
 use App\Services\ClienteStatusService;
+use App\Services\PlanLimitService;
 use App\Tenancy\TenancyContext;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
@@ -47,8 +48,10 @@ class ClienteController extends Controller
         );
     }
 
-    public function store(Request $request): JsonResponse
+    public function store(Request $request, PlanLimitService $planLimit): JsonResponse
     {
+        $planLimit->verificarLimiteClientes();
+
         $cpfCnpj = preg_replace('/\D/', '', (string)($request->cpf_cnpj ?? ''));
         $rule = strlen($cpfCnpj) === 14 ? new Cnpj() : new Cpf();
 

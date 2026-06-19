@@ -20,6 +20,8 @@ class Cobranca extends Model
         'mes_referencia',
         'valor',
         'status',
+        'tipo',
+        'descricao',
         'asaas_payment_id',
         'vencimento',
         'pago_em',

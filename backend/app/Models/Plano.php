@@ -20,15 +20,23 @@ class Plano extends Model
         'preco_mensal',
         'limite_usuarios',
         'limite_os_mes',
+        'limite_produtos',
+        'limite_clientes',
+        'limite_notas_mes',
+        'preco_nota_excedente',
         'ativo',
     ];
 
     protected $casts = [
-        'preco_mensal'    => 'decimal:2',
-        'limite_usuarios' => 'integer',
-        'limite_os_mes'   => 'integer',
-        'ativo'           => 'boolean',
-        'criado_em'       => 'datetime',
+        'preco_mensal'         => 'decimal:2',
+        'limite_usuarios'      => 'integer',
+        'limite_os_mes'        => 'integer',
+        'limite_produtos'      => 'integer',
+        'limite_clientes'      => 'integer',
+        'limite_notas_mes'     => 'integer',
+        'preco_nota_excedente' => 'decimal:2',
+        'ativo'                => 'boolean',
+        'criado_em'            => 'datetime',
     ];
 
     protected static function boot(): void

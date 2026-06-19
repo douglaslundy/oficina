@@ -5,6 +5,7 @@ namespace App\Http\Controllers;
 
 use App\Http\Resources\ProdutoResource;
 use App\Models\Produto;
+use App\Services\PlanLimitService;
 use App\Tenancy\TenancyContext;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
@@ -44,8 +45,10 @@ class ProdutoController extends Controller
         ]);
     }
 
-    public function store(Request $request): JsonResponse
+    public function store(Request $request, PlanLimitService $planLimit): JsonResponse
     {
+        $planLimit->verificarLimiteProdutos();
+
         $validated = $request->validate([
             'nome'        => ['required', 'string', 'max:150'],
             'sku'         => ['nullable', 'string', 'max:30', 'unique:produtos,sku'],
