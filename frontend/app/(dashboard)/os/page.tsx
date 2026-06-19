@@ -14,9 +14,23 @@ interface OS {
   veiculo_placa?: string
   problema_relatado?: string
   valor_total: number
+  valor_pago: number
   status: string
   criado_em: string
   mecanico?: { nome: string }
+}
+
+function pagamentoPill(valorPago: number, valorTotal: number) {
+  if (valorTotal <= 0) return null
+  const pago = Number(valorPago ?? 0)
+  const total = Number(valorTotal ?? 0)
+  if (pago >= total) {
+    return <span style={{ display: 'inline-block', padding: '2px 9px', borderRadius: 999, fontSize: 11, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.04em', background: 'rgba(67,160,71,.15)', color: 'var(--success)' }}>PAGO</span>
+  }
+  if (pago > 0) {
+    return <span style={{ display: 'inline-block', padding: '2px 9px', borderRadius: 999, fontSize: 11, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.04em', background: 'rgba(245,166,35,.15)', color: 'var(--accent)' }}>PARCIAL</span>
+  }
+  return <span style={{ display: 'inline-block', padding: '2px 9px', borderRadius: 999, fontSize: 11, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.04em', background: 'rgba(229,57,53,.15)', color: 'var(--danger)' }}>A PAGAR</span>
 }
 
 const I: React.CSSProperties = {
@@ -75,7 +89,9 @@ export default function OSPage() {
     { key: 'veiculo',     label: 'Veículo',  render: r => r.cliente?.veiculo_placa ?? r.veiculo_placa ?? '-' },
     { key: 'mecanico',    label: 'Mecânico', render: r => r.mecanico?.nome ?? '-' },
     { key: 'problema',    label: 'Serviço',  render: r => <span style={{ color: 'var(--text)', fontSize: 13 }}>{r.problema_relatado?.slice(0, 40) ?? '-'}</span> },
-    { key: 'valor_total', label: 'Valor',    render: r => <span className="font-mono">{formatarMoeda(r.valor_total)}</span> },
+    { key: 'valor_total', label: 'Total',     render: r => <span className="font-mono">{formatarMoeda(r.valor_total)}</span> },
+    { key: 'valor_pago',  label: 'Pago',     render: r => <span className="font-mono" style={{ color: 'var(--muted)' }}>{formatarMoeda(r.valor_pago ?? 0)}</span> },
+    { key: 'pagamento',   label: 'Pagamento', render: r => pagamentoPill(r.valor_pago ?? 0, r.valor_total) },
     { key: 'status',      label: 'Status',   render: r => <StatusPill status={r.status} /> },
     { key: 'criado_em',   label: 'Data',     render: r => formatarData(r.criado_em) },
   ]
