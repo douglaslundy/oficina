@@ -1,5 +1,5 @@
 'use client'
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useCallback } from 'react'
 import { useForm, useFieldArray } from 'react-hook-form'
 import api from '@/lib/api'
 import { toast } from '@/hooks/useToast'
@@ -136,28 +136,30 @@ export function OSForm({ initialData, onSuccess }: OSFormProps) {
   const mecanicoId = watch('mecanico_id')
   const veiculo_id = watch('veiculo_id')
 
+  // Recarrega a lista de produtos (com estoque atual) — usado após inserir/
+  // remover peça para o select refletir o estoque sem precisar de F5.
+  const fetchProdutos = useCallback(async () => {
+    try {
+      const r = await api.get('/produtos?per_page=200')
+      setProdutos(r.data.data ?? [])
+    } catch { /* mantém lista anterior */ }
+  }, [])
+
   useEffect(() => {
     const requests: Promise<unknown>[] = [
       api.get('/usuarios?role=MECANICO'),
     ]
     if (!isEdit) {
-      requests.push(
-        api.get('/clientes?per_page=200'),
-        api.get('/produtos?per_page=200'),
-      )
-    } else {
-      requests.push(api.get('/produtos?per_page=200'))
+      requests.push(api.get('/clientes?per_page=200'))
     }
     Promise.all(requests).then(results => {
       setMecanicos((results[0] as { data: { data: typeof mecanicos } }).data.data ?? [])
       if (!isEdit) {
         setClientes((results[1] as { data: { data: typeof clientes } }).data.data ?? [])
-        setProdutos((results[2] as { data: { data: typeof produtos } }).data.data ?? [])
-      } else {
-        setProdutos((results[1] as { data: { data: typeof produtos } }).data.data ?? [])
       }
     }).catch(() => {})
-  }, [isEdit]) // eslint-disable-line react-hooks/exhaustive-deps
+    fetchProdutos()
+  }, [isEdit, fetchProdutos]) // eslint-disable-line react-hooks/exhaustive-deps
 
   // Fetch vehicles (new mode only)
   useEffect(() => {
@@ -228,6 +230,7 @@ export function OSForm({ initialData, onSuccess }: OSFormProps) {
     try {
       await api.delete(`/os/${initialData!.id}/itens/${itemId}`)
       toast('Item removido.', 'success')
+      await fetchProdutos() // atualiza estoque exibido no select
       onSuccess?.({})
     } catch {
       toast('Erro ao remover item.', 'danger')
@@ -475,7 +478,7 @@ export function OSForm({ initialData, onSuccess }: OSFormProps) {
 
                 {/* Formulário para adicionar novo item (apenas quando editável) */}
                 {!['CONCLUIDA', 'CANCELADA'].includes(watch('status')) && initialData?.id && (
-                  <NewItemInline osId={initialData.id} produtos={produtos} onAdded={onSuccess} />
+                  <NewItemInline osId={initialData.id} produtos={produtos} onAdded={() => { fetchProdutos(); onSuccess?.({}) }} />
                 )}
               </>
             )}
