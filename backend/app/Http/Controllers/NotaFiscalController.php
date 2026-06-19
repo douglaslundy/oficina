@@ -6,6 +6,7 @@ namespace App\Http\Controllers;
 use App\Http\Resources\NotaFiscalResource;
 use App\Models\NotaFiscal;
 use App\Services\NfeService;
+use App\Services\PlanLimitService;
 use Barryvdh\DomPDF\Facade\Pdf;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
@@ -13,7 +14,10 @@ use Illuminate\Http\Resources\Json\AnonymousResourceCollection;
 
 class NotaFiscalController extends Controller
 {
-    public function __construct(private readonly NfeService $nfeService) {}
+    public function __construct(
+        private readonly NfeService $nfeService,
+        private readonly PlanLimitService $planLimit,
+    ) {}
 
     public function index(Request $request): AnonymousResourceCollection
     {
@@ -82,6 +86,10 @@ class NotaFiscalController extends Controller
                 'xml_retorno'  => $resultado['xml_retorno'],
                 'emitido_em'   => now(),
             ]);
+
+            if ($resultado['status'] === 'AUTORIZADA') {
+                $this->planLimit->registrarNotaSeExcedente($nota->fresh());
+            }
         } catch (\Exception $e) {
             $nota->update(['status' => 'REJEITADA']);
             return response()->json(['message' => $e->getMessage()], 422);

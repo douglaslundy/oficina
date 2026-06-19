@@ -9,10 +9,17 @@ interface LimiteItem {
   percent: number
 }
 
+interface NotasMesItem extends LimiteItem {
+  preco_excedente: number
+}
+
 interface PlanLimites {
   plano: { id: string; nome: string } | null
   usuarios: LimiteItem | null
   os_mes: LimiteItem | null
+  produtos: LimiteItem | null
+  clientes: LimiteItem | null
+  notas_mes: NotasMesItem | null
 }
 
 export function usePlanLimites() {

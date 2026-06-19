@@ -5,8 +5,26 @@ import { DataTable, Column } from '@/components/ui/DataTable'
 import { StatusPill } from '@/components/ui/StatusPill'
 import { StockBar } from '@/components/ui/StockBar'
 import { formatarMoeda } from '@/lib/formatters'
+import { usePlanLimites } from '@/hooks/usePlanLimites'
 import api from '@/lib/api'
 import { toast } from '@/hooks/useToast'
+
+function PlanUsageBar({ atual, limite, label }: { atual: number; limite: number; label: string }) {
+  if (limite === -1) return null
+  const pct = Math.min(100, Math.round((atual / limite) * 100))
+  const color = pct >= 100 ? 'var(--danger)' : pct >= 80 ? 'var(--accent)' : 'var(--success)'
+  return (
+    <div style={{ marginBottom: 20, padding: '12px 16px', borderRadius: 10, background: 'var(--card)', border: '1px solid var(--border)', maxWidth: 380 }}>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
+        <span style={{ color: 'var(--muted)', fontSize: 13 }}>{label}</span>
+        <span className="font-mono" style={{ fontSize: 13, color, fontWeight: 600 }}>{atual} / {limite}</span>
+      </div>
+      <div style={{ height: 6, borderRadius: 3, background: 'var(--border)', overflow: 'hidden' }}>
+        <div style={{ height: '100%', width: `${pct}%`, borderRadius: 3, background: color, transition: 'width .4s ease' }} />
+      </div>
+    </div>
+  )
+}
 
 interface Produto {
   id: string
@@ -27,6 +45,7 @@ export default function ProdutosPage() {
   const [showEntrada, setShowEntrada] = useState<string | null>(null)
   const [qtdEntrada, setQtdEntrada] = useState(1)
   const [motivoEntrada, setMotivoEntrada] = useState('')
+  const { limites } = usePlanLimites()
 
   const fetchProdutos = useCallback(() => {
     setLoading(true)
@@ -147,7 +166,7 @@ export default function ProdutosPage() {
 
   return (
     <div>
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 24 }}>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
         <h1
           className="font-display"
           style={{ fontSize: 28, fontWeight: 800, color: 'var(--text)', margin: 0 }}>
@@ -169,6 +188,10 @@ export default function ProdutosPage() {
           }}
         />
       </div>
+
+      {limites?.produtos && (
+        <PlanUsageBar atual={limites.produtos.atual} limite={limites.produtos.limite} label="Produtos cadastrados no plano" />
+      )}
 
       <DataTable
         columns={columns}

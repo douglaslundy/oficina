@@ -4,7 +4,25 @@ import { useRouter } from 'next/navigation'
 import { DataTable, Column } from '@/components/ui/DataTable'
 import { StatusPill } from '@/components/ui/StatusPill'
 import { formatarCPF, formatarCNPJ, formatarData } from '@/lib/formatters'
+import { usePlanLimites } from '@/hooks/usePlanLimites'
 import api from '@/lib/api'
+
+function PlanUsageBar({ atual, limite, label }: { atual: number; limite: number; label: string }) {
+  if (limite === -1) return null
+  const pct = Math.min(100, Math.round((atual / limite) * 100))
+  const color = pct >= 100 ? 'var(--danger)' : pct >= 80 ? 'var(--accent)' : 'var(--success)'
+  return (
+    <div style={{ marginBottom: 20, padding: '12px 16px', borderRadius: 10, background: 'var(--card)', border: '1px solid var(--border)', maxWidth: 380 }}>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
+        <span style={{ color: 'var(--muted)', fontSize: 13 }}>{label}</span>
+        <span className="font-mono" style={{ fontSize: 13, color, fontWeight: 600 }}>{atual} / {limite}</span>
+      </div>
+      <div style={{ height: 6, borderRadius: 3, background: 'var(--border)', overflow: 'hidden' }}>
+        <div style={{ height: '100%', width: `${pct}%`, borderRadius: 3, background: color, transition: 'width .4s ease' }} />
+      </div>
+    </div>
+  )
+}
 
 interface Cliente {
   id: string
@@ -22,6 +40,7 @@ export default function ClientesPage() {
   const [clientes, setClientes] = useState<Cliente[]>([])
   const [loading, setLoading] = useState(true)
   const [search, setSearch] = useState('')
+  const { limites } = usePlanLimites()
 
   useEffect(() => {
     const timeout = setTimeout(() => {
@@ -66,7 +85,7 @@ export default function ClientesPage() {
 
   return (
     <div>
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 24 }}>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
         <div>
           <h1 className="font-display" style={{ fontSize: 28, fontWeight: 800, color: 'var(--text)', margin: 0 }}>Clientes</h1>
           <p style={{ color: 'var(--muted)', margin: '4px 0 0', fontSize: 14 }}>{clientes.length} registros</p>
@@ -75,6 +94,10 @@ export default function ClientesPage() {
           placeholder="Buscar por nome, CPF, placa..."
           style={{ padding: '8px 14px', borderRadius: 8, background: 'var(--card)', border: '1px solid var(--border)', color: 'var(--text)', fontSize: 14, width: 280, outline: 'none' }} />
       </div>
+      {limites?.clientes && (
+        <PlanUsageBar atual={limites.clientes.atual} limite={limites.clientes.limite} label="Clientes cadastrados no plano" />
+      )}
+
       <DataTable
         columns={columns}
         data={clientes}

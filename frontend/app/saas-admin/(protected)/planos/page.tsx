@@ -11,6 +11,10 @@ interface Plano {
   preco_mensal: string // e.g. "199.90"
   limite_usuarios: number // -1 = unlimited
   limite_os_mes: number // -1 = unlimited
+  limite_produtos: number
+  limite_clientes: number
+  limite_notas_mes: number
+  preco_nota_excedente: string
   ativo: boolean
   oficinas_count: number
 }
@@ -20,6 +24,10 @@ interface PlanoForm {
   preco_mensal: string
   limite_usuarios: string
   limite_os_mes: string
+  limite_produtos: string
+  limite_clientes: string
+  limite_notas_mes: string
+  preco_nota_excedente: string
 }
 
 type ModalMode = 'create' | 'edit'
@@ -104,6 +112,10 @@ function PlanoModal({ mode, initial, onClose, onSuccess }: PlanoModalProps) {
     preco_mensal: initial?.preco_mensal ?? '',
     limite_usuarios: initial ? String(initial.limite_usuarios) : '',
     limite_os_mes: initial ? String(initial.limite_os_mes) : '',
+    limite_produtos: initial ? String(initial.limite_produtos ?? -1) : '',
+    limite_clientes: initial ? String(initial.limite_clientes ?? -1) : '',
+    limite_notas_mes: initial ? String(initial.limite_notas_mes ?? -1) : '',
+    preco_nota_excedente: initial?.preco_nota_excedente ?? '',
   })
   const [submitting, setSubmitting] = useState(false)
   const [error, setError] = useState<string | null>(null)
@@ -138,6 +150,10 @@ function PlanoModal({ mode, initial, onClose, onSuccess }: PlanoModalProps) {
       preco_mensal: parseFloat(form.preco_mensal),
       limite_usuarios: parseInt(form.limite_usuarios, 10),
       limite_os_mes: parseInt(form.limite_os_mes, 10),
+      limite_produtos: form.limite_produtos !== '' ? parseInt(form.limite_produtos, 10) : -1,
+      limite_clientes: form.limite_clientes !== '' ? parseInt(form.limite_clientes, 10) : -1,
+      limite_notas_mes: form.limite_notas_mes !== '' ? parseInt(form.limite_notas_mes, 10) : -1,
+      preco_nota_excedente: form.preco_nota_excedente !== '' ? parseFloat(form.preco_nota_excedente) : 0,
     }
 
     setSubmitting(true)
@@ -288,6 +304,59 @@ function PlanoModal({ mode, initial, onClose, onSuccess }: PlanoModalProps) {
             </Field>
           </div>
 
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
+            <Field label="Limite de Produtos" hint="Use -1 para ilimitado">
+              <input
+                style={inputStyle}
+                type="number"
+                step="1"
+                value={form.limite_produtos}
+                onChange={(e) => handleChange('limite_produtos', e.target.value)}
+                placeholder="-1"
+                disabled={submitting}
+              />
+            </Field>
+
+            <Field label="Limite de Clientes" hint="Use -1 para ilimitado">
+              <input
+                style={inputStyle}
+                type="number"
+                step="1"
+                value={form.limite_clientes}
+                onChange={(e) => handleChange('limite_clientes', e.target.value)}
+                placeholder="-1"
+                disabled={submitting}
+              />
+            </Field>
+          </div>
+
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
+            <Field label="Limite de Notas/mês" hint="Use -1 para ilimitado">
+              <input
+                style={inputStyle}
+                type="number"
+                step="1"
+                value={form.limite_notas_mes}
+                onChange={(e) => handleChange('limite_notas_mes', e.target.value)}
+                placeholder="-1"
+                disabled={submitting}
+              />
+            </Field>
+
+            <Field label="Preço Nota Excedente (R$)" hint="Por nota acima do limite">
+              <input
+                style={inputStyle}
+                type="number"
+                min="0"
+                step="0.01"
+                value={form.preco_nota_excedente}
+                onChange={(e) => handleChange('preco_nota_excedente', e.target.value)}
+                placeholder="0.00"
+                disabled={submitting}
+              />
+            </Field>
+          </div>
+
           {/* Actions */}
           <div
             style={{
@@ -364,7 +433,7 @@ export default function PlanosPage() {
   const [deactivating, setDeactivating] = useState<string | null>(null)
   const [deactivateError, setDeactivateError] = useState<string | null>(null)
 
-  const TABLE_COLS = ['Nome', 'Preço/mês', 'Limite Usuários', 'Limite OS/mês', 'Oficinas', 'Status', 'Ações']
+  const TABLE_COLS = ['Nome', 'Preço/mês', 'Usuários', 'OS/mês', 'Produtos', 'Clientes', 'Notas/mês', 'Excedente', 'Oficinas', 'Status', 'Ações']
 
   const fetchPlanos = useCallback(async () => {
     setLoading(true)
@@ -575,7 +644,7 @@ export default function PlanosPage() {
                       <td style={{ padding: '13px 16px' }}>
                         <Skeleton width="65%" height={14} />
                       </td>
-                      {Array.from({ length: 4 }).map((__, j) => (
+                      {Array.from({ length: 8 }).map((__, j) => (
                         <td key={j} style={{ padding: '13px 16px' }}>
                           <Skeleton height={14} width={j === 0 ? '55%' : '40%'} />
                         </td>
@@ -594,7 +663,7 @@ export default function PlanosPage() {
                 ) : planos.length === 0 ? (
                   <tr>
                     <td
-                      colSpan={7}
+                      colSpan={11}
                       style={{
                         padding: '48px 16px',
                         textAlign: 'center',
@@ -668,13 +737,38 @@ export default function PlanosPage() {
                             style={{
                               fontFamily: "'JetBrains Mono', monospace",
                               fontSize: 14,
-                              color:
-                                plano.limite_os_mes === -1
-                                  ? 'var(--muted)'
-                                  : 'var(--text)',
+                              color: plano.limite_os_mes === -1 ? 'var(--muted)' : 'var(--text)',
                             }}
                           >
                             {displayLimite(plano.limite_os_mes)}
+                          </span>
+                        </td>
+
+                        {/* Limite produtos */}
+                        <td style={{ padding: '12px 16px' }}>
+                          <span style={{ fontFamily: "'JetBrains Mono', monospace", fontSize: 14, color: plano.limite_produtos === -1 ? 'var(--muted)' : 'var(--text)' }}>
+                            {displayLimite(plano.limite_produtos)}
+                          </span>
+                        </td>
+
+                        {/* Limite clientes */}
+                        <td style={{ padding: '12px 16px' }}>
+                          <span style={{ fontFamily: "'JetBrains Mono', monospace", fontSize: 14, color: plano.limite_clientes === -1 ? 'var(--muted)' : 'var(--text)' }}>
+                            {displayLimite(plano.limite_clientes)}
+                          </span>
+                        </td>
+
+                        {/* Limite notas/mês */}
+                        <td style={{ padding: '12px 16px' }}>
+                          <span style={{ fontFamily: "'JetBrains Mono', monospace", fontSize: 14, color: plano.limite_notas_mes === -1 ? 'var(--muted)' : 'var(--text)' }}>
+                            {displayLimite(plano.limite_notas_mes)}
+                          </span>
+                        </td>
+
+                        {/* Preço excedente */}
+                        <td style={{ padding: '12px 16px', whiteSpace: 'nowrap' }}>
+                          <span style={{ fontFamily: "'JetBrains Mono', monospace", fontSize: 14, color: parseFloat(plano.preco_nota_excedente) === 0 ? 'var(--muted)' : 'var(--accent)' }}>
+                            {parseFloat(plano.preco_nota_excedente) === 0 ? '—' : formatarPreco(plano.preco_nota_excedente)}
                           </span>
                         </td>
 

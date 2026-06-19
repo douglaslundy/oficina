@@ -24,10 +24,14 @@ class PlanoController extends Controller
     public function store(Request $request): JsonResponse
     {
         $validated = $request->validate([
-            'nome'            => 'required|string|max:60',
-            'preco_mensal'    => 'required|numeric|min:0',
-            'limite_usuarios' => 'required|integer|min:-1',
-            'limite_os_mes'   => 'required|integer|min:-1',
+            'nome'                  => 'required|string|max:60',
+            'preco_mensal'          => 'required|numeric|min:0',
+            'limite_usuarios'       => 'required|integer|min:-1',
+            'limite_os_mes'         => 'required|integer|min:-1',
+            'limite_produtos'       => 'nullable|integer|min:-1',
+            'limite_clientes'       => 'nullable|integer|min:-1',
+            'limite_notas_mes'      => 'nullable|integer|min:-1',
+            'preco_nota_excedente'  => 'nullable|numeric|min:0',
         ]);
 
         $plano = Plano::create($validated);
@@ -44,11 +48,15 @@ class PlanoController extends Controller
         $plano = Plano::findOrFail($id);
 
         $validated = $request->validate([
-            'nome'            => 'required|string|max:60',
-            'preco_mensal'    => 'required|numeric|min:0',
-            'limite_usuarios' => 'required|integer|min:-1',
-            'limite_os_mes'   => 'required|integer|min:-1',
-            'ativo'           => 'sometimes|boolean',
+            'nome'                  => 'required|string|max:60',
+            'preco_mensal'          => 'required|numeric|min:0',
+            'limite_usuarios'       => 'required|integer|min:-1',
+            'limite_os_mes'         => 'required|integer|min:-1',
+            'limite_produtos'       => 'nullable|integer|min:-1',
+            'limite_clientes'       => 'nullable|integer|min:-1',
+            'limite_notas_mes'      => 'nullable|integer|min:-1',
+            'preco_nota_excedente'  => 'nullable|numeric|min:0',
+            'ativo'                 => 'sometimes|boolean',
         ]);
 
         $plano->update($validated);
@@ -81,13 +89,17 @@ class PlanoController extends Controller
     private function formatPlano(Plano $plano): array
     {
         return [
-            'id'              => $plano->id,
-            'nome'            => $plano->nome,
-            'preco_mensal'    => number_format((float) $plano->preco_mensal, 2, '.', ''),
-            'limite_usuarios' => $plano->limite_usuarios,
-            'limite_os_mes'   => $plano->limite_os_mes,
-            'ativo'           => $plano->ativo,
-            'oficinas_count'  => $plano->oficinas_count ?? 0,
+            'id'                   => $plano->id,
+            'nome'                 => $plano->nome,
+            'preco_mensal'         => number_format((float) $plano->preco_mensal, 2, '.', ''),
+            'limite_usuarios'      => $plano->limite_usuarios,
+            'limite_os_mes'        => $plano->limite_os_mes,
+            'limite_produtos'      => $plano->limite_produtos,
+            'limite_clientes'      => $plano->limite_clientes,
+            'limite_notas_mes'     => $plano->limite_notas_mes,
+            'preco_nota_excedente' => number_format((float) $plano->preco_nota_excedente, 2, '.', ''),
+            'ativo'                => $plano->ativo,
+            'oficinas_count'       => $plano->oficinas_count ?? 0,
         ];
     }
 }
