@@ -585,7 +585,7 @@ export default function OficinasPage() {
         }
       `}</style>
 
-      <div style={{ padding: '32px 32px 40px', color: 'var(--text)', maxWidth: 1280 }}>
+      <div style={{ padding: '32px 32px 40px', color: 'var(--text)', maxWidth: 1280, margin: '0 auto' }}>
         {/* Page header */}
         <div
           style={{

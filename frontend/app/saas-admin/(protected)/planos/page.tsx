@@ -448,7 +448,7 @@ export default function PlanosPage() {
         }
       `}</style>
 
-      <div style={{ padding: '32px 32px 40px', color: 'var(--text)', maxWidth: 1100 }}>
+      <div style={{ padding: '32px 32px 40px', color: 'var(--text)', maxWidth: 1100, margin: '0 auto' }}>
         {/* Page header */}
         <div
           style={{

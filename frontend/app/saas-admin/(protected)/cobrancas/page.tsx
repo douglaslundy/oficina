@@ -212,7 +212,7 @@ export default function CobrancasPage() {
         }
       `}</style>
 
-      <div style={{ padding: '32px 32px 40px', color: 'var(--text)', maxWidth: 1200 }}>
+      <div style={{ padding: '32px 32px 40px', color: 'var(--text)', maxWidth: 1200, margin: '0 auto' }}>
         {/* Page header */}
         <div style={{ marginBottom: 28 }}>
           <h1

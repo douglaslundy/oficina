@@ -325,7 +325,7 @@ export default function OficinaDetailPage() {
         </div>
       )}
 
-      <div style={{ padding: '32px 32px 48px', maxWidth: 1200, color: 'var(--text)' }}>
+      <div style={{ padding: '32px 32px 48px', maxWidth: 1200, color: 'var(--text)', margin: '0 auto' }}>
         {/* Breadcrumb */}
         <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 24 }}>
           <Link href="/saas-admin/oficinas" style={{ color: 'var(--muted)', fontSize: 14, textDecoration: 'none' }}>
