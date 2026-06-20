@@ -131,9 +131,9 @@ function EditModal({ alerta, onClose, onSaved }: EditModalProps) {
               onChange={e => setForm(f => ({ ...f, destinatarios: e.target.value }))}
               rows={3}
               style={{ ...iStyle, resize: 'vertical' as const }}
-              placeholder="35984297193&#10;35999887766"
+              placeholder="35984000000&#10;35999887766"
             />
-            <p style={{ fontSize: 11, color: 'var(--muted)', marginTop: 4 }}>Apenas números, com DDD. Ex: 35984297193</p>
+            <p style={{ fontSize: 11, color: 'var(--muted)', marginTop: 4 }}>Apenas números, com DDD. Ex: 35984000000</p>
           </div>
 
           <div style={{ display: 'flex', gap: 20 }}>
@@ -239,7 +239,7 @@ function CreateModal({ onClose, onSaved }: CreateModalProps) {
           <div>
             <label style={{ display: 'block', fontSize: 12, fontWeight: 600, color: 'var(--muted)', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: 6 }}>Destinatários (um por linha)</label>
             <textarea value={form.destinatarios} onChange={e => setForm(f => ({ ...f, destinatarios: e.target.value }))} rows={2}
-              style={{ ...iStyle, resize: 'vertical' as const }} placeholder="35984297193" />
+              style={{ ...iStyle, resize: 'vertical' as const }} placeholder="35984000000" />
           </div>
           <div style={{ display: 'flex', gap: 20 }}>
             <label style={{ display: 'flex', alignItems: 'center', gap: 8, cursor: 'pointer' }}>
