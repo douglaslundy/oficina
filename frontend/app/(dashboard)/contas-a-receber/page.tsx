@@ -151,11 +151,11 @@ export default function ContasAReceberPage() {
 
                   return (
                     <tr key={c.id}
-                      onClick={() => c.tipo !== 'VENDA_BALCAO' && router.push(`/os/${c.id}`)}
+                      onClick={() => router.push(c.tipo === 'VENDA_BALCAO' ? `/pdv/${c.id}` : `/os/${c.id}`)}
                       style={{
                         borderBottom: idx < contasFiltradas.length - 1 ? '1px solid var(--border)' : 'none',
                         background: rowBg,
-                        cursor: c.tipo !== 'VENDA_BALCAO' ? 'pointer' : 'default',
+                        cursor: 'pointer',
                       }}
                       onMouseEnter={e => {
                         (e.currentTarget as HTMLTableRowElement).style.background =
