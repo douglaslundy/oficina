@@ -144,23 +144,28 @@ export default function PdvPage() {
   }
 
   function atualizarQtd(idx: number, qty: number) {
-    if (qty <= 0) { removerItem(idx); return }
+    const safe = isNaN(qty) || qty <= 0 ? 0 : qty
+    if (safe <= 0) { removerItem(idx); return }
     setItens(prev => {
       const next = [...prev]
-      next[idx] = { ...next[idx], quantidade: qty }
+      next[idx] = { ...next[idx], quantidade: safe }
       return next
     })
   }
 
   function atualizarPreco(idx: number, preco: number) {
+    const safe = isNaN(preco) ? 0 : preco
     setItens(prev => {
       const next = [...prev]
-      next[idx] = { ...next[idx], valor_unitario: preco }
+      next[idx] = { ...next[idx], valor_unitario: safe }
       return next
     })
   }
 
-  const total = itens.reduce((s, i) => s + i.quantidade * i.valor_unitario, 0)
+  const total = itens.reduce((s, i) => {
+    const sub = i.quantidade * i.valor_unitario
+    return s + (isNaN(sub) ? 0 : sub)
+  }, 0)
 
   // ─── Finalizar venda ──────────────────────────────────────────────────────
 
