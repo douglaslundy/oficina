@@ -49,10 +49,18 @@ class OrdemServicoController extends Controller
             $query->whereDate('criado_em', '<=', $request->data_fim);
         }
         if ($request->has('tipo')) {
-            $query->where('tipo', $request->tipo);
+            $tipos = array_filter(explode(',', (string)$request->tipo));
+            count($tipos) === 1
+                ? $query->where('tipo', $tipos[0])
+                : $query->whereIn('tipo', $tipos);
         } else {
             // Por padrão a listagem principal exibe apenas OS (não vendas balcão)
             $query->where('tipo', 'OS');
+        }
+        if ($request->boolean('em_aberto')) {
+            $query->whereColumn('valor_pago', '<', 'valor_total')
+                  ->where('valor_total', '>', 0)
+                  ->where('status', 'CONCLUIDA');
         }
         if ($request->has('search')) {
             $search = $request->search;
