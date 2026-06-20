@@ -674,6 +674,7 @@ function NewItemInline({ osId, produtos, servicos, onAdded }: {
       <div style={{ display: 'grid', gridTemplateColumns: '100px 1fr', gap: 8, marginBottom: 8 }}>
         <select value={tipo} onChange={e => {
           setTipo(e.target.value as 'SERVICO' | 'PECA')
+          setProdutoId('')
           setServicoId('')
           setIsManual(false)
           setDescricao('')
