@@ -61,10 +61,9 @@ export default function VendaDetalhe() {
   const [erro, setErro] = useState<string | null>(null)
   const [toast, setToast] = useState<{ msg: string; type: 'success' | 'danger' } | null>(null)
 
-  // Modal de pagamento
+  // Modal de pagamento multiplo
   const [showPagModal, setShowPagModal] = useState(false)
-  const [formaPag, setFormaPag] = useState('DINHEIRO')
-  const [valorPag, setValorPag] = useState('')
+  const [entradas, setEntradas] = useState<{ forma: string; valor: string }[]>([{ forma: 'DINHEIRO', valor: '' }])
   const [salvandoPag, setSalvandoPag] = useState(false)
 
   const load = useCallback(() => {
@@ -76,18 +75,44 @@ export default function VendaDetalhe() {
 
   useEffect(() => { load() }, [load])
 
-  async function registrarPagamento() {
-    const valor = parseFloat(valorPag)
-    if (isNaN(valor) || valor <= 0) {
-      setToast({ msg: 'Informe um valor válido.', type: 'danger' }); return
+  const totalEntradas = entradas.reduce((s, e) => {
+    const v = parseFloat(e.valor); return s + (isNaN(v) ? 0 : v)
+  }, 0)
+
+  function abrirModal() {
+    setEntradas([{ forma: 'DINHEIRO', valor: '' }])
+    setShowPagModal(true)
+  }
+
+  function fecharModal() {
+    setShowPagModal(false)
+    setEntradas([{ forma: 'DINHEIRO', valor: '' }])
+  }
+
+  function addEntrada() {
+    setEntradas(prev => [...prev, { forma: 'DINHEIRO', valor: '' }])
+  }
+
+  function removeEntrada(idx: number) {
+    setEntradas(prev => prev.filter((_, i) => i !== idx))
+  }
+
+  function updateEntrada(idx: number, field: 'forma' | 'valor', val: string) {
+    setEntradas(prev => prev.map((e, i) => i === idx ? { ...e, [field]: val } : e))
+  }
+
+  async function registrarPagamentos() {
+    const validas = entradas.filter(e => parseFloat(e.valor) > 0)
+    if (validas.length === 0) {
+      setToast({ msg: 'Informe pelo menos um valor.', type: 'danger' }); return
     }
     setSalvandoPag(true)
     try {
-      await api.post(`/os/${id}/pagamentos`, { forma_pagamento: formaPag, valor })
-      setToast({ msg: 'Pagamento registrado!', type: 'success' })
-      setShowPagModal(false)
-      setValorPag('')
-      setFormaPag('DINHEIRO')
+      for (const e of validas) {
+        await api.post(`/os/${id}/pagamentos`, { forma_pagamento: e.forma, valor: parseFloat(e.valor) })
+      }
+      setToast({ msg: `${validas.length > 1 ? validas.length + ' pagamentos registrados!' : 'Pagamento registrado!'}`, type: 'success' })
+      fecharModal()
       load()
     } catch {
       setToast({ msg: 'Erro ao registrar pagamento.', type: 'danger' })
@@ -157,7 +182,7 @@ export default function VendaDetalhe() {
           </span>
           {temSaldo && (
             <button
-              onClick={() => setShowPagModal(true)}
+              onClick={abrirModal}
               style={{
                 padding: '7px 18px', borderRadius: 7, fontWeight: 700, fontSize: 13,
                 background: 'var(--accent)', color: '#000', border: 'none', cursor: 'pointer',
@@ -267,7 +292,7 @@ export default function VendaDetalhe() {
         {temSaldo && (
           <div style={{ padding: '14px 18px', borderTop: venda.pagamentos.length > 0 ? '1px solid var(--border)' : 'none' }}>
             <button
-              onClick={() => setShowPagModal(true)}
+              onClick={abrirModal}
               style={{
                 padding: '9px 20px', borderRadius: 7, fontWeight: 700, fontSize: 13,
                 background: 'var(--accent)', color: '#000', border: 'none', cursor: 'pointer',
@@ -280,10 +305,10 @@ export default function VendaDetalhe() {
         )}
       </div>
 
-      {/* Modal de pagamento */}
+      {/* Modal de multipagamento */}
       {showPagModal && (
         <div
-          onClick={e => { if (e.target === e.currentTarget) setShowPagModal(false) }}
+          onClick={e => { if (e.target === e.currentTarget) fecharModal() }}
           style={{
             position: 'fixed', inset: 0, background: 'rgba(0,0,0,.55)',
             display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000,
@@ -291,60 +316,89 @@ export default function VendaDetalhe() {
         >
           <div style={{
             background: 'var(--card)', border: '1px solid var(--border)',
-            borderRadius: 12, padding: 28, width: 360, boxShadow: '0 16px 48px rgba(0,0,0,.4)',
+            borderRadius: 12, padding: 28, width: 420, boxShadow: '0 16px 48px rgba(0,0,0,.4)',
           }}>
-            <h3 className="font-display" style={{ fontSize: 18, fontWeight: 800, margin: '0 0 20px' }}>
+            <h3 className="font-display" style={{ fontSize: 18, fontWeight: 800, margin: '0 0 4px' }}>
               Registrar Pagamento
             </h3>
+            <p style={{ color: 'var(--muted)', fontSize: 13, margin: '0 0 20px' }}>
+              Saldo em aberto: <span className="font-mono" style={{ color: 'var(--accent)', fontWeight: 700 }}>{formatarMoeda(venda.saldo_devedor)}</span>
+            </p>
 
-            <div style={{ marginBottom: 14 }}>
-              <label style={{ ...labelStyle, display: 'block', marginBottom: 6 }}>Forma de Pagamento</label>
-              <select
-                value={formaPag}
-                onChange={e => setFormaPag(e.target.value)}
-                style={inputStyle}
-              >
-                {FORMAS_PAG.map(f => <option key={f} value={f}>{f.replace(/_/g, ' ')}</option>)}
-              </select>
+            {/* Entradas */}
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 10, marginBottom: 12 }}>
+              {entradas.map((e, idx) => (
+                <div key={idx} style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+                  <select
+                    value={e.forma}
+                    onChange={ev => updateEntrada(idx, 'forma', ev.target.value)}
+                    style={{ ...inputStyle, flex: '0 0 148px', padding: '8px 10px' }}
+                  >
+                    {FORMAS_PAG.map(f => <option key={f} value={f}>{f.replace(/_/g, ' ')}</option>)}
+                  </select>
+                  <input
+                    type="number" min={0.01} step={0.01} placeholder="Valor"
+                    value={e.valor}
+                    onChange={ev => updateEntrada(idx, 'valor', ev.target.value)}
+                    style={{ ...inputStyle, flex: 1, padding: '8px 10px', textAlign: 'right', fontFamily: 'monospace' }}
+                    autoFocus={idx === 0}
+                  />
+                  {entradas.length > 1 && (
+                    <button onClick={() => removeEntrada(idx)} style={{
+                      background: 'none', border: 'none', color: 'var(--danger)',
+                      cursor: 'pointer', fontSize: 18, padding: '0 4px', flexShrink: 0,
+                    }}>✕</button>
+                  )}
+                </div>
+              ))}
             </div>
 
-            <div style={{ marginBottom: 20 }}>
-              <label style={{ ...labelStyle, display: 'block', marginBottom: 6 }}>
-                Valor — saldo: {formatarMoeda(venda.saldo_devedor)}
-              </label>
-              <input
-                type="number"
-                min={0.01}
-                step={0.01}
-                placeholder="0,00"
-                value={valorPag}
-                onChange={e => setValorPag(e.target.value)}
-                style={{ ...inputStyle, textAlign: 'right', fontFamily: 'monospace' }}
-                autoFocus
-              />
-            </div>
+            {/* Adicionar meio */}
+            <button onClick={addEntrada} style={{
+              width: '100%', padding: '7px 0', borderRadius: 6, fontSize: 13,
+              background: 'none', border: '1px dashed var(--border)', color: 'var(--muted)',
+              cursor: 'pointer', marginBottom: 18,
+            }}>
+              + Adicionar meio de pagamento
+            </button>
+
+            {/* Totalizador */}
+            {entradas.length > 1 && (
+              <div style={{
+                display: 'flex', justifyContent: 'space-between', padding: '10px 14px',
+                borderRadius: 8, marginBottom: 18,
+                background: totalEntradas > venda.saldo_devedor
+                  ? 'rgba(67,160,71,.08)' : 'rgba(245,166,35,.08)',
+                border: `1px solid ${totalEntradas > venda.saldo_devedor ? 'var(--success)' : 'var(--border)'}`,
+              }}>
+                <span style={{ fontSize: 13, color: 'var(--muted)' }}>Total a pagar</span>
+                <span className="font-mono" style={{
+                  fontSize: 14, fontWeight: 700,
+                  color: totalEntradas >= venda.saldo_devedor ? 'var(--success)' : 'var(--accent)',
+                }}>
+                  {formatarMoeda(totalEntradas)}
+                </span>
+              </div>
+            )}
 
             <div style={{ display: 'flex', gap: 10 }}>
               <button
-                onClick={registrarPagamento}
-                disabled={salvandoPag}
+                onClick={registrarPagamentos}
+                disabled={salvandoPag || totalEntradas <= 0}
                 style={{
                   flex: 1, padding: '10px 0', borderRadius: 7, fontWeight: 800,
-                  background: salvandoPag ? 'var(--border)' : 'var(--accent)',
-                  color: salvandoPag ? 'var(--muted)' : '#000',
-                  border: 'none', cursor: salvandoPag ? 'not-allowed' : 'pointer',
+                  background: salvandoPag || totalEntradas <= 0 ? 'var(--border)' : 'var(--accent)',
+                  color: salvandoPag || totalEntradas <= 0 ? 'var(--muted)' : '#000',
+                  border: 'none', cursor: salvandoPag || totalEntradas <= 0 ? 'not-allowed' : 'pointer',
                   fontSize: 14, fontFamily: "'Barlow Condensed', sans-serif",
                 }}
               >
-                {salvandoPag ? '⟳ Salvando…' : '✓ Confirmar'}
+                {salvandoPag ? '⟳ Salvando…' : '✓ Confirmar Pagamento'}
               </button>
-              <button
-                onClick={() => { setShowPagModal(false); setValorPag(''); setFormaPag('DINHEIRO') }}
-                style={{
-                  padding: '10px 18px', borderRadius: 7, background: 'transparent',
-                  border: '1px solid var(--border)', color: 'var(--muted)', cursor: 'pointer', fontSize: 14,
-                }}
-              >
+              <button onClick={fecharModal} style={{
+                padding: '10px 18px', borderRadius: 7, background: 'transparent',
+                border: '1px solid var(--border)', color: 'var(--muted)', cursor: 'pointer', fontSize: 14,
+              }}>
                 Cancelar
               </button>
             </div>
