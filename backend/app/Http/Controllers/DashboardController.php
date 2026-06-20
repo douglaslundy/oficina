@@ -21,11 +21,11 @@ class DashboardController extends Controller
             ->whereNotIn('status', ['CANCELADA'])
             ->sum(DB::raw('valor_total - valor_pago')) ?? 0);
 
-        // Faturamento = valor_pago de OS/Vendas concluídas no mês (inclui Venda Balcão)
+        // Faturamento = valor efetivamente recebido (limitado ao valor da OS, ignora troco)
         $faturamentoMes = (float)(OrdemServico::where('status', 'CONCLUIDA')
             ->whereMonth('criado_em', now()->month)
             ->whereYear('criado_em', now()->year)
-            ->sum('valor_pago') ?? 0);
+            ->sum(DB::raw('LEAST(valor_pago, valor_total)')) ?? 0);
 
         $nfEmitidas = NotaFiscal::where('status', 'AUTORIZADA')
             ->whereMonth('emitido_em', now()->month)
@@ -62,7 +62,7 @@ class DashboardController extends Controller
             ->where('criado_em', '>=', now()->subMonths(6)->startOfMonth())
             ->select(
                 DB::raw("TO_CHAR(criado_em, 'Mon/YY') as mes"),
-                DB::raw('SUM(valor_pago) as total')
+                DB::raw('SUM(LEAST(valor_pago, valor_total)) as total')
             )
             ->groupBy('mes')
             ->orderByRaw("MIN(criado_em)")
