@@ -28,12 +28,17 @@ class ClienteStatusService
                 $os = OrdemServico::where('cliente_id', $clienteId)
                     ->where('status', 'CONCLUIDA')->where('venda_a_prazo', true)
                     ->whereColumn('valor_pago', '<', 'valor_total')
+                    ->with('itens')
                     ->first();
+                $itensTexto = $os?->itens
+                    ->map(fn($i) => "• {$i->descricao} (x{$i->quantidade})")
+                    ->join("\n") ?? '-';
                 $this->alertas->dispatch('DIVIDA_VENCIDA', [
                     'cliente'            => $cliente->nome,
                     'valor'              => 'R$ ' . number_format(max(0, $os?->valor_total - $os?->valor_pago), 2, ',', '.'),
                     'os_numero'          => $os?->numero ?? '-',
                     'vencimento'         => $os?->data_vencimento_pagamento?->format('d/m/Y') ?? '-',
+                    'itens'              => $itensTexto,
                     '_telefone_cliente'  => $cliente->telefone ?? '',
                 ]);
             }
@@ -52,11 +57,17 @@ class ClienteStatusService
             $cliente = Cliente::find($clienteId);
             if ($cliente && !in_array($cliente->status, ['DEVEDOR', 'DIVIDA_VENCIDA'], true)) {
                 $os = OrdemServico::where('cliente_id', $clienteId)
-                    ->where('status', 'CONCLUIDA')->whereColumn('valor_pago', '<', 'valor_total')->first();
+                    ->where('status', 'CONCLUIDA')->whereColumn('valor_pago', '<', 'valor_total')
+                    ->with('itens')
+                    ->first();
+                $itensTexto = $os?->itens
+                    ->map(fn($i) => "• {$i->descricao} (x{$i->quantidade})")
+                    ->join("\n") ?? '-';
                 $this->alertas->dispatch('CLIENTE_DEVEDOR', [
                     'cliente'           => $cliente->nome,
                     'valor'             => 'R$ ' . number_format(max(0, $os?->valor_total - $os?->valor_pago), 2, ',', '.'),
                     'os_numero'         => $os?->numero ?? '-',
+                    'itens'             => $itensTexto,
                     '_telefone_cliente' => $cliente->telefone ?? '',
                 ]);
             }
