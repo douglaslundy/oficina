@@ -150,7 +150,7 @@ export default function OSDetailPage() {
           style={{ padding: '6px 14px', background: 'transparent', border: '1px solid var(--border)', color: 'var(--muted)', borderRadius: 8, cursor: 'pointer', fontSize: 13 }}>
           📄 PDF
         </button>
-        {(os.pagamentos ?? []).reduce((s, p) => s + p.valor, 0) > 0 && (
+        {(os.pagamentos ?? []).reduce((s, p) => s + Number(p.valor), 0) > 0 && (
           <button onClick={downloadRecibo}
             style={{ padding: '6px 14px', background: 'transparent', border: '1px solid var(--success)', color: 'var(--success)', borderRadius: 8, cursor: 'pointer', fontSize: 13 }}>
             🧾 Recibo
@@ -192,8 +192,8 @@ export default function OSDetailPage() {
                 </div>
               ))}
               {(() => {
-                const totalPago = (os.pagamentos ?? []).reduce((s, p) => s + p.valor, 0)
-                const diff = totalPago - (os.valor_total ?? 0)
+                const totalPago = (os.pagamentos ?? []).reduce((s, p) => s + Number(p.valor), 0)
+                const diff = totalPago - Number(os.valor_total ?? 0)
                 const isTroco = diff > 0
                 const hasDiff = Math.abs(diff) > 0.001
                 return (
