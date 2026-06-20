@@ -39,8 +39,8 @@ const TIPOS_CUSTOM = [
 const VARIAVEIS_POR_TIPO: Record<string, string[]> = {
   ESTOQUE_BAIXO:          ['{produto}', '{quantidade}', '{unidade}'],
   ESTOQUE_CRITICO:        ['{produto}', '{quantidade}'],
-  CLIENTE_DEVEDOR:        ['{cliente}', '{valor}', '{os_numero}'],
-  DIVIDA_VENCIDA:         ['{cliente}', '{valor}', '{os_numero}', '{vencimento}'],
+  CLIENTE_DEVEDOR:        ['{cliente}', '{valor}', '{os_numero}', '{itens}'],
+  DIVIDA_VENCIDA:         ['{cliente}', '{valor}', '{os_numero}', '{vencimento}', '{itens}'],
   OS_NOVA:                ['{os_numero}', '{cliente}', '{veiculo}', '{problema}'],
   OS_STATUS_MUDOU:        ['{os_numero}', '{status}', '{cliente}', '{veiculo}'],
   OS_VENCIDA:             ['{os_numero}', '{cliente}', '{vencimento}'],
