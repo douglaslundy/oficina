@@ -16,6 +16,7 @@ use App\Http\Controllers\AuditController;
 use App\Http\Controllers\PlanController;
 use App\Http\Controllers\RelatorioController;
 use App\Http\Controllers\UsuarioController;
+use App\Http\Controllers\ServicoController;
 use App\Http\Controllers\VeiculoController;
 use App\Http\Controllers\SaaS\AuthController as SaaSAuthController;
 use App\Http\Controllers\SaaS\CobrancaController as SaaSCobrancaController;
@@ -113,6 +114,18 @@ Route::middleware(['tenant', 'auth:sanctum', 'role:ADMIN,ATENDENTE'])->group(fun
     Route::put('produtos/{produto}',     [ProdutoController::class, 'update']);
     Route::delete('produtos/{produto}',  [ProdutoController::class, 'destroy']);
     Route::post('produtos/{produto}/estoque/entrada', [EstoqueController::class, 'entrada']);
+});
+
+// ─── Serviços — leitura: todos; escrita: ADMIN, ATENDENTE; desativar: ADMIN ───
+Route::middleware(['tenant', 'auth:sanctum'])->group(function () {
+    Route::get('servicos', [ServicoController::class, 'index']);
+});
+Route::middleware(['tenant', 'auth:sanctum', 'role:ADMIN,ATENDENTE'])->group(function () {
+    Route::post('servicos',     [ServicoController::class, 'store']);
+    Route::put('servicos/{id}', [ServicoController::class, 'update']);
+});
+Route::middleware(['tenant', 'auth:sanctum', 'role:ADMIN'])->group(function () {
+    Route::delete('servicos/{id}', [ServicoController::class, 'destroy']);
 });
 
 // ─── OS — leitura: todos; criação/edição: ADMIN, ATENDENTE, MECANICO ─────────
