@@ -66,29 +66,29 @@ export function Sidebar({ clientesDevedores = 0, produtosAlerta = 0, isMobile = 
       transition: 'transform 0.25s ease',
     }}>
       {/* Logo */}
-      <div style={{ padding: '16px 20px 12px', borderBottom: '1px solid var(--border)' }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+      <div style={{ padding: '12px 16px 10px', borderBottom: '1px solid var(--border)' }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
           <div style={{
-            width: 36, height: 36, borderRadius: 8, background: 'var(--accent)',
-            display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 18,
+            width: 30, height: 30, borderRadius: 7, background: 'var(--accent)',
+            display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 15,
           }}>🔧</div>
-          <span className="font-display" style={{ fontSize: 18, fontWeight: 800, color: 'var(--text)' }}>MecânicaPro</span>
+          <span className="font-display" style={{ fontSize: 16, fontWeight: 800, color: 'var(--text)' }}>MecânicaPro</span>
         </div>
       </div>
 
       {/* Nav */}
-      <nav style={{ flex: 1, padding: '6px 0', overflowY: 'auto' }}>
+      <nav style={{ flex: 1, padding: '4px 0', overflowY: 'hidden' }}>
         {itemsWithBadges.map(item => {
           const active = pathname === item.href || (item.href !== '/' && pathname.startsWith(item.href))
           return (
             <Link key={item.href} href={item.href} onClick={isMobile ? onClose : undefined}
               style={{
                 display: 'flex', alignItems: 'center', gap: 9,
-                padding: '7px 16px', textDecoration: 'none',
+                padding: '5px 14px', textDecoration: 'none',
                 color: active ? 'var(--text)' : 'var(--muted)',
                 background: active ? 'rgba(245,166,35,0.08)' : 'transparent',
                 borderLeft: `2px solid ${active ? 'var(--accent)' : 'transparent'}`,
-                fontSize: 13, fontWeight: active ? 600 : 400,
+                fontSize: 12, fontWeight: active ? 600 : 400,
                 transition: 'all 0.15s',
               }}>
               <span style={{ fontSize: 15 }}>{item.icon}</span>
@@ -109,25 +109,26 @@ export function Sidebar({ clientesDevedores = 0, produtosAlerta = 0, isMobile = 
 
       {/* User pill */}
       {user && (
-        <div style={{ padding: '10px 16px', borderBottom: '1px solid var(--border)' }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 8 }}>
+        <div style={{ padding: '8px 14px', borderTop: '1px solid var(--border)' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 6 }}>
             <div style={{
-              width: 32, height: 32, borderRadius: '50%',
+              width: 28, height: 28, borderRadius: '50%',
               background: 'var(--card)', display: 'flex', alignItems: 'center',
-              justifyContent: 'center', fontSize: 14, border: '1px solid var(--border)',
+              justifyContent: 'center', fontSize: 12, border: '1px solid var(--border)',
+              flexShrink: 0,
             }}>
               {user.nome.charAt(0).toUpperCase()}
             </div>
-            <div>
-              <p style={{ color: 'var(--text)', fontSize: 13, fontWeight: 600, margin: 0 }}>{user.nome}</p>
-              <p style={{ color: 'var(--muted)', fontSize: 11, margin: 0 }}>{user.role}</p>
+            <div style={{ minWidth: 0 }}>
+              <p style={{ color: 'var(--text)', fontSize: 12, fontWeight: 600, margin: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{user.nome}</p>
+              <p style={{ color: 'var(--muted)', fontSize: 10, margin: 0 }}>{user.role}</p>
             </div>
           </div>
           <button onClick={logout}
             style={{
-              width: '100%', padding: 6, borderRadius: 6,
+              width: '100%', padding: '4px 0', borderRadius: 6,
               background: 'transparent', border: '1px solid var(--border)',
-              color: 'var(--muted)', fontSize: 13, cursor: 'pointer',
+              color: 'var(--muted)', fontSize: 12, cursor: 'pointer',
             }}>
             Sair
           </button>
