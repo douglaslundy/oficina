@@ -37,7 +37,6 @@ interface OSFormData {
   status: string
   forma_pagamento?: string
   prazo_entrega?: string
-  valor_pago?: number
   venda_a_prazo?: boolean
   prazo_pagamento_dias?: number
   itens: OsItem[]
@@ -56,7 +55,6 @@ interface OSFormProps {
     status?: string
     forma_pagamento?: string
     prazo_entrega?: string
-    valor_pago?: number
     valor_total?: number
     venda_a_prazo?: boolean
     prazo_pagamento_dias?: number
@@ -121,7 +119,6 @@ export function OSForm({ initialData, onSuccess }: OSFormProps) {
       problema_relatado: initialData?.problema_relatado ?? '',
       forma_pagamento: initialData?.forma_pagamento ?? '',
       prazo_entrega: initialData?.prazo_entrega ?? '',
-      valor_pago: initialData?.valor_pago ?? 0,
       venda_a_prazo: initialData?.venda_a_prazo ?? false,
       prazo_pagamento_dias: initialData?.prazo_pagamento_dias,
       itens: formItens,
@@ -135,7 +132,6 @@ export function OSForm({ initialData, onSuccess }: OSFormProps) {
   const clienteId = watch('cliente_id')
   const mecanicoId = watch('mecanico_id')
   const veiculo_id = watch('veiculo_id')
-  const valorPago = Number(watch('valor_pago') ?? 0)
 
   // Recarrega a lista de produtos (com estoque atual) — usado após inserir/
   // remover peça para o select refletir o estoque sem precisar de F5.
@@ -248,7 +244,6 @@ export function OSForm({ initialData, onSuccess }: OSFormProps) {
           problema_relatado:     data.problema_relatado,
           forma_pagamento:       data.forma_pagamento,
           prazo_entrega:         data.prazo_entrega || null,
-          valor_pago:            data.valor_pago,
           venda_a_prazo:         data.venda_a_prazo,
           prazo_pagamento_dias:  data.prazo_pagamento_dias,
         }
@@ -559,30 +554,6 @@ export function OSForm({ initialData, onSuccess }: OSFormProps) {
           </>
         )}
       </div>
-
-      {/* Valor pago (edit only) */}
-      {isEdit && (
-        <div style={{ marginBottom: 24 }}>
-          <label style={L}>Valor pago (R$)</label>
-          <input type="number" step="0.01" min="0" {...register('valor_pago')} style={{ ...S, width: 200 }} />
-          {valorPago > 0 && (() => {
-            const efectivoTotal = initialData?.valor_total ?? 0
-            const diff = valorPago - efectivoTotal
-            if (diff === 0) return null
-            const isChange = diff > 0
-            return (
-              <div style={{ marginTop: 8, display: 'inline-flex', alignItems: 'center', gap: 8, padding: '6px 14px', borderRadius: 8, background: isChange ? 'rgba(67,160,71,.1)' : 'rgba(229,57,53,.1)', border: `1px solid ${isChange ? 'var(--success)' : 'var(--danger)'}` }}>
-                <span style={{ color: isChange ? 'var(--success)' : 'var(--danger)', fontSize: 13, fontWeight: 600 }}>
-                  {isChange ? 'Troco' : 'Falta'}:
-                </span>
-                <span className="font-mono" style={{ color: isChange ? 'var(--success)' : 'var(--danger)', fontSize: 14, fontWeight: 700 }}>
-                  {new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(Math.abs(diff))}
-                </span>
-              </div>
-            )
-          })()}
-        </div>
-      )}
 
       <div style={{ display: 'flex', justifyContent: 'flex-end' }}>
         <button type="submit" disabled={isSubmitting} className="font-display"

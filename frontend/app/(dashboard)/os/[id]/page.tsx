@@ -150,7 +150,7 @@ export default function OSDetailPage() {
           style={{ padding: '6px 14px', background: 'transparent', border: '1px solid var(--border)', color: 'var(--muted)', borderRadius: 8, cursor: 'pointer', fontSize: 13 }}>
           📄 PDF
         </button>
-        {(os.valor_pago ?? 0) > 0 && (
+        {(os.pagamentos ?? []).reduce((s, p) => s + p.valor, 0) > 0 && (
           <button onClick={downloadRecibo}
             style={{ padding: '6px 14px', background: 'transparent', border: '1px solid var(--success)', color: 'var(--success)', borderRadius: 8, cursor: 'pointer', fontSize: 13 }}>
             🧾 Recibo
@@ -191,12 +191,32 @@ export default function OSDetailPage() {
                   </div>
                 </div>
               ))}
-              <div style={{ display: 'flex', justifyContent: 'space-between', paddingTop: 12, marginTop: 4 }}>
-                <span style={{ color: 'var(--muted)', fontSize: 13, fontWeight: 600 }}>Total pago</span>
-                <span className="font-mono" style={{ color: 'var(--success)', fontWeight: 700, fontSize: 15 }}>
-                  {formatarMoeda(os.valor_pago ?? 0)}
-                </span>
-              </div>
+              {(() => {
+                const totalPago = (os.pagamentos ?? []).reduce((s, p) => s + p.valor, 0)
+                const diff = totalPago - (os.valor_total ?? 0)
+                const isTroco = diff > 0
+                const hasDiff = Math.abs(diff) > 0.001
+                return (
+                  <>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', paddingTop: 12, marginTop: 4 }}>
+                      <span style={{ color: 'var(--muted)', fontSize: 13, fontWeight: 600 }}>Total pago</span>
+                      <span className="font-mono" style={{ color: 'var(--success)', fontWeight: 700, fontSize: 15 }}>
+                        {formatarMoeda(totalPago)}
+                      </span>
+                    </div>
+                    {hasDiff && (
+                      <div style={{ display: 'flex', justifyContent: 'space-between', paddingTop: 8, marginTop: 4 }}>
+                        <span style={{ color: isTroco ? 'var(--success)' : 'var(--danger)', fontSize: 13, fontWeight: 600 }}>
+                          {isTroco ? 'Troco' : 'Falta pagar'}
+                        </span>
+                        <span className="font-mono" style={{ color: isTroco ? 'var(--success)' : 'var(--danger)', fontWeight: 700, fontSize: 15 }}>
+                          {formatarMoeda(Math.abs(diff))}
+                        </span>
+                      </div>
+                    )}
+                  </>
+                )
+              })()}
             </div>
           ) : (
             <p style={{ color: 'var(--muted)', fontSize: 14, marginBottom: 20 }}>Nenhum pagamento registrado.</p>

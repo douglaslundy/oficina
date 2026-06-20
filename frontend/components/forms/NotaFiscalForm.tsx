@@ -28,6 +28,13 @@ interface Empresa {
   aliquota_iss?: number
 }
 
+interface PlanInfo {
+  atual: number
+  limite: number
+  percent: number
+  preco_excedente: number
+}
+
 const iStyle: React.CSSProperties = {
   width: '100%',
   padding: '9px 12px',
@@ -58,15 +65,18 @@ export function NotaFiscalForm() {
   const [obs, setObs] = useState('')
   const [loading, setLoading] = useState(false)
   const [empresa, setEmpresa] = useState<Empresa | null>(null)
+  const [planInfo, setPlanInfo] = useState<PlanInfo | null>(null)
 
   useEffect(() => {
     Promise.all([
       api.get('/clientes?per_page=200'),
       api.get('/configuracoes'),
-    ]).then(([c, e]) => {
+      api.get('/plano/limites'),
+    ]).then(([c, e, p]) => {
       setClientes(c.data.data ?? [])
       setEmpresa(e.data)
       setAliquota(Number(e.data?.aliquota_iss ?? 5))
+      setPlanInfo(p.data?.notas_mes ?? null)
     }).catch(() => {})
   }, [])
 
@@ -283,6 +293,50 @@ export function NotaFiscalForm() {
             <p style={{ color: 'var(--muted)', fontSize: 13, margin: '4px 0 0' }}>
               {clienteSelecionado.cidade} — {clienteSelecionado.uf}
             </p>
+          </div>
+        )}
+
+        {planInfo && (
+          <div style={{ background: 'var(--card)', borderRadius: 12, border: '1px solid var(--border)', padding: 20 }}>
+            <h4 className="font-display" style={{ fontSize: 14, fontWeight: 700, color: 'var(--muted)', textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: 12 }}>
+              Cota de Notas
+            </h4>
+            {planInfo.limite === -1 ? (
+              <p style={{ color: 'var(--success)', fontSize: 14, fontWeight: 600, margin: 0 }}>Ilimitado</p>
+            ) : (
+              <>
+                <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 8 }}>
+                  <span style={{ color: 'var(--muted)', fontSize: 13 }}>Notas este mês</span>
+                  <span className="font-mono" style={{ fontSize: 13, fontWeight: 700, color: planInfo.atual >= planInfo.limite ? 'var(--danger)' : 'var(--text)' }}>
+                    {planInfo.atual} / {planInfo.limite}
+                  </span>
+                </div>
+                <div style={{ height: 4, borderRadius: 999, background: 'var(--border)', overflow: 'hidden', marginBottom: 10 }}>
+                  <div style={{
+                    height: '100%',
+                    borderRadius: 999,
+                    width: `${Math.min(100, planInfo.percent)}%`,
+                    background: planInfo.percent >= 100 ? 'var(--danger)' : planInfo.percent >= 75 ? 'var(--accent)' : 'var(--success)',
+                    transition: 'width 0.4s',
+                  }} />
+                </div>
+                {planInfo.preco_excedente > 0 && (
+                  <p style={{ color: 'var(--muted)', fontSize: 12, margin: '0 0 6px' }}>
+                    Nota excedente: <span className="font-mono" style={{ color: 'var(--accent)' }}>
+                      {new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(planInfo.preco_excedente)}
+                    </span> / nota
+                  </p>
+                )}
+                {planInfo.atual > planInfo.limite && planInfo.preco_excedente > 0 && (
+                  <div style={{ marginTop: 8, padding: '8px 12px', borderRadius: 8, background: 'rgba(229,57,53,.1)', border: '1px solid var(--danger)' }}>
+                    <span style={{ color: 'var(--danger)', fontSize: 12, fontWeight: 600 }}>Saldo excedente a pagar: </span>
+                    <span className="font-mono" style={{ color: 'var(--danger)', fontSize: 13, fontWeight: 700 }}>
+                      {new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format((planInfo.atual - planInfo.limite) * planInfo.preco_excedente)}
+                    </span>
+                  </div>
+                )}
+              </>
+            )}
           </div>
         )}
 
