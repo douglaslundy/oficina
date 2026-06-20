@@ -24,6 +24,7 @@ use App\Http\Controllers\SaaS\DashboardController as SaaSDashboardController;
 use App\Http\Controllers\SaaS\OficinaController as SaaSOficinaController;
 use App\Http\Controllers\SaaS\PlanoController as SaaSPlanoController;
 use App\Http\Controllers\SaaS\WebhookController as SaaSWebhookController;
+use App\Http\Controllers\SaaS\SaasConfigController;
 
 // Health check — para docker-compose healthcheck e monitoramento
 Route::get('/health', fn() => response()->json(['status' => 'ok']));
@@ -66,6 +67,12 @@ Route::prefix('saas')->group(function () {
 
         // Dashboard SaaS
         Route::get('dashboard', [SaaSDashboardController::class, 'index']);
+
+        // Configurações gateway (SaaS Admin)
+        Route::get('config',                     [SaasConfigController::class, 'show']);
+        Route::put('config/gateway',             [SaasConfigController::class, 'updateGateway']);
+        Route::put('config/asaas',               [SaasConfigController::class, 'updateAsaas']);
+        Route::put('config/mercadopago',         [SaasConfigController::class, 'updateMercadoPago']);
     });
 });
 
