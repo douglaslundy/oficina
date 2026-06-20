@@ -13,6 +13,7 @@ class OrdemServicoResource extends JsonResource
         return [
             'id'               => $this->id,
             'numero'           => $this->numero,
+            'tipo'             => $this->tipo ?? 'OS',
             'cliente_id'       => $this->cliente_id,
             'cliente'          => $this->whenLoaded('cliente', fn() => [
                 'id'            => $this->cliente->id,

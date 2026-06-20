@@ -46,6 +46,12 @@ class OrdemServicoController extends Controller
         if ($request->has('data_fim')) {
             $query->whereDate('criado_em', '<=', $request->data_fim);
         }
+        if ($request->has('tipo')) {
+            $query->where('tipo', $request->tipo);
+        } else {
+            // Por padrão a listagem principal exibe apenas OS (não vendas balcão)
+            $query->where('tipo', 'OS');
+        }
         if ($request->has('search')) {
             $search = $request->search;
             $query->where(function ($q) use ($search) {
@@ -61,8 +67,11 @@ class OrdemServicoController extends Controller
     {
         $this->planLimit->verificarLimiteOsMensal();
 
+        $isVendaBalcao = $request->input('tipo') === 'VENDA_BALCAO';
+
         $validated = $request->validate([
-            'cliente_id'              => ['required', 'string', 'exists:clientes,id'],
+            'tipo'                    => ['nullable', 'string', 'in:OS,VENDA_BALCAO'],
+            'cliente_id'              => [$isVendaBalcao ? 'nullable' : 'required', 'string', 'exists:clientes,id'],
             'mecanico_id'             => ['nullable', 'string', 'exists:usuarios,id'],
             'veiculo_descricao'       => ['nullable', 'string', 'max:100'],
             'veiculo_placa'           => ['nullable', 'string', 'max:10'],
@@ -79,6 +88,12 @@ class OrdemServicoController extends Controller
             'itens.*.quantidade'      => ['required', 'numeric', 'min:0.01'],
             'itens.*.valor_unitario'  => ['required', 'numeric', 'min:0'],
         ]);
+
+        // Venda balcão já nasce como CONCLUIDA
+        if ($isVendaBalcao) {
+            $validated['status'] = 'CONCLUIDA';
+            $validated['tipo']   = 'VENDA_BALCAO';
+        }
 
         try {
             return DB::transaction(function () use ($validated) {
@@ -102,7 +117,10 @@ class OrdemServicoController extends Controller
                 }
                 $os->update(['valor_total' => $total]);
 
-                $this->clienteStatusService->recalcular($os->cliente_id);
+                        // Recalcular status apenas quando há cliente vinculado
+                if ($os->cliente_id) {
+                    $this->clienteStatusService->recalcular($os->cliente_id);
+                }
 
                 return (new OrdemServicoResource($os->load(['cliente', 'mecanico', 'itens'])))->response()->setStatusCode(201);
             });
@@ -166,7 +184,9 @@ class OrdemServicoController extends Controller
             }
 
             $os->update($validated);
-            $this->clienteStatusService->recalcular($os->cliente_id);
+            if ($os->cliente_id) {
+                $this->clienteStatusService->recalcular($os->cliente_id);
+            }
 
             // Dispatch NPS email 2 days after OS completion
             if ($novoStatus === 'CONCLUIDA' && $wasNotConcluida) {
