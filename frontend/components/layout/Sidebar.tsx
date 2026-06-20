@@ -21,11 +21,13 @@ const NAV_ITEMS: NavItem[] = [
   { href: '/agendamentos',     label: 'Agendamento',       icon: '📅' },
   { href: '/fiscal/emitir',    label: 'Emitir NF',         icon: '🧾' },
   { href: '/fiscal/historico', label: 'Histórico NF',      icon: '📋' },
-  { href: '/relatorios',       label: 'Relatórios',        icon: '📈' },
-  { href: '/usuarios',         label: 'Usuários',          icon: '👤' },
-  { href: '/empresa',          label: 'Empresa',           icon: '🏢' },
-  { href: '/auditoria',        label: 'Auditoria',         icon: '🔍' },
-  { href: '/configuracoes',    label: 'Configurações',     icon: '⚙️' },
+  { href: '/relatorios',            label: 'Relatórios',        icon: '📈' },
+  { href: '/alertas',               label: 'Alertas WhatsApp',  icon: '💬' },
+  { href: '/usuarios',              label: 'Usuários',          icon: '👤' },
+  { href: '/empresa',               label: 'Empresa',           icon: '🏢' },
+  { href: '/auditoria',             label: 'Auditoria',         icon: '🔍' },
+  { href: '/configuracoes',         label: 'Configurações',     icon: '⚙️' },
+  { href: '/configuracoes/whatsapp',label: 'Config WhatsApp',   icon: '📱' },
 ]
 
 interface SidebarProps {
