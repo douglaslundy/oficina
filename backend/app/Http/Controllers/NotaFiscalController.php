@@ -11,6 +11,7 @@ use Barryvdh\DomPDF\Facade\Pdf;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Http\Resources\Json\AnonymousResourceCollection;
+use ZipArchive;
 
 class NotaFiscalController extends Controller
 {
@@ -115,5 +116,39 @@ class NotaFiscalController extends Controller
             ->setPaper('a4', 'portrait');
 
         return $pdf->download('NF-' . ($nota->numero ?? $nota->id) . '.pdf');
+    }
+
+    public function downloadZip(Request $request): \Symfony\Component\HttpFoundation\BinaryFileResponse|JsonResponse
+    {
+        $request->validate([
+            'ids'   => ['required', 'array', 'min:1', 'max:50'],
+            'ids.*' => ['required', 'string'],
+        ]);
+
+        $notas   = NotaFiscal::with('cliente')->whereIn('id', $request->ids)->get();
+        $empresa = \App\Models\Configuracao::first()?->toArray() ?? [];
+
+        if ($notas->isEmpty()) {
+            return response()->json(['message' => 'Nenhuma nota encontrada.'], 404);
+        }
+
+        $tmpDir  = storage_path('app/tmp');
+        @mkdir($tmpDir, 0755, true);
+        $zipPath = $tmpDir . '/nfs_' . uniqid() . '.zip';
+
+        $zip = new ZipArchive();
+        if ($zip->open($zipPath, ZipArchive::CREATE | ZipArchive::OVERWRITE) !== true) {
+            return response()->json(['message' => 'Erro ao gerar arquivo ZIP.'], 500);
+        }
+
+        foreach ($notas as $nota) {
+            $pdf      = Pdf::loadView('pdf.nota_fiscal', compact('nota', 'empresa'))->setPaper('a4', 'portrait');
+            $filename = 'NF-' . ($nota->numero ?? $nota->id) . '.pdf';
+            $zip->addFromString($filename, $pdf->output());
+        }
+
+        $zip->close();
+
+        return response()->download($zipPath, 'notas_fiscais.zip')->deleteFileAfterSend(true);
     }
 }
