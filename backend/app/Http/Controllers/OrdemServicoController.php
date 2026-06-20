@@ -83,12 +83,15 @@ class OrdemServicoController extends Controller
             'prazo_entrega'           => ['nullable', 'date'],
             'venda_a_prazo'           => ['nullable', 'boolean'],
             'prazo_pagamento_dias'    => ['nullable', 'integer', 'min:1', 'max:365'],
-            'itens'                   => ['nullable', 'array'],
-            'itens.*.tipo'            => ['required', 'in:SERVICO,PECA'],
-            'itens.*.produto_id'      => ['nullable', 'string', 'exists:produtos,id'],
-            'itens.*.descricao'       => ['required', 'string', 'max:200'],
-            'itens.*.quantidade'      => ['required', 'numeric', 'min:0.01'],
-            'itens.*.valor_unitario'  => ['required', 'numeric', 'min:0'],
+            'itens'                        => ['nullable', 'array'],
+            'itens.*.tipo'                 => ['required', 'in:SERVICO,PECA'],
+            'itens.*.produto_id'           => ['nullable', 'string', 'exists:produtos,id'],
+            'itens.*.descricao'            => ['required', 'string', 'max:200'],
+            'itens.*.quantidade'           => ['required', 'numeric', 'min:0.01'],
+            'itens.*.valor_unitario'       => ['required', 'numeric', 'min:0'],
+            'pagamentos'                   => ['nullable', 'array'],
+            'pagamentos.*.forma_pagamento' => ['required_with:pagamentos', 'string', 'max:30'],
+            'pagamentos.*.valor'           => ['required_with:pagamentos', 'numeric', 'min:0.01'],
         ]);
 
         // Venda balcão já nasce como CONCLUIDA
@@ -99,7 +102,7 @@ class OrdemServicoController extends Controller
 
         try {
             return DB::transaction(function () use ($validated) {
-                $osData = collect($validated)->except('itens')->toArray();
+                $osData = collect($validated)->except(['itens', 'pagamentos'])->toArray();
 
                 // Calcular vencimento ao criar já como CONCLUIDA com prazo
                 if (($osData['status'] ?? 'ABERTA') === 'CONCLUIDA'
@@ -117,7 +120,28 @@ class OrdemServicoController extends Controller
                     $this->estoqueService->darSaidaItem($os, $criado);
                     $total += $item['quantidade'] * $item['valor_unitario'];
                 }
-                $os->update(['valor_total' => $total]);
+
+                // Processar pagamentos múltiplos
+                $totalPago = 0;
+                foreach ($validated['pagamentos'] ?? [] as $pag) {
+                    OsPagamento::create([
+                        'os_id'           => $os->id,
+                        'forma_pagamento' => $pag['forma_pagamento'],
+                        'valor'           => $pag['valor'],
+                    ]);
+                    $totalPago += (float) $pag['valor'];
+                }
+
+                // Para VENDA_BALCAO não-a-prazo: forçar valor_pago = valor_total
+                // para eliminar divergência de ponto flutuante JS vs PHP
+                if (!empty($osData['tipo']) && $osData['tipo'] === 'VENDA_BALCAO' && empty($osData['venda_a_prazo'])) {
+                    $os->update(['valor_total' => $total, 'valor_pago' => $total]);
+                } else {
+                    $os->update(['valor_total' => $total]);
+                    if ($totalPago > 0) {
+                        $os->update(['valor_pago' => min($totalPago, $total)]);
+                    }
+                }
 
                         // Recalcular status apenas quando há cliente vinculado
                 if ($os->cliente_id) {
