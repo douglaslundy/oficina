@@ -22,8 +22,7 @@ class MercadoPagoService
 
         $ambiente = $cfg->mp_ambiente ?? 'sandbox';
         $this->baseUrl = 'https://api.mercadopago.com';
-        // Em sandbox as URLs são as mesmas, a diferença é o access_token de teste
-        _ = $ambiente; // usado apenas para referência futura de ambientes distintos
+        unset($ambiente);
     }
 
     public function criarCustomer(string $nome, string $email, string $cpfCnpj): array
