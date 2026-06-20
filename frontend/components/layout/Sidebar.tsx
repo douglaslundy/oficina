@@ -77,7 +77,7 @@ export function Sidebar({ clientesDevedores = 0, produtosAlerta = 0, isMobile = 
       </div>
 
       {/* Nav */}
-      <nav style={{ flex: 1, padding: '4px 0', overflowY: 'hidden' }}>
+      <nav style={{ flex: 1, padding: '4px 0', overflowY: 'auto', minHeight: 0 }}>
         {itemsWithBadges.map(item => {
           const active = pathname === item.href || (item.href !== '/' && pathname.startsWith(item.href))
           return (

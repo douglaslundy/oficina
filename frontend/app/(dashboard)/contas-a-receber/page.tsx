@@ -123,40 +123,40 @@ export default function ContasAReceberPage() {
     ? ['#', 'Tipo', 'Cliente', 'Data', 'Total', 'Pago', 'Saldo', 'Vencimento', 'Status']
     : ['#', 'Tipo', 'Cliente', 'Data', 'Total', 'Recebido', 'Status']
 
+  function gerarPDF() {
+    const area = document.getElementById('print-area')
+    if (!area) return
+    const janela = window.open('', '_blank', 'width=1100,height=750')
+    if (!janela) return
+    janela.document.write(`<!DOCTYPE html><html><head>
+      <meta charset="utf-8">
+      <title>Contas a Receber</title>
+      <style>
+        * { box-sizing: border-box; margin: 0; padding: 0; }
+        body { font-family: Arial, sans-serif; font-size: 12px; color: #000; padding: 24px 32px; background: #fff; }
+        .print-header { margin-bottom: 16px; border-bottom: 2px solid #000; padding-bottom: 10px; }
+        .print-title { font-size: 20px; font-weight: 800; margin: 0 0 2px; }
+        .print-sub { font-size: 11px; color: #555; }
+        .kpi-grid { display: flex; gap: 16px; margin-bottom: 20px; }
+        .kpi-box { flex: 1; border: 1px solid #ccc; border-radius: 6px; padding: 10px 14px; }
+        .kpi-label { font-size: 9px; text-transform: uppercase; color: #666; margin: 0 0 4px; }
+        .kpi-value { font-size: 16px; font-weight: 700; font-family: monospace; }
+        table { width: 100%; border-collapse: collapse; }
+        th { background: #f0f0f0; padding: 6px 10px; text-align: left; font-size: 10px; text-transform: uppercase; border-bottom: 2px solid #ccc; }
+        td { padding: 6px 10px; border-bottom: 1px solid #e0e0e0; font-size: 11px; }
+        tr:nth-child(even) td { background: #f9f9f9; }
+        tfoot td { font-weight: 700; border-top: 2px solid #000; padding-top: 8px; }
+        @page { margin: 10mm; size: A4 landscape; }
+      </style>
+    </head><body>${area.innerHTML}</body></html>`)
+    janela.document.close()
+    janela.focus()
+    setTimeout(() => { janela.print(); janela.close() }, 400)
+  }
+
   return (
     <>
-      {/* ── CSS de impressão ── */}
-      <style>{`
-        @media screen {
-          #print-area { display: none; }
-        }
-        @media print {
-          body { height: 0 !important; overflow: hidden !important; }
-          body * { visibility: hidden !important; }
-          #print-area {
-            display: block !important;
-            visibility: visible !important;
-            position: fixed;
-            top: 0; left: 0; right: 0;
-            padding: 24px 32px;
-            background: #fff;
-            color: #000;
-            z-index: 99999;
-          }
-          #print-area * { visibility: visible !important; }
-          #print-area table { width: 100%; border-collapse: collapse; font-size: 11px; }
-          #print-area th { background: #f0f0f0; padding: 6px 10px; text-align: left; font-size: 10px; text-transform: uppercase; border-bottom: 2px solid #ccc; }
-          #print-area td { padding: 6px 10px; border-bottom: 1px solid #e0e0e0; }
-          #print-area .kpi-grid { display: flex; gap: 16px; margin-bottom: 20px; }
-          #print-area .kpi-box { flex: 1; border: 1px solid #ccc; border-radius: 6px; padding: 10px 14px; }
-          #print-area .kpi-label { font-size: 9px; text-transform: uppercase; color: #666; margin: 0 0 4px; }
-          #print-area .kpi-value { font-size: 16px; font-weight: 700; margin: 0; font-family: monospace; }
-          #print-area .print-header { margin-bottom: 16px; border-bottom: 2px solid #000; padding-bottom: 10px; }
-          #print-area .print-title { font-size: 20px; font-weight: 800; margin: 0 0 2px; }
-          #print-area .print-sub { font-size: 11px; color: #555; margin: 0; }
-          @page { margin: 10mm; size: A4 landscape; }
-        }
-      `}</style>
+      <style>{`#print-area { display: none; }`}</style>
 
       <div style={{ padding: '28px 32px', maxWidth: 1060, margin: '0 auto', color: 'var(--text)' }}>
         <div style={{ marginBottom: 20 }}>
@@ -180,7 +180,7 @@ export default function ContasAReceberPage() {
           </div>
 
           <button
-            onClick={() => window.print()}
+            onClick={gerarPDF}
             style={{
               marginLeft: 'auto', padding: '8px 18px', borderRadius: 7, fontSize: 13, fontWeight: 600,
               background: 'var(--card)', border: '1px solid var(--border)', color: 'var(--text)',
