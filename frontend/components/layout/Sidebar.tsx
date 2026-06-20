@@ -16,6 +16,7 @@ const NAV_ITEMS: NavItem[] = [
   { href: '/clientes',         label: 'Clientes',          icon: '👥' },
   { href: '/produtos',         label: 'Produtos',          icon: '📦' },
   { href: '/servicos',         label: 'Serviços',          icon: '🛠️' },
+  { href: '/pdv',              label: 'Venda Balcão',      icon: '🛒' },
   { href: '/os',               label: 'Ordens de Serviço', icon: '🔧' },
   { href: '/agendamentos',     label: 'Agendamento',       icon: '📅' },
   { href: '/fiscal/emitir',    label: 'Emitir NF',         icon: '🧾' },
