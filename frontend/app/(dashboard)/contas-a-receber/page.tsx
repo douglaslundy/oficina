@@ -131,8 +131,18 @@ export default function ContasAReceberPage() {
           #print-area { display: none; }
         }
         @media print {
+          body { height: 0 !important; overflow: hidden !important; }
           body * { visibility: hidden !important; }
-          #print-area { display: block !important; visibility: visible !important; position: fixed; inset: 0; padding: 24px 32px; background: #fff; color: #000; }
+          #print-area {
+            display: block !important;
+            visibility: visible !important;
+            position: fixed;
+            top: 0; left: 0; right: 0;
+            padding: 24px 32px;
+            background: #fff;
+            color: #000;
+            z-index: 99999;
+          }
           #print-area * { visibility: visible !important; }
           #print-area table { width: 100%; border-collapse: collapse; font-size: 11px; }
           #print-area th { background: #f0f0f0; padding: 6px 10px; text-align: left; font-size: 10px; text-transform: uppercase; border-bottom: 2px solid #ccc; }
