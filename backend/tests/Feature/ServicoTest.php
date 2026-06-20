@@ -172,4 +172,15 @@ class ServicoTest extends TestCase
 
         $response->assertStatus(403);
     }
+
+    public function test_atendente_nao_pode_desativar_servico(): void
+    {
+        $token   = $this->loginAtendente();
+        $servico = $this->criarServico();
+
+        $response = $this->withToken($token)->deleteJson("/api/servicos/{$servico->id}");
+
+        $response->assertStatus(403);
+        $this->assertDatabaseHas('servicos', ['id' => $servico->id, 'ativo' => true]);
+    }
 }
