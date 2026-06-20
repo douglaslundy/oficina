@@ -15,7 +15,7 @@ export function StatCard({ title, value, icon, color, subtitle, href, compact }:
     <div
       style={{
         background: 'var(--card)', borderRadius: compact ? 10 : 12, border: '1px solid var(--border)',
-        padding: compact ? '18px 14px' : 24, position: 'relative', overflow: 'hidden',
+        padding: compact ? '26px 14px' : 24, position: 'relative', overflow: 'hidden',
         cursor: href ? 'pointer' : 'default',
         transition: href ? 'border-color 0.15s' : undefined,
       }}
