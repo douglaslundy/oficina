@@ -6,6 +6,7 @@ namespace App\Http\Controllers;
 use App\Http\Resources\AgendamentoResource;
 use App\Models\Agendamento;
 use App\Models\OrdemServico;
+use App\Services\AlertaDispatchService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Http\Resources\Json\AnonymousResourceCollection;
@@ -13,6 +14,8 @@ use Illuminate\Support\Facades\DB;
 
 class AgendamentoController extends Controller
 {
+    public function __construct(private readonly AlertaDispatchService $alertas) {}
+
     public function index(Request $request): AnonymousResourceCollection
     {
         $query = Agendamento::with(['cliente', 'mecanico']);
@@ -103,6 +106,16 @@ class AgendamentoController extends Controller
             $agendamento->update([
                 'status' => 'CONFIRMADO',
                 'os_id'  => $os->id,
+            ]);
+
+            $this->alertas->dispatch('AGENDAMENTO_CONFIRMADO', [
+                'cliente'            => $agendamento->cliente?->nome ?? '-',
+                'data'               => $agendamento->data_hora_inicio?->format('d/m/Y') ?? '-',
+                'hora'               => $agendamento->data_hora_inicio?->format('H:i') ?? '-',
+                'servico'            => $agendamento->tipo_servico,
+                'os_numero'          => $os->numero,
+                '_telefone_cliente'  => $agendamento->cliente?->telefone ?? '',
+                '_telefone_mecanico' => $agendamento->mecanico?->telefone ?? '',
             ]);
 
             return response()->json([

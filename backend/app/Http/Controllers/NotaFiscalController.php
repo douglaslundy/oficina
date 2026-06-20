@@ -5,6 +5,7 @@ namespace App\Http\Controllers;
 
 use App\Http\Resources\NotaFiscalResource;
 use App\Models\NotaFiscal;
+use App\Services\AlertaDispatchService;
 use App\Services\NfeService;
 use App\Services\PlanLimitService;
 use Barryvdh\DomPDF\Facade\Pdf;
@@ -18,6 +19,7 @@ class NotaFiscalController extends Controller
     public function __construct(
         private readonly NfeService $nfeService,
         private readonly PlanLimitService $planLimit,
+        private readonly AlertaDispatchService $alertas,
     ) {}
 
     public function index(Request $request): AnonymousResourceCollection
@@ -89,7 +91,15 @@ class NotaFiscalController extends Controller
             ]);
 
             if ($resultado['status'] === 'AUTORIZADA') {
-                $this->planLimit->registrarNotaSeExcedente($nota->fresh());
+                $notaFresh = $nota->fresh()->loadMissing('cliente');
+                $this->planLimit->registrarNotaSeExcedente($notaFresh);
+                $this->alertas->dispatch('NF_AUTORIZADA', [
+                    'nf_numero'    => $notaFresh->numero,
+                    'cliente'      => $notaFresh->cliente?->nome ?? '-',
+                    'valor'        => 'R$ ' . number_format((float)$notaFresh->valor_total, 2, ',', '.'),
+                    'chave_acesso' => $notaFresh->chave_acesso ?? '-',
+                    '_telefone_cliente' => $notaFresh->cliente?->telefone ?? '',
+                ]);
             }
         } catch (\Exception $e) {
             $nota->update(['status' => 'REJEITADA']);

@@ -18,6 +18,8 @@ use App\Http\Controllers\RelatorioController;
 use App\Http\Controllers\UsuarioController;
 use App\Http\Controllers\ServicoController;
 use App\Http\Controllers\VeiculoController;
+use App\Http\Controllers\AlertaConfigController;
+use App\Http\Controllers\WhatsAppConfigController;
 use App\Http\Controllers\SaaS\AuthController as SaaSAuthController;
 use App\Http\Controllers\SaaS\CobrancaController as SaaSCobrancaController;
 use App\Http\Controllers\SaaS\DashboardController as SaaSDashboardController;
@@ -187,6 +189,24 @@ Route::middleware(['tenant', 'auth:sanctum', 'role:ADMIN'])->group(function () {
     Route::post('configuracoes/certificado', [ConfiguracaoController::class, 'uploadCertificado']);
     Route::get('configuracoes',              [ConfiguracaoController::class, 'show']);
     Route::put('configuracoes',              [ConfiguracaoController::class, 'update']);
+});
+
+// ─── WhatsApp — somente ADMIN ────────────────────────────────────────────────
+Route::middleware(['tenant', 'auth:sanctum', 'role:ADMIN'])->group(function () {
+    Route::get('whatsapp/config',   [WhatsAppConfigController::class, 'show']);
+    Route::post('whatsapp/config',  [WhatsAppConfigController::class, 'upsert']);
+    Route::post('whatsapp/testar',  [WhatsAppConfigController::class, 'testarConexao']);
+    Route::get('whatsapp/status',   [WhatsAppConfigController::class, 'statusInstancia']);
+    Route::get('whatsapp/qrcode',   [WhatsAppConfigController::class, 'qrCode']);
+});
+
+// ─── Alertas WhatsApp — ADMIN e ATENDENTE ────────────────────────────────────
+Route::middleware(['tenant', 'auth:sanctum', 'role:ADMIN,ATENDENTE'])->group(function () {
+    Route::get('alertas',               [AlertaConfigController::class, 'index']);
+    Route::post('alertas',              [AlertaConfigController::class, 'store']);
+    Route::put('alertas/{id}',          [AlertaConfigController::class, 'update']);
+    Route::post('alertas/{id}/toggle',  [AlertaConfigController::class, 'toggle']);
+    Route::delete('alertas/{id}',       [AlertaConfigController::class, 'destroy']);
 });
 
 // ─── Agendamentos — todos os roles ───────────────────────────────────────────

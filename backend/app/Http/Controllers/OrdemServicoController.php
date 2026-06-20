@@ -6,6 +6,7 @@ namespace App\Http\Controllers;
 use App\Http\Resources\OrdemServicoResource;
 use App\Models\OrdemServico;
 use App\Models\OsPagamento;
+use App\Services\AlertaDispatchService;
 use App\Services\ClienteStatusService;
 use App\Services\EstoqueService;
 use App\Services\PlanLimitService;
@@ -22,6 +23,7 @@ class OrdemServicoController extends Controller
         private readonly EstoqueService $estoqueService,
         private readonly ClienteStatusService $clienteStatusService,
         private readonly PlanLimitService $planLimit,
+        private readonly AlertaDispatchService $alertas,
     ) {}
 
     public function index(Request $request): AnonymousResourceCollection
@@ -122,6 +124,15 @@ class OrdemServicoController extends Controller
                     $this->clienteStatusService->recalcular($os->cliente_id);
                 }
 
+                $os->loadMissing('cliente');
+                $this->alertas->dispatch('OS_NOVA', [
+                    'os_numero'          => $os->numero,
+                    'cliente'            => $os->cliente?->nome ?? '-',
+                    'veiculo'            => $os->veiculo_descricao ?? $os->veiculo_placa ?? '-',
+                    'problema'           => $os->problema_relatado ?? '-',
+                    '_telefone_mecanico' => $os->mecanico?->telefone ?? '',
+                ]);
+
                 return (new OrdemServicoResource($os->load(['cliente', 'mecanico', 'itens'])))->response()->setStatusCode(201);
             });
         } catch (\RuntimeException $e) {
@@ -191,6 +202,19 @@ class OrdemServicoController extends Controller
             // Dispatch NPS email 2 days after OS completion
             if ($novoStatus === 'CONCLUIDA' && $wasNotConcluida) {
                 \App\Jobs\EnviarNpsCliente::dispatch($os->fresh())->delay(now()->addDays(2));
+            }
+
+            // Alerta WhatsApp de mudança de status
+            if ($novoStatus && $novoStatus !== $os->getOriginal('status')) {
+                $fresh = $os->fresh()->loadMissing('cliente');
+                $this->alertas->dispatch('OS_STATUS_MUDOU', [
+                    'os_numero'           => $fresh->numero,
+                    'status'              => $novoStatus,
+                    'cliente'             => $fresh->cliente?->nome ?? '-',
+                    'veiculo'             => $fresh->veiculo_descricao ?? $fresh->veiculo_placa ?? '-',
+                    '_telefone_cliente'   => $fresh->cliente?->telefone ?? '',
+                    '_telefone_mecanico'  => $fresh->mecanico?->telefone ?? '',
+                ]);
             }
 
             return new OrdemServicoResource($os->fresh()->load(['cliente', 'mecanico', 'itens']));
@@ -316,7 +340,21 @@ class OrdemServicoController extends Controller
             $totalPago = $os->pagamentos()->sum('valor');
             $os->update(['valor_pago' => $totalPago]);
 
-            $this->clienteStatusService->recalcular($os->cliente_id);
+            if ($os->cliente_id) {
+                $this->clienteStatusService->recalcular($os->cliente_id);
+            }
+
+            $os->loadMissing('cliente');
+            $saldoDevedor = max(0, (float)$os->valor_total - (float)$totalPago);
+            $tipoAlerta   = $saldoDevedor > 0 ? 'PAGAMENTO_PARCIAL' : 'PAGAMENTO_RECEBIDO';
+            $this->alertas->dispatch($tipoAlerta, [
+                'os_numero'          => $os->numero,
+                'cliente'            => $os->cliente?->nome ?? '-',
+                'valor'              => 'R$ ' . number_format($validated['valor'], 2, ',', '.'),
+                'forma_pagamento'    => $validated['forma_pagamento'],
+                'saldo_devedor'      => 'R$ ' . number_format($saldoDevedor, 2, ',', '.'),
+                '_telefone_cliente'  => $os->cliente?->telefone ?? '',
+            ]);
 
             return $pagamento;
         });
