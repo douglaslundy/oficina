@@ -31,6 +31,32 @@ class DashboardController extends Controller
             ->whereMonth('emitido_em', now()->month)
             ->count();
 
+        // KPI — OS abertas/em andamento este mês
+        $osMes = OrdemServico::where(fn($q) => $q->where('tipo', 'OS')->orWhereNull('tipo'))
+            ->whereNotIn('status', ['CANCELADA'])
+            ->whereMonth('criado_em', now()->month)
+            ->whereYear('criado_em', now()->year)
+            ->count();
+
+        $osMesValor = (float)(OrdemServico::where(fn($q) => $q->where('tipo', 'OS')->orWhereNull('tipo'))
+            ->whereNotIn('status', ['CANCELADA'])
+            ->whereMonth('criado_em', now()->month)
+            ->whereYear('criado_em', now()->year)
+            ->sum('valor_total') ?? 0);
+
+        // KPI — Vendas Balcão este mês
+        $vendasMes = OrdemServico::where('tipo', 'VENDA_BALCAO')
+            ->whereNotIn('status', ['CANCELADA'])
+            ->whereMonth('criado_em', now()->month)
+            ->whereYear('criado_em', now()->year)
+            ->count();
+
+        $vendasMesValor = (float)(OrdemServico::where('tipo', 'VENDA_BALCAO')
+            ->whereNotIn('status', ['CANCELADA'])
+            ->whereMonth('criado_em', now()->month)
+            ->whereYear('criado_em', now()->year)
+            ->sum('valor_total') ?? 0);
+
         // Faturamento mensal (últimos 7 meses) — OS + Vendas Balcão concluídas
         $faturamentoMensal = OrdemServico::where('status', 'CONCLUIDA')
             ->where('criado_em', '>=', now()->subMonths(6)->startOfMonth())
@@ -72,10 +98,14 @@ class DashboardController extends Controller
 
         return response()->json([
             'stats' => [
-                'clientes_ativos' => $clientesAtivos,
-                'dividas_abertas' => round($dividasAbertas, 2),
-                'faturamento_mes' => round($faturamentoMes, 2),
-                'nf_emitidas_mes' => $nfEmitidas,
+                'clientes_ativos'   => $clientesAtivos,
+                'dividas_abertas'   => round($dividasAbertas, 2),
+                'faturamento_mes'   => round($faturamentoMes, 2),
+                'nf_emitidas_mes'   => $nfEmitidas,
+                'os_mes'            => $osMes,
+                'os_mes_valor'      => round($osMesValor, 2),
+                'vendas_mes'        => $vendasMes,
+                'vendas_mes_valor'  => round($vendasMesValor, 2),
             ],
             'faturamento_mensal' => $faturamentoMensal,
             'produtos_criticos'  => $produtosCriticos,
