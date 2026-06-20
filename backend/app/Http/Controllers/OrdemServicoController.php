@@ -60,7 +60,7 @@ class OrdemServicoController extends Controller
         if ($request->boolean('em_aberto')) {
             $query->whereColumn('valor_pago', '<', 'valor_total')
                   ->where('valor_total', '>', 0)
-                  ->where('status', 'CONCLUIDA');
+                  ->whereNotIn('status', ['CANCELADA']);
         }
         if ($request->has('search')) {
             $search = $request->search;
@@ -70,7 +70,8 @@ class OrdemServicoController extends Controller
             });
         }
 
-        return OrdemServicoResource::collection($query->orderBy('criado_em', 'desc')->paginate(20));
+        $perPage = min((int)$request->input('per_page', 20), 200);
+        return OrdemServicoResource::collection($query->orderBy('criado_em', 'desc')->paginate($perPage));
     }
 
     public function store(Request $request): JsonResponse

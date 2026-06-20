@@ -153,8 +153,8 @@ export default function PdvPage() {
   }
 
   function atualizarQtd(idx: number, qty: number) {
-    const safe = isNaN(qty) || qty <= 0 ? 0 : qty
-    if (safe <= 0) { removerItem(idx); return }
+    if (isNaN(qty)) return
+    const safe = Math.max(1, qty)
     setItens(prev => {
       const next = [...prev]
       next[idx] = { ...next[idx], quantidade: safe }
