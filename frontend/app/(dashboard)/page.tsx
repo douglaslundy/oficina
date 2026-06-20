@@ -66,7 +66,7 @@ export default function DashboardPage() {
         <h1 className="font-display" style={{ fontSize: 28, fontWeight: 800, color: 'var(--text)', marginBottom: 24 }}>Dashboard</h1>
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(6, 1fr)', gap: 12, marginBottom: 24 }}>
           {[1,2,3,4,5,6].map(i => (
-            <div key={i} style={{ background: 'var(--card)', borderRadius: 10, border: '1px solid var(--border)', height: 82, animation: 'pulse 1.5s ease-in-out infinite' }} />
+            <div key={i} style={{ background: 'var(--card)', borderRadius: 10, border: '1px solid var(--border)', height: 100, animation: 'pulse 1.5s ease-in-out infinite' }} />
           ))}
         </div>
       </div>
