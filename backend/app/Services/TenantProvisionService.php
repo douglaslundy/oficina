@@ -6,6 +6,7 @@ namespace App\Services;
 use App\Models\Configuracao;
 use App\Models\Oficina;
 use App\Models\Plano;
+use App\Models\SaasConfig;
 use App\Models\Usuario;
 use App\Tenancy\TenancyContext;
 use Illuminate\Support\Facades\DB;
@@ -15,7 +16,10 @@ use Illuminate\Support\Str;
 
 class TenantProvisionService
 {
-    public function __construct(private readonly AsaasService $asaas) {}
+    public function __construct(
+        private readonly AsaasService $asaas,
+        private readonly MercadoPagoService $mercadoPago,
+    ) {}
 
     public function provisionar(array $data): Oficina
     {
@@ -58,26 +62,45 @@ class TenantProvisionService
 
             TenancyContext::clear();
 
-            // 4. Call AsaasService for paid plans (non-blocking)
+            // 4. Call payment gateway for paid plans (non-blocking)
+            $gateway = SaasConfig::get()->gateway_preferido ?? 'ASAAS';
             if ((float) $plano->preco_mensal > 0) {
                 try {
-                    $customer = $this->asaas->criarCustomer(
-                        $data['admin_nome'],
-                        $data['cnpj'],
-                        $data['admin_email']
-                    );
-                    $subscription = $this->asaas->criarSubscription(
-                        $customer['id'],
-                        (float) $plano->preco_mensal,
-                        now()->addDay()->format('Y-m-d')
-                    );
-                    $oficina->update([
-                        'asaas_customer_id'     => $customer['id'],
-                        'asaas_subscription_id' => $subscription['id'],
-                    ]);
+                    if ($gateway === 'MERCADOPAGO') {
+                        $customer = $this->mercadoPago->criarCustomer(
+                            $data['admin_nome'],
+                            $data['admin_email'],
+                            $data['cnpj'],
+                        );
+                        $subscription = $this->mercadoPago->criarSubscription(
+                            $customer['id'],
+                            (float) $plano->preco_mensal,
+                            now()->addDay()->format('Y-m-d')
+                        );
+                        $oficina->update([
+                            'gateway'           => 'MERCADOPAGO',
+                            'mp_customer_id'    => $customer['id'],
+                            'mp_subscription_id'=> $subscription['id'],
+                        ]);
+                    } else {
+                        $customer = $this->asaas->criarCustomer(
+                            $data['admin_nome'],
+                            $data['cnpj'],
+                            $data['admin_email']
+                        );
+                        $subscription = $this->asaas->criarSubscription(
+                            $customer['id'],
+                            (float) $plano->preco_mensal,
+                            now()->addDay()->format('Y-m-d')
+                        );
+                        $oficina->update([
+                            'gateway'               => 'ASAAS',
+                            'asaas_customer_id'     => $customer['id'],
+                            'asaas_subscription_id' => $subscription['id'],
+                        ]);
+                    }
                 } catch (\Throwable $e) {
-                    // Log but don't abort provisioning for non-critical Asaas failure
-                    \Illuminate\Support\Facades\Log::warning("Asaas provisioning skipped: {$e->getMessage()}");
+                    \Illuminate\Support\Facades\Log::warning("Gateway provisioning skipped ({$gateway}): {$e->getMessage()}");
                 }
             }
 

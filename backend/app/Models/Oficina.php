@@ -22,8 +22,11 @@ class Oficina extends Model
         'slug',
         'plano_id',
         'status',
+        'gateway',
         'asaas_customer_id',
         'asaas_subscription_id',
+        'mp_customer_id',
+        'mp_subscription_id',
         'admin_email',
     ];
 

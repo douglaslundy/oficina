@@ -22,7 +22,9 @@ class Cobranca extends Model
         'status',
         'tipo',
         'descricao',
+        'gateway',
         'asaas_payment_id',
+        'mp_payment_id',
         'vencimento',
         'pago_em',
     ];
