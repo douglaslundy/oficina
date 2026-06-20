@@ -127,10 +127,13 @@ export default function ContasAReceberPage() {
     <>
       {/* ── CSS de impressão ── */}
       <style>{`
+        @media screen {
+          #print-area { display: none; }
+        }
         @media print {
           body * { visibility: hidden !important; }
-          #print-area, #print-area * { visibility: visible !important; }
-          #print-area { position: fixed; inset: 0; padding: 24px 32px; background: #fff; color: #000; }
+          #print-area { display: block !important; visibility: visible !important; position: fixed; inset: 0; padding: 24px 32px; background: #fff; color: #000; }
+          #print-area * { visibility: visible !important; }
           #print-area table { width: 100%; border-collapse: collapse; font-size: 11px; }
           #print-area th { background: #f0f0f0; padding: 6px 10px; text-align: left; font-size: 10px; text-transform: uppercase; border-bottom: 2px solid #ccc; }
           #print-area td { padding: 6px 10px; border-bottom: 1px solid #e0e0e0; }
@@ -311,7 +314,7 @@ export default function ContasAReceberPage() {
       </div>
 
       {/* ── Área de impressão (invisível na tela, visível no print) ── */}
-      <div id="print-area" style={{ display: 'none' }}>
+      <div id="print-area">
         {/* Cabeçalho */}
         <div className="print-header">
           <p className="print-title">

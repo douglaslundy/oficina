@@ -84,7 +84,7 @@ export default function DashboardPage() {
         <StatCard title="NF Emitidas" value={data.stats.nf_emitidas_mes} icon="🧾" color="var(--info)" subtitle="Este mês" href="/fiscal/historico" compact />
         <StatCard title="Clientes" value={data.stats.clientes_ativos} icon="👥" color="var(--info)" subtitle="Ativos" href="/clientes" compact />
         <StatCard title="OS do Mês" value={data.stats.os_mes} icon="🔧" color="var(--accent)" subtitle={formatarMoeda(data.stats.os_mes_valor)} href="/os" compact />
-        <StatCard title="Vendas Balcão" value={data.stats.vendas_mes} icon="🛒" color="var(--info)" subtitle={formatarMoeda(data.stats.vendas_mes_valor)} href="/pdv" compact />
+        <StatCard title="Vendas Balcão" value={data.stats.vendas_mes} icon="🛒" color="var(--info)" subtitle={formatarMoeda(data.stats.vendas_mes_valor)} href="/contas-a-receber" compact />
       </div>
 
       <div style={{ display: 'grid', gridTemplateColumns: '2fr 1fr', gap: 24, marginBottom: 24 }}>
