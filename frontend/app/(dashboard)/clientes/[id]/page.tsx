@@ -67,7 +67,7 @@ export default function ClienteDetailPage() {
   useEffect(() => {
     Promise.all([
       api.get(`/clientes/${id}`),
-      api.get(`/os?cliente_id=${id}`),
+      api.get(`/os?cliente_id=${id}&tipo=OS,VENDA_BALCAO`),
       api.get(`/clientes/${id}/veiculos`),
     ]).then(([c, o, v]) => {
       setCliente(c.data.data)
