@@ -51,11 +51,11 @@ class WhatsAppConfigController extends Controller
         $cfg->evolution_url  = $validated['evolution_url'];
         $cfg->instance_name  = $validated['instance_name'];
         $cfg->ativo          = (bool)($validated['ativo'] ?? false);
-        $cfg->oficina_id     = $oficina_id;
+        $cfg->oficina_id     = $oficinaId;
         $cfg->save();
 
         // Garante alertas pré-definidos para este tenant
-        $this->alertaDispatch->garantirAlertasPreDefinidos($oficina_id);
+        $this->alertaDispatch->garantirAlertasPreDefinidos($oficinaId);
 
         return response()->json(['data' => $cfg->mascarado(), 'message' => 'Configuração salva.']);
     }

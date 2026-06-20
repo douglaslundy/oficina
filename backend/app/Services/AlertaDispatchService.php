@@ -52,8 +52,11 @@ class AlertaDispatchService
         $telefones = array_unique(array_filter($telefones));
 
         foreach ($telefones as $telefone) {
-            EnviarAlertaWhatsAppJob::dispatch($oficina_id: $oficinaId, telefone: $telefone, mensagem: $mensagem)
-                ->onQueue('whatsapp');
+            EnviarAlertaWhatsAppJob::dispatch(
+                oficina_id: $oficinaId,
+                telefone:   (string) $telefone,
+                mensagem:   $mensagem,
+            )->onQueue('whatsapp');
         }
     }
 
