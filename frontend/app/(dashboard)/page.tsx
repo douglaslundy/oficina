@@ -19,7 +19,7 @@ interface DashData {
   faturamento_mensal: Array<{ mes: string; total: number }>
   produtos_criticos: Array<{ id: string; nome: string; qty_atual: number; qty_minima: number }>
   ultimas_os: Array<{
-    id: string; numero: number; cliente?: string; status: string; valor_total: number; criado_em: string
+    id: string; numero: number; tipo: string; cliente?: string; status: string; valor_total: number; criado_em: string
   }>
 }
 
@@ -32,8 +32,25 @@ export default function DashboardPage() {
   }, [])
 
   const osColumns: Column<DashData['ultimas_os'][number]>[] = [
-    { key: 'numero', label: '#OS', render: r => <span className="font-mono" style={{ color: 'var(--accent)' }}>#{r.numero}</span> },
-    { key: 'cliente', label: 'Cliente', render: r => r.cliente ?? '-' },
+    {
+      key: 'numero', label: '#', render: r => (
+        <span className="font-mono" style={{ color: 'var(--accent)' }}>
+          {r.tipo === 'VENDA_BALCAO' ? 'V' : 'OS'}#{r.numero}
+        </span>
+      ),
+    },
+    {
+      key: 'tipo', label: 'Tipo', render: r => (
+        <span style={{
+          fontSize: 11, padding: '2px 8px', borderRadius: 4, fontWeight: 700,
+          background: r.tipo === 'VENDA_BALCAO' ? 'rgba(30,136,229,.15)' : 'rgba(245,166,35,.15)',
+          color: r.tipo === 'VENDA_BALCAO' ? 'var(--info)' : 'var(--accent)',
+        }}>
+          {r.tipo === 'VENDA_BALCAO' ? 'Balcão' : 'OS'}
+        </span>
+      ),
+    },
+    { key: 'cliente', label: 'Cliente', render: r => r.cliente ?? '—' },
     { key: 'status', label: 'Status', render: r => <StatusPill status={r.status} /> },
     { key: 'valor_total', label: 'Valor', render: r => <span className="font-mono">{formatarMoeda(r.valor_total)}</span> },
     { key: 'criado_em', label: 'Data', render: r => formatarData(r.criado_em) },
@@ -104,7 +121,7 @@ export default function DashboardPage() {
         <DataTable
           columns={osColumns}
           data={data.ultimas_os}
-          onRowClick={r => router.push(`/os/${r.id}`)}
+          onRowClick={r => router.push(r.tipo === 'VENDA_BALCAO' ? `/pdv/${r.id}` : `/os/${r.id}`)}
           emptyMessage="Nenhuma OS encontrada."
         />
       </div>

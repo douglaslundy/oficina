@@ -17,26 +17,29 @@ class DashboardController extends Controller
         $clientesAtivos = Cliente::whereIn('status', ['REGULAR', 'DEVEDOR', 'OS_ABERTA'])->count();
 
         $dividasAbertas = (float)(OrdemServico::whereColumn('valor_pago', '<', 'valor_total')
+            ->where('valor_total', '>', 0)
+            ->whereNotIn('status', ['CANCELADA'])
             ->sum(DB::raw('valor_total - valor_pago')) ?? 0);
 
-        $faturamentoMes = (float)(NotaFiscal::where('status', 'AUTORIZADA')
-            ->whereMonth('emitido_em', now()->month)
-            ->whereYear('emitido_em', now()->year)
-            ->sum('valor_total') ?? 0);
+        // Faturamento = valor_pago de OS/Vendas concluídas no mês (inclui Venda Balcão)
+        $faturamentoMes = (float)(OrdemServico::where('status', 'CONCLUIDA')
+            ->whereMonth('criado_em', now()->month)
+            ->whereYear('criado_em', now()->year)
+            ->sum('valor_pago') ?? 0);
 
         $nfEmitidas = NotaFiscal::where('status', 'AUTORIZADA')
             ->whereMonth('emitido_em', now()->month)
             ->count();
 
-        // Faturamento últimos 7 meses
-        $faturamentoMensal = NotaFiscal::where('status', 'AUTORIZADA')
-            ->where('emitido_em', '>=', now()->subMonths(6)->startOfMonth())
+        // Faturamento mensal (últimos 7 meses) — OS + Vendas Balcão concluídas
+        $faturamentoMensal = OrdemServico::where('status', 'CONCLUIDA')
+            ->where('criado_em', '>=', now()->subMonths(6)->startOfMonth())
             ->select(
-                DB::raw("TO_CHAR(emitido_em, 'Mon/YY') as mes"),
-                DB::raw('SUM(valor_total) as total')
+                DB::raw("TO_CHAR(criado_em, 'Mon/YY') as mes"),
+                DB::raw('SUM(valor_pago) as total')
             )
             ->groupBy('mes')
-            ->orderByRaw("MIN(emitido_em)")
+            ->orderByRaw("MIN(criado_em)")
             ->get();
 
         // Produtos críticos (top 5)
@@ -52,7 +55,7 @@ class DashboardController extends Controller
             ->values()
             ->map(fn($p) => ['id' => $p->id, 'nome' => $p->nome, 'qty_atual' => $p->qty_atual, 'status' => $p->status_estoque]);
 
-        // Últimas 8 OS
+        // Últimas 8 OS + Vendas Balcão
         $ultimasOs = OrdemServico::with('cliente')
             ->orderBy('criado_em', 'desc')
             ->limit(8)
@@ -60,6 +63,7 @@ class DashboardController extends Controller
             ->map(fn($o) => [
                 'id'          => $o->id,
                 'numero'      => $o->numero,
+                'tipo'        => $o->tipo ?? 'OS',
                 'cliente'     => $o->cliente?->nome,
                 'status'      => $o->status,
                 'valor_total' => $o->valor_total,
