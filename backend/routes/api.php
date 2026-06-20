@@ -29,8 +29,9 @@ use App\Http\Controllers\SaaS\SaasConfigController;
 // Health check — para docker-compose healthcheck e monitoramento
 Route::get('/health', fn() => response()->json(['status' => 'ok']));
 
-// Asaas webhook — público, validado pelo token no header
-Route::post('saas/webhooks/asaas', [SaaSWebhookController::class, 'asaas']);
+// Webhooks SaaS — públicos, validados internamente
+Route::post('saas/webhooks/asaas',        [SaaSWebhookController::class, 'asaas']);
+Route::post('saas/webhooks/mercadopago',  [SaaSWebhookController::class, 'mercadopago']);
 
 // SaaS Admin — Auth (público, sem middleware de tenant)
 Route::prefix('saas')->group(function () {
