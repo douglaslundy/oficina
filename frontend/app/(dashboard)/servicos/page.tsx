@@ -32,7 +32,7 @@ function ServicoModal({
   mode: 'create' | 'edit'
   initial?: Servico
   onClose: () => void
-  onSuccess: () => void
+  onSuccess: (mode: 'create' | 'edit') => void
 }) {
   const [form, setForm] = useState<ServicoForm>({
     nome: initial?.nome ?? '',
@@ -45,18 +45,19 @@ function ServicoModal({
     e.preventDefault()
     setError(null)
     if (!form.nome.trim()) { setError('Nome é obrigatório.'); return }
-    if (form.valor_padrao === '' || isNaN(parseFloat(form.valor_padrao))) {
-      setError('Informe um valor padrão válido.'); return
+    const valorNum = parseFloat(form.valor_padrao)
+    if (form.valor_padrao === '' || isNaN(valorNum) || valorNum < 0) {
+      setError('Informe um valor padrão válido (mínimo R$ 0,00).'); return
     }
     setSubmitting(true)
     try {
-      const payload = { nome: form.nome.trim(), valor_padrao: parseFloat(form.valor_padrao) }
+      const payload = { nome: form.nome.trim(), valor_padrao: valorNum }
       if (mode === 'create') {
         await api.post('/servicos', payload)
       } else {
         await api.put(`/servicos/${initial!.id}`, payload)
       }
-      onSuccess()
+      onSuccess(mode)
     } catch (err: unknown) {
       const e = err as { response?: { data?: { message?: string } } }
       setError(e.response?.data?.message ?? 'Erro ao salvar.')
@@ -139,14 +140,16 @@ export default function ServicosPage() {
   const [editTarget, setEditTarget] = useState<Servico | undefined>()
   const [confirmDeactivate, setConfirmDeactivate] = useState<string | null>(null)
   const [deactivating, setDeactivating] = useState(false)
+  const [reactivating, setReactivating] = useState(false)
 
   const fetchServicos = useCallback(async () => {
     setLoading(true)
     try {
       const r = await api.get('/servicos?per_page=200')
       setServicos(r.data.data ?? [])
-    } catch { /* silently fails */ }
-    finally { setLoading(false) }
+    } catch {
+      toast('Erro ao carregar serviços.', 'danger')
+    } finally { setLoading(false) }
   }, [])
 
   useEffect(() => { fetchServicos() }, [fetchServicos])
@@ -166,18 +169,21 @@ export default function ServicosPage() {
   }
 
   async function handleReactivate(id: string) {
+    setReactivating(true)
     try {
       await api.put(`/servicos/${id}`, { ativo: true })
       toast('Serviço reativado.', 'success')
       fetchServicos()
     } catch {
       toast('Erro ao reativar.', 'danger')
+    } finally {
+      setReactivating(false)
     }
   }
 
-  function handleModalSuccess() {
+  function handleModalSuccess(resolvedMode: 'create' | 'edit') {
     setShowModal(false)
-    toast(modalMode === 'create' ? 'Serviço criado!' : 'Serviço atualizado!', 'success')
+    toast(resolvedMode === 'create' ? 'Serviço criado!' : 'Serviço atualizado!', 'success')
     fetchServicos()
   }
 
@@ -260,7 +266,7 @@ export default function ServicosPage() {
                       ) : (
                         <div style={{ display: 'flex', gap: 8 }}>
                           <button
-                            onClick={() => { setModalMode('edit'); setEditTarget(s); setShowModal(true) }}
+                            onClick={() => { setConfirmDeactivate(null); setModalMode('edit'); setEditTarget(s); setShowModal(true) }}
                             style={{ background: 'rgba(245,166,35,.1)', border: '1px solid rgba(245,166,35,.3)', color: 'var(--accent)', borderRadius: 6, padding: '5px 14px', fontSize: 13, fontWeight: 600, cursor: 'pointer' }}>
                             Editar
                           </button>
@@ -270,9 +276,9 @@ export default function ServicosPage() {
                               Desativar
                             </button>
                           ) : (
-                            <button onClick={() => handleReactivate(s.id)}
-                              style={{ background: 'rgba(67,160,71,.1)', border: '1px solid rgba(67,160,71,.3)', color: 'var(--success)', borderRadius: 6, padding: '5px 14px', fontSize: 13, fontWeight: 600, cursor: 'pointer' }}>
-                              Reativar
+                            <button onClick={() => handleReactivate(s.id)} disabled={reactivating}
+                              style={{ background: 'rgba(67,160,71,.1)', border: '1px solid rgba(67,160,71,.3)', color: 'var(--success)', borderRadius: 6, padding: '5px 14px', fontSize: 13, fontWeight: 600, cursor: reactivating ? 'not-allowed' : 'pointer' }}>
+                              {reactivating ? '⟳' : 'Reativar'}
                             </button>
                           )}
                         </div>
