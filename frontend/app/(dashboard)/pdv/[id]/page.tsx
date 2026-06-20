@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useCallback } from 'react'
 import { useParams, useRouter } from 'next/navigation'
 import api from '@/lib/api'
 import { formatarMoeda, formatarData } from '@/lib/formatters'
@@ -37,32 +37,78 @@ interface Venda {
   criado_em: string
 }
 
+const FORMAS_PAG = ['DINHEIRO', 'PIX', 'CARTAO_DEBITO', 'CARTAO_CREDITO', 'BOLETO', 'TRANSFERENCIA']
+
+function Toast({ msg, type, onClose }: { msg: string; type: 'success' | 'danger'; onClose: () => void }) {
+  useEffect(() => { const t = setTimeout(onClose, 3000); return () => clearTimeout(t) }, [onClose])
+  return (
+    <div style={{
+      position: 'fixed', bottom: 24, right: 24, zIndex: 9999,
+      background: type === 'success' ? 'var(--success)' : 'var(--danger)',
+      color: '#fff', padding: '12px 20px', borderRadius: 8,
+      fontSize: 14, fontWeight: 600, boxShadow: '0 4px 20px rgba(0,0,0,.35)',
+    }}>
+      {type === 'success' ? '✓' : '✕'} {msg}
+    </div>
+  )
+}
+
 export default function VendaDetalhe() {
   const { id } = useParams<{ id: string }>()
   const router = useRouter()
   const [venda, setVenda] = useState<Venda | null>(null)
   const [loading, setLoading] = useState(true)
   const [erro, setErro] = useState<string | null>(null)
+  const [toast, setToast] = useState<{ msg: string; type: 'success' | 'danger' } | null>(null)
 
-  useEffect(() => {
+  // Modal de pagamento
+  const [showPagModal, setShowPagModal] = useState(false)
+  const [formaPag, setFormaPag] = useState('DINHEIRO')
+  const [valorPag, setValorPag] = useState('')
+  const [salvandoPag, setSalvandoPag] = useState(false)
+
+  const load = useCallback(() => {
     api.get<{ data: Venda }>(`/os/${id}`)
-      .then(r => setVenda(r.data.data))
+      .then(r => { setVenda(r.data.data); setErro(null) })
       .catch(() => setErro('Erro ao carregar venda.'))
       .finally(() => setLoading(false))
   }, [id])
+
+  useEffect(() => { load() }, [load])
+
+  async function registrarPagamento() {
+    const valor = parseFloat(valorPag)
+    if (isNaN(valor) || valor <= 0) {
+      setToast({ msg: 'Informe um valor válido.', type: 'danger' }); return
+    }
+    setSalvandoPag(true)
+    try {
+      await api.post(`/os/${id}/pagamentos`, { forma_pagamento: formaPag, valor })
+      setToast({ msg: 'Pagamento registrado!', type: 'success' })
+      setShowPagModal(false)
+      setValorPag('')
+      setFormaPag('DINHEIRO')
+      load()
+    } catch {
+      setToast({ msg: 'Erro ao registrar pagamento.', type: 'danger' })
+    } finally {
+      setSalvandoPag(false)
+    }
+  }
+
+  const inputStyle: React.CSSProperties = {
+    width: '100%', padding: '9px 12px', borderRadius: 7,
+    border: '1px solid var(--border)', background: 'var(--card)',
+    color: 'var(--text)', fontSize: 14, outline: 'none', boxSizing: 'border-box',
+  }
 
   const labelStyle: React.CSSProperties = {
     fontSize: 11, fontWeight: 600, color: 'var(--muted)',
     textTransform: 'uppercase', letterSpacing: '0.05em',
   }
 
-  if (loading) return (
-    <div style={{ padding: '40px 32px', color: 'var(--muted)', fontSize: 14 }}>Carregando…</div>
-  )
-
-  if (erro || !venda) return (
-    <div style={{ padding: '40px 32px', color: 'var(--danger)', fontSize: 14 }}>{erro ?? 'Venda não encontrada.'}</div>
-  )
+  if (loading) return <div style={{ padding: '40px 32px', color: 'var(--muted)', fontSize: 14 }}>Carregando…</div>
+  if (erro || !venda) return <div style={{ padding: '40px 32px', color: 'var(--danger)', fontSize: 14 }}>{erro ?? 'Venda não encontrada.'}</div>
 
   const vencida = venda.data_vencimento_pagamento
     ? (() => {
@@ -71,8 +117,12 @@ export default function VendaDetalhe() {
       })()
     : false
 
+  const temSaldo = venda.saldo_devedor > 0
+
   return (
     <div style={{ padding: '28px 32px', maxWidth: 860, margin: '0 auto', color: 'var(--text)' }}>
+      {toast && <Toast msg={toast.msg} type={toast.type} onClose={() => setToast(null)} />}
+
       {/* Header */}
       <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', marginBottom: 24 }}>
         <div>
@@ -89,7 +139,7 @@ export default function VendaDetalhe() {
           </p>
         </div>
         <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
-          {venda.venda_a_prazo && venda.saldo_devedor > 0 && (
+          {venda.venda_a_prazo && temSaldo && (
             <span style={{
               padding: '4px 12px', borderRadius: 999, fontSize: 11, fontWeight: 700,
               background: vencida ? 'rgba(229,57,53,.15)' : 'rgba(245,166,35,.15)',
@@ -100,11 +150,23 @@ export default function VendaDetalhe() {
           )}
           <span style={{
             padding: '4px 12px', borderRadius: 999, fontSize: 11, fontWeight: 700,
-            background: venda.saldo_devedor <= 0 ? 'rgba(67,160,71,.15)' : 'rgba(245,166,35,.15)',
-            color: venda.saldo_devedor <= 0 ? 'var(--success)' : 'var(--accent)',
+            background: !temSaldo ? 'rgba(67,160,71,.15)' : 'rgba(245,166,35,.15)',
+            color: !temSaldo ? 'var(--success)' : 'var(--accent)',
           }}>
-            {venda.saldo_devedor <= 0 ? 'PAGO' : 'PENDENTE'}
+            {!temSaldo ? 'PAGO' : 'PENDENTE'}
           </span>
+          {temSaldo && (
+            <button
+              onClick={() => setShowPagModal(true)}
+              style={{
+                padding: '7px 18px', borderRadius: 7, fontWeight: 700, fontSize: 13,
+                background: 'var(--accent)', color: '#000', border: 'none', cursor: 'pointer',
+                fontFamily: "'Barlow Condensed', sans-serif",
+              }}
+            >
+              + Registrar Pagamento
+            </button>
+          )}
         </div>
       </div>
 
@@ -113,7 +175,7 @@ export default function VendaDetalhe() {
         {[
           { label: 'Total', valor: venda.valor_total, cor: 'var(--text)' },
           { label: 'Pago', valor: venda.valor_pago, cor: 'var(--success)' },
-          { label: 'Saldo Devedor', valor: venda.saldo_devedor, cor: venda.saldo_devedor > 0 ? (vencida ? 'var(--danger)' : 'var(--accent)') : 'var(--muted)' },
+          { label: 'Saldo Devedor', valor: venda.saldo_devedor, cor: temSaldo ? (vencida ? 'var(--danger)' : 'var(--accent)') : 'var(--muted)' },
         ].map(s => (
           <div key={s.label} style={{ background: 'var(--card)', border: '1px solid var(--border)', borderRadius: 10, padding: '14px 18px' }}>
             <p style={{ ...labelStyle, margin: '0 0 6px' }}>{s.label}</p>
@@ -172,11 +234,11 @@ export default function VendaDetalhe() {
       </div>
 
       {/* Pagamentos */}
-      {venda.pagamentos.length > 0 && (
-        <div style={{ background: 'var(--card)', border: '1px solid var(--border)', borderRadius: 10, overflow: 'hidden' }}>
-          <div style={{ padding: '12px 18px', borderBottom: '1px solid var(--border)', fontSize: 13, fontWeight: 600 }}>
-            Pagamentos recebidos
-          </div>
+      <div style={{ background: 'var(--card)', border: '1px solid var(--border)', borderRadius: 10, overflow: 'hidden' }}>
+        <div style={{ padding: '12px 18px', borderBottom: '1px solid var(--border)', fontSize: 13, fontWeight: 600 }}>
+          Pagamentos recebidos {venda.pagamentos.length === 0 && <span style={{ color: 'var(--muted)', fontWeight: 400 }}>— nenhum ainda</span>}
+        </div>
+        {venda.pagamentos.length > 0 && (
           <table style={{ width: '100%', borderCollapse: 'collapse' }}>
             <thead>
               <tr>
@@ -201,6 +263,92 @@ export default function VendaDetalhe() {
               ))}
             </tbody>
           </table>
+        )}
+        {temSaldo && (
+          <div style={{ padding: '14px 18px', borderTop: venda.pagamentos.length > 0 ? '1px solid var(--border)' : 'none' }}>
+            <button
+              onClick={() => setShowPagModal(true)}
+              style={{
+                padding: '9px 20px', borderRadius: 7, fontWeight: 700, fontSize: 13,
+                background: 'var(--accent)', color: '#000', border: 'none', cursor: 'pointer',
+                fontFamily: "'Barlow Condensed', sans-serif",
+              }}
+            >
+              + Registrar Pagamento
+            </button>
+          </div>
+        )}
+      </div>
+
+      {/* Modal de pagamento */}
+      {showPagModal && (
+        <div
+          onClick={e => { if (e.target === e.currentTarget) setShowPagModal(false) }}
+          style={{
+            position: 'fixed', inset: 0, background: 'rgba(0,0,0,.55)',
+            display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000,
+          }}
+        >
+          <div style={{
+            background: 'var(--card)', border: '1px solid var(--border)',
+            borderRadius: 12, padding: 28, width: 360, boxShadow: '0 16px 48px rgba(0,0,0,.4)',
+          }}>
+            <h3 className="font-display" style={{ fontSize: 18, fontWeight: 800, margin: '0 0 20px' }}>
+              Registrar Pagamento
+            </h3>
+
+            <div style={{ marginBottom: 14 }}>
+              <label style={{ ...labelStyle, display: 'block', marginBottom: 6 }}>Forma de Pagamento</label>
+              <select
+                value={formaPag}
+                onChange={e => setFormaPag(e.target.value)}
+                style={inputStyle}
+              >
+                {FORMAS_PAG.map(f => <option key={f} value={f}>{f.replace(/_/g, ' ')}</option>)}
+              </select>
+            </div>
+
+            <div style={{ marginBottom: 20 }}>
+              <label style={{ ...labelStyle, display: 'block', marginBottom: 6 }}>
+                Valor — saldo: {formatarMoeda(venda.saldo_devedor)}
+              </label>
+              <input
+                type="number"
+                min={0.01}
+                step={0.01}
+                placeholder="0,00"
+                value={valorPag}
+                onChange={e => setValorPag(e.target.value)}
+                style={{ ...inputStyle, textAlign: 'right', fontFamily: 'monospace' }}
+                autoFocus
+              />
+            </div>
+
+            <div style={{ display: 'flex', gap: 10 }}>
+              <button
+                onClick={registrarPagamento}
+                disabled={salvandoPag}
+                style={{
+                  flex: 1, padding: '10px 0', borderRadius: 7, fontWeight: 800,
+                  background: salvandoPag ? 'var(--border)' : 'var(--accent)',
+                  color: salvandoPag ? 'var(--muted)' : '#000',
+                  border: 'none', cursor: salvandoPag ? 'not-allowed' : 'pointer',
+                  fontSize: 14, fontFamily: "'Barlow Condensed', sans-serif",
+                }}
+              >
+                {salvandoPag ? '⟳ Salvando…' : '✓ Confirmar'}
+              </button>
+              <button
+                onClick={() => { setShowPagModal(false); setValorPag(''); setFormaPag('DINHEIRO') }}
+                style={{
+                  padding: '10px 18px', borderRadius: 7, background: 'transparent',
+                  border: '1px solid var(--border)', color: 'var(--muted)', cursor: 'pointer', fontSize: 14,
+                }}
+              >
+                Cancelar
+              </button>
+            </div>
+          </div>
         </div>
       )}
     </div>

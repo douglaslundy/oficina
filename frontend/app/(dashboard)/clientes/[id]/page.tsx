@@ -10,6 +10,7 @@ import api from '@/lib/api'
 interface OsResumo {
   id: string
   numero: number
+  tipo: string
   status: string
   valor_total: number
   valor_pago: number
@@ -192,7 +193,7 @@ export default function ClienteDetailPage() {
                   return (
                     <div
                       key={o.id}
-                      onClick={() => router.push(`/os/${o.id}`)}
+                      onClick={() => router.push(o.tipo === 'VENDA_BALCAO' ? `/pdv/${o.id}` : `/os/${o.id}`)}
                       style={{
                         display: 'flex', justifyContent: 'space-between', alignItems: 'center',
                         padding: '12px 14px', borderRadius: 8,
@@ -202,7 +203,7 @@ export default function ClienteDetailPage() {
                     >
                       <div>
                         <p style={{ color: 'var(--text)', fontSize: 14, margin: 0, fontWeight: 600 }}>
-                          OS #{o.numero}
+                          {o.tipo === 'VENDA_BALCAO' ? 'Venda' : 'OS'} #{o.numero}
                           {o.venda_a_prazo && (
                             <span style={{ marginLeft: 8, fontSize: 11, color: 'var(--muted)', fontWeight: 400 }}>• prazo {o.prazo_pagamento_dias}d</span>
                           )}
@@ -241,11 +242,13 @@ export default function ClienteDetailPage() {
             os.map(o => (
               <div
                 key={o.id}
-                onClick={() => router.push(`/os/${o.id}`)}
+                onClick={() => router.push(o.tipo === 'VENDA_BALCAO' ? `/pdv/${o.id}` : `/os/${o.id}`)}
                 style={{ padding: '10px 0', borderBottom: '1px solid var(--border)', display: 'flex', justifyContent: 'space-between', alignItems: 'center', cursor: 'pointer' }}
               >
                 <div>
-                  <p style={{ color: 'var(--text)', fontSize: 14, margin: 0, fontWeight: 600 }}>OS #{o.numero}</p>
+                  <p style={{ color: 'var(--text)', fontSize: 14, margin: 0, fontWeight: 600 }}>
+                    {o.tipo === 'VENDA_BALCAO' ? 'Venda' : 'OS'} #{o.numero}
+                  </p>
                   <p style={{ color: 'var(--muted)', fontSize: 12, margin: '2px 0 0' }}>{formatarData(o.criado_em)}</p>
                   {o.data_vencimento_pagamento && o.saldo_devedor > 0 && (
                     <p style={{ color: 'var(--accent)', fontSize: 11, margin: '2px 0 0' }}>
