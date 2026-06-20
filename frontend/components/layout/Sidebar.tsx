@@ -61,7 +61,7 @@ export function Sidebar({ clientesDevedores = 0, produtosAlerta = 0, isMobile = 
       transition: 'transform 0.25s ease',
     }}>
       {/* Logo */}
-      <div style={{ padding: '20px 20px 16px', borderBottom: '1px solid var(--border)' }}>
+      <div style={{ padding: '16px 20px 12px', borderBottom: '1px solid var(--border)' }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
           <div style={{
             width: 36, height: 36, borderRadius: 8, background: 'var(--accent)',
@@ -72,21 +72,21 @@ export function Sidebar({ clientesDevedores = 0, produtosAlerta = 0, isMobile = 
       </div>
 
       {/* Nav */}
-      <nav style={{ flex: 1, padding: '12px 0', overflowY: 'auto' }}>
+      <nav style={{ flex: 1, padding: '6px 0', overflowY: 'auto' }}>
         {itemsWithBadges.map(item => {
           const active = pathname === item.href || (item.href !== '/' && pathname.startsWith(item.href))
           return (
             <Link key={item.href} href={item.href} onClick={isMobile ? onClose : undefined}
               style={{
-                display: 'flex', alignItems: 'center', gap: 10,
-                padding: '9px 16px', textDecoration: 'none',
+                display: 'flex', alignItems: 'center', gap: 9,
+                padding: '7px 16px', textDecoration: 'none',
                 color: active ? 'var(--text)' : 'var(--muted)',
                 background: active ? 'rgba(245,166,35,0.08)' : 'transparent',
                 borderLeft: `2px solid ${active ? 'var(--accent)' : 'transparent'}`,
-                fontSize: 14, fontWeight: active ? 600 : 400,
+                fontSize: 13, fontWeight: active ? 600 : 400,
                 transition: 'all 0.15s',
               }}>
-              <span style={{ fontSize: 16 }}>{item.icon}</span>
+              <span style={{ fontSize: 15 }}>{item.icon}</span>
               <span style={{ flex: 1 }}>{item.label}</span>
               {item.badge && (
                 <span style={{
@@ -104,7 +104,7 @@ export function Sidebar({ clientesDevedores = 0, produtosAlerta = 0, isMobile = 
 
       {/* User pill */}
       {user && (
-        <div style={{ padding: '12px 16px', borderBottom: '1px solid var(--border)' }}>
+        <div style={{ padding: '10px 16px', borderBottom: '1px solid var(--border)' }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 8 }}>
             <div style={{
               width: 32, height: 32, borderRadius: '50%',
