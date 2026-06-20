@@ -23,6 +23,7 @@ const NAV_ITEMS: NavItem[] = [
   { href: '/fiscal/historico', label: 'Histórico NF',      icon: '📋' },
   { href: '/relatorios',            label: 'Relatórios',        icon: '📈' },
   { href: '/alertas',               label: 'Alertas WhatsApp',  icon: '💬' },
+  { href: '/alertas/logs',          label: 'Histórico Alertas', icon: '📜' },
   { href: '/usuarios',              label: 'Usuários',          icon: '👤' },
   { href: '/empresa',               label: 'Empresa',           icon: '🏢' },
   { href: '/auditoria',             label: 'Auditoria',         icon: '🔍' },

@@ -3,6 +3,7 @@ declare(strict_types=1);
 
 namespace App\Services;
 
+use App\Models\AlertaLog;
 use App\Models\WhatsAppConfig;
 use App\Tenancy\TenancyContext;
 use Illuminate\Support\Facades\Http;
@@ -87,15 +88,17 @@ class WhatsAppService
         }
     }
 
-    public function enviarMensagem(string $telefone, string $mensagem): bool
+    public function enviarMensagem(string $telefone, string $mensagem, string $tipo = 'MANUAL'): bool
     {
         if (!$this->estaAtivo()) return false;
 
-        // Normaliza número: remove tudo que não é dígito
         $numero = preg_replace('/\D/', '', $telefone);
         if (!str_starts_with($numero, '55')) {
             $numero = '55' . $numero;
         }
+
+        $sucesso = false;
+        $erro    = null;
 
         try {
             $resp = $this->http()->post("/message/sendText/{$this->instance()}", [
@@ -104,13 +107,29 @@ class WhatsAppService
                 'options' => ['delay' => 500],
             ]);
 
-            if ($resp->successful()) return true;
-
-            Log::warning("WhatsApp send failed [{$numero}]: " . $resp->body());
-            return false;
+            $sucesso = $resp->successful();
+            if (!$sucesso) {
+                $erro = "HTTP {$resp->status()}: " . substr($resp->body(), 0, 300);
+                Log::warning("WhatsApp send failed [{$numero}]: " . $resp->body());
+            }
         } catch (\Throwable $e) {
+            $erro = $e->getMessage();
             Log::error("WhatsApp exception [{$numero}]: " . $e->getMessage());
-            return false;
         }
+
+        // Grava log de envio
+        $oficinaId = TenancyContext::get();
+        if ($oficinaId) {
+            AlertaLog::create([
+                'oficina_id'   => $oficinaId,
+                'tipo'         => $tipo,
+                'destinatario' => $numero,
+                'mensagem'     => $mensagem,
+                'sucesso'      => $sucesso,
+                'erro'         => $erro,
+            ]);
+        }
+
+        return $sucesso;
     }
 }

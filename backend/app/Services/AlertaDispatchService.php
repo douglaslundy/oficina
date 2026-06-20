@@ -56,6 +56,7 @@ class AlertaDispatchService
                 oficina_id: $oficinaId,
                 telefone:   (string) $telefone,
                 mensagem:   $mensagem,
+                tipo:       $tipo,
             )->onQueue('whatsapp');
         }
     }

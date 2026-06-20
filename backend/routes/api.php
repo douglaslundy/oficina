@@ -19,6 +19,7 @@ use App\Http\Controllers\UsuarioController;
 use App\Http\Controllers\ServicoController;
 use App\Http\Controllers\VeiculoController;
 use App\Http\Controllers\AlertaConfigController;
+use App\Http\Controllers\AlertaLogController;
 use App\Http\Controllers\WhatsAppConfigController;
 use App\Http\Controllers\SaaS\AuthController as SaaSAuthController;
 use App\Http\Controllers\SaaS\CobrancaController as SaaSCobrancaController;
@@ -207,6 +208,7 @@ Route::middleware(['tenant', 'auth:sanctum', 'role:ADMIN,ATENDENTE'])->group(fun
     Route::put('alertas/{id}',          [AlertaConfigController::class, 'update']);
     Route::post('alertas/{id}/toggle',  [AlertaConfigController::class, 'toggle']);
     Route::delete('alertas/{id}',       [AlertaConfigController::class, 'destroy']);
+    Route::get('alertas/logs',          [AlertaLogController::class, 'index']);
 });
 
 // ─── Agendamentos — todos os roles ───────────────────────────────────────────
