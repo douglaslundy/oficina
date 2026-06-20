@@ -28,7 +28,14 @@ interface ItemVenda {
   valor_unitario: number
 }
 
+interface PagamentoEntry {
+  forma_pagamento: string
+  valor: string
+}
+
 type ToastType = 'success' | 'danger'
+
+const FORMAS_PAG = ['DINHEIRO', 'PIX', 'CARTAO_DEBITO', 'CARTAO_CREDITO', 'BOLETO', 'TRANSFERENCIA']
 
 // ─── Toast ────────────────────────────────────────────────────────────────────
 
@@ -67,7 +74,9 @@ export default function PdvPage() {
   const [clienteSelecionado, setClienteSelecionado] = useState<Cliente | null>(null)
 
   const [itens, setItens] = useState<ItemVenda[]>([])
-  const [formaPagamento, setFormaPagamento] = useState('DINHEIRO')
+  const [pagamentos, setPagamentos] = useState<PagamentoEntry[]>([{ forma_pagamento: 'DINHEIRO', valor: '' }])
+  const [vendaAPrazo, setVendaAPrazo] = useState(false)
+  const [prazoEmDias, setPrazoEmDias] = useState(30)
   const [salvando, setSalvando] = useState(false)
   const [toast, setToast] = useState<{ msg: string; type: ToastType } | null>(null)
 
@@ -118,7 +127,7 @@ export default function PdvPage() {
     }, 280)
   }, [clienteBusca])
 
-  // ─── Adicionar produto ────────────────────────────────────────────────────
+  // ─── Itens ────────────────────────────────────────────────────────────────
 
   function adicionarProduto(p: Produto) {
     setItens(prev => {
@@ -167,6 +176,31 @@ export default function PdvPage() {
     return s + (isNaN(sub) ? 0 : sub)
   }, 0)
 
+  // ─── Pagamentos ───────────────────────────────────────────────────────────
+
+  const totalPago = pagamentos.reduce((s, p) => {
+    const v = parseFloat(p.valor)
+    return s + (isNaN(v) ? 0 : v)
+  }, 0)
+
+  const troco = !vendaAPrazo && totalPago > total ? totalPago - total : 0
+
+  function adicionarPagamento() {
+    setPagamentos(prev => [...prev, { forma_pagamento: 'DINHEIRO', valor: '' }])
+  }
+
+  function removerPagamento(idx: number) {
+    setPagamentos(prev => prev.filter((_, i) => i !== idx))
+  }
+
+  function atualizarPagamento(idx: number, field: keyof PagamentoEntry, value: string) {
+    setPagamentos(prev => {
+      const next = [...prev]
+      next[idx] = { ...next[idx], [field]: value }
+      return next
+    })
+  }
+
   // ─── Finalizar venda ──────────────────────────────────────────────────────
 
   async function finalizarVenda() {
@@ -174,18 +208,31 @@ export default function PdvPage() {
       showToast('Adicione pelo menos um produto.', 'danger')
       return
     }
+    if (!vendaAPrazo) {
+      const validos = pagamentos.filter(p => parseFloat(p.valor) > 0)
+      if (validos.length === 0) {
+        showToast('Informe pelo menos um valor de pagamento.', 'danger')
+        return
+      }
+    }
     setSalvando(true)
     try {
+      const pagValidos = pagamentos
+        .map(p => ({ forma_pagamento: p.forma_pagamento, valor: parseFloat(p.valor) }))
+        .filter(p => !isNaN(p.valor) && p.valor > 0)
+
       await api.post('/os', {
-        tipo: 'VENDA_BALCAO',
-        cliente_id: clienteSelecionado?.id ?? null,
-        forma_pagamento: formaPagamento,
-        valor_pago: total,
+        tipo:                 'VENDA_BALCAO',
+        cliente_id:           clienteSelecionado?.id ?? null,
+        venda_a_prazo:        vendaAPrazo,
+        prazo_pagamento_dias: vendaAPrazo ? prazoEmDias : undefined,
+        valor_pago:           vendaAPrazo ? 0 : Math.min(totalPago, total),
+        pagamentos:           vendaAPrazo ? [] : pagValidos,
         itens: itens.map(i => ({
-          tipo: 'PECA',
-          produto_id: i.produto_id,
-          descricao: i.nome,
-          quantidade: i.quantidade,
+          tipo:           'PECA',
+          produto_id:     i.produto_id,
+          descricao:      i.nome,
+          quantidade:     i.quantidade,
           valor_unitario: i.valor_unitario,
         })),
       })
@@ -193,7 +240,9 @@ export default function PdvPage() {
       setItens([])
       setClienteSelecionado(null)
       setClienteBusca('')
-      setFormaPagamento('DINHEIRO')
+      setPagamentos([{ forma_pagamento: 'DINHEIRO', valor: '' }])
+      setVendaAPrazo(false)
+      setPrazoEmDias(30)
     } catch (e: unknown) {
       const msg = (e as { response?: { data?: { message?: string } } })?.response?.data?.message
       showToast(msg ?? 'Erro ao finalizar venda.', 'danger')
@@ -214,6 +263,8 @@ export default function PdvPage() {
     fontSize: 12, fontWeight: 600, color: 'var(--muted)',
     textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: 6, display: 'block',
   }
+
+  const vencimentoDisplay = new Date(Date.now() + prazoEmDias * 86400000).toLocaleDateString('pt-BR')
 
   return (
     <div style={{ padding: '28px 32px', maxWidth: 1100, margin: '0 auto', color: 'var(--text)' }}>
@@ -350,8 +401,8 @@ export default function PdvPage() {
           </div>
         </div>
 
-        {/* ── Coluna direita — resumo + pagamento ────────────────────────── */}
-        <div style={{ flex: '0 0 300px', display: 'flex', flexDirection: 'column', gap: 16 }}>
+        {/* ── Coluna direita — cliente + pagamento + totais ───────────────── */}
+        <div style={{ flex: '0 0 320px', display: 'flex', flexDirection: 'column', gap: 16 }}>
 
           {/* Cliente (opcional) */}
           <div style={{
@@ -409,24 +460,78 @@ export default function PdvPage() {
             )}
           </div>
 
-          {/* Forma de pagamento */}
+          {/* Pagamento */}
           <div style={{
             background: 'var(--card)', border: '1px solid var(--border)',
             borderRadius: 10, padding: 20,
           }}>
-            <label style={labelStyle}>Forma de pagamento</label>
-            <select
-              value={formaPagamento}
-              onChange={e => setFormaPagamento(e.target.value)}
-              style={{ ...inputStyle }}
-            >
-              {['DINHEIRO', 'PIX', 'CARTAO_DEBITO', 'CARTAO_CREDITO', 'BOLETO', 'TRANSFERENCIA'].map(f => (
-                <option key={f} value={f}>{f.replace(/_/g, ' ')}</option>
-              ))}
-            </select>
+            <label style={labelStyle}>Pagamento</label>
+
+            {/* Toggle venda a prazo */}
+            <label style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 14, cursor: 'pointer' }}>
+              <input
+                type="checkbox"
+                checked={vendaAPrazo}
+                onChange={e => { setVendaAPrazo(e.target.checked); }}
+                style={{ width: 16, height: 16, accentColor: 'var(--accent)' }}
+              />
+              <span style={{ fontSize: 14, color: 'var(--text)' }}>Venda a prazo</span>
+            </label>
+
+            {vendaAPrazo ? (
+              <div>
+                <label style={labelStyle}>Prazo (dias)</label>
+                <input
+                  type="number"
+                  min={1}
+                  max={365}
+                  value={prazoEmDias}
+                  onChange={e => setPrazoEmDias(parseInt(e.target.value) || 30)}
+                  style={{ ...inputStyle }}
+                />
+                <p style={{ fontSize: 12, color: 'var(--muted)', marginTop: 6 }}>
+                  Vencimento: {vencimentoDisplay}
+                </p>
+              </div>
+            ) : (
+              <>
+                {pagamentos.map((pag, idx) => (
+                  <div key={idx} style={{ display: 'flex', gap: 8, marginBottom: 8, alignItems: 'center' }}>
+                    <select
+                      value={pag.forma_pagamento}
+                      onChange={e => atualizarPagamento(idx, 'forma_pagamento', e.target.value)}
+                      style={{ ...inputStyle, flex: '0 0 140px', padding: '8px 10px' }}
+                    >
+                      {FORMAS_PAG.map(f => (
+                        <option key={f} value={f}>{f.replace(/_/g, ' ')}</option>
+                      ))}
+                    </select>
+                    <input
+                      type="number"
+                      min={0}
+                      step={0.01}
+                      placeholder="Valor"
+                      value={pag.valor}
+                      onChange={e => atualizarPagamento(idx, 'valor', e.target.value)}
+                      style={{ ...inputStyle, flex: 1, padding: '8px 10px', textAlign: 'right', fontFamily: 'monospace' }}
+                    />
+                    {pagamentos.length > 1 && (
+                      <button onClick={() => removerPagamento(idx)}
+                        style={{ background: 'none', border: 'none', color: 'var(--danger)', cursor: 'pointer', fontSize: 18, padding: '0 4px', flexShrink: 0 }}>
+                        ✕
+                      </button>
+                    )}
+                  </div>
+                ))}
+                <button onClick={adicionarPagamento}
+                  style={{ background: 'none', border: '1px dashed var(--border)', color: 'var(--muted)', borderRadius: 7, padding: '7px 0', width: '100%', cursor: 'pointer', fontSize: 13, marginTop: 2 }}>
+                  + Adicionar meio de pagamento
+                </button>
+              </>
+            )}
           </div>
 
-          {/* Total + botão */}
+          {/* Total + troco + botão */}
           <div style={{
             background: 'var(--card)', border: '1px solid var(--border)',
             borderRadius: 10, padding: 20,
@@ -435,12 +540,56 @@ export default function PdvPage() {
               <span style={{ fontSize: 13, color: 'var(--muted)' }}>Itens</span>
               <span style={{ fontSize: 13, fontFamily: 'monospace' }}>{itens.length}</span>
             </div>
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 18, borderTop: '1px solid var(--border)', paddingTop: 12 }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderTop: '1px solid var(--border)', paddingTop: 12, marginBottom: 10 }}>
               <span style={{ fontSize: 15, fontWeight: 700 }}>Total</span>
               <span style={{ fontSize: 22, fontWeight: 800, fontFamily: 'monospace', color: 'var(--accent)' }}>
                 {formatarMoeda(total)}
               </span>
             </div>
+
+            {/* Pago e troco (só quando não é a prazo e há valor) */}
+            {!vendaAPrazo && totalPago > 0 && (
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 6 }}>
+                <span style={{ fontSize: 13, color: 'var(--muted)' }}>Pago</span>
+                <span style={{ fontSize: 14, fontFamily: 'monospace', color: totalPago >= total ? 'var(--success)' : 'var(--accent)' }}>
+                  {formatarMoeda(totalPago)}
+                </span>
+              </div>
+            )}
+
+            {troco > 0 && (
+              <div style={{
+                display: 'flex', justifyContent: 'space-between', alignItems: 'center',
+                marginBottom: 12, padding: '8px 12px',
+                background: 'rgba(67,160,71,.1)', border: '1px solid var(--success)', borderRadius: 7,
+              }}>
+                <span style={{ fontSize: 14, fontWeight: 700, color: 'var(--success)' }}>Troco</span>
+                <span style={{ fontSize: 16, fontWeight: 800, fontFamily: 'monospace', color: 'var(--success)' }}>
+                  {formatarMoeda(troco)}
+                </span>
+              </div>
+            )}
+
+            {!vendaAPrazo && troco === 0 && totalPago > 0 && totalPago < total && (
+              <div style={{
+                display: 'flex', justifyContent: 'space-between', alignItems: 'center',
+                marginBottom: 12, padding: '8px 12px',
+                background: 'rgba(229,57,53,.08)', border: '1px solid var(--danger)', borderRadius: 7,
+              }}>
+                <span style={{ fontSize: 13, color: 'var(--danger)' }}>Falta</span>
+                <span style={{ fontSize: 14, fontWeight: 700, fontFamily: 'monospace', color: 'var(--danger)' }}>
+                  {formatarMoeda(total - totalPago)}
+                </span>
+              </div>
+            )}
+
+            {vendaAPrazo && (
+              <div style={{ marginBottom: 12, padding: '8px 12px', background: 'rgba(245,166,35,.08)', border: '1px solid var(--accent)', borderRadius: 7 }}>
+                <span style={{ fontSize: 12, color: 'var(--accent)', fontWeight: 600 }}>
+                  Prazo de {prazoEmDias} dias · vence {vencimentoDisplay}
+                </span>
+              </div>
+            )}
 
             <button
               onClick={finalizarVenda}
@@ -452,10 +601,10 @@ export default function PdvPage() {
                 border: 'none', borderRadius: 8, fontSize: 15,
                 fontWeight: 800, cursor: salvando || itens.length === 0 ? 'not-allowed' : 'pointer',
                 fontFamily: "'Barlow Condensed', sans-serif", letterSpacing: '0.02em',
-                transition: 'background 0.15s',
+                transition: 'background 0.15s', marginTop: 4,
               }}
             >
-              {salvando ? '⟳ Finalizando...' : '✓ Finalizar Venda'}
+              {salvando ? '⟳ Finalizando...' : vendaAPrazo ? '✓ Registrar Venda a Prazo' : '✓ Finalizar Venda'}
             </button>
           </div>
         </div>
