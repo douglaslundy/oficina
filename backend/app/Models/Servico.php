@@ -6,10 +6,13 @@ namespace App\Models;
 use App\Tenancy\HasTenantScope;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Support\Str;
+use App\Tenancy\TenancyContext;
+use Spatie\Activitylog\Models\Concerns\LogsActivity;
+use Spatie\Activitylog\Support\LogOptions;
 
 class Servico extends Model
 {
-    use HasTenantScope;
+    use HasTenantScope, LogsActivity;
 
     protected $table = 'servicos';
     protected $primaryKey = 'id';
@@ -24,6 +27,15 @@ class Servico extends Model
         'valor_padrao' => 'float',
         'criado_em'    => 'datetime',
     ];
+
+    public function getActivitylogOptions(): LogOptions
+    {
+        return LogOptions::defaults()
+            ->logFillable()
+            ->logOnlyDirty()
+            ->dontLogEmptyChanges()
+            ->useLogName(TenancyContext::getSlug() ?? 'default');
+    }
 
     protected static function boot(): void
     {

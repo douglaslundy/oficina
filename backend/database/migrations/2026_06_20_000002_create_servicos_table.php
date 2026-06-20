@@ -10,7 +10,7 @@ return new class extends Migration {
     {
         Schema::create('servicos', function (Blueprint $table) {
             $table->uuid('id')->primary();
-            $table->uuid('oficina_id')->nullable()->index();
+            $table->foreignUuid('oficina_id')->nullable()->index()->constrained('oficinas')->nullOnDelete();
             $table->string('nome', 120);
             $table->decimal('valor_padrao', 10, 2)->default(0);
             $table->boolean('ativo')->default(true);
