@@ -95,6 +95,7 @@ export function OSForm({ initialData, onSuccess }: OSFormProps) {
   const isEdit = !!initialData?.id
   const [mecanicos, setMecanicos] = useState<Array<{ id: string; nome: string }>>([])
   const [produtos, setProdutos] = useState<Array<{ id: string; nome: string; qty_atual: number; unidade?: string; preco_venda: number | null }>>([])
+  const [servicos, setServicos] = useState<Array<{ id: string; nome: string; valor_padrao: number }>>([])
 
   // New mode only
   const [clientes, setClientes] = useState<Array<{ id: string; nome: string; veiculo_modelo?: string; veiculo_ano?: number | null; veiculo_placa?: string }>>([])
@@ -126,6 +127,7 @@ export function OSForm({ initialData, onSuccess }: OSFormProps) {
   })
 
   const { fields, append, remove } = useFieldArray({ control, name: 'itens' })
+  const [manualServiceFields, setManualServiceFields] = useState<Set<number>>(new Set<number>())
   const itens = watch('itens')
   const total = itens.reduce((acc, i) => acc + (Number(i.quantidade || 0) * Number(i.valor_unitario || 0)), 0)
 
@@ -139,6 +141,13 @@ export function OSForm({ initialData, onSuccess }: OSFormProps) {
     try {
       const r = await api.get('/produtos?per_page=200')
       setProdutos(r.data.data ?? [])
+    } catch { /* mantém lista anterior */ }
+  }, [])
+
+  const fetchServicos = useCallback(async () => {
+    try {
+      const r = await api.get('/servicos?ativo=1&per_page=200')
+      setServicos(r.data.data ?? [])
     } catch { /* mantém lista anterior */ }
   }, [])
 
@@ -156,7 +165,8 @@ export function OSForm({ initialData, onSuccess }: OSFormProps) {
       }
     }).catch(() => {})
     fetchProdutos()
-  }, [isEdit, fetchProdutos]) // eslint-disable-line react-hooks/exhaustive-deps
+    fetchServicos()
+  }, [isEdit, fetchProdutos, fetchServicos]) // eslint-disable-line react-hooks/exhaustive-deps
 
   // Fetch vehicles (new mode only)
   useEffect(() => {
@@ -219,6 +229,24 @@ export function OSForm({ initialData, onSuccess }: OSFormProps) {
     if (v) {
       setValue('veiculo_descricao', veiculoLabel(v))
       setValue('veiculo_placa', v.placa ?? '')
+    }
+  }
+
+  function handleServicoSelect(idx: number, value: string) {
+    if (value === '__manual__') {
+      setManualServiceFields(prev => new Set<number>(prev).add(idx))
+      setValue(`itens.${idx}.descricao`, '')
+    } else {
+      const s = servicos.find(x => x.id === value)
+      if (s) {
+        setValue(`itens.${idx}.descricao`, s.nome)
+        setValue(`itens.${idx}.valor_unitario`, s.valor_padrao)
+      }
+      setManualServiceFields(prev => {
+        const next = new Set<number>()
+        prev.forEach(i => { if (i !== idx) next.add(i) })
+        return next
+      })
     }
   }
 
@@ -474,7 +502,7 @@ export function OSForm({ initialData, onSuccess }: OSFormProps) {
 
                 {/* Formulário para adicionar novo item (apenas quando editável) */}
                 {!['CONCLUIDA', 'CANCELADA'].includes(watch('status')) && initialData?.id && (
-                  <NewItemInline osId={initialData.id} produtos={produtos} onAdded={() => { fetchProdutos(); onSuccess?.({}) }} />
+                  <NewItemInline osId={initialData.id} produtos={produtos} servicos={servicos} onAdded={() => { fetchProdutos(); onSuccess?.({}) }} />
                 )}
               </>
             )}
@@ -530,12 +558,31 @@ export function OSForm({ initialData, onSuccess }: OSFormProps) {
                         <option key={p.id} value={p.id}>{produtoLabel(p)}</option>
                       ))}
                     </select>
-                  ) : (
+                  ) : manualServiceFields.has(idx) ? (
                     <input {...register(`itens.${idx}.descricao`)} placeholder="Descrição do serviço" style={S} />
+                  ) : (
+                    <select
+                      onChange={e => handleServicoSelect(idx, e.target.value)}
+                      defaultValue=""
+                      style={S}
+                    >
+                      <option value="">Selecionar serviço...</option>
+                      {servicos.map(s => (
+                        <option key={s.id} value={s.id}>{s.nome}</option>
+                      ))}
+                      <option value="__manual__">✏️ Outro (digitar manualmente)</option>
+                    </select>
                   )}
                   <input type="number" step="0.01" min="0.01" {...register(`itens.${idx}.quantidade`)} placeholder="Qtd" style={S} />
                   <input type="number" step="0.01" min="0" {...register(`itens.${idx}.valor_unitario`)} placeholder="R$ unit." style={S} />
-                  <button type="button" onClick={() => remove(idx)}
+                  <button type="button" onClick={() => {
+                    remove(idx)
+                    setManualServiceFields(prev => {
+                      const next = new Set<number>()
+                      prev.forEach(i => { if (i < idx) next.add(i); else if (i > idx) next.add(i - 1) })
+                      return next
+                    })
+                  }}
                     style={{ padding: '0 12px', background: 'transparent', border: 'none', color: 'var(--danger)', cursor: 'pointer', fontSize: 18 }}>
                     ×
                   </button>
@@ -565,9 +612,10 @@ export function OSForm({ initialData, onSuccess }: OSFormProps) {
   )
 }
 
-function NewItemInline({ osId, produtos, onAdded }: {
+function NewItemInline({ osId, produtos, servicos, onAdded }: {
   osId: string
   produtos: Array<{ id: string; nome: string; qty_atual: number; unidade?: string; preco_venda: number | null }>
+  servicos: Array<{ id: string; nome: string; valor_padrao: number }>
   onAdded?: (data: Record<string, unknown>) => void
 }) {
   const [tipo, setTipo] = useState<'SERVICO' | 'PECA'>('SERVICO')
@@ -576,6 +624,8 @@ function NewItemInline({ osId, produtos, onAdded }: {
   const [quantidade, setQuantidade] = useState(1)
   const [valorUnitario, setValorUnitario] = useState(0)
   const [loading, setLoading] = useState(false)
+  const [servicoId, setServicoId] = useState('')
+  const [isManual, setIsManual] = useState(false)
 
   function handleProdutoSelect(id: string) {
     setProdutoId(id)
@@ -600,6 +650,8 @@ function NewItemInline({ osId, produtos, onAdded }: {
       toast('Item adicionado.', 'success')
       setDescricao('')
       setProdutoId('')
+      setServicoId('')
+      setIsManual(false)
       setQuantidade(1)
       setValorUnitario(0)
       onAdded?.({})
@@ -620,7 +672,13 @@ function NewItemInline({ osId, produtos, onAdded }: {
     <div style={{ marginTop: 12, padding: 12, borderRadius: 8, border: '1px dashed var(--border)', background: 'var(--surface)' }}>
       <p style={{ color: 'var(--muted)', fontSize: 12, marginBottom: 8, fontWeight: 600 }}>+ Adicionar item</p>
       <div style={{ display: 'grid', gridTemplateColumns: '100px 1fr', gap: 8, marginBottom: 8 }}>
-        <select value={tipo} onChange={e => setTipo(e.target.value as 'SERVICO' | 'PECA')} style={SI}>
+        <select value={tipo} onChange={e => {
+          setTipo(e.target.value as 'SERVICO' | 'PECA')
+          setServicoId('')
+          setIsManual(false)
+          setDescricao('')
+          setValorUnitario(0)
+        }} style={SI}>
           <option value="SERVICO">Serviço</option>
           <option value="PECA">Peça</option>
         </select>
@@ -629,9 +687,35 @@ function NewItemInline({ osId, produtos, onAdded }: {
             <option value="">Selecionar peça...</option>
             {produtos.map(p => <option key={p.id} value={p.id}>{produtoLabel(p)}</option>)}
           </select>
-        ) : (
+        ) : isManual ? (
           <input value={descricao} onChange={e => setDescricao(e.target.value)}
             placeholder="Descrição do serviço" style={SI} />
+        ) : (
+          <select
+            value={servicoId}
+            onChange={e => {
+              const val = e.target.value
+              if (val === '__manual__') {
+                setIsManual(true)
+                setServicoId('')
+                setDescricao('')
+              } else {
+                setServicoId(val)
+                const s = servicos.find(x => x.id === val)
+                if (s) {
+                  setDescricao(s.nome)
+                  setValorUnitario(s.valor_padrao)
+                }
+              }
+            }}
+            style={SI}
+          >
+            <option value="">Selecionar serviço...</option>
+            {servicos.map(s => (
+              <option key={s.id} value={s.id}>{s.nome}</option>
+            ))}
+            <option value="__manual__">✏️ Outro (digitar manualmente)</option>
+          </select>
         )}
       </div>
       <div style={{ display: 'grid', gridTemplateColumns: '80px 130px 1fr', gap: 8, alignItems: 'center' }}>
