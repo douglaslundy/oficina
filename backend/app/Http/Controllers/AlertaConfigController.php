@@ -15,15 +15,15 @@ class AlertaConfigController extends Controller
 {
     public function __construct(private readonly AlertaDispatchService $dispatch) {}
 
-    /** Canais liberados pelo plano da oficina atual. */
+    /** Canais disponíveis para a oficina atual (plano OU grant avulso). */
     private function canaisPermitidos(): array
     {
-        $oficina = Oficina::with('plano')->find(TenancyContext::get());
-        $plano   = $oficina?->plano;
+        $oficinaId = (string) TenancyContext::get();
+        $ent = app(\App\Services\EntitlementService::class);
 
         return [
-            'WHATSAPP' => (bool) ($plano?->alerta_whatsapp),
-            'EMAIL'    => (bool) ($plano?->alerta_email),
+            'WHATSAPP' => $ent->disponivel($oficinaId, 'ALERTA_WHATSAPP'),
+            'EMAIL'    => $ent->disponivel($oficinaId, 'ALERTA_EMAIL'),
         ];
     }
 

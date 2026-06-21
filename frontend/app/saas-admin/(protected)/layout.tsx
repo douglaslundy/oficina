@@ -5,6 +5,7 @@ const NAV_ITEMS = [
   { label: 'Dashboard', href: '/saas-admin' },
   { label: 'Oficinas', href: '/saas-admin/oficinas' },
   { label: 'Planos', href: '/saas-admin/planos' },
+  { label: 'Pacotes', href: '/saas-admin/pacotes' },
   { label: 'Cobranças', href: '/saas-admin/cobrancas' },
   { label: 'Notificações', href: '/saas-admin/notificacoes' },
   { label: 'Configurações', href: '/saas-admin/configuracoes' },

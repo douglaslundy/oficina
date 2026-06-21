@@ -27,11 +27,19 @@ class OrcamentoController extends Controller
 
     public function enviar(Request $request, string $os): JsonResponse
     {
-        $oficina = Oficina::with('plano')->find(TenancyContext::get());
-        if (!$oficina?->plano?->orcamento) {
+        $oficina   = Oficina::with('plano')->find(TenancyContext::get());
+        $ent       = app(\App\Services\EntitlementService::class);
+        $oficinaId = (string) TenancyContext::get();
+
+        if (!$ent->disponivel($oficinaId, 'ORCAMENTO')) {
             return response()->json([
                 'message' => 'Funcionalidade de orçamento não faz parte do seu plano. Contate o administrador do seu plano e contrate.',
             ], 403);
+        }
+        if (!$ent->permiteEnvio($oficinaId, 'ORCAMENTO')) {
+            return response()->json([
+                'message' => 'Cota de orçamentos do mês atingida. Aguarde o próximo mês ou contrate mais.',
+            ], 422);
         }
 
         $ordem = OrdemServico::with(['cliente', 'itens'])->findOrFail($os);

@@ -165,6 +165,7 @@ class PlanLimitService
         }
 
         $plano = $oficina->plano;
+        $ent   = app(EntitlementService::class);
 
         $totalUsuarios = Usuario::withoutGlobalScopes()
             ->where('oficina_id', $oficina->id)
@@ -187,9 +188,10 @@ class PlanLimitService
             'plano' => [
                 'id'              => $plano->id,
                 'nome'            => $plano->nome,
-                'alerta_whatsapp' => (bool) $plano->alerta_whatsapp,
-                'alerta_email'    => (bool) $plano->alerta_email,
-                'orcamento'       => (bool) $plano->orcamento,
+                // Disponibilidade efetiva: incluso no plano OU liberado por grant avulso.
+                'alerta_whatsapp' => $ent->disponivel($oficina->id, 'ALERTA_WHATSAPP'),
+                'alerta_email'    => $ent->disponivel($oficina->id, 'ALERTA_EMAIL'),
+                'orcamento'       => $ent->disponivel($oficina->id, 'ORCAMENTO'),
             ],
             'usuarios'  => $this->itemUso($totalUsuarios, $plano->limite_usuarios),
             'os_mes'    => $this->itemUso($totalOsMes, $plano->limite_os_mes),

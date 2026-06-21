@@ -11,7 +11,10 @@ use App\Tenancy\TenancyContext;
 
 class AlertaDispatchService
 {
-    public function __construct(private readonly WhatsAppService $whatsApp) {}
+    public function __construct(
+        private readonly WhatsAppService $whatsApp,
+        private readonly EntitlementService $ent,
+    ) {}
 
     /**
      * Dispara um alerta WhatsApp se estiver ativo para o tenant atual.
@@ -33,15 +36,17 @@ class AlertaDispatchService
 
         if (!$alerta) return;
 
-        // Canais do alerta interseccionados com o que o plano libera.
-        $permitidos = $this->canaisDoPlano($oficinaId);
+        // Canais do alerta interseccionados com o que está disponível (plano OU grant).
+        $permitidos = $this->ent->canaisDisponiveis($oficinaId);
         $canais     = array_intersect((array)($alerta->canais ?? ['WHATSAPP']), $permitidos);
         if (empty($canais)) return;
 
         $mensagem = $this->renderTemplate($alerta->template_mensagem ?? '', $vars);
 
         // ── Canal WhatsApp ───────────────────────────────────────────────
-        if (in_array('WHATSAPP', $canais, true) && $this->whatsApp->estaAtivo()) {
+        if (in_array('WHATSAPP', $canais, true)
+            && $this->whatsApp->estaAtivo()
+            && $this->ent->permiteEnvio($oficinaId, 'ALERTA_WHATSAPP')) {
             $telefones = array_merge((array)($alerta->destinatarios ?? []), $extras);
             if ($alerta->enviar_cliente && isset($vars['_telefone_cliente'])) {
                 $telefones[] = $vars['_telefone_cliente'];
@@ -62,7 +67,7 @@ class AlertaDispatchService
         }
 
         // ── Canal E-mail ─────────────────────────────────────────────────
-        if (in_array('EMAIL', $canais, true)) {
+        if (in_array('EMAIL', $canais, true) && $this->ent->permiteEnvio($oficinaId, 'ALERTA_EMAIL')) {
             $emails = (array)($alerta->emails ?? []);
             if ($alerta->enviar_cliente && !empty($vars['_email_cliente'])) {
                 $emails[] = $vars['_email_cliente'];
@@ -82,18 +87,6 @@ class AlertaDispatchService
                 )->onQueue('whatsapp');
             }
         }
-    }
-
-    /** Canais liberados pelo plano da oficina. */
-    private function canaisDoPlano(string $oficinaId): array
-    {
-        $plano = Oficina::with('plano')->find($oficinaId)?->plano;
-
-        $canais = [];
-        if ($plano?->alerta_whatsapp) $canais[] = 'WHATSAPP';
-        if ($plano?->alerta_email)    $canais[] = 'EMAIL';
-
-        return $canais;
     }
 
     private function renderTemplate(string $template, array $vars): string

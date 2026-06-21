@@ -90,6 +90,17 @@ Route::prefix('saas')->group(function () {
         Route::post('notificacoes',         [\App\Http\Controllers\SaaS\NotificacaoController::class, 'store']);
         Route::put('notificacoes/{id}',     [\App\Http\Controllers\SaaS\NotificacaoController::class, 'update']);
         Route::delete('notificacoes/{id}',  [\App\Http\Controllers\SaaS\NotificacaoController::class, 'destroy']);
+
+        // Pacotes de serviço avulso — catálogo
+        Route::get('pacotes',         [\App\Http\Controllers\SaaS\PacoteServicoController::class, 'index']);
+        Route::post('pacotes',        [\App\Http\Controllers\SaaS\PacoteServicoController::class, 'store']);
+        Route::put('pacotes/{id}',    [\App\Http\Controllers\SaaS\PacoteServicoController::class, 'update']);
+        Route::delete('pacotes/{id}', [\App\Http\Controllers\SaaS\PacoteServicoController::class, 'destroy']);
+
+        // Serviços avulsos liberados por oficina
+        Route::get('oficinas/{id}/servicos',        [\App\Http\Controllers\SaaS\OficinaServicoController::class, 'index']);
+        Route::post('oficinas/{id}/servicos',       [\App\Http\Controllers\SaaS\OficinaServicoController::class, 'store']);
+        Route::delete('oficinas/{id}/servicos/{sid}', [\App\Http\Controllers\SaaS\OficinaServicoController::class, 'destroy']);
     });
 });
 

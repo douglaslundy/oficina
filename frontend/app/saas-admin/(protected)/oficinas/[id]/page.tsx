@@ -4,6 +4,7 @@ import { useState, useEffect, useCallback } from 'react'
 import { useParams, useRouter } from 'next/navigation'
 import Link from 'next/link'
 import saasApi from '@/lib/saas-api'
+import { ServicosAvulsosSection } from '@/components/saas/ServicosAvulsosSection'
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -568,6 +569,8 @@ export default function OficinaDetailPage() {
               </table>
             </div>
           )}
+
+          <ServicosAvulsosSection oficinaId={id} />
         </div>
       </div>
     </>
