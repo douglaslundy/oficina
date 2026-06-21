@@ -11,6 +11,7 @@ use App\Http\Controllers\DashboardController;
 use App\Http\Controllers\EstoqueController;
 use App\Http\Controllers\NotaFiscalController;
 use App\Http\Controllers\OrdemServicoController;
+use App\Http\Controllers\OrcamentoController;
 use App\Http\Controllers\ProdutoController;
 use App\Http\Controllers\AuditController;
 use App\Http\Controllers\PlanController;
@@ -35,6 +36,10 @@ Route::get('/health', fn() => response()->json(['status' => 'ok']));
 // Webhooks SaaS — públicos, validados internamente
 Route::post('saas/webhooks/asaas',        [SaaSWebhookController::class, 'asaas']);
 Route::post('saas/webhooks/mercadopago',  [SaaSWebhookController::class, 'mercadopago']);
+
+// Orçamento público — sem auth/tenant; o tenant é resolvido pelo token do orçamento
+Route::get('orcamento/{token}',            [OrcamentoController::class, 'showPublico']);
+Route::post('orcamento/{token}/responder', [OrcamentoController::class, 'responder']);
 
 // SaaS Admin — Auth (público, sem middleware de tenant)
 Route::prefix('saas')->group(function () {
@@ -156,6 +161,7 @@ Route::middleware(['tenant', 'auth:sanctum', 'role:ADMIN,ATENDENTE,MECANICO'])->
     Route::delete('os/{osId}/itens/{itemId}',               [OrdemServicoController::class, 'removeItem']);
     Route::post('os/{id}/pagamentos',                        [OrdemServicoController::class, 'addPagamento']);
     Route::delete('os/{id}/pagamentos/{pagamentoId}',        [OrdemServicoController::class, 'removePagamento']);
+    Route::post('os/{os}/orcamento/enviar',                  [OrcamentoController::class, 'enviar']);
 });
 Route::middleware(['tenant', 'auth:sanctum', 'role:ADMIN'])->group(function () {
     Route::delete('os/{id}', [OrdemServicoController::class, 'destroy']);

@@ -26,6 +26,7 @@ class Plano extends Model
         'preco_nota_excedente',
         'alerta_whatsapp',
         'alerta_email',
+        'orcamento',
         'ativo',
     ];
 
@@ -39,6 +40,7 @@ class Plano extends Model
         'preco_nota_excedente' => 'decimal:2',
         'alerta_whatsapp'      => 'boolean',
         'alerta_email'         => 'boolean',
+        'orcamento'            => 'boolean',
         'ativo'                => 'boolean',
         'criado_em'            => 'datetime',
     ];

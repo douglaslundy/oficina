@@ -70,6 +70,8 @@ const TIPO_LABELS: Record<string, string> = {
   PAGAMENTO_RECEBIDO:     '✅ Pagamento Recebido',
   PAGAMENTO_PARCIAL:      '⚡ Pagamento Parcial',
   NF_AUTORIZADA:          '🧾 Nota Fiscal Autorizada',
+  ORCAMENTO_APROVADO:     '✅ Orçamento Aprovado',
+  ORCAMENTO_RECUSADO:     '❌ Orçamento Recusado',
 }
 
 const TIPOS_CUSTOM = [
@@ -91,6 +93,8 @@ const VARIAVEIS_POR_TIPO: Record<string, string[]> = {
   PAGAMENTO_RECEBIDO:     ['{os_numero}', '{cliente}', '{valor}', '{forma_pagamento}', '{saldo_devedor}'],
   PAGAMENTO_PARCIAL:      ['{os_numero}', '{cliente}', '{valor}', '{saldo_devedor}'],
   NF_AUTORIZADA:          ['{nf_numero}', '{cliente}', '{valor}', '{chave_acesso}'],
+  ORCAMENTO_APROVADO:     ['{cliente}', '{os_numero}', '{valor}', '{servicos_aprovados}'],
+  ORCAMENTO_RECUSADO:     ['{cliente}', '{os_numero}'],
 }
 
 interface EditModalProps {

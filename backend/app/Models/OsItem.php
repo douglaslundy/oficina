@@ -20,13 +20,14 @@ class OsItem extends Model
 
     protected $fillable = [
         'os_id', 'tipo', 'produto_id', 'descricao',
-        'quantidade', 'valor_unitario', 'oficina_id',
+        'quantidade', 'valor_unitario', 'oficina_id', 'aprovado',
     ];
 
     protected $casts = [
         'quantidade'     => 'float',
         'valor_unitario' => 'float',
         'valor_total'    => 'float',
+        'aprovado'       => 'boolean',
     ];
 
     protected static function boot(): void

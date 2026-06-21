@@ -34,6 +34,7 @@ class PlanoController extends Controller
             'preco_nota_excedente'  => 'nullable|numeric|min:0',
             'alerta_whatsapp'       => 'sometimes|boolean',
             'alerta_email'          => 'sometimes|boolean',
+            'orcamento'             => 'sometimes|boolean',
         ]);
 
         $plano = Plano::create($validated);
@@ -60,6 +61,7 @@ class PlanoController extends Controller
             'preco_nota_excedente'  => 'nullable|numeric|min:0',
             'alerta_whatsapp'       => 'sometimes|boolean',
             'alerta_email'          => 'sometimes|boolean',
+            'orcamento'             => 'sometimes|boolean',
             'ativo'                 => 'sometimes|boolean',
         ]);
 
@@ -104,6 +106,7 @@ class PlanoController extends Controller
             'preco_nota_excedente' => number_format((float) $plano->preco_nota_excedente, 2, '.', ''),
             'alerta_whatsapp'      => (bool) $plano->alerta_whatsapp,
             'alerta_email'         => (bool) $plano->alerta_email,
+            'orcamento'            => (bool) $plano->orcamento,
             'ativo'                => $plano->ativo,
             'oficinas_count'       => $plano->oficinas_count ?? 0,
         ];

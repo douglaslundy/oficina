@@ -70,6 +70,31 @@ export default function OSDetailPage() {
     fetchOs()
   }, [fetchOs])
 
+  const [podeOrcar, setPodeOrcar] = useState(false)
+  const [enviandoOrc, setEnviandoOrc] = useState(false)
+
+  useEffect(() => {
+    api.get('/plano/limites')
+      .then(r => setPodeOrcar(!!r.data?.plano?.orcamento))
+      .catch(() => setPodeOrcar(false))
+  }, [])
+
+  async function enviarOrcamento() {
+    if (!confirm('Enviar este orçamento ao cliente para aprovação? Os serviços ficarão pendentes de aprovação.')) return
+    setEnviandoOrc(true)
+    try {
+      const r = await api.post<{ message: string; link: string }>(`/os/${id}/orcamento/enviar`, {})
+      toast(r.data.message, 'success')
+      if (r.data.link) {
+        try { await navigator.clipboard.writeText(r.data.link) } catch { /* ignore */ }
+      }
+      fetchOs()
+    } catch (e: unknown) {
+      const msg = (e as { response?: { data?: { message?: string } } })?.response?.data?.message
+      toast(msg ?? 'Erro ao enviar orçamento.', 'danger')
+    } finally { setEnviandoOrc(false) }
+  }
+
   async function downloadFile(endpoint: string, filename: string) {
     try {
       const token = localStorage.getItem('auth_token')
@@ -150,6 +175,12 @@ export default function OSDetailPage() {
           style={{ padding: '6px 14px', background: 'transparent', border: '1px solid var(--border)', color: 'var(--muted)', borderRadius: 8, cursor: 'pointer', fontSize: 13 }}>
           📄 PDF
         </button>
+        {podeOrcar && os.status !== 'CANCELADA' && (
+          <button onClick={enviarOrcamento} disabled={enviandoOrc}
+            style={{ padding: '6px 14px', background: 'var(--accent)', border: 'none', color: '#000', borderRadius: 8, cursor: enviandoOrc ? 'not-allowed' : 'pointer', fontSize: 13, fontWeight: 700 }}>
+            {enviandoOrc ? '⟳ Enviando...' : '📝 Enviar orçamento'}
+          </button>
+        )}
         {(os.pagamentos ?? []).reduce((s, p) => s + Number(p.valor), 0) > 0 && (
           <button onClick={downloadRecibo}
             style={{ padding: '6px 14px', background: 'transparent', border: '1px solid var(--success)', color: 'var(--success)', borderRadius: 8, cursor: 'pointer', fontSize: 13 }}>

@@ -189,6 +189,7 @@ class PlanLimitService
                 'nome'            => $plano->nome,
                 'alerta_whatsapp' => (bool) $plano->alerta_whatsapp,
                 'alerta_email'    => (bool) $plano->alerta_email,
+                'orcamento'       => (bool) $plano->orcamento,
             ],
             'usuarios'  => $this->itemUso($totalUsuarios, $plano->limite_usuarios),
             'os_mes'    => $this->itemUso($totalOsMes, $plano->limite_os_mes),

@@ -17,6 +17,7 @@ interface Plano {
   preco_nota_excedente: string
   alerta_whatsapp: boolean
   alerta_email: boolean
+  orcamento: boolean
   ativo: boolean
   oficinas_count: number
 }
@@ -32,6 +33,7 @@ interface PlanoForm {
   preco_nota_excedente: string
   alerta_whatsapp: boolean
   alerta_email: boolean
+  orcamento: boolean
 }
 
 type ModalMode = 'create' | 'edit'
@@ -122,6 +124,7 @@ function PlanoModal({ mode, initial, onClose, onSuccess }: PlanoModalProps) {
     preco_nota_excedente: initial?.preco_nota_excedente ?? '',
     alerta_whatsapp: initial?.alerta_whatsapp ?? false,
     alerta_email: initial?.alerta_email ?? false,
+    orcamento: initial?.orcamento ?? false,
   })
   const [submitting, setSubmitting] = useState(false)
   const [error, setError] = useState<string | null>(null)
@@ -162,6 +165,7 @@ function PlanoModal({ mode, initial, onClose, onSuccess }: PlanoModalProps) {
       preco_nota_excedente: form.preco_nota_excedente !== '' ? parseFloat(form.preco_nota_excedente) : 0,
       alerta_whatsapp: form.alerta_whatsapp,
       alerta_email: form.alerta_email,
+      orcamento: form.orcamento,
     }
 
     setSubmitting(true)
@@ -379,6 +383,12 @@ function PlanoModal({ mode, initial, onClose, onSuccess }: PlanoModalProps) {
                 onChange={(e) => setForm((p) => ({ ...p, alerta_email: e.target.checked }))}
                 disabled={submitting} style={{ width: 16, height: 16, accentColor: 'var(--accent)' }} />
               ✉️ Alertas via E-mail
+            </label>
+            <label style={{ display: 'flex', alignItems: 'center', gap: 10, cursor: 'pointer', fontSize: 14, color: 'var(--text)' }}>
+              <input type="checkbox" checked={form.orcamento}
+                onChange={(e) => setForm((p) => ({ ...p, orcamento: e.target.checked }))}
+                disabled={submitting} style={{ width: 16, height: 16, accentColor: 'var(--accent)' }} />
+              📝 Orçamento para aprovação do cliente
             </label>
           </div>
 
@@ -800,8 +810,8 @@ export default function PlanosPage() {
                         {/* Canais de alerta */}
                         <td style={{ padding: '12px 16px', whiteSpace: 'nowrap' }}>
                           <span style={{ fontSize: 15 }}>
-                            {plano.alerta_whatsapp ? '💬' : ''}{plano.alerta_email ? '✉️' : ''}
-                            {!plano.alerta_whatsapp && !plano.alerta_email && <span style={{ color: 'var(--muted)', fontSize: 13 }}>—</span>}
+                            {plano.alerta_whatsapp ? '💬' : ''}{plano.alerta_email ? '✉️' : ''}{plano.orcamento ? '📝' : ''}
+                            {!plano.alerta_whatsapp && !plano.alerta_email && !plano.orcamento && <span style={{ color: 'var(--muted)', fontSize: 13 }}>—</span>}
                           </span>
                         </td>
 
