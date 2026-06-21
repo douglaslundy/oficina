@@ -13,6 +13,14 @@ interface SaasConfigData {
   mp_access_token: string | null
   mp_public_key: string | null
   mp_webhook_secret: string | null
+  smtp_host: string | null
+  smtp_port: number | null
+  smtp_username: string | null
+  smtp_password: string | null
+  smtp_encryption: string | null
+  smtp_from_address: string | null
+  smtp_from_name: string | null
+  smtp_ativo: boolean
 }
 
 type ToastType = 'success' | 'danger'
@@ -153,6 +161,19 @@ export default function SaasConfigPage() {
   const [mpAmbiente, setMpAmbiente] = useState('sandbox')
   const [savingMp, setSavingMp] = useState(false)
 
+  // SMTP
+  const [smtpHost, setSmtpHost] = useState('')
+  const [smtpPort, setSmtpPort] = useState('587')
+  const [smtpUsername, setSmtpUsername] = useState('')
+  const [smtpPassword, setSmtpPassword] = useState('')
+  const [smtpEncryption, setSmtpEncryption] = useState('tls')
+  const [smtpFromAddress, setSmtpFromAddress] = useState('')
+  const [smtpFromName, setSmtpFromName] = useState('MecânicaPro')
+  const [smtpAtivo, setSmtpAtivo] = useState(false)
+  const [savingSmtp, setSavingSmtp] = useState(false)
+  const [smtpTestTo, setSmtpTestTo] = useState('')
+  const [testingSmtp, setTestingSmtp] = useState(false)
+
   const showToast = useCallback((msg: string, type: ToastType) => setToast({ msg, type }), [])
 
   useEffect(() => {
@@ -166,6 +187,14 @@ export default function SaasConfigPage() {
         setMpPublicKey(d.mp_public_key ?? '')
         setMpWebhookSecret(d.mp_webhook_secret ?? '')
         setMpAmbiente(d.mp_ambiente ?? 'sandbox')
+        setSmtpHost(d.smtp_host ?? '')
+        setSmtpPort(d.smtp_port ? String(d.smtp_port) : '587')
+        setSmtpUsername(d.smtp_username ?? '')
+        setSmtpPassword(d.smtp_password ?? '')
+        setSmtpEncryption(d.smtp_encryption ?? 'tls')
+        setSmtpFromAddress(d.smtp_from_address ?? '')
+        setSmtpFromName(d.smtp_from_name ?? 'MecânicaPro')
+        setSmtpAtivo(d.smtp_ativo ?? false)
       })
       .catch(() => showToast('Erro ao carregar configurações.', 'danger'))
       .finally(() => setLoading(false))
@@ -214,6 +243,45 @@ export default function SaasConfigPage() {
       showToast(msg ?? 'Erro ao salvar configurações Mercado Pago.', 'danger')
     } finally {
       setSavingMp(false)
+    }
+  }
+
+  async function salvarSmtp() {
+    setSavingSmtp(true)
+    try {
+      await saasApi.put('/saas/config/smtp', {
+        smtp_host: smtpHost,
+        smtp_port: parseInt(smtpPort, 10) || 587,
+        smtp_username: smtpUsername,
+        smtp_password: smtpPassword,
+        smtp_encryption: smtpEncryption || null,
+        smtp_from_address: smtpFromAddress,
+        smtp_from_name: smtpFromName,
+        smtp_ativo: smtpAtivo,
+      })
+      showToast('Configurações SMTP salvas.', 'success')
+    } catch (e: unknown) {
+      const msg = (e as { response?: { data?: { message?: string } } })?.response?.data?.message
+      showToast(msg ?? 'Erro ao salvar SMTP.', 'danger')
+    } finally {
+      setSavingSmtp(false)
+    }
+  }
+
+  async function testarSmtp() {
+    if (!smtpTestTo.trim()) {
+      showToast('Informe um e-mail para receber o teste.', 'danger')
+      return
+    }
+    setTestingSmtp(true)
+    try {
+      await saasApi.post('/saas/config/smtp/testar', { destinatario: smtpTestTo })
+      showToast('E-mail de teste enviado! Verifique a caixa de entrada.', 'success')
+    } catch (e: unknown) {
+      const msg = (e as { response?: { data?: { error?: string } } })?.response?.data?.error
+      showToast(msg ?? 'Falha ao enviar e-mail de teste.', 'danger')
+    } finally {
+      setTestingSmtp(false)
     }
   }
 
@@ -329,6 +397,84 @@ export default function SaasConfigPage() {
         <SecretInput label="Public Key" value={mpPublicKey} onChange={setMpPublicKey} placeholder="APP_USR-..." />
         <SecretInput label="Webhook Secret" value={mpWebhookSecret} onChange={setMpWebhookSecret} />
         <SaveButton loading={savingMp} onClick={salvarMercadoPago} label="Salvar Configurações Mercado Pago" />
+      </SectionCard>
+
+      {/* ── Seção 4 — SMTP (E-mail) ─────────────────────────────────────── */}
+      <SectionCard
+        title="Servidor de E-mail (SMTP)"
+        subtitle="Credenciais usadas para enviar os alertas por e-mail das oficinas"
+      >
+        <div style={{ display: 'grid', gridTemplateColumns: '2fr 1fr', gap: 12 }}>
+          <div style={{ marginBottom: 16 }}>
+            <label style={{ display: 'block', fontSize: 12, fontWeight: 600, color: 'var(--muted)', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: 6 }}>
+              Host SMTP
+            </label>
+            <input value={smtpHost} onChange={e => setSmtpHost(e.target.value)} placeholder="smtp.gmail.com"
+              style={{ width: '100%', padding: '9px 12px', borderRadius: 7, border: '1px solid var(--border)', background: 'var(--card)', color: 'var(--text)', fontSize: 14, outline: 'none', boxSizing: 'border-box' }} />
+          </div>
+          <div style={{ marginBottom: 16 }}>
+            <label style={{ display: 'block', fontSize: 12, fontWeight: 600, color: 'var(--muted)', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: 6 }}>
+              Porta
+            </label>
+            <input value={smtpPort} onChange={e => setSmtpPort(e.target.value)} placeholder="587" type="number"
+              style={{ width: '100%', padding: '9px 12px', borderRadius: 7, border: '1px solid var(--border)', background: 'var(--card)', color: 'var(--text)', fontSize: 14, outline: 'none', boxSizing: 'border-box' }} />
+          </div>
+        </div>
+
+        <div style={{ marginBottom: 16 }}>
+          <label style={{ display: 'block', fontSize: 12, fontWeight: 600, color: 'var(--muted)', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: 6 }}>
+            Usuário
+          </label>
+          <input value={smtpUsername} onChange={e => setSmtpUsername(e.target.value)} placeholder="usuario@dominio.com"
+            style={{ width: '100%', padding: '9px 12px', borderRadius: 7, border: '1px solid var(--border)', background: 'var(--card)', color: 'var(--text)', fontSize: 14, outline: 'none', boxSizing: 'border-box' }} />
+        </div>
+
+        <SecretInput label="Senha" value={smtpPassword} onChange={setSmtpPassword} />
+
+        <div style={{ marginBottom: 16 }}>
+          <label style={{ display: 'block', fontSize: 12, fontWeight: 600, color: 'var(--muted)', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: 6 }}>
+            Criptografia
+          </label>
+          <select value={smtpEncryption} onChange={e => setSmtpEncryption(e.target.value)} style={selectStyle}>
+            <option value="tls">TLS</option>
+            <option value="ssl">SSL</option>
+          </select>
+        </div>
+
+        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
+          <div style={{ marginBottom: 16 }}>
+            <label style={{ display: 'block', fontSize: 12, fontWeight: 600, color: 'var(--muted)', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: 6 }}>
+              E-mail remetente (From)
+            </label>
+            <input value={smtpFromAddress} onChange={e => setSmtpFromAddress(e.target.value)} placeholder="naoresponda@dominio.com"
+              style={{ width: '100%', padding: '9px 12px', borderRadius: 7, border: '1px solid var(--border)', background: 'var(--card)', color: 'var(--text)', fontSize: 14, outline: 'none', boxSizing: 'border-box' }} />
+          </div>
+          <div style={{ marginBottom: 16 }}>
+            <label style={{ display: 'block', fontSize: 12, fontWeight: 600, color: 'var(--muted)', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: 6 }}>
+              Nome remetente
+            </label>
+            <input value={smtpFromName} onChange={e => setSmtpFromName(e.target.value)} placeholder="MecânicaPro"
+              style={{ width: '100%', padding: '9px 12px', borderRadius: 7, border: '1px solid var(--border)', background: 'var(--card)', color: 'var(--text)', fontSize: 14, outline: 'none', boxSizing: 'border-box' }} />
+          </div>
+        </div>
+
+        <label style={{ display: 'flex', alignItems: 'center', gap: 10, cursor: 'pointer', marginBottom: 16 }}>
+          <input type="checkbox" checked={smtpAtivo} onChange={e => setSmtpAtivo(e.target.checked)}
+            style={{ width: 16, height: 16, accentColor: 'var(--accent)' }} />
+          <span style={{ fontSize: 14, fontWeight: 600, color: 'var(--text)' }}>Ativar envio de e-mails</span>
+        </label>
+
+        <div style={{ display: 'flex', gap: 10, alignItems: 'flex-end', flexWrap: 'wrap' }}>
+          <SaveButton loading={savingSmtp} onClick={salvarSmtp} label="Salvar SMTP" />
+          <div style={{ flex: 1, minWidth: 200 }}>
+            <input value={smtpTestTo} onChange={e => setSmtpTestTo(e.target.value)} placeholder="email@para-testar.com" type="email"
+              style={{ width: '100%', padding: '9px 12px', borderRadius: 7, border: '1px solid var(--border)', background: 'var(--card)', color: 'var(--text)', fontSize: 14, outline: 'none', boxSizing: 'border-box' }} />
+          </div>
+          <button onClick={testarSmtp} disabled={testingSmtp}
+            style={{ padding: '9px 18px', borderRadius: 7, background: 'transparent', border: '1px solid var(--accent)', color: 'var(--accent)', fontSize: 14, fontWeight: 600, cursor: testingSmtp ? 'not-allowed' : 'pointer', whiteSpace: 'nowrap' }}>
+            {testingSmtp ? '⟳ Enviando...' : '📨 Enviar teste'}
+          </button>
+        </div>
       </SectionCard>
     </div>
   )

@@ -116,6 +116,8 @@ class AgendamentoController extends Controller
                 'os_numero'          => $os->numero,
                 '_telefone_cliente'  => $agendamento->cliente?->telefone ?? '',
                 '_telefone_mecanico' => $agendamento->mecanico?->telefone ?? '',
+                '_email_cliente'     => $agendamento->cliente?->email ?? '',
+                '_email_mecanico'    => $agendamento->mecanico?->email ?? '',
             ]);
 
             return response()->json([

@@ -164,6 +164,7 @@ class OrdemServicoController extends Controller
                     'veiculo'            => $os->veiculo_descricao ?? $os->veiculo_placa ?? '-',
                     'problema'           => $os->problema_relatado ?? '-',
                     '_telefone_mecanico' => $os->mecanico?->telefone ?? '',
+                    '_email_mecanico'    => $os->mecanico?->email ?? '',
                 ]);
 
                 return (new OrdemServicoResource($os->load(['cliente', 'mecanico', 'itens'])))->response()->setStatusCode(201);
@@ -247,6 +248,8 @@ class OrdemServicoController extends Controller
                     'veiculo'             => $fresh->veiculo_descricao ?? $fresh->veiculo_placa ?? '-',
                     '_telefone_cliente'   => $fresh->cliente?->telefone ?? '',
                     '_telefone_mecanico'  => $fresh->mecanico?->telefone ?? '',
+                    '_email_cliente'      => $fresh->cliente?->email ?? '',
+                    '_email_mecanico'     => $fresh->mecanico?->email ?? '',
                 ]);
             }
 
@@ -387,6 +390,7 @@ class OrdemServicoController extends Controller
                 'forma_pagamento'    => $validated['forma_pagamento'],
                 'saldo_devedor'      => 'R$ ' . number_format($saldoDevedor, 2, ',', '.'),
                 '_telefone_cliente'  => $os->cliente?->telefone ?? '',
+                '_email_cliente'     => $os->cliente?->email ?? '',
             ]);
 
             return $pagamento;

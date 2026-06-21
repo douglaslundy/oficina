@@ -15,6 +15,8 @@ interface Plano {
   limite_clientes: number
   limite_notas_mes: number
   preco_nota_excedente: string
+  alerta_whatsapp: boolean
+  alerta_email: boolean
   ativo: boolean
   oficinas_count: number
 }
@@ -28,6 +30,8 @@ interface PlanoForm {
   limite_clientes: string
   limite_notas_mes: string
   preco_nota_excedente: string
+  alerta_whatsapp: boolean
+  alerta_email: boolean
 }
 
 type ModalMode = 'create' | 'edit'
@@ -116,6 +120,8 @@ function PlanoModal({ mode, initial, onClose, onSuccess }: PlanoModalProps) {
     limite_clientes: initial ? String(initial.limite_clientes ?? -1) : '',
     limite_notas_mes: initial ? String(initial.limite_notas_mes ?? -1) : '',
     preco_nota_excedente: initial?.preco_nota_excedente ?? '',
+    alerta_whatsapp: initial?.alerta_whatsapp ?? false,
+    alerta_email: initial?.alerta_email ?? false,
   })
   const [submitting, setSubmitting] = useState(false)
   const [error, setError] = useState<string | null>(null)
@@ -154,6 +160,8 @@ function PlanoModal({ mode, initial, onClose, onSuccess }: PlanoModalProps) {
       limite_clientes: form.limite_clientes !== '' ? parseInt(form.limite_clientes, 10) : -1,
       limite_notas_mes: form.limite_notas_mes !== '' ? parseInt(form.limite_notas_mes, 10) : -1,
       preco_nota_excedente: form.preco_nota_excedente !== '' ? parseFloat(form.preco_nota_excedente) : 0,
+      alerta_whatsapp: form.alerta_whatsapp,
+      alerta_email: form.alerta_email,
     }
 
     setSubmitting(true)
@@ -357,6 +365,23 @@ function PlanoModal({ mode, initial, onClose, onSuccess }: PlanoModalProps) {
             </Field>
           </div>
 
+          {/* Canais de alerta liberados pelo plano */}
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 8, paddingTop: 8, borderTop: '1px solid var(--border)' }}>
+            <span style={{ fontSize: 13, fontWeight: 600, color: 'var(--muted)' }}>Canais de alerta inclusos no plano</span>
+            <label style={{ display: 'flex', alignItems: 'center', gap: 10, cursor: 'pointer', fontSize: 14, color: 'var(--text)' }}>
+              <input type="checkbox" checked={form.alerta_whatsapp}
+                onChange={(e) => setForm((p) => ({ ...p, alerta_whatsapp: e.target.checked }))}
+                disabled={submitting} style={{ width: 16, height: 16, accentColor: 'var(--accent)' }} />
+              💬 Alertas via WhatsApp
+            </label>
+            <label style={{ display: 'flex', alignItems: 'center', gap: 10, cursor: 'pointer', fontSize: 14, color: 'var(--text)' }}>
+              <input type="checkbox" checked={form.alerta_email}
+                onChange={(e) => setForm((p) => ({ ...p, alerta_email: e.target.checked }))}
+                disabled={submitting} style={{ width: 16, height: 16, accentColor: 'var(--accent)' }} />
+              ✉️ Alertas via E-mail
+            </label>
+          </div>
+
           {/* Actions */}
           <div
             style={{
@@ -433,7 +458,7 @@ export default function PlanosPage() {
   const [deactivating, setDeactivating] = useState<string | null>(null)
   const [deactivateError, setDeactivateError] = useState<string | null>(null)
 
-  const TABLE_COLS = ['Nome', 'Preço/mês', 'Usuários', 'OS/mês', 'Produtos', 'Clientes', 'Notas/mês', 'Excedente', 'Oficinas', 'Status', 'Ações']
+  const TABLE_COLS = ['Nome', 'Preço/mês', 'Usuários', 'OS/mês', 'Produtos', 'Clientes', 'Notas/mês', 'Excedente', 'Alertas', 'Oficinas', 'Status', 'Ações']
 
   const fetchPlanos = useCallback(async () => {
     setLoading(true)
@@ -644,7 +669,7 @@ export default function PlanosPage() {
                       <td style={{ padding: '13px 16px' }}>
                         <Skeleton width="65%" height={14} />
                       </td>
-                      {Array.from({ length: 8 }).map((__, j) => (
+                      {Array.from({ length: 9 }).map((__, j) => (
                         <td key={j} style={{ padding: '13px 16px' }}>
                           <Skeleton height={14} width={j === 0 ? '55%' : '40%'} />
                         </td>
@@ -663,7 +688,7 @@ export default function PlanosPage() {
                 ) : planos.length === 0 ? (
                   <tr>
                     <td
-                      colSpan={11}
+                      colSpan={12}
                       style={{
                         padding: '48px 16px',
                         textAlign: 'center',
@@ -769,6 +794,14 @@ export default function PlanosPage() {
                         <td style={{ padding: '12px 16px', whiteSpace: 'nowrap' }}>
                           <span style={{ fontFamily: "'JetBrains Mono', monospace", fontSize: 14, color: parseFloat(plano.preco_nota_excedente) === 0 ? 'var(--muted)' : 'var(--accent)' }}>
                             {parseFloat(plano.preco_nota_excedente) === 0 ? '—' : formatarPreco(plano.preco_nota_excedente)}
+                          </span>
+                        </td>
+
+                        {/* Canais de alerta */}
+                        <td style={{ padding: '12px 16px', whiteSpace: 'nowrap' }}>
+                          <span style={{ fontSize: 15 }}>
+                            {plano.alerta_whatsapp ? '💬' : ''}{plano.alerta_email ? '✉️' : ''}
+                            {!plano.alerta_whatsapp && !plano.alerta_email && <span style={{ color: 'var(--muted)', fontSize: 13 }}>—</span>}
                           </span>
                         </td>
 

@@ -40,6 +40,7 @@ class ClienteStatusService
                     'vencimento'         => $os?->data_vencimento_pagamento?->format('d/m/Y') ?? '-',
                     'itens'              => $itensTexto,
                     '_telefone_cliente'  => $cliente->telefone ?? '',
+                    '_email_cliente'     => $cliente->email ?? '',
                 ]);
             }
             Cliente::where('id', $clienteId)->update(['status' => 'DIVIDA_VENCIDA']);
@@ -69,6 +70,7 @@ class ClienteStatusService
                     'os_numero'         => $os?->numero ?? '-',
                     'itens'             => $itensTexto,
                     '_telefone_cliente' => $cliente->telefone ?? '',
+                    '_email_cliente'    => $cliente->email ?? '',
                 ]);
             }
             Cliente::where('id', $clienteId)->update(['status' => 'DEVEDOR']);

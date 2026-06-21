@@ -99,6 +99,7 @@ class NotaFiscalController extends Controller
                     'valor'        => 'R$ ' . number_format((float)$notaFresh->valor_total, 2, ',', '.'),
                     'chave_acesso' => $notaFresh->chave_acesso ?? '-',
                     '_telefone_cliente' => $notaFresh->cliente?->telefone ?? '',
+                    '_email_cliente'    => $notaFresh->cliente?->email ?? '',
                 ]);
             }
         } catch (\Exception $e) {

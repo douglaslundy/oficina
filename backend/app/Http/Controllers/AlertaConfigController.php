@@ -4,14 +4,41 @@ declare(strict_types=1);
 namespace App\Http\Controllers;
 
 use App\Models\AlertaConfig;
+use App\Models\Oficina;
 use App\Services\AlertaDispatchService;
 use App\Tenancy\TenancyContext;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
+use Illuminate\Validation\ValidationException;
 
 class AlertaConfigController extends Controller
 {
     public function __construct(private readonly AlertaDispatchService $dispatch) {}
+
+    /** Canais liberados pelo plano da oficina atual. */
+    private function canaisPermitidos(): array
+    {
+        $oficina = Oficina::with('plano')->find(TenancyContext::get());
+        $plano   = $oficina?->plano;
+
+        return [
+            'WHATSAPP' => (bool) ($plano?->alerta_whatsapp),
+            'EMAIL'    => (bool) ($plano?->alerta_email),
+        ];
+    }
+
+    /** Garante que todos os canais pedidos fazem parte do plano. */
+    private function validarCanais(array $canais): void
+    {
+        $permitidos = $this->canaisPermitidos();
+        foreach ($canais as $canal) {
+            if (empty($permitidos[$canal])) {
+                throw ValidationException::withMessages([
+                    'canais' => 'Funcionalidade não faz parte do seu plano. Contate o administrador do seu plano e contrate.',
+                ]);
+            }
+        }
+    }
 
     public function index(): JsonResponse
     {
@@ -33,12 +60,20 @@ class AlertaConfigController extends Controller
             'template_mensagem' => ['required', 'string'],
             'destinatarios'     => ['array'],
             'destinatarios.*'   => ['string'],
+            'emails'            => ['array'],
+            'emails.*'          => ['email'],
+            'canais'            => ['array', 'min:1'],
+            'canais.*'          => ['in:WHATSAPP,EMAIL'],
             'enviar_cliente'    => ['boolean'],
             'enviar_mecanico'   => ['boolean'],
         ]);
 
+        $canais = $validated['canais'] ?? ['WHATSAPP'];
+        $this->validarCanais($canais);
+
         $alerta = AlertaConfig::create([
             ...$validated,
+            'canais'       => $canais,
             'oficina_id'   => TenancyContext::get(),
             'pre_definido' => false,
             'ativo'        => true,
@@ -56,9 +91,17 @@ class AlertaConfigController extends Controller
             'template_mensagem' => ['sometimes', 'string'],
             'destinatarios'     => ['sometimes', 'array'],
             'destinatarios.*'   => ['string'],
+            'emails'            => ['sometimes', 'array'],
+            'emails.*'          => ['email'],
+            'canais'            => ['sometimes', 'array', 'min:1'],
+            'canais.*'          => ['in:WHATSAPP,EMAIL'],
             'enviar_cliente'    => ['sometimes', 'boolean'],
             'enviar_mecanico'   => ['sometimes', 'boolean'],
         ]);
+
+        if (isset($validated['canais'])) {
+            $this->validarCanais($validated['canais']);
+        }
 
         $alerta->update($validated);
 

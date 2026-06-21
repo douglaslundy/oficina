@@ -25,6 +25,8 @@ class AlertaConfig extends Model
         'ativo',
         'template_mensagem',
         'destinatarios',
+        'emails',
+        'canais',
         'enviar_cliente',
         'enviar_mecanico',
     ];
@@ -33,6 +35,8 @@ class AlertaConfig extends Model
         'pre_definido'    => 'boolean',
         'ativo'           => 'boolean',
         'destinatarios'   => 'array',
+        'emails'          => 'array',
+        'canais'          => 'array',
         'enviar_cliente'  => 'boolean',
         'enviar_mecanico' => 'boolean',
         'criado_em'       => 'datetime',

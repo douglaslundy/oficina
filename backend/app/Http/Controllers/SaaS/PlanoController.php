@@ -32,6 +32,8 @@ class PlanoController extends Controller
             'limite_clientes'       => 'nullable|integer|min:-1',
             'limite_notas_mes'      => 'nullable|integer|min:-1',
             'preco_nota_excedente'  => 'nullable|numeric|min:0',
+            'alerta_whatsapp'       => 'sometimes|boolean',
+            'alerta_email'          => 'sometimes|boolean',
         ]);
 
         $plano = Plano::create($validated);
@@ -56,6 +58,8 @@ class PlanoController extends Controller
             'limite_clientes'       => 'nullable|integer|min:-1',
             'limite_notas_mes'      => 'nullable|integer|min:-1',
             'preco_nota_excedente'  => 'nullable|numeric|min:0',
+            'alerta_whatsapp'       => 'sometimes|boolean',
+            'alerta_email'          => 'sometimes|boolean',
             'ativo'                 => 'sometimes|boolean',
         ]);
 
@@ -98,6 +102,8 @@ class PlanoController extends Controller
             'limite_clientes'      => $plano->limite_clientes,
             'limite_notas_mes'     => $plano->limite_notas_mes,
             'preco_nota_excedente' => number_format((float) $plano->preco_nota_excedente, 2, '.', ''),
+            'alerta_whatsapp'      => (bool) $plano->alerta_whatsapp,
+            'alerta_email'         => (bool) $plano->alerta_email,
             'ativo'                => $plano->ativo,
             'oficinas_count'       => $plano->oficinas_count ?? 0,
         ];

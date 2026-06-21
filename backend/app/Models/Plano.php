@@ -24,6 +24,8 @@ class Plano extends Model
         'limite_clientes',
         'limite_notas_mes',
         'preco_nota_excedente',
+        'alerta_whatsapp',
+        'alerta_email',
         'ativo',
     ];
 
@@ -35,6 +37,8 @@ class Plano extends Model
         'limite_clientes'      => 'integer',
         'limite_notas_mes'     => 'integer',
         'preco_nota_excedente' => 'decimal:2',
+        'alerta_whatsapp'      => 'boolean',
+        'alerta_email'         => 'boolean',
         'ativo'                => 'boolean',
         'criado_em'            => 'datetime',
     ];

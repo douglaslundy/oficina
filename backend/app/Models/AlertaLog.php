@@ -20,6 +20,7 @@ class AlertaLog extends Model
     protected $fillable = [
         'oficina_id',
         'tipo',
+        'canal',
         'destinatario',
         'mensagem',
         'sucesso',

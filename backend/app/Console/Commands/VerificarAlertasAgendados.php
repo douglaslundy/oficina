@@ -51,6 +51,7 @@ class VerificarAlertasAgendados extends Command
                 'veiculo'    => $os->veiculo_descricao ?? $os->veiculo_placa ?? '-',
                 'vencimento' => $os->prazo_entrega?->format('d/m/Y') ?? '-',
                 '_telefone_cliente' => $os->cliente?->telefone ?? '',
+                '_email_cliente'    => $os->cliente?->email ?? '',
             ]);
         }
     }
@@ -74,6 +75,8 @@ class VerificarAlertasAgendados extends Command
                 'servico'   => $ag->tipo_servico,
                 '_telefone_cliente' => $ag->cliente?->telefone ?? '',
                 '_telefone_mecanico' => $ag->mecanico?->telefone ?? '',
+                '_email_cliente'    => $ag->cliente?->email ?? '',
+                '_email_mecanico'   => $ag->mecanico?->email ?? '',
             ]);
         }
     }

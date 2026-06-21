@@ -19,6 +19,19 @@ class SaasConfig extends Model
         'mp_public_key',
         'mp_webhook_secret',
         'mp_ambiente',
+        'smtp_host',
+        'smtp_port',
+        'smtp_username',
+        'smtp_password',
+        'smtp_encryption',
+        'smtp_from_address',
+        'smtp_from_name',
+        'smtp_ativo',
+    ];
+
+    protected $casts = [
+        'smtp_port'  => 'integer',
+        'smtp_ativo' => 'boolean',
     ];
 
     protected $hidden = [
@@ -27,7 +40,16 @@ class SaasConfig extends Model
         'mp_access_token',
         'mp_public_key',
         'mp_webhook_secret',
+        'smtp_password',
     ];
+
+    /** Há SMTP configurado e ativo para envio de e-mails? */
+    public function smtpConfigurado(): bool
+    {
+        return $this->smtp_ativo
+            && !empty($this->smtp_host)
+            && !empty($this->getRawOriginal('smtp_from_address'));
+    }
 
     /** Retorna sempre a linha singleton. */
     public static function get(): self

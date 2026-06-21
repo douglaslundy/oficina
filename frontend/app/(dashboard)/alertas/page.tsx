@@ -11,8 +11,50 @@ interface AlertaConfig {
   ativo: boolean
   template_mensagem: string | null
   destinatarios: string[]
+  emails: string[]
+  canais: string[]
   enviar_cliente: boolean
   enviar_mecanico: boolean
+}
+
+interface Entitlements {
+  whatsapp: boolean
+  email: boolean
+}
+
+// Seletor de canais — só permite marcar o que o plano libera.
+function CanaisSelector({ canais, setCanais, ent }: {
+  canais: { whatsapp: boolean; email: boolean }
+  setCanais: (c: { whatsapp: boolean; email: boolean }) => void
+  ent: Entitlements
+}) {
+  const lockMsg = 'Funcionalidade não faz parte do seu plano, contate o administrador do seu plano e contrate.'
+  return (
+    <div>
+      <label style={{ display: 'block', fontSize: 12, fontWeight: 600, color: 'var(--muted)', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: 6 }}>
+        Canais de envio
+      </label>
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+        {([
+          { key: 'whatsapp' as const, label: '💬 WhatsApp', allowed: ent.whatsapp },
+          { key: 'email' as const,    label: '✉️ E-mail',  allowed: ent.email },
+        ]).map(opt => (
+          <div key={opt.key}>
+            <label style={{ display: 'flex', alignItems: 'center', gap: 8, cursor: opt.allowed ? 'pointer' : 'not-allowed', opacity: opt.allowed ? 1 : 0.5 }}>
+              <input type="checkbox" disabled={!opt.allowed}
+                checked={opt.allowed && canais[opt.key]}
+                onChange={e => setCanais({ ...canais, [opt.key]: e.target.checked })}
+                style={{ width: 16, height: 16, accentColor: 'var(--accent)' }} />
+              <span style={{ fontSize: 14 }}>{opt.label}</span>
+            </label>
+            {!opt.allowed && (
+              <p style={{ fontSize: 11, color: 'var(--danger)', margin: '2px 0 0 24px' }}>{lockMsg}</p>
+            )}
+          </div>
+        ))}
+      </div>
+    </div>
+  )
 }
 
 const TIPO_LABELS: Record<string, string> = {
@@ -53,34 +95,51 @@ const VARIAVEIS_POR_TIPO: Record<string, string[]> = {
 
 interface EditModalProps {
   alerta: AlertaConfig
+  ent: Entitlements
   onClose: () => void
   onSaved: () => void
 }
 
-function EditModal({ alerta, onClose, onSaved }: EditModalProps) {
+function EditModal({ alerta, ent, onClose, onSaved }: EditModalProps) {
   const [form, setForm] = useState({
     template_mensagem: alerta.template_mensagem ?? '',
     destinatarios:     (alerta.destinatarios ?? []).join('\n'),
+    emails:            (alerta.emails ?? []).join('\n'),
     enviar_cliente:    alerta.enviar_cliente,
     enviar_mecanico:   alerta.enviar_mecanico,
+  })
+  const [canais, setCanais] = useState({
+    whatsapp: (alerta.canais ?? ['WHATSAPP']).includes('WHATSAPP'),
+    email:    (alerta.canais ?? []).includes('EMAIL'),
   })
   const [saving, setSaving] = useState(false)
 
   async function salvar() {
+    const canaisArr = [
+      ...(canais.whatsapp && ent.whatsapp ? ['WHATSAPP'] : []),
+      ...(canais.email && ent.email ? ['EMAIL'] : []),
+    ]
+    if (canaisArr.length === 0) {
+      toast('Selecione ao menos um canal disponível no seu plano.', 'danger'); return
+    }
     setSaving(true)
     try {
-      const dests = form.destinatarios.split('\n').map(s => s.trim()).filter(Boolean)
+      const dests  = form.destinatarios.split('\n').map(s => s.trim()).filter(Boolean)
+      const emails = form.emails.split('\n').map(s => s.trim()).filter(Boolean)
       await api.put(`/alertas/${alerta.id}`, {
         template_mensagem: form.template_mensagem,
         destinatarios:     dests,
+        emails,
+        canais:            canaisArr,
         enviar_cliente:    form.enviar_cliente,
         enviar_mecanico:   form.enviar_mecanico,
       })
       toast('Alerta atualizado!', 'success')
       onSaved()
       onClose()
-    } catch {
-      toast('Erro ao salvar alerta.', 'danger')
+    } catch (e: unknown) {
+      const msg = (e as { response?: { data?: { message?: string } } })?.response?.data?.message
+      toast(msg ?? 'Erro ao salvar alerta.', 'danger')
     } finally { setSaving(false) }
   }
 
@@ -136,6 +195,18 @@ function EditModal({ alerta, onClose, onSaved }: EditModalProps) {
             <p style={{ fontSize: 11, color: 'var(--muted)', marginTop: 4 }}>Apenas números, com DDD. Ex: 35984000000</p>
           </div>
 
+          <CanaisSelector canais={canais} setCanais={setCanais} ent={ent} />
+
+          {canais.email && ent.email && (
+            <div>
+              <label style={{ display: 'block', fontSize: 12, fontWeight: 600, color: 'var(--muted)', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: 6 }}>
+                E-mails (um por linha)
+              </label>
+              <textarea value={form.emails} onChange={e => setForm(f => ({ ...f, emails: e.target.value }))} rows={2}
+                style={{ ...iStyle, resize: 'vertical' as const }} placeholder="contato@cliente.com" />
+            </div>
+          )}
+
           <div style={{ display: 'flex', gap: 20 }}>
             <label style={{ display: 'flex', alignItems: 'center', gap: 8, cursor: 'pointer' }}>
               <input type="checkbox" checked={form.enviar_cliente}
@@ -167,35 +238,53 @@ function EditModal({ alerta, onClose, onSaved }: EditModalProps) {
 }
 
 interface CreateModalProps {
+  ent: Entitlements
   onClose: () => void
   onSaved: () => void
 }
 
-function CreateModal({ onClose, onSaved }: CreateModalProps) {
+function CreateModal({ ent, onClose, onSaved }: CreateModalProps) {
   const [form, setForm] = useState({
     tipo:              TIPOS_CUSTOM[0],
     nome:              '',
     template_mensagem: '',
     destinatarios:     '',
+    emails:            '',
     enviar_cliente:    false,
     enviar_mecanico:   false,
   })
+  // Pré-seleciona o primeiro canal disponível no plano.
+  const [canais, setCanais] = useState({ whatsapp: ent.whatsapp, email: ent.email && !ent.whatsapp })
   const [saving, setSaving] = useState(false)
 
   async function salvar() {
     if (!form.nome.trim() || !form.template_mensagem.trim()) {
       toast('Nome e template são obrigatórios.', 'danger'); return
     }
+    const canaisArr = [
+      ...(canais.whatsapp && ent.whatsapp ? ['WHATSAPP'] : []),
+      ...(canais.email && ent.email ? ['EMAIL'] : []),
+    ]
+    if (canaisArr.length === 0) {
+      toast('Selecione ao menos um canal disponível no seu plano.', 'danger'); return
+    }
     setSaving(true)
     try {
       await api.post('/alertas', {
-        ...form,
-        destinatarios: form.destinatarios.split('\n').map(s => s.trim()).filter(Boolean),
+        tipo:              form.tipo,
+        nome:              form.nome,
+        template_mensagem: form.template_mensagem,
+        enviar_cliente:    form.enviar_cliente,
+        enviar_mecanico:   form.enviar_mecanico,
+        canais:            canaisArr,
+        destinatarios:     form.destinatarios.split('\n').map(s => s.trim()).filter(Boolean),
+        emails:            form.emails.split('\n').map(s => s.trim()).filter(Boolean),
       })
       toast('Alerta criado!', 'success')
       onSaved(); onClose()
-    } catch {
-      toast('Erro ao criar alerta.', 'danger')
+    } catch (e: unknown) {
+      const msg = (e as { response?: { data?: { message?: string } } })?.response?.data?.message
+      toast(msg ?? 'Erro ao criar alerta.', 'danger')
     } finally { setSaving(false) }
   }
 
@@ -237,10 +326,21 @@ function CreateModal({ onClose, onSaved }: CreateModalProps) {
             )}
           </div>
           <div>
-            <label style={{ display: 'block', fontSize: 12, fontWeight: 600, color: 'var(--muted)', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: 6 }}>Destinatários (um por linha)</label>
+            <label style={{ display: 'block', fontSize: 12, fontWeight: 600, color: 'var(--muted)', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: 6 }}>Telefones (um por linha, com DDD)</label>
             <textarea value={form.destinatarios} onChange={e => setForm(f => ({ ...f, destinatarios: e.target.value }))} rows={2}
               style={{ ...iStyle, resize: 'vertical' as const }} placeholder="35984000000" />
           </div>
+
+          <CanaisSelector canais={canais} setCanais={setCanais} ent={ent} />
+
+          {canais.email && ent.email && (
+            <div>
+              <label style={{ display: 'block', fontSize: 12, fontWeight: 600, color: 'var(--muted)', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: 6 }}>E-mails (um por linha)</label>
+              <textarea value={form.emails} onChange={e => setForm(f => ({ ...f, emails: e.target.value }))} rows={2}
+                style={{ ...iStyle, resize: 'vertical' as const }} placeholder="contato@cliente.com" />
+            </div>
+          )}
+
           <div style={{ display: 'flex', gap: 20 }}>
             <label style={{ display: 'flex', alignItems: 'center', gap: 8, cursor: 'pointer' }}>
               <input type="checkbox" checked={form.enviar_cliente} onChange={e => setForm(f => ({ ...f, enviar_cliente: e.target.checked }))} style={{ width: 16, height: 16, accentColor: 'var(--accent)' }} />
@@ -270,6 +370,7 @@ export default function AlertasPage() {
   const [editando, setEditando]     = useState<AlertaConfig | null>(null)
   const [criando, setCriando]       = useState(false)
   const [toggling, setToggling]     = useState<string | null>(null)
+  const [ent, setEnt]               = useState<Entitlements>({ whatsapp: false, email: false })
 
   const fetchAlertas = useCallback(() => {
     setLoading(true)
@@ -280,6 +381,15 @@ export default function AlertasPage() {
   }, [])
 
   useEffect(fetchAlertas, [fetchAlertas])
+
+  useEffect(() => {
+    api.get<{ plano: { alerta_whatsapp?: boolean; alerta_email?: boolean } | null }>('/plano/limites')
+      .then(r => setEnt({
+        whatsapp: !!r.data.plano?.alerta_whatsapp,
+        email:    !!r.data.plano?.alerta_email,
+      }))
+      .catch(() => setEnt({ whatsapp: false, email: false }))
+  }, [])
 
   async function toggle(id: string) {
     setToggling(id)
@@ -308,16 +418,16 @@ export default function AlertasPage() {
 
   return (
     <div>
-      {editando && <EditModal alerta={editando} onClose={() => setEditando(null)} onSaved={fetchAlertas} />}
-      {criando  && <CreateModal onClose={() => setCriando(false)} onSaved={fetchAlertas} />}
+      {editando && <EditModal alerta={editando} ent={ent} onClose={() => setEditando(null)} onSaved={fetchAlertas} />}
+      {criando  && <CreateModal ent={ent} onClose={() => setCriando(false)} onSaved={fetchAlertas} />}
 
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 24 }}>
         <div>
           <h1 className="font-display" style={{ fontSize: 28, fontWeight: 800, color: 'var(--text)', margin: 0 }}>
-            Alertas WhatsApp
+            Alertas
           </h1>
           <p style={{ color: 'var(--muted)', fontSize: 14, margin: '4px 0 0' }}>
-            Configure quais alertas serão enviados via WhatsApp
+            Configure os alertas e os canais de envio (WhatsApp / e-mail) conforme seu plano
           </p>
         </div>
         <button onClick={() => setCriando(true)}
