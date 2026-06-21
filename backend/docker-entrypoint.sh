@@ -40,6 +40,13 @@ done
 
 echo "Database connected!"
 
+# Papel "worker": apenas processa as filas (sem migrate/seed/serve — o container
+# web cuida disso). Mantém o wait-for-DB e o APP_KEY já tratados acima.
+if [ "${CONTAINER_ROLE:-web}" = "worker" ]; then
+    echo "=== Starting queue worker (whatsapp,default) ==="
+    exec php artisan queue:work redis --queue=whatsapp,default --tries=3 --sleep=3 --timeout=120 --backoff=30
+fi
+
 # Run migrations (creates migrations table if needed, then runs all)
 echo "Running migrations..."
 php artisan migrate --force --no-interaction

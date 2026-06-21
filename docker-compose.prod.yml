@@ -75,8 +75,9 @@ services:
     build:
       context: ./backend
       dockerfile: Dockerfile.prod
-    command: php artisan queue:work redis --queue=whatsapp,default --tries=3 --sleep=3 --timeout=120 --backoff=30
-    environment: *backend-env
+    environment:
+      <<: *backend-env
+      CONTAINER_ROLE: worker
     depends_on:
       postgres:
         condition: service_healthy
