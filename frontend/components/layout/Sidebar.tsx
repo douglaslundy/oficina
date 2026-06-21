@@ -37,6 +37,7 @@ const NAV_ITEMS: NavItem[] = [
   { href: '/relatorios',            label: 'Relatórios',        icon: '📈' },
   { href: '/alertas',               label: 'Alertas',           icon: '💬', gate: 'alertas' },
   { href: '/alertas/logs',          label: 'Histórico Alertas', icon: '📜', gate: 'alertas' },
+  { href: '/contratar',             label: 'Contratar Serviços',icon: '🛍️' },
   { href: '/usuarios',              label: 'Usuários',          icon: '👤' },
   { href: '/empresa',               label: 'Empresa',           icon: '🏢' },
   { href: '/auditoria',             label: 'Auditoria',         icon: '🔍' },

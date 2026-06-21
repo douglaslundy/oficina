@@ -101,6 +101,11 @@ Route::prefix('saas')->group(function () {
         Route::get('oficinas/{id}/servicos',        [\App\Http\Controllers\SaaS\OficinaServicoController::class, 'index']);
         Route::post('oficinas/{id}/servicos',       [\App\Http\Controllers\SaaS\OficinaServicoController::class, 'store']);
         Route::delete('oficinas/{id}/servicos/{sid}', [\App\Http\Controllers\SaaS\OficinaServicoController::class, 'destroy']);
+
+        // Solicitações de serviço (aprovação)
+        Route::get('solicitacoes',                [\App\Http\Controllers\SaaS\SolicitacaoController::class, 'index']);
+        Route::post('solicitacoes/{id}/aprovar',  [\App\Http\Controllers\SaaS\SolicitacaoController::class, 'aprovar']);
+        Route::post('solicitacoes/{id}/recusar',  [\App\Http\Controllers\SaaS\SolicitacaoController::class, 'recusar']);
     });
 });
 
@@ -122,6 +127,10 @@ Route::middleware(['tenant', 'auth:sanctum'])->group(function () {
     Route::get('dashboard',      [DashboardController::class, 'index']);
     Route::get('plano/limites',  [PlanController::class, 'limites']);
     Route::get('notificacoes/ativas', [\App\Http\Controllers\NotificacaoController::class, 'ativas']);
+    // Contratação de serviços avulsos (oficina solicita)
+    Route::get('pacotes-disponiveis', [\App\Http\Controllers\SolicitacaoServicoController::class, 'pacotesDisponiveis']);
+    Route::get('solicitacoes',        [\App\Http\Controllers\SolicitacaoServicoController::class, 'index']);
+    Route::post('solicitacoes',       [\App\Http\Controllers\SolicitacaoServicoController::class, 'store']);
 });
 
 // ─── Clientes — leitura: todos; escrita: ADMIN, ATENDENTE ────────────────────
