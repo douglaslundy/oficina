@@ -167,7 +167,7 @@ export default function WhatsAppConfigPage() {
   if (loading) return <div style={{ padding: 40, color: 'var(--muted)' }}>Carregando...</div>
 
   return (
-    <div style={{ maxWidth: 680, color: 'var(--text)' }}>
+    <div style={{ maxWidth: 680, margin: '0 auto', color: 'var(--text)' }}>
       <div style={{ marginBottom: 28 }}>
         <h1 className="font-display" style={{ fontSize: 28, fontWeight: 800, margin: 0 }}>
           Configuração WhatsApp

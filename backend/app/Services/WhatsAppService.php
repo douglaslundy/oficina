@@ -60,14 +60,62 @@ class WhatsAppService
     public function qrCode(): ?string
     {
         try {
+            // A Evolution não cria a instância automaticamente em /connect.
+            // Se ela ainda não existe, criamos agora — o /create já devolve o QR.
+            $qrCriacao = $this->garantirInstancia();
+            if ($qrCriacao !== null) {
+                return $qrCriacao;
+            }
+
+            // Instância já existia: solicita o connect para obter o QR atual.
             $resp = $this->http()->get("/instance/connect/{$this->instance()}");
             if ($resp->successful()) {
                 return $resp->json('base64') ?? $resp->json('qrcode.base64');
             }
+            Log::warning("WhatsApp connect falhou [{$this->instance()}]: HTTP {$resp->status()} " . $resp->body());
         } catch (\Throwable $e) {
             Log::warning('WhatsApp QR code failed: ' . $e->getMessage());
         }
         return null;
+    }
+
+    /**
+     * Garante que a instância exista na Evolution API.
+     *
+     * @return string|null  QR code em base64 se a instância foi criada agora;
+     *                      null se ela já existia (use /instance/connect nesse caso).
+     */
+    private function garantirInstancia(): ?string
+    {
+        $instance = $this->instance();
+
+        // Já existe? connectionState responde 2xx para instâncias existentes.
+        $estado = $this->http()->get("/instance/connectionState/{$instance}");
+        if ($estado->successful()) {
+            return null;
+        }
+
+        // Cria a instância. Na Evolution v2, qrcode:true retorna o base64 na resposta.
+        $resp = $this->http()->post('/instance/create', [
+            'instanceName' => $instance,
+            'integration'  => 'WHATSAPP-BAILEYS',
+            'qrcode'       => true,
+        ]);
+
+        if (!$resp->successful()) {
+            Log::warning("WhatsApp create instance falhou [{$instance}]: HTTP {$resp->status()} " . $resp->body());
+            return null;
+        }
+
+        // Persiste o token (hash) gerado pela Evolution para esta instância.
+        $hash = $resp->json('hash');
+        $token = is_array($hash) ? ($hash['apikey'] ?? null) : $hash;
+        if ($token && ($cfg = $this->config())) {
+            $cfg->instance_token = $token;
+            $cfg->save();
+        }
+
+        return $resp->json('qrcode.base64') ?? $resp->json('base64');
     }
 
     public function testarConexao(string $url, string $apiKey, string $instance): array
@@ -82,6 +130,16 @@ class WhatsAppService
                 $state = $resp->json('instance.state') ?? 'open';
                 return ['ok' => true, 'status' => $state];
             }
+
+            // Credenciais válidas, porém a instância ainda não foi criada na Evolution.
+            if ($resp->status() === 404 && str_contains($resp->body(), 'does not exist')) {
+                return [
+                    'ok'     => false,
+                    'status' => 'nao_criada',
+                    'error'  => 'Conexão com a Evolution OK, mas a instância "' . $instance . '" ainda não existe. Clique em "Escanear QR Code" para criá-la.',
+                ];
+            }
+
             return ['ok' => false, 'error' => "HTTP {$resp->status()}: " . $resp->body()];
         } catch (\Throwable $e) {
             return ['ok' => false, 'error' => $e->getMessage()];

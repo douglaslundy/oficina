@@ -233,7 +233,7 @@ export default function SaasConfigPage() {
   }
 
   return (
-    <div style={{ padding: '28px 32px', maxWidth: 720, color: 'var(--text)' }}>
+    <div style={{ padding: '28px 32px', maxWidth: 720, margin: '0 auto', color: 'var(--text)' }}>
       {toast && <Toast msg={toast.msg} type={toast.type} onClose={() => setToast(null)} />}
 
       <div style={{ marginBottom: 24 }}>

@@ -78,8 +78,19 @@ export function Sidebar({ clientesDevedores = 0, produtosAlerta = 0, isMobile = 
 
       {/* Nav */}
       <nav style={{ flex: 1, padding: '4px 0', overflowY: 'auto', minHeight: 0 }}>
-        {itemsWithBadges.map(item => {
-          const active = pathname === item.href || (item.href !== '/' && pathname.startsWith(item.href))
+        {(() => {
+          // Determina o item ativo: dentre todos os hrefs que casam com a rota
+          // atual, vence o mais específico (href mais longo). Evita que um item
+          // pai (ex.: /configuracoes) acenda junto com o filho (/configuracoes/whatsapp).
+          const matches = (href: string) =>
+            href === '/' ? pathname === '/' : (pathname === href || pathname.startsWith(href + '/'))
+          const activeHref = itemsWithBadges
+            .map(i => i.href)
+            .filter(matches)
+            .sort((a, b) => b.length - a.length)[0]
+
+          return itemsWithBadges.map(item => {
+          const active = item.href === activeHref
           return (
             <Link key={item.href} href={item.href} onClick={isMobile ? onClose : undefined}
               style={{
@@ -104,7 +115,8 @@ export function Sidebar({ clientesDevedores = 0, produtosAlerta = 0, isMobile = 
               )}
             </Link>
           )
-        })}
+          })
+        })()}
       </nav>
 
       {/* User pill */}
