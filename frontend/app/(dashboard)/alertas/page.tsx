@@ -57,6 +57,69 @@ function CanaisSelector({ canais, setCanais, ent }: {
   )
 }
 
+// Máscara de telefone brasileiro: (XX) XXXXX-XXXX
+function formatTel(v: string): string {
+  const d = v.replace(/\D/g, '').slice(0, 11)
+  if (d.length <= 2) return d
+  if (d.length <= 6) return `(${d.slice(0, 2)}) ${d.slice(2)}`
+  if (d.length <= 10) return `(${d.slice(0, 2)}) ${d.slice(2, 6)}-${d.slice(6)}`
+  return `(${d.slice(0, 2)}) ${d.slice(2, 7)}-${d.slice(7)}`
+}
+
+// Input com máscara + botão para adicionar telefones (chips) ao alerta.
+function TelefonesInput({ telefones, setTelefones }: {
+  telefones: string[]
+  setTelefones: (t: string[]) => void
+}) {
+  const [input, setInput] = useState('')
+
+  function adicionar() {
+    const d = input.replace(/\D/g, '')
+    if (d.length < 10 || d.length > 11) {
+      toast('Telefone inválido. Informe DDD + número.', 'danger'); return
+    }
+    if (!telefones.includes(d)) setTelefones([...telefones, d])
+    setInput('')
+  }
+
+  const inp: React.CSSProperties = {
+    flex: 1, padding: '9px 12px', borderRadius: 7, background: 'var(--bg)',
+    border: '1px solid var(--border)', color: 'var(--text)', fontSize: 14, outline: 'none', boxSizing: 'border-box',
+  }
+
+  return (
+    <div>
+      <label style={{ display: 'block', fontSize: 12, fontWeight: 600, color: 'var(--muted)', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: 6 }}>
+        Telefones (WhatsApp)
+      </label>
+      <div style={{ display: 'flex', gap: 8 }}>
+        <input
+          value={formatTel(input)}
+          onChange={e => setInput(e.target.value)}
+          onKeyDown={e => { if (e.key === 'Enter') { e.preventDefault(); adicionar() } }}
+          placeholder="(11) 99999-8888"
+          style={inp}
+        />
+        <button type="button" onClick={adicionar}
+          style={{ padding: '0 16px', borderRadius: 7, background: 'var(--accent)', color: '#000', border: 'none', fontSize: 13, fontWeight: 700, cursor: 'pointer', whiteSpace: 'nowrap' }}>
+          + Adicionar
+        </button>
+      </div>
+      {telefones.length > 0 && (
+        <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, marginTop: 8 }}>
+          {telefones.map(t => (
+            <span key={t} style={{ display: 'inline-flex', alignItems: 'center', gap: 6, background: 'var(--bg)', border: '1px solid var(--border)', borderRadius: 999, padding: '4px 10px', fontSize: 13 }}>
+              📱 {formatTel(t)}
+              <button type="button" onClick={() => setTelefones(telefones.filter(x => x !== t))}
+                style={{ background: 'none', border: 'none', color: 'var(--danger)', cursor: 'pointer', fontSize: 15, lineHeight: 1, padding: 0 }}>×</button>
+            </span>
+          ))}
+        </div>
+      )}
+    </div>
+  )
+}
+
 const TIPO_LABELS: Record<string, string> = {
   ESTOQUE_BAIXO:          '📦 Estoque Baixo',
   ESTOQUE_CRITICO:        '🚨 Estoque Crítico/Zerado',
@@ -107,11 +170,13 @@ interface EditModalProps {
 function EditModal({ alerta, ent, onClose, onSaved }: EditModalProps) {
   const [form, setForm] = useState({
     template_mensagem: alerta.template_mensagem ?? '',
-    destinatarios:     (alerta.destinatarios ?? []).join('\n'),
     emails:            (alerta.emails ?? []).join('\n'),
     enviar_cliente:    alerta.enviar_cliente,
     enviar_mecanico:   alerta.enviar_mecanico,
   })
+  const [telefones, setTelefones] = useState<string[]>(
+    (alerta.destinatarios ?? []).map(t => t.replace(/\D/g, '')).filter(Boolean)
+  )
   const [canais, setCanais] = useState({
     whatsapp: (alerta.canais ?? ['WHATSAPP']).includes('WHATSAPP'),
     email:    (alerta.canais ?? []).includes('EMAIL'),
@@ -128,11 +193,10 @@ function EditModal({ alerta, ent, onClose, onSaved }: EditModalProps) {
     }
     setSaving(true)
     try {
-      const dests  = form.destinatarios.split('\n').map(s => s.trim()).filter(Boolean)
       const emails = form.emails.split('\n').map(s => s.trim()).filter(Boolean)
       await api.put(`/alertas/${alerta.id}`, {
         template_mensagem: form.template_mensagem,
-        destinatarios:     dests,
+        destinatarios:     telefones,
         emails,
         canais:            canaisArr,
         enviar_cliente:    form.enviar_cliente,
@@ -185,19 +249,7 @@ function EditModal({ alerta, ent, onClose, onSaved }: EditModalProps) {
             )}
           </div>
 
-          <div>
-            <label style={{ display: 'block', fontSize: 12, fontWeight: 600, color: 'var(--muted)', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: 6 }}>
-              Destinatários (um número por linha, com DDD)
-            </label>
-            <textarea
-              value={form.destinatarios}
-              onChange={e => setForm(f => ({ ...f, destinatarios: e.target.value }))}
-              rows={3}
-              style={{ ...iStyle, resize: 'vertical' as const }}
-              placeholder="35984000000&#10;35999887766"
-            />
-            <p style={{ fontSize: 11, color: 'var(--muted)', marginTop: 4 }}>Apenas números, com DDD. Ex: 35984000000</p>
-          </div>
+          <TelefonesInput telefones={telefones} setTelefones={setTelefones} />
 
           <CanaisSelector canais={canais} setCanais={setCanais} ent={ent} />
 
@@ -252,11 +304,11 @@ function CreateModal({ ent, onClose, onSaved }: CreateModalProps) {
     tipo:              TIPOS_CUSTOM[0],
     nome:              '',
     template_mensagem: '',
-    destinatarios:     '',
     emails:            '',
     enviar_cliente:    false,
     enviar_mecanico:   false,
   })
+  const [telefones, setTelefones] = useState<string[]>([])
   // Pré-seleciona o primeiro canal disponível no plano.
   const [canais, setCanais] = useState({ whatsapp: ent.whatsapp, email: ent.email && !ent.whatsapp })
   const [saving, setSaving] = useState(false)
@@ -281,7 +333,7 @@ function CreateModal({ ent, onClose, onSaved }: CreateModalProps) {
         enviar_cliente:    form.enviar_cliente,
         enviar_mecanico:   form.enviar_mecanico,
         canais:            canaisArr,
-        destinatarios:     form.destinatarios.split('\n').map(s => s.trim()).filter(Boolean),
+        destinatarios:     telefones,
         emails:            form.emails.split('\n').map(s => s.trim()).filter(Boolean),
       })
       toast('Alerta criado!', 'success')
@@ -329,11 +381,7 @@ function CreateModal({ ent, onClose, onSaved }: CreateModalProps) {
               </div>
             )}
           </div>
-          <div>
-            <label style={{ display: 'block', fontSize: 12, fontWeight: 600, color: 'var(--muted)', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: 6 }}>Telefones (um por linha, com DDD)</label>
-            <textarea value={form.destinatarios} onChange={e => setForm(f => ({ ...f, destinatarios: e.target.value }))} rows={2}
-              style={{ ...iStyle, resize: 'vertical' as const }} placeholder="35984000000" />
-          </div>
+          <TelefonesInput telefones={telefones} setTelefones={setTelefones} />
 
           <CanaisSelector canais={canais} setCanais={setCanais} ent={ent} />
 

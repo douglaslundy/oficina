@@ -33,7 +33,7 @@ services:
     build:
       context: ./backend
       dockerfile: Dockerfile.prod
-    environment:
+    environment: &backend-env
       APP_NAME: MecânicaPro
       APP_ENV: production
       APP_DEBUG: "false"
@@ -69,6 +69,22 @@ services:
       timeout: 5s
       retries: 12
       start_period: 60s
+
+  # Worker de filas — processa alertas WhatsApp/e-mail, orçamento, etc.
+  worker:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile.prod
+    command: php artisan queue:work redis --queue=whatsapp,default --tries=3 --sleep=3 --timeout=120 --backoff=30
+    environment: *backend-env
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    networks:
+      - mecanicapro_net
+    restart: unless-stopped
 
   frontend:
     build:
