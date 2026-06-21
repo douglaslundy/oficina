@@ -120,4 +120,43 @@ class WhatsAppServiceTest extends TestCase
         $this->assertArrayHasKey('error', $r);
         $this->assertStringContainsString('cURL error 7', $r['error']);
     }
+
+    public function test_enviar_teste_normaliza_numero_e_envia(): void
+    {
+        Http::fake([
+            '*/message/sendText/*' => Http::response(['key' => ['id' => 'ABC']], 201),
+        ]);
+
+        $r = $this->service->enviarTeste('11999998888');
+
+        $this->assertTrue($r['ok']);
+        // Deve prefixar 55 (DDI Brasil) no número
+        Http::assertSent(fn ($req) => str_contains($req->url(), '/message/sendText/')
+            && $req['number'] === '5511999998888');
+    }
+
+    public function test_enviar_teste_retorna_erro_quando_evolution_falha(): void
+    {
+        Http::fake([
+            '*/message/sendText/*' => Http::response(['message' => 'not connected'], 400),
+        ]);
+
+        $r = $this->service->enviarTeste('11999998888');
+
+        $this->assertFalse($r['ok']);
+        $this->assertArrayHasKey('error', $r);
+    }
+
+    public function test_desconectar_chama_logout(): void
+    {
+        Http::fake([
+            '*/instance/logout/*' => Http::response(['status' => 'SUCCESS'], 200),
+        ]);
+
+        $r = $this->service->desconectar();
+
+        $this->assertTrue($r['ok']);
+        Http::assertSent(fn ($req) => str_contains($req->url(), '/instance/logout/')
+            && $req->method() === 'DELETE');
+    }
 }

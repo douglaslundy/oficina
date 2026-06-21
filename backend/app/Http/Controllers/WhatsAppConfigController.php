@@ -100,4 +100,20 @@ class WhatsAppConfigController extends Controller
         }
         return response()->json(['qrcode' => $r['qrcode']]);
     }
+
+    public function desconectar(): JsonResponse
+    {
+        $r = $this->whatsApp->desconectar();
+        return response()->json($r, $r['ok'] ? 200 : 422);
+    }
+
+    public function enviarTeste(Request $request): JsonResponse
+    {
+        $validated = $request->validate([
+            'telefone' => ['required', 'string', 'min:8', 'max:20'],
+        ]);
+
+        $r = $this->whatsApp->enviarTeste($validated['telefone']);
+        return response()->json($r, $r['ok'] ? 200 : 422);
+    }
 }

@@ -71,9 +71,12 @@ export default function WhatsAppConfigPage() {
   const [loading, setLoading]           = useState(true)
   const [saving, setSaving]             = useState(false)
   const [testing, setTesting]           = useState(false)
+  const [disconnecting, setDisconnecting] = useState(false)
   const [status, setStatus]             = useState<InstanceStatus>({ status: 'unknown', number: null })
   const [qrCode, setQrCode]             = useState<string | null>(null)
   const [showQr, setShowQr]             = useState(false)
+  const [testPhone, setTestPhone]       = useState('')
+  const [sendingTest, setSendingTest]   = useState(false)
   const pollRef = useRef<ReturnType<typeof setInterval> | null>(null)
 
   const [form, setForm] = useState({
@@ -165,6 +168,36 @@ export default function WhatsAppConfigPage() {
     }
   }
 
+  async function desconectar() {
+    if (!window.confirm('Desconectar a sessão do WhatsApp? Será necessário escanear o QR code novamente para reconectar.')) return
+    setDisconnecting(true)
+    try {
+      await api.post('/whatsapp/desconectar', {})
+      toast('Sessão desconectada.', 'success')
+      setStatus({ status: 'close', number: null })
+      fetchStatus()
+    } catch (e: unknown) {
+      const msg = (e as { response?: { data?: { error?: string } } })?.response?.data?.error
+      toast(msg ?? 'Erro ao desconectar.', 'danger')
+    } finally { setDisconnecting(false) }
+  }
+
+  async function enviarTeste() {
+    const numero = testPhone.replace(/\D/g, '')
+    if (numero.length < 10) {
+      toast('Informe um número válido com DDD (ex: 11999998888).', 'danger')
+      return
+    }
+    setSendingTest(true)
+    try {
+      await api.post('/whatsapp/enviar-teste', { telefone: testPhone })
+      toast('Mensagem de teste enviada! Verifique o WhatsApp do número.', 'success')
+    } catch (e: unknown) {
+      const msg = (e as { response?: { data?: { error?: string } } })?.response?.data?.error
+      toast(msg ?? 'Erro ao enviar a mensagem de teste.', 'danger')
+    } finally { setSendingTest(false) }
+  }
+
   if (loading) return <div style={{ padding: 40, color: 'var(--muted)' }}>Carregando...</div>
 
   return (
@@ -197,6 +230,12 @@ export default function WhatsAppConfigPage() {
             <button onClick={verQrCode}
               style={{ padding: '8px 16px', borderRadius: 7, background: 'var(--accent)', color: '#000', border: 'none', fontSize: 13, fontWeight: 700, cursor: 'pointer' }}>
               📷 Escanear QR Code
+            </button>
+          )}
+          {status.status === 'open' && (
+            <button onClick={desconectar} disabled={disconnecting}
+              style={{ padding: '8px 16px', borderRadius: 7, background: 'transparent', border: '1px solid var(--danger)', color: 'var(--danger)', fontSize: 13, fontWeight: 700, cursor: disconnecting ? 'not-allowed' : 'pointer' }}>
+              {disconnecting ? '⟳ Desconectando...' : '⏻ Desconectar'}
             </button>
           )}
           <button onClick={fetchStatus}
@@ -278,6 +317,42 @@ export default function WhatsAppConfigPage() {
             <button onClick={salvar} disabled={saving}
               style={{ padding: '9px 24px', borderRadius: 7, background: saving ? 'var(--border)' : 'var(--accent)', color: saving ? 'var(--muted)' : '#000', border: 'none', fontSize: 14, fontWeight: 700, cursor: saving ? 'not-allowed' : 'pointer', fontFamily: "'Barlow Condensed', sans-serif" }}>
               {saving ? '⟳ Salvando...' : 'Salvar Configuração'}
+            </button>
+          </div>
+        </div>
+      </div>
+
+      {/* Enviar mensagem de teste */}
+      <div style={{ background: 'var(--card)', border: '1px solid var(--border)', borderRadius: 10, overflow: 'hidden', marginTop: 20 }}>
+        <div style={{ padding: '14px 20px', borderBottom: '1px solid var(--border)' }}>
+          <div style={{ fontSize: 15, fontWeight: 700 }}>Enviar mensagem de teste</div>
+          <div style={{ fontSize: 13, color: 'var(--muted)', marginTop: 2 }}>
+            Informe um número com DDD para confirmar que o envio está funcionando
+          </div>
+        </div>
+        <div style={{ padding: 24 }}>
+          {status.status !== 'open' && (
+            <div style={{ marginBottom: 14, padding: '10px 14px', background: 'rgba(245,166,35,.08)', border: '1px solid rgba(245,166,35,.25)', borderRadius: 7, fontSize: 13, color: 'var(--accent)' }}>
+              ⚠️ O WhatsApp precisa estar conectado para enviar mensagens. Escaneie o QR code primeiro.
+            </div>
+          )}
+          <div style={{ display: 'flex', gap: 12, alignItems: 'flex-end' }}>
+            <div style={{ flex: 1 }}>
+              <label style={lStyle}>Número do WhatsApp (com DDD)</label>
+              <input
+                value={testPhone}
+                onChange={e => setTestPhone(e.target.value)}
+                onKeyDown={e => { if (e.key === 'Enter') enviarTeste() }}
+                placeholder="11999998888"
+                style={iStyle}
+              />
+            </div>
+            <button onClick={enviarTeste} disabled={sendingTest || status.status !== 'open'}
+              style={{ padding: '9px 22px', borderRadius: 7, border: 'none', whiteSpace: 'nowrap',
+                background: (sendingTest || status.status !== 'open') ? 'var(--border)' : 'var(--success)',
+                color: (sendingTest || status.status !== 'open') ? 'var(--muted)' : '#fff',
+                fontSize: 14, fontWeight: 700, cursor: (sendingTest || status.status !== 'open') ? 'not-allowed' : 'pointer' }}>
+              {sendingTest ? '⟳ Enviando...' : '📨 Enviar teste'}
             </button>
           </div>
         </div>

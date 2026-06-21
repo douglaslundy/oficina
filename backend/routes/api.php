@@ -199,6 +199,8 @@ Route::middleware(['tenant', 'auth:sanctum', 'role:ADMIN'])->group(function () {
     Route::post('whatsapp/testar',  [WhatsAppConfigController::class, 'testarConexao']);
     Route::get('whatsapp/status',   [WhatsAppConfigController::class, 'statusInstancia']);
     Route::get('whatsapp/qrcode',   [WhatsAppConfigController::class, 'qrCode']);
+    Route::post('whatsapp/desconectar',   [WhatsAppConfigController::class, 'desconectar']);
+    Route::post('whatsapp/enviar-teste',  [WhatsAppConfigController::class, 'enviarTeste']);
 });
 
 // ─── Alertas WhatsApp — ADMIN e ATENDENTE ────────────────────────────────────

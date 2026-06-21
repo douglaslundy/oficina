@@ -163,6 +163,61 @@ class WhatsAppService
     {
         if (!$this->estaAtivo()) return false;
 
+        return $this->dispararMensagem($telefone, $mensagem, $tipo)['ok'];
+    }
+
+    /**
+     * Envia uma mensagem de teste para validar a integração.
+     * Não exige o flag "ativo" (este controla apenas os alertas automáticos);
+     * basta a configuração existir e a instância estar conectada.
+     *
+     * @return array{ok: bool, error?: string}
+     */
+    public function enviarTeste(string $telefone): array
+    {
+        $cfg = $this->config();
+        if (!$cfg || empty($cfg->getRawOriginal('evolution_api_key'))) {
+            return ['ok' => false, 'error' => 'Configuração do WhatsApp não encontrada. Salve a configuração primeiro.'];
+        }
+
+        $mensagem = "✅ *MecânicaPro*\n\nMensagem de teste. Se você recebeu isto, a integração com o WhatsApp está funcionando! 🚀";
+
+        return $this->dispararMensagem($telefone, $mensagem, 'TESTE');
+    }
+
+    /**
+     * Desconecta (logout) a sessão atual do WhatsApp, mantendo a instância.
+     * Após o logout o status volta para "close" e o QR code fica disponível
+     * novamente para reconectar.
+     *
+     * @return array{ok: bool, error?: string}
+     */
+    public function desconectar(): array
+    {
+        if (!$this->config()) {
+            return ['ok' => false, 'error' => 'Configuração do WhatsApp não encontrada.'];
+        }
+
+        try {
+            $resp = $this->http()->delete("/instance/logout/{$this->instance()}");
+            if ($resp->successful()) {
+                return ['ok' => true];
+            }
+            Log::warning("WhatsApp logout falhou [{$this->instance()}]: HTTP {$resp->status()} " . $resp->body());
+            return ['ok' => false, 'error' => "Evolution retornou HTTP {$resp->status()}: " . substr($resp->body(), 0, 200)];
+        } catch (\Throwable $e) {
+            Log::warning('WhatsApp logout failed: ' . $e->getMessage());
+            return ['ok' => false, 'error' => 'Falha ao desconectar: ' . $e->getMessage()];
+        }
+    }
+
+    /**
+     * Dispara uma mensagem de texto pela Evolution e registra no log de alertas.
+     *
+     * @return array{ok: bool, error?: string}
+     */
+    private function dispararMensagem(string $telefone, string $mensagem, string $tipo): array
+    {
         $numero = preg_replace('/\D/', '', $telefone);
         if (!str_starts_with($numero, '55')) {
             $numero = '55' . $numero;
@@ -201,6 +256,6 @@ class WhatsAppService
             ]);
         }
 
-        return $sucesso;
+        return $sucesso ? ['ok' => true] : ['ok' => false, 'error' => $erro ?? 'Falha ao enviar a mensagem.'];
     }
 }
