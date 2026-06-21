@@ -4,6 +4,7 @@ import { Sidebar } from '@/components/layout/Sidebar'
 import { Topbar } from '@/components/layout/Topbar'
 import { AlertBanner } from '@/components/layout/AlertBanner'
 import { ToastContainer } from '@/components/ui/Toast'
+import { NotificacaoModal } from '@/components/NotificacaoModal'
 import { useEstoqueAlerts } from '@/hooks/useEstoqueAlerts'
 import { useAlertBanner } from '@/hooks/useAlertBanner'
 
@@ -52,6 +53,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
         </main>
       </div>
       <ToastContainer />
+      <NotificacaoModal />
     </div>
   )
 }

@@ -6,6 +6,7 @@ const NAV_ITEMS = [
   { label: 'Oficinas', href: '/saas-admin/oficinas' },
   { label: 'Planos', href: '/saas-admin/planos' },
   { label: 'Cobranças', href: '/saas-admin/cobrancas' },
+  { label: 'Notificações', href: '/saas-admin/notificacoes' },
   { label: 'Configurações', href: '/saas-admin/configuracoes' },
 ] as const
 

@@ -84,6 +84,12 @@ Route::prefix('saas')->group(function () {
         Route::put('config/mercadopago',         [SaasConfigController::class, 'updateMercadoPago']);
         Route::put('config/smtp',                [SaasConfigController::class, 'updateSmtp']);
         Route::post('config/smtp/testar',        [SaasConfigController::class, 'testarSmtp']);
+
+        // Notificações (avisos) — CRUD do admin SaaS
+        Route::get('notificacoes',          [\App\Http\Controllers\SaaS\NotificacaoController::class, 'index']);
+        Route::post('notificacoes',         [\App\Http\Controllers\SaaS\NotificacaoController::class, 'store']);
+        Route::put('notificacoes/{id}',     [\App\Http\Controllers\SaaS\NotificacaoController::class, 'update']);
+        Route::delete('notificacoes/{id}',  [\App\Http\Controllers\SaaS\NotificacaoController::class, 'destroy']);
     });
 });
 
@@ -104,6 +110,7 @@ Route::middleware(['tenant', 'auth:sanctum'])->prefix('auth')->group(function ()
 Route::middleware(['tenant', 'auth:sanctum'])->group(function () {
     Route::get('dashboard',      [DashboardController::class, 'index']);
     Route::get('plano/limites',  [PlanController::class, 'limites']);
+    Route::get('notificacoes/ativas', [\App\Http\Controllers\NotificacaoController::class, 'ativas']);
 });
 
 // ─── Clientes — leitura: todos; escrita: ADMIN, ATENDENTE ────────────────────
