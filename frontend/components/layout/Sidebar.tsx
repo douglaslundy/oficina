@@ -3,12 +3,24 @@ import Link from 'next/link'
 import { usePathname } from 'next/navigation'
 import { useAuth, AuthUser } from '@/hooks/useAuth'
 import { useState, useEffect } from 'react'
+import api from '@/lib/api'
+
+// Recursos opcionais liberados por plano. Item com `gate` só aparece se o
+// plano atual liberar o recurso correspondente.
+type Gate = 'alertas' | 'whatsapp'
 
 interface NavItem {
   href: string
   label: string
   icon: string
   badge?: number
+  gate?: Gate
+}
+
+interface Entitlements {
+  alerta_whatsapp: boolean
+  alerta_email: boolean
+  orcamento: boolean
 }
 
 const NAV_ITEMS: NavItem[] = [
@@ -23,14 +35,20 @@ const NAV_ITEMS: NavItem[] = [
   { href: '/fiscal/emitir',    label: 'Emitir NF',         icon: '🧾' },
   { href: '/fiscal/historico', label: 'Histórico NF',      icon: '📋' },
   { href: '/relatorios',            label: 'Relatórios',        icon: '📈' },
-  { href: '/alertas',               label: 'Alertas WhatsApp',  icon: '💬' },
-  { href: '/alertas/logs',          label: 'Histórico Alertas', icon: '📜' },
+  { href: '/alertas',               label: 'Alertas',           icon: '💬', gate: 'alertas' },
+  { href: '/alertas/logs',          label: 'Histórico Alertas', icon: '📜', gate: 'alertas' },
   { href: '/usuarios',              label: 'Usuários',          icon: '👤' },
   { href: '/empresa',               label: 'Empresa',           icon: '🏢' },
   { href: '/auditoria',             label: 'Auditoria',         icon: '🔍' },
   { href: '/configuracoes',         label: 'Configurações',     icon: '⚙️' },
-  { href: '/configuracoes/whatsapp',label: 'Config WhatsApp',   icon: '📱' },
+  { href: '/configuracoes/whatsapp',label: 'Config WhatsApp',   icon: '📱', gate: 'whatsapp' },
 ]
+
+function gateLiberado(gate: Gate, ent: Entitlements): boolean {
+  if (gate === 'alertas')  return ent.alerta_whatsapp || ent.alerta_email
+  if (gate === 'whatsapp') return ent.alerta_whatsapp || ent.orcamento
+  return true
+}
 
 interface SidebarProps {
   clientesDevedores?: number
@@ -44,18 +62,29 @@ export function Sidebar({ clientesDevedores = 0, produtosAlerta = 0, isMobile = 
   const pathname = usePathname()
   const { logout, getUser } = useAuth()
   const [user, setUser] = useState<AuthUser | null>(null)
+  const [ent, setEnt] = useState<Entitlements | null>(null)
 
   useEffect(() => {
     setUser(getUser())
+    api.get<{ plano: Partial<Entitlements> | null }>('/plano/limites')
+      .then(r => setEnt({
+        alerta_whatsapp: !!r.data.plano?.alerta_whatsapp,
+        alerta_email:    !!r.data.plano?.alerta_email,
+        orcamento:       !!r.data.plano?.orcamento,
+      }))
+      .catch(() => setEnt({ alerta_whatsapp: false, alerta_email: false, orcamento: false }))
   }, [])
 
-  const itemsWithBadges = NAV_ITEMS.map(item => {
-    if (item.href === '/clientes' && clientesDevedores > 0)
-      return { ...item, badge: clientesDevedores }
-    if (item.href === '/produtos' && produtosAlerta > 0)
-      return { ...item, badge: produtosAlerta }
-    return item
-  })
+  const itemsWithBadges = NAV_ITEMS
+    // Esconde itens de recursos não liberados no plano (enquanto carrega, oculta gated).
+    .filter(item => !item.gate || (ent ? gateLiberado(item.gate, ent) : false))
+    .map(item => {
+      if (item.href === '/clientes' && clientesDevedores > 0)
+        return { ...item, badge: clientesDevedores }
+      if (item.href === '/produtos' && produtosAlerta > 0)
+        return { ...item, badge: produtosAlerta }
+      return item
+    })
 
   return (
     <aside style={{

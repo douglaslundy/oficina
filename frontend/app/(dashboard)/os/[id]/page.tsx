@@ -72,6 +72,7 @@ export default function OSDetailPage() {
 
   const [podeOrcar, setPodeOrcar] = useState(false)
   const [enviandoOrc, setEnviandoOrc] = useState(false)
+  const [confirmOrc, setConfirmOrc] = useState(false)
 
   useEffect(() => {
     api.get('/plano/limites')
@@ -80,7 +81,6 @@ export default function OSDetailPage() {
   }, [])
 
   async function enviarOrcamento() {
-    if (!confirm('Enviar este orçamento ao cliente para aprovação? Os serviços ficarão pendentes de aprovação.')) return
     setEnviandoOrc(true)
     try {
       const r = await api.post<{ message: string; link: string }>(`/os/${id}/orcamento/enviar`, {})
@@ -88,6 +88,7 @@ export default function OSDetailPage() {
       if (r.data.link) {
         try { await navigator.clipboard.writeText(r.data.link) } catch { /* ignore */ }
       }
+      setConfirmOrc(false)
       fetchOs()
     } catch (e: unknown) {
       const msg = (e as { response?: { data?: { message?: string } } })?.response?.data?.message
@@ -157,6 +158,30 @@ export default function OSDetailPage() {
 
   return (
     <div style={{ maxWidth: 900, margin: '0 auto' }}>
+      {confirmOrc && (
+        <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.65)', zIndex: 1000, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 24 }}>
+          <div style={{ background: 'var(--card)', border: '1px solid var(--border)', borderRadius: 14, padding: 28, width: 420, maxWidth: '100%' }}>
+            <div style={{ fontSize: 38, textAlign: 'center', marginBottom: 8 }}>📝</div>
+            <h3 className="font-display" style={{ fontSize: 20, fontWeight: 800, color: 'var(--text)', margin: 0, textAlign: 'center' }}>
+              Enviar orçamento ao cliente?
+            </h3>
+            <p style={{ color: 'var(--muted)', fontSize: 14, textAlign: 'center', margin: '10px 0 0', lineHeight: 1.5 }}>
+              O cliente receberá um link por WhatsApp e/ou e-mail para aprovar os serviços.
+              A OS ficará com status <b style={{ color: 'var(--info)' }}>ORÇAMENTO ENVIADO</b>.
+            </p>
+            <div style={{ display: 'flex', gap: 12, marginTop: 24, justifyContent: 'center' }}>
+              <button onClick={() => setConfirmOrc(false)} disabled={enviandoOrc}
+                style={{ padding: '9px 22px', borderRadius: 8, background: 'transparent', border: '1px solid var(--border)', color: 'var(--muted)', cursor: 'pointer', fontSize: 14 }}>
+                Cancelar
+              </button>
+              <button onClick={enviarOrcamento} disabled={enviandoOrc}
+                style={{ padding: '9px 24px', borderRadius: 8, background: 'var(--accent)', border: 'none', color: '#000', fontSize: 14, fontWeight: 700, cursor: enviandoOrc ? 'not-allowed' : 'pointer', fontFamily: "'Barlow Condensed', sans-serif" }}>
+                {enviandoOrc ? '⟳ Enviando...' : 'Confirmar envio'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
       <div style={{ display: 'flex', alignItems: 'center', gap: 16, marginBottom: 24, flexWrap: 'wrap' }}>
         <button onClick={() => router.back()}
           style={{ background: 'none', border: 'none', color: 'var(--muted)', cursor: 'pointer', fontSize: 14 }}>
@@ -176,7 +201,7 @@ export default function OSDetailPage() {
           📄 PDF
         </button>
         {podeOrcar && os.status !== 'CANCELADA' && (
-          <button onClick={enviarOrcamento} disabled={enviandoOrc}
+          <button onClick={() => setConfirmOrc(true)} disabled={enviandoOrc}
             style={{ padding: '6px 14px', background: 'var(--accent)', border: 'none', color: '#000', borderRadius: 8, cursor: enviandoOrc ? 'not-allowed' : 'pointer', fontSize: 13, fontWeight: 700 }}>
             {enviandoOrc ? '⟳ Enviando...' : '📝 Enviar orçamento'}
           </button>

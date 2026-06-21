@@ -35,6 +35,14 @@ class LoginController extends Controller
             return response()->json(['message' => 'Usuário inativo. Contate o administrador.'], 403);
         }
 
+        // Oficina suspensa/cancelada/inadimplente — bloqueia o acesso com mensagem clara.
+        if ($usuario->oficina_id) {
+            $oficina = \App\Models\Oficina::find($usuario->oficina_id);
+            if ($oficina && in_array($oficina->status, ['SUSPENSA', 'CANCELADA', 'INADIMPLENTE'], true)) {
+                return response()->json(['message' => 'Serviços suspensos, contate seu administrador.'], 403);
+            }
+        }
+
         RateLimiter::clear($key);
         $usuario->update(['ultimo_acesso' => now()]);
 
