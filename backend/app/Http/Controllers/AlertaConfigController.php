@@ -18,7 +18,7 @@ class AlertaConfigController extends Controller
         $oficinaId = TenancyContext::get();
 
         // Garante que os pré-definidos existam
-        $this->dispatch->garantirAlertasPreDefinidos($oficina_id);
+        $this->dispatch->garantirAlertasPreDefinidos($oficinaId);
 
         $alertas = AlertaConfig::orderByRaw("pre_definido DESC, criado_em ASC")->get();
 
