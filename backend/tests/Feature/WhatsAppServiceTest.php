@@ -64,7 +64,7 @@ class WhatsAppServiceTest extends TestCase
 
         $qr = $this->service->qrCode();
 
-        $this->assertSame('data:image/png;base64,QRDATA', $qr);
+        $this->assertSame('data:image/png;base64,QRDATA', $qr['qrcode']);
 
         // Confirma que chamou o endpoint de criação
         Http::assertSent(fn ($req) => str_contains($req->url(), '/instance/create')
@@ -88,7 +88,7 @@ class WhatsAppServiceTest extends TestCase
 
         $qr = $this->service->qrCode();
 
-        $this->assertSame('data:image/png;base64,CONNECTQR', $qr);
+        $this->assertSame('data:image/png;base64,CONNECTQR', $qr['qrcode']);
         Http::assertNotSent(fn ($req) => str_contains($req->url(), '/instance/create'));
     }
 
@@ -105,5 +105,19 @@ class WhatsAppServiceTest extends TestCase
 
         $this->assertFalse($resultado['ok']);
         $this->assertSame('nao_criada', $resultado['status']);
+    }
+
+    public function test_qrcode_propaga_erro_de_conexao(): void
+    {
+        // Simula falha de conexão (ex.: URL inalcançável de dentro do container).
+        Http::fake(function () {
+            throw new \Illuminate\Http\Client\ConnectionException('cURL error 7: Failed to connect');
+        });
+
+        $r = $this->service->qrCode();
+
+        $this->assertNull($r['qrcode']);
+        $this->assertArrayHasKey('error', $r);
+        $this->assertStringContainsString('cURL error 7', $r['error']);
     }
 }

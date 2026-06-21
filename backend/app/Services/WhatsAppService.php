@@ -57,26 +57,39 @@ class WhatsAppService
         return ['status' => 'disconnected', 'number' => null];
     }
 
-    public function qrCode(): ?string
+    /**
+     * @return array{qrcode: string|null, error?: string}
+     */
+    public function qrCode(): array
     {
+        if (!$this->config()) {
+            return ['qrcode' => null, 'error' => 'Configuração do WhatsApp não encontrada. Salve a configuração primeiro.'];
+        }
+
         try {
             // A Evolution não cria a instância automaticamente em /connect.
             // Se ela ainda não existe, criamos agora — o /create já devolve o QR.
             $qrCriacao = $this->garantirInstancia();
             if ($qrCriacao !== null) {
-                return $qrCriacao;
+                return ['qrcode' => $qrCriacao];
             }
 
             // Instância já existia: solicita o connect para obter o QR atual.
             $resp = $this->http()->get("/instance/connect/{$this->instance()}");
             if ($resp->successful()) {
-                return $resp->json('base64') ?? $resp->json('qrcode.base64');
+                $qr = $resp->json('base64') ?? $resp->json('qrcode.base64');
+                if ($qr) {
+                    return ['qrcode' => $qr];
+                }
+                return ['qrcode' => null, 'error' => 'A Evolution não retornou QR code (a instância pode já estar conectada).'];
             }
+
             Log::warning("WhatsApp connect falhou [{$this->instance()}]: HTTP {$resp->status()} " . $resp->body());
+            return ['qrcode' => null, 'error' => "Evolution retornou HTTP {$resp->status()}: " . substr($resp->body(), 0, 200)];
         } catch (\Throwable $e) {
             Log::warning('WhatsApp QR code failed: ' . $e->getMessage());
+            return ['qrcode' => null, 'error' => 'Falha ao conectar na Evolution (' . $this->config()->getRawOriginal('evolution_url') . '): ' . $e->getMessage()];
         }
-        return null;
     }
 
     /**

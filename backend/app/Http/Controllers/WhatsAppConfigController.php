@@ -80,7 +80,9 @@ class WhatsAppConfigController extends Controller
             $validated['instance_name'],
         );
 
-        return response()->json($resultado, $resultado['ok'] ? 200 : 422);
+        // Sempre 200: o teste "rodou"; o resultado (ok/erro) vai no corpo para o
+        // frontend exibir a mensagem real em vez de um erro HTTP genérico.
+        return response()->json($resultado, 200);
     }
 
     public function statusInstancia(): JsonResponse
@@ -90,10 +92,12 @@ class WhatsAppConfigController extends Controller
 
     public function qrCode(): JsonResponse
     {
-        $qr = $this->whatsApp->qrCode();
-        if (!$qr) {
-            return response()->json(['message' => 'Não foi possível obter o QR code. Verifique a configuração.'], 422);
+        $r = $this->whatsApp->qrCode();
+        if (empty($r['qrcode'])) {
+            return response()->json([
+                'message' => $r['error'] ?? 'Não foi possível obter o QR code. Verifique a configuração.',
+            ], 422);
         }
-        return response()->json(['qrcode' => $qr]);
+        return response()->json(['qrcode' => $r['qrcode']]);
     }
 }

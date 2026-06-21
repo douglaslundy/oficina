@@ -77,7 +77,7 @@ export default function WhatsAppConfigPage() {
   const pollRef = useRef<ReturnType<typeof setInterval> | null>(null)
 
   const [form, setForm] = useState({
-    evolution_url:     'http://localhost:8081',
+    evolution_url:     'http://192.168.0.115:8081',
     evolution_api_key: '',
     instance_name:     'mecanicapro',
     instance_token:    '',
@@ -159,8 +159,9 @@ export default function WhatsAppConfigPage() {
       const r = await api.get<{ qrcode: string }>('/whatsapp/qrcode')
       setQrCode(r.data.qrcode)
       setShowQr(true)
-    } catch {
-      toast('Salve a configuração antes de gerar o QR code.', 'danger')
+    } catch (e: unknown) {
+      const msg = (e as { response?: { data?: { message?: string } } })?.response?.data?.message
+      toast(msg ?? 'Erro ao gerar o QR code.', 'danger')
     }
   }
 
