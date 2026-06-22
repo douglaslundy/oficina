@@ -52,6 +52,20 @@ class EntitlementService
         };
     }
 
+    /** Soma do valor adicional mensal dos grants avulsos ativos da oficina. */
+    public function valorAdicionalMensal(string $oficinaId): float
+    {
+        $hoje = now()->toDateString();
+
+        return (float) OficinaServico::where('oficina_id', $oficinaId)
+            ->where('ativo', true)
+            ->where('data_inicio', '<=', $hoje)
+            ->where(fn ($q) => $q->where('recorrente', true)
+                ->orWhereNull('data_fim')
+                ->orWhere('data_fim', '>=', $hoje))
+            ->sum('valor_adicional');
+    }
+
     public function grantAtivo(string $oficinaId, string $servico): ?OficinaServico
     {
         $hoje = now()->toDateString();

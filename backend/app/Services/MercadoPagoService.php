@@ -71,6 +71,20 @@ class MercadoPagoService
         return $response->successful();
     }
 
+    /** Atualiza o valor mensal da assinatura (preapproval). */
+    public function atualizarSubscription(string $subscriptionId, float $valor): array
+    {
+        $response = $this->http()->put("/preapproval/{$subscriptionId}", [
+            'auto_recurring' => [
+                'transaction_amount' => $valor,
+                'currency_id'        => 'BRL',
+            ],
+        ]);
+
+        $this->throwIfFailed($response, 'atualizar subscription');
+        return $response->json();
+    }
+
     public function buscarSubscription(string $subscriptionId): array
     {
         $response = $this->http()->get("/preapproval/{$subscriptionId}");

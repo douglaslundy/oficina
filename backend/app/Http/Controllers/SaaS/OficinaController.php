@@ -9,7 +9,10 @@ use App\Models\Oficina;
 use App\Models\OrdemServico;
 use App\Models\Usuario;
 use App\Services\AsaasService;
+use App\Services\EntitlementService;
+use App\Services\MercadoPagoService;
 use App\Services\TenantProvisionService;
+use App\Models\SaasConfig;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Carbon;
@@ -19,7 +22,55 @@ class OficinaController extends Controller
     public function __construct(
         private TenantProvisionService $provisionService,
         private AsaasService $asaas,
+        private MercadoPagoService $mercadoPago,
+        private EntitlementService $ent,
     ) {}
+
+    /** Composição da mensalidade efetiva (plano + serviços avulsos ativos). */
+    public function mensalidade(string $id): JsonResponse
+    {
+        $oficina = Oficina::with('plano')->findOrFail($id);
+        $planoValor = (float) ($oficina->plano?->preco_mensal ?? 0);
+        $adicional  = $this->ent->valorAdicionalMensal($id);
+        $gateway    = $oficina->gateway ?: (SaasConfig::get()->gateway_preferido ?? 'ASAAS');
+        $temAssinatura = $gateway === 'MERCADOPAGO'
+            ? !empty($oficina->mp_subscription_id)
+            : !empty($oficina->asaas_subscription_id);
+
+        return response()->json([
+            'plano_valor'    => round($planoValor, 2),
+            'adicional'      => round($adicional, 2),
+            'total'          => round($planoValor + $adicional, 2),
+            'gateway'        => $gateway,
+            'tem_assinatura' => $temAssinatura,
+        ]);
+    }
+
+    /** Atualiza o valor da assinatura no gateway para a mensalidade efetiva. */
+    public function sincronizarAssinatura(string $id): JsonResponse
+    {
+        $oficina = Oficina::with('plano')->findOrFail($id);
+        $total   = round((float) ($oficina->plano?->preco_mensal ?? 0) + $this->ent->valorAdicionalMensal($id), 2);
+        $gateway = $oficina->gateway ?: (SaasConfig::get()->gateway_preferido ?? 'ASAAS');
+
+        try {
+            if ($gateway === 'MERCADOPAGO') {
+                if (empty($oficina->mp_subscription_id)) {
+                    return response()->json(['message' => 'Oficina sem assinatura no Mercado Pago.'], 422);
+                }
+                $this->mercadoPago->atualizarSubscription($oficina->mp_subscription_id, $total);
+            } else {
+                if (empty($oficina->asaas_subscription_id)) {
+                    return response()->json(['message' => 'Oficina sem assinatura no Asaas.'], 422);
+                }
+                $this->asaas->atualizarSubscription($oficina->asaas_subscription_id, $total);
+            }
+        } catch (\Throwable $e) {
+            return response()->json(['message' => 'Falha ao atualizar a assinatura: ' . $e->getMessage()], 422);
+        }
+
+        return response()->json(['message' => 'Assinatura atualizada para R$ ' . number_format($total, 2, ',', '.') . '.']);
+    }
 
     public function index(Request $request): JsonResponse
     {

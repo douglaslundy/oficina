@@ -54,6 +54,18 @@ class AsaasService
         return $response->successful();
     }
 
+    /** Atualiza o valor mensal da assinatura. */
+    public function atualizarSubscription(string $subscriptionId, float $value): array
+    {
+        $response = Http::withHeaders(['access_token' => $this->apiKey])
+            ->put("{$this->baseUrl}/subscriptions/{$subscriptionId}", [
+                'value' => $value,
+            ]);
+
+        $this->throwIfFailed($response, 'atualizar subscription');
+        return $response->json();
+    }
+
     public function buscarSubscription(string $subscriptionId): array
     {
         $response = Http::withHeaders(['access_token' => $this->apiKey])

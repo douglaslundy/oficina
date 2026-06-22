@@ -46,10 +46,28 @@ export function ServicosAvulsosSection({ oficinaId }: { oficinaId: string }) {
   const [cperiodo, setCperiodo] = useState('30')
   const [saving, setSaving] = useState(false)
   const [msg, setMsg] = useState<string | null>(null)
+  const [mens, setMens] = useState<{ plano_valor: number; adicional: number; total: number; gateway: string; tem_assinatura: boolean } | null>(null)
+  const [sincronizando, setSincronizando] = useState(false)
+  const [okMsg, setOkMsg] = useState<string | null>(null)
+
+  const carregarMensalidade = useCallback(() => {
+    saasApi.get(`/saas/oficinas/${oficinaId}/mensalidade`).then(r => setMens(r.data)).catch(() => setMens(null))
+  }, [oficinaId])
 
   const carregar = useCallback(() => {
     saasApi.get<{ data: Grant[] }>(`/saas/oficinas/${oficinaId}/servicos`).then(r => setGrants(r.data.data ?? [])).catch(() => setGrants([]))
-  }, [oficinaId])
+    carregarMensalidade()
+  }, [oficinaId, carregarMensalidade])
+
+  async function sincronizar() {
+    setOkMsg(null); setMsg(null); setSincronizando(true)
+    try {
+      const r = await saasApi.post<{ message: string }>(`/saas/oficinas/${oficinaId}/sincronizar-assinatura`)
+      setOkMsg(r.data.message)
+    } catch (e: unknown) {
+      setMsg((e as { response?: { data?: { message?: string } } })?.response?.data?.message ?? 'Falha ao sincronizar.')
+    } finally { setSincronizando(false) }
+  }
 
   useEffect(() => {
     carregar()
@@ -129,6 +147,24 @@ export function ServicosAvulsosSection({ oficinaId }: { oficinaId: string }) {
           {saving ? '⟳...' : '+ Liberar'}
         </button>
       </div>
+
+      {/* Mensalidade efetiva + sincronização */}
+      {mens && (
+        <div style={{ background: 'var(--bg)', border: '1px solid var(--border)', borderRadius: 9, padding: '14px 16px', marginBottom: 18, display: 'flex', flexWrap: 'wrap', alignItems: 'center', justifyContent: 'space-between', gap: 12 }}>
+          <div style={{ fontSize: 13, color: 'var(--muted)' }}>
+            Mensalidade efetiva: <b style={{ color: 'var(--text)' }}>{brl(mens.plano_valor)}</b> (plano)
+            {mens.adicional > 0 && <> + <b style={{ color: 'var(--text)' }}>{brl(mens.adicional)}</b> (avulsos)</>}
+            {' = '}<b className="font-display" style={{ color: 'var(--accent)', fontSize: 16 }}>{brl(mens.total)}</b>
+            <div style={{ fontSize: 11, marginTop: 2 }}>Gateway: {mens.gateway}{!mens.tem_assinatura && ' · sem assinatura ativa'}</div>
+          </div>
+          <button onClick={sincronizar} disabled={sincronizando || !mens.tem_assinatura}
+            title={!mens.tem_assinatura ? 'Oficina sem assinatura no gateway' : ''}
+            style={{ padding: '8px 14px', borderRadius: 7, background: mens.tem_assinatura ? 'var(--info)' : 'var(--border)', border: 'none', color: '#fff', fontSize: 13, fontWeight: 700, cursor: (sincronizando || !mens.tem_assinatura) ? 'not-allowed' : 'pointer', whiteSpace: 'nowrap' }}>
+            {sincronizando ? '⟳ Sincronizando...' : '🔄 Atualizar valor da assinatura'}
+          </button>
+        </div>
+      )}
+      {okMsg && <div style={{ background: 'rgba(67,160,71,.12)', border: '1px solid var(--success)', color: 'var(--success)', borderRadius: 8, padding: '8px 12px', fontSize: 13, marginBottom: 14 }}>{okMsg}</div>}
 
       {/* Lista de grants */}
       {grants.length === 0 ? (
