@@ -22,11 +22,17 @@ const TIPO_LABELS: Record<string, string> = {
 interface LogEntry {
   id: string
   tipo: string
+  canal?: string | null
   destinatario: string
   mensagem: string
   sucesso: boolean
   erro: string | null
   enviado_em: string
+}
+
+const CANAL_LABEL: Record<string, string> = {
+  WHATSAPP: '💬 WhatsApp',
+  EMAIL: '✉️ E-mail',
 }
 
 interface PaginatedLogs {
@@ -50,6 +56,7 @@ export default function AlertaLogsPage() {
   const [filtroSucesso, setFiltroSucesso] = useState('')
   const [filtroDe, setFiltroDe]         = useState('')
   const [filtroAte, setFiltroAte]       = useState('')
+  const [selecionado, setSelecionado]   = useState<LogEntry | null>(null)
 
   const fetchLogs = useCallback(() => {
     setLoading(true)
@@ -75,6 +82,44 @@ export default function AlertaLogsPage() {
 
   return (
     <div>
+      {selecionado && (
+        <div onClick={() => setSelecionado(null)}
+          style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.65)', zIndex: 1000, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 20 }}>
+          <div onClick={e => e.stopPropagation()}
+            style={{ background: 'var(--card)', border: '1px solid var(--border)', borderRadius: 14, padding: 28, width: 520, maxWidth: '100%', maxHeight: '90vh', overflowY: 'auto' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 18 }}>
+              <h3 className="font-display" style={{ fontSize: 20, fontWeight: 800, color: 'var(--text)', margin: 0 }}>
+                {TIPO_LABELS[selecionado.tipo] ?? selecionado.tipo}
+              </h3>
+              <button onClick={() => setSelecionado(null)} style={{ background: 'none', border: 'none', color: 'var(--muted)', fontSize: 24, cursor: 'pointer', lineHeight: 1 }}>×</button>
+            </div>
+            <div style={{ display: 'grid', gridTemplateColumns: 'auto 1fr', gap: '10px 16px', fontSize: 14 }}>
+              <span style={{ color: 'var(--muted)' }}>Status</span>
+              <span style={{ fontWeight: 700, color: selecionado.sucesso ? 'var(--success)' : 'var(--danger)' }}>{selecionado.sucesso ? '✅ Enviado' : '❌ Falhou'}</span>
+              <span style={{ color: 'var(--muted)' }}>Canal</span>
+              <span>{CANAL_LABEL[selecionado.canal ?? ''] ?? (selecionado.canal ?? '—')}</span>
+              <span style={{ color: 'var(--muted)' }}>Destinatário</span>
+              <span style={{ fontFamily: 'monospace' }}>{selecionado.destinatario}</span>
+              <span style={{ color: 'var(--muted)' }}>Data/Hora</span>
+              <span style={{ fontFamily: 'monospace' }}>{formatDate(selecionado.enviado_em)}</span>
+            </div>
+            <div style={{ marginTop: 18 }}>
+              <div style={{ fontSize: 12, fontWeight: 600, color: 'var(--muted)', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: 6 }}>Mensagem</div>
+              <div style={{ background: 'var(--bg)', border: '1px solid var(--border)', borderRadius: 8, padding: '12px 14px', fontSize: 14, color: 'var(--text)', whiteSpace: 'pre-wrap', lineHeight: 1.5 }}>
+                {selecionado.mensagem}
+              </div>
+            </div>
+            {selecionado.erro && (
+              <div style={{ marginTop: 14 }}>
+                <div style={{ fontSize: 12, fontWeight: 600, color: 'var(--danger)', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: 6 }}>Erro</div>
+                <div style={{ background: 'rgba(229,57,53,.08)', border: '1px solid rgba(229,57,53,.3)', borderRadius: 8, padding: '12px 14px', fontSize: 13, color: 'var(--danger)', whiteSpace: 'pre-wrap' }}>
+                  {selecionado.erro}
+                </div>
+              </div>
+            )}
+          </div>
+        </div>
+      )}
       <div style={{ marginBottom: 24 }}>
         <h1 className="font-display" style={{ fontSize: 28, fontWeight: 800, color: 'var(--text)', margin: 0 }}>
           Histórico de Alertas Enviados
@@ -130,7 +175,12 @@ export default function AlertaLogsPage() {
               </thead>
               <tbody>
                 {logs.data.map((log, i) => (
-                  <tr key={log.id} style={{ borderBottom: i < logs.data.length - 1 ? '1px solid var(--border)' : undefined, background: log.sucesso ? undefined : 'rgba(229,57,53,.04)' }}>
+                  <tr key={log.id} onClick={() => setSelecionado(log)}
+                    title="Ver detalhes"
+                    style={{ borderBottom: i < logs.data.length - 1 ? '1px solid var(--border)' : undefined, background: log.sucesso ? undefined : 'rgba(229,57,53,.04)', cursor: 'pointer' }}
+                    onMouseEnter={e => { (e.currentTarget as HTMLTableRowElement).style.background = 'rgba(255,255,255,.03)' }}
+                    onMouseLeave={e => { (e.currentTarget as HTMLTableRowElement).style.background = log.sucesso ? '' : 'rgba(229,57,53,.04)' }}>
+
                     <td style={{ padding: '10px 16px', fontSize: 12, color: 'var(--muted)', whiteSpace: 'nowrap', fontFamily: 'monospace' }}>
                       {formatDate(log.enviado_em)}
                     </td>

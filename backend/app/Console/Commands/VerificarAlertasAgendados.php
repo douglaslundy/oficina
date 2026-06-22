@@ -52,6 +52,8 @@ class VerificarAlertasAgendados extends Command
                 'vencimento' => $os->prazo_entrega?->format('d/m/Y') ?? '-',
                 '_telefone_cliente' => $os->cliente?->telefone ?? '',
                 '_email_cliente'    => $os->cliente?->email ?? '',
+                '_telefone_mecanico' => $os->mecanico?->telefone ?? '',
+                '_email_mecanico'    => $os->mecanico?->email ?? '',
             ]);
         }
     }
