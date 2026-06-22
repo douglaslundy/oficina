@@ -204,7 +204,7 @@ export default function AlertaLogsPage() {
                     </td>
                     <td style={{ padding: '10px 16px', fontSize: 12, color: 'var(--muted)', maxWidth: 340 }}>
                       <div style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }} title={log.mensagem}>
-                        {log.mensagem}
+                        {log.mensagem.length > 30 ? log.mensagem.slice(0, 30) + '…' : log.mensagem}
                       </div>
                       {log.erro && (
                         <div style={{ color: 'var(--danger)', fontSize: 11, marginTop: 2 }} title={log.erro ?? ''}>
