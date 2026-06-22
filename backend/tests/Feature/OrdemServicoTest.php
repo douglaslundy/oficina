@@ -6,8 +6,10 @@ namespace Tests\Feature;
 use App\Models\Cliente;
 use App\Models\Produto;
 use App\Models\Usuario;
+use App\Services\AlertaDispatchService;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\Hash;
+use Mockery;
 use Tests\TestCase;
 
 class OrdemServicoTest extends TestCase
@@ -147,6 +149,27 @@ class OrdemServicoTest extends TestCase
 
         // Estoque não pode ter sido alterado (transação revertida).
         $this->assertEquals(1, $produto->fresh()->qty_atual);
+    }
+
+    public function test_mudanca_de_status_dispara_alerta(): void
+    {
+        [$token, $mecId, $cliId] = $this->setupEntities();
+
+        $spy = Mockery::spy(AlertaDispatchService::class);
+        $this->app->instance(AlertaDispatchService::class, $spy);
+
+        $os = $this->withToken($token)->postJson('/api/os', [
+            'cliente_id' => $cliId, 'mecanico_id' => $mecId, 'status' => 'ABERTA',
+        ])->json('data');
+
+        $this->withToken($token)->putJson("/api/os/{$os['id']}", [
+            'status' => 'EM_ANDAMENTO',
+        ])->assertOk();
+
+        $spy->shouldHaveReceived('dispatch')
+            ->withArgs(fn ($tipo, $vars = []) => $tipo === 'OS_STATUS_MUDOU'
+                && ($vars['status'] ?? null) === 'EM_ANDAMENTO')
+            ->once();
     }
 
     public function test_cancelar_os_devolve_estoque(): void

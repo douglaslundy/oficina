@@ -55,8 +55,8 @@ class OrcamentoController extends Controller
         }
 
         return DB::transaction(function () use ($ordem, $cliente, $oficina) {
-            // Reinicia a rodada de aprovação dos serviços
-            OsItem::where('os_id', $ordem->id)->where('tipo', 'SERVICO')->update(['aprovado' => null]);
+            // Reinicia a rodada de aprovação de serviços E peças (ambos são aprováveis).
+            OsItem::where('os_id', $ordem->id)->update(['aprovado' => null]);
 
             $orcamento = Orcamento::updateOrCreate(
                 ['os_id' => $ordem->id],
@@ -71,7 +71,9 @@ class OrcamentoController extends Controller
 
             $ordem->update(['status' => 'ORCAMENTO_ENVIADO']);
 
-            $link = rtrim((string) config('app.url'), '/') . '/orcamento/' . $orcamento->token;
+            // Link aponta para o frontend público (não o backend). URL crua com
+            // https em produção → o WhatsApp transforma em link clicável.
+            $link = rtrim((string) config('app.frontend_url'), '/') . '/orcamento/' . $orcamento->token;
             $msg  = "Olá {$cliente->nome}! A {$oficina->nome} preparou um orçamento para o seu veículo (OS #{$ordem->numero}).\n\n"
                   . "Veja os serviços e aprove pelo link:\n{$link}";
 
@@ -127,10 +129,12 @@ class OrcamentoController extends Controller
             ]);
 
             $pecas = $ordem->itens->where('tipo', 'PECA')->values()->map(fn (OsItem $i) => [
+                'id'             => $i->id,
                 'descricao'      => $i->descricao,
                 'quantidade'     => $i->quantidade,
                 'valor_unitario' => $i->valor_unitario,
                 'valor_total'    => $i->valor_total,
+                'aprovado'       => $i->aprovado,
             ]);
 
             return response()->json([
@@ -166,38 +170,46 @@ class OrcamentoController extends Controller
         $validated = $request->validate([
             'servicos_aprovados'   => ['present', 'array'],
             'servicos_aprovados.*' => ['string'],
+            'pecas_aprovadas'      => ['sometimes', 'array'],
+            'pecas_aprovadas.*'    => ['string'],
         ]);
-        $aprovados = $validated['servicos_aprovados'];
+        // Serviços e peças aprovados pelo cliente.
+        $aprovados = array_merge(
+            $validated['servicos_aprovados'],
+            $validated['pecas_aprovadas'] ?? [],
+        );
 
         TenancyContext::set($orcamento->oficina_id);
         try {
             return DB::transaction(function () use ($orcamento, $aprovados) {
                 $ordem = OrdemServico::with(['cliente', 'mecanico', 'itens'])->findOrFail($orcamento->os_id);
 
-                $servicos = $ordem->itens->where('tipo', 'SERVICO');
-                $totalServicos = $servicos->count();
+                // Serviços e peças são aprováveis; total e status consideram todos os itens.
+                $itens         = $ordem->itens;
+                $totalItens    = $itens->count();
                 $qtdAprovados  = 0;
                 $nomesAprovados = [];
 
-                foreach ($servicos as $servico) {
-                    $ok = in_array($servico->id, $aprovados, true);
-                    OsItem::where('id', $servico->id)->update(['aprovado' => $ok]);
-                    if ($ok) { $qtdAprovados++; $nomesAprovados[] = $servico->descricao; }
+                foreach ($itens as $item) {
+                    $ok = in_array($item->id, $aprovados, true);
+                    OsItem::where('id', $item->id)->update(['aprovado' => $ok]);
+                    // Recusa de peça NÃO devolve estoque (oficina ajusta depois).
+                    if ($ok) {
+                        $qtdAprovados++;
+                        if ($item->tipo === 'SERVICO') $nomesAprovados[] = $item->descricao;
+                    }
                 }
 
-                // valor_total = serviços aprovados + todas as peças (informativas)
-                $valorServicos = (float) $ordem->itens
-                    ->where('tipo', 'SERVICO')
+                // valor_total = soma dos itens aprovados (serviços + peças)
+                $valorTotal = round((float) $itens
                     ->whereIn('id', $aprovados)
-                    ->sum('valor_total');
-                $valorPecas = (float) $ordem->itens->where('tipo', 'PECA')->sum('valor_total');
-                $valorTotal = round($valorServicos + $valorPecas, 2);
+                    ->sum('valor_total'), 2);
 
-                // Status conforme a proporção de serviços aprovados
+                // Status conforme a proporção de itens (serviços + peças) aprovados
                 if ($qtdAprovados === 0) {
                     $statusOrc = 'RECUSADO';
                     $statusOs  = 'ORCAMENTO_RECUSADO';
-                } elseif ($qtdAprovados === $totalServicos) {
+                } elseif ($qtdAprovados === $totalItens) {
                     $statusOrc = 'APROVADO';
                     $statusOs  = 'ORCAMENTO_APROVADO';
                 } else {

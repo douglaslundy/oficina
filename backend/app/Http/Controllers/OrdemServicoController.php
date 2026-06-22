@@ -207,6 +207,10 @@ class OrdemServicoController extends Controller
 
         return DB::transaction(function () use ($os, $validated, $novoStatus) {
             $wasNotConcluida = $os->status !== 'CONCLUIDA';
+            // Captura o status ANTES do update: após $os->update() o Eloquent
+            // sincroniza os "originals", então getOriginal('status') passaria a
+            // retornar o status novo e o alerta nunca dispararia.
+            $statusAnterior = $os->status;
 
             // O estoque é baixado no momento em que a peça é inserida na OS,
             // portanto a conclusão NÃO deve baixar novamente (evita duplicidade).
@@ -241,7 +245,7 @@ class OrdemServicoController extends Controller
             }
 
             // Alerta WhatsApp de mudança de status
-            if ($novoStatus && $novoStatus !== $os->getOriginal('status')) {
+            if ($novoStatus && $novoStatus !== $statusAnterior) {
                 $fresh = $os->fresh()->loadMissing('cliente');
                 $this->alertas->dispatch('OS_STATUS_MUDOU', [
                     'os_numero'           => $fresh->numero,

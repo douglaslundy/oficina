@@ -13,6 +13,9 @@ use Illuminate\Validation\ValidationException;
 
 class AlertaConfigController extends Controller
 {
+    /** Status de OS válidos como condição (status-alvo) do gatilho. */
+    private const STATUS_OS_VALIDOS = ['ABERTA', 'EM_ANDAMENTO', 'AGUARDANDO_PECAS', 'CONCLUIDA', 'CANCELADA'];
+
     public function __construct(private readonly AlertaDispatchService $dispatch) {}
 
     /** Canais disponíveis para a oficina atual (plano OU grant avulso). */
@@ -40,6 +43,23 @@ class AlertaConfigController extends Controller
         }
     }
 
+    /**
+     * Limpa as condições: remove listas vazias e retorna null quando não sobra
+     * nenhum filtro (alerta dispara sempre).
+     */
+    private function normalizarCondicoes(?array $condicoes): ?array
+    {
+        if (empty($condicoes)) return null;
+
+        $limpo = [];
+        foreach ($condicoes as $campo => $valores) {
+            $valores = array_values(array_filter((array) $valores, fn($v) => $v !== '' && $v !== null));
+            if (!empty($valores)) $limpo[$campo] = $valores;
+        }
+
+        return empty($limpo) ? null : $limpo;
+    }
+
     public function index(): JsonResponse
     {
         $oficinaId = TenancyContext::get();
@@ -64,6 +84,9 @@ class AlertaConfigController extends Controller
             'emails.*'          => ['email'],
             'canais'            => ['array', 'min:1'],
             'canais.*'          => ['in:WHATSAPP,EMAIL'],
+            'condicoes'              => ['nullable', 'array'],
+            'condicoes.status_alvo'  => ['nullable', 'array'],
+            'condicoes.status_alvo.*' => ['string', 'in:' . implode(',', self::STATUS_OS_VALIDOS)],
             'enviar_cliente'    => ['boolean'],
             'enviar_mecanico'   => ['boolean'],
         ]);
@@ -74,6 +97,7 @@ class AlertaConfigController extends Controller
         $alerta = AlertaConfig::create([
             ...$validated,
             'canais'       => $canais,
+            'condicoes'    => $this->normalizarCondicoes($validated['condicoes'] ?? null),
             'oficina_id'   => TenancyContext::get(),
             'pre_definido' => false,
             'ativo'        => true,
@@ -95,12 +119,19 @@ class AlertaConfigController extends Controller
             'emails.*'          => ['email'],
             'canais'            => ['sometimes', 'array', 'min:1'],
             'canais.*'          => ['in:WHATSAPP,EMAIL'],
+            'condicoes'              => ['sometimes', 'nullable', 'array'],
+            'condicoes.status_alvo'  => ['nullable', 'array'],
+            'condicoes.status_alvo.*' => ['string', 'in:' . implode(',', self::STATUS_OS_VALIDOS)],
             'enviar_cliente'    => ['sometimes', 'boolean'],
             'enviar_mecanico'   => ['sometimes', 'boolean'],
         ]);
 
         if (isset($validated['canais'])) {
             $this->validarCanais($validated['canais']);
+        }
+
+        if (array_key_exists('condicoes', $validated)) {
+            $validated['condicoes'] = $this->normalizarCondicoes($validated['condicoes']);
         }
 
         $alerta->update($validated);

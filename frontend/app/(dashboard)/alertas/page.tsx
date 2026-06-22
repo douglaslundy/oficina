@@ -15,6 +15,7 @@ interface AlertaConfig {
   canais: string[]
   enviar_cliente: boolean
   enviar_mecanico: boolean
+  condicoes?: { status_alvo?: string[] } | null
 }
 
 interface Entitlements {
@@ -53,6 +54,42 @@ function CanaisSelector({ canais, setCanais, ent }: {
           </div>
         ))}
       </div>
+    </div>
+  )
+}
+
+// Seletor de status-alvo (condição do gatilho de mudança de status da OS).
+function StatusAlvoSelector({ value, onChange }: {
+  value: string[]
+  onChange: (v: string[]) => void
+}) {
+  function toggle(s: string) {
+    onChange(value.includes(s) ? value.filter(x => x !== s) : [...value, s])
+  }
+  return (
+    <div>
+      <label style={{ display: 'block', fontSize: 12, fontWeight: 600, color: 'var(--muted)', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: 6 }}>
+        Disparar quando a OS virar
+      </label>
+      <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
+        {STATUS_OS_OPCOES.map(opt => {
+          const on = value.includes(opt.value)
+          return (
+            <button key={opt.value} type="button" onClick={() => toggle(opt.value)}
+              style={{
+                padding: '6px 12px', borderRadius: 999, fontSize: 13, cursor: 'pointer',
+                border: `1px solid ${on ? 'var(--accent)' : 'var(--border)'}`,
+                background: on ? 'rgba(245,166,35,.15)' : 'transparent',
+                color: on ? 'var(--accent)' : 'var(--muted)', fontWeight: on ? 700 : 400,
+              }}>
+              {on ? '✓ ' : ''}{opt.label}
+            </button>
+          )
+        })}
+      </div>
+      <p style={{ fontSize: 11, color: 'var(--muted)', margin: '6px 0 0' }}>
+        Nenhum selecionado = dispara em qualquer mudança de status.
+      </p>
     </div>
   )
 }
@@ -137,11 +174,35 @@ const TIPO_LABELS: Record<string, string> = {
   ORCAMENTO_RECUSADO:     '❌ Orçamento Recusado',
 }
 
-const TIPOS_CUSTOM = [
-  'ESTOQUE_BAIXO', 'ESTOQUE_CRITICO', 'CLIENTE_DEVEDOR', 'DIVIDA_VENCIDA',
-  'OS_NOVA', 'OS_STATUS_MUDOU', 'OS_VENCIDA', 'AGENDAMENTO_CONFIRMADO',
-  'AGENDAMENTO_LEMBRETE', 'PAGAMENTO_RECEBIDO', 'PAGAMENTO_PARCIAL', 'NF_AUTORIZADA',
+// Eventos agrupados por entidade — base do construtor de gatilhos.
+const ENTIDADES: { entidade: string; eventos: string[] }[] = [
+  { entidade: 'Ordem de Serviço', eventos: ['OS_NOVA', 'OS_STATUS_MUDOU', 'OS_VENCIDA'] },
+  { entidade: 'Pagamento',        eventos: ['PAGAMENTO_RECEBIDO', 'PAGAMENTO_PARCIAL'] },
+  { entidade: 'Nota Fiscal',      eventos: ['NF_AUTORIZADA'] },
+  { entidade: 'Agendamento',      eventos: ['AGENDAMENTO_CONFIRMADO', 'AGENDAMENTO_LEMBRETE'] },
+  { entidade: 'Estoque',          eventos: ['ESTOQUE_BAIXO', 'ESTOQUE_CRITICO'] },
+  { entidade: 'Cliente',          eventos: ['CLIENTE_DEVEDOR', 'DIVIDA_VENCIDA'] },
 ]
+
+// Status-alvo selecionáveis na condição de mudança de status da OS.
+const STATUS_OS_OPCOES: { value: string; label: string }[] = [
+  { value: 'ABERTA',           label: 'Aberta' },
+  { value: 'EM_ANDAMENTO',     label: 'Em Andamento' },
+  { value: 'AGUARDANDO_PECAS', label: 'Aguardando Peças' },
+  { value: 'CONCLUIDA',        label: 'Concluída' },
+  { value: 'CANCELADA',        label: 'Cancelada' },
+]
+
+// Eventos que suportam filtro por status-alvo.
+function suportaStatusAlvo(tipo: string): boolean {
+  return tipo === 'OS_STATUS_MUDOU'
+}
+
+function statusAlvoLabel(values?: string[]): string {
+  if (!values || values.length === 0) return 'qualquer status'
+  const map = Object.fromEntries(STATUS_OS_OPCOES.map(o => [o.value, o.label]))
+  return values.map(v => map[v] ?? v).join(', ')
+}
 
 const VARIAVEIS_POR_TIPO: Record<string, string[]> = {
   ESTOQUE_BAIXO:          ['{produto}', '{quantidade}', '{unidade}'],
@@ -181,6 +242,7 @@ function EditModal({ alerta, ent, onClose, onSaved }: EditModalProps) {
     whatsapp: (alerta.canais ?? ['WHATSAPP']).includes('WHATSAPP'),
     email:    (alerta.canais ?? []).includes('EMAIL'),
   })
+  const [statusAlvo, setStatusAlvo] = useState<string[]>(alerta.condicoes?.status_alvo ?? [])
   const [saving, setSaving] = useState(false)
 
   async function salvar() {
@@ -201,6 +263,10 @@ function EditModal({ alerta, ent, onClose, onSaved }: EditModalProps) {
         canais:            canaisArr,
         enviar_cliente:    form.enviar_cliente,
         enviar_mecanico:   form.enviar_mecanico,
+        // Só envia condicoes para eventos que a suportam (null = limpa o filtro).
+        ...(suportaStatusAlvo(alerta.tipo)
+          ? { condicoes: statusAlvo.length > 0 ? { status_alvo: statusAlvo } : null }
+          : {}),
       })
       toast('Alerta atualizado!', 'success')
       onSaved()
@@ -248,6 +314,10 @@ function EditModal({ alerta, ent, onClose, onSaved }: EditModalProps) {
               </div>
             )}
           </div>
+
+          {suportaStatusAlvo(alerta.tipo) && (
+            <StatusAlvoSelector value={statusAlvo} onChange={setStatusAlvo} />
+          )}
 
           <TelefonesInput telefones={telefones} setTelefones={setTelefones} />
 
@@ -300,18 +370,34 @@ interface CreateModalProps {
 }
 
 function CreateModal({ ent, onClose, onSaved }: CreateModalProps) {
+  const [entidade, setEntidade] = useState(ENTIDADES[0].entidade)
   const [form, setForm] = useState({
-    tipo:              TIPOS_CUSTOM[0],
+    tipo:              ENTIDADES[0].eventos[0],
     nome:              '',
     template_mensagem: '',
     emails:            '',
     enviar_cliente:    false,
     enviar_mecanico:   false,
   })
+  const [statusAlvo, setStatusAlvo] = useState<string[]>([])
   const [telefones, setTelefones] = useState<string[]>([])
   // Pré-seleciona o primeiro canal disponível no plano.
   const [canais, setCanais] = useState({ whatsapp: ent.whatsapp, email: ent.email && !ent.whatsapp })
   const [saving, setSaving] = useState(false)
+
+  const eventosDaEntidade = ENTIDADES.find(e => e.entidade === entidade)?.eventos ?? []
+
+  function trocarEntidade(nova: string) {
+    setEntidade(nova)
+    const primeiro = ENTIDADES.find(e => e.entidade === nova)?.eventos[0] ?? ''
+    setForm(f => ({ ...f, tipo: primeiro }))
+    setStatusAlvo([])
+  }
+
+  function trocarEvento(tipo: string) {
+    setForm(f => ({ ...f, tipo }))
+    setStatusAlvo([])
+  }
 
   async function salvar() {
     if (!form.nome.trim() || !form.template_mensagem.trim()) {
@@ -335,6 +421,7 @@ function CreateModal({ ent, onClose, onSaved }: CreateModalProps) {
         canais:            canaisArr,
         destinatarios:     telefones,
         emails:            form.emails.split('\n').map(s => s.trim()).filter(Boolean),
+        condicoes:         suportaStatusAlvo(form.tipo) && statusAlvo.length > 0 ? { status_alvo: statusAlvo } : null,
       })
       toast('Alerta criado!', 'success')
       onSaved(); onClose()
@@ -355,12 +442,24 @@ function CreateModal({ ent, onClose, onSaved }: CreateModalProps) {
           <button onClick={onClose} style={{ background: 'none', border: 'none', color: 'var(--muted)', cursor: 'pointer', fontSize: 22 }}>×</button>
         </div>
         <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
-          <div>
-            <label style={{ display: 'block', fontSize: 12, fontWeight: 600, color: 'var(--muted)', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: 6 }}>Gatilho</label>
-            <select value={form.tipo} onChange={e => setForm(f => ({ ...f, tipo: e.target.value }))} style={iStyle}>
-              {TIPOS_CUSTOM.map(t => <option key={t} value={t}>{TIPO_LABELS[t] ?? t}</option>)}
-            </select>
+          <div style={{ display: 'flex', gap: 12 }}>
+            <div style={{ flex: 1 }}>
+              <label style={{ display: 'block', fontSize: 12, fontWeight: 600, color: 'var(--muted)', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: 6 }}>Entidade</label>
+              <select value={entidade} onChange={e => trocarEntidade(e.target.value)} style={iStyle}>
+                {ENTIDADES.map(en => <option key={en.entidade} value={en.entidade}>{en.entidade}</option>)}
+              </select>
+            </div>
+            <div style={{ flex: 1 }}>
+              <label style={{ display: 'block', fontSize: 12, fontWeight: 600, color: 'var(--muted)', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: 6 }}>Evento (gatilho)</label>
+              <select value={form.tipo} onChange={e => trocarEvento(e.target.value)} style={iStyle}>
+                {eventosDaEntidade.map(t => <option key={t} value={t}>{TIPO_LABELS[t] ?? t}</option>)}
+              </select>
+            </div>
           </div>
+
+          {suportaStatusAlvo(form.tipo) && (
+            <StatusAlvoSelector value={statusAlvo} onChange={setStatusAlvo} />
+          )}
           <div>
             <label style={{ display: 'block', fontSize: 12, fontWeight: 600, color: 'var(--muted)', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: 6 }}>Nome do alerta *</label>
             <input value={form.nome} onChange={e => setForm(f => ({ ...f, nome: e.target.value }))} style={iStyle} placeholder="Ex: Lembrete de cobrança" />
@@ -468,6 +567,21 @@ export default function AlertasPage() {
   const predefinidos = alertas.filter(a => a.pre_definido)
   const customizados = alertas.filter(a => !a.pre_definido)
 
+  // Detecta sobreposição: um catch-all (sem filtro) ativo + um gatilho filtrado
+  // ativo do mesmo tipo dispara mensagens duplicadas para os status filtrados.
+  const tiposEmConflito = Object.entries(
+    alertas
+      .filter(a => a.ativo && suportaStatusAlvo(a.tipo))
+      .reduce<Record<string, AlertaConfig[]>>((acc, a) => {
+        (acc[a.tipo] ??= []).push(a); return acc
+      }, {}),
+  )
+    .filter(([, list]) =>
+      list.some(a => !a.condicoes?.status_alvo?.length) &&
+      list.some(a => a.condicoes?.status_alvo?.length),
+    )
+    .map(([tipo]) => TIPO_LABELS[tipo] ?? tipo)
+
   return (
     <div>
       {editando && <EditModal alerta={editando} ent={ent} onClose={() => setEditando(null)} onSaved={fetchAlertas} />}
@@ -488,6 +602,20 @@ export default function AlertasPage() {
           + Novo Alerta
         </button>
       </div>
+
+      {tiposEmConflito.length > 0 && (
+        <div style={{
+          display: 'flex', gap: 10, alignItems: 'flex-start', marginBottom: 20, padding: '12px 16px',
+          borderRadius: 9, border: '1px solid var(--accent)', background: 'rgba(245,166,35,.08)',
+        }}>
+          <span style={{ fontSize: 18, lineHeight: 1.2 }}>⚠️</span>
+          <div style={{ fontSize: 13, color: 'var(--text)' }}>
+            <b>Possível envio duplicado</b> em: {tiposEmConflito.join(', ')}.{' '}
+            Há um alerta sem filtro (dispara em qualquer status) ativo junto com gatilhos por status específico.
+            Edite o filtro do alerta geral ou desative-o para evitar duas mensagens ao cliente.
+          </div>
+        </div>
+      )}
 
       {loading ? (
         <div style={{ padding: 40, textAlign: 'center', color: 'var(--muted)' }}>Carregando...</div>
@@ -531,6 +659,11 @@ export default function AlertasPage() {
                           {alerta.template_mensagem}
                         </div>
                       )}
+                      {suportaStatusAlvo(alerta.tipo) && alerta.condicoes?.status_alvo?.length ? (
+                        <div style={{ fontSize: 11, color: 'var(--accent)', marginTop: 2 }}>
+                          Só quando vira: {statusAlvoLabel(alerta.condicoes.status_alvo)}
+                        </div>
+                      ) : null}
                     </td>
                     <td style={{ padding: '12px 20px', textAlign: 'right' }}>
                       <button onClick={() => setEditando(alerta)}
@@ -564,6 +697,9 @@ export default function AlertasPage() {
                         <div style={{ fontSize: 14, fontWeight: 600, color: 'var(--text)' }}>{alerta.nome}</div>
                         <div style={{ fontSize: 12, color: 'var(--muted)', marginTop: 1 }}>
                           Gatilho: {TIPO_LABELS[alerta.tipo] ?? alerta.tipo}
+                          {suportaStatusAlvo(alerta.tipo) && alerta.condicoes?.status_alvo?.length
+                            ? ` · quando vira ${statusAlvoLabel(alerta.condicoes.status_alvo)}`
+                            : ''}
                         </div>
                       </td>
                       <td style={{ padding: '12px 20px', textAlign: 'right' }}>

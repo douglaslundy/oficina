@@ -28,14 +28,44 @@ class AlertaDispatchService
         $oficinaId = TenancyContext::get();
         if (!$oficinaId) return;
 
-        $alerta = AlertaConfig::withoutGlobalScopes()
+        // Pode haver mais de um alerta ativo para o mesmo tipo (gatilhos com
+        // condições diferentes). Dispara todos cujas condições casam com $vars.
+        $alertas = AlertaConfig::withoutGlobalScopes()
             ->where('oficina_id', $oficinaId)
             ->where('tipo', $tipo)
             ->where('ativo', true)
-            ->first();
+            ->get();
 
-        if (!$alerta) return;
+        foreach ($alertas as $alerta) {
+            if ($this->condicoesCasam((array)($alerta->condicoes ?? []), $vars)) {
+                $this->enviarAlerta($alerta, $oficinaId, $tipo, $vars, $extras);
+            }
+        }
+    }
 
+    /**
+     * Avalia o filtro de disparo: cada campo de $condicoes precisa casar com a
+     * var correspondente (valor presente na lista de aceitos). Vazio = sempre.
+     */
+    private function condicoesCasam(array $condicoes, array $vars): bool
+    {
+        foreach ($condicoes as $campo => $aceitos) {
+            $aceitos = array_values(array_filter((array) $aceitos, fn($v) => $v !== '' && $v !== null));
+            if (empty($aceitos)) continue; // campo sem restrição
+
+            // 'status_alvo' compara com a var 'status'; demais comparam com a var de mesmo nome.
+            $varKey = $campo === 'status_alvo' ? 'status' : $campo;
+            $valor  = $vars[$varKey] ?? null;
+
+            if (!in_array($valor, $aceitos, true)) {
+                return false;
+            }
+        }
+        return true;
+    }
+
+    private function enviarAlerta(AlertaConfig $alerta, string $oficinaId, string $tipo, array $vars, array $extras): void
+    {
         // Canais do alerta interseccionados com o que está disponível (plano OU grant).
         $permitidos = $this->ent->canaisDisponiveis($oficinaId);
         $canais     = array_intersect((array)($alerta->canais ?? ['WHATSAPP']), $permitidos);

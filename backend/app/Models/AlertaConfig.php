@@ -27,6 +27,7 @@ class AlertaConfig extends Model
         'destinatarios',
         'emails',
         'canais',
+        'condicoes',
         'enviar_cliente',
         'enviar_mecanico',
     ];
@@ -37,6 +38,7 @@ class AlertaConfig extends Model
         'destinatarios'   => 'array',
         'emails'          => 'array',
         'canais'          => 'array',
+        'condicoes'       => 'array',
         'enviar_cliente'  => 'boolean',
         'enviar_mecanico' => 'boolean',
         'criado_em'       => 'datetime',

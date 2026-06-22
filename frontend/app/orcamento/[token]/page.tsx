@@ -53,7 +53,9 @@ export default function OrcamentoPublicoPage() {
       .then(r => {
         setOrc(r.data.data)
         const sel: Record<string, boolean> = {}
-        r.data.data.servicos.forEach(s => { sel[s.id] = s.aprovado !== false }) // default marcado
+        // default marcado para serviços e peças (aprovado !== false)
+        r.data.data.servicos.forEach(s => { sel[s.id] = s.aprovado !== false })
+        r.data.data.pecas.forEach(p => { sel[p.id] = p.aprovado !== false })
         setSelecionados(sel)
       })
       .catch(() => setErro('Orçamento não encontrado ou expirado.'))
@@ -63,15 +65,18 @@ export default function OrcamentoPublicoPage() {
   useEffect(() => { carregar() }, [carregar])
 
   const totalSelecionado = orc
-    ? orc.servicos.filter(s => selecionados[s.id]).reduce((acc, s) => acc + Number(s.valor_total), 0)
-      + orc.pecas.reduce((acc, p) => acc + Number(p.valor_total), 0)
+    ? [...orc.servicos, ...orc.pecas]
+        .filter(i => selecionados[i.id])
+        .reduce((acc, i) => acc + Number(i.valor_total), 0)
     : 0
 
   async function enviar() {
-    const ids = Object.entries(selecionados).filter(([, v]) => v).map(([k]) => k)
+    if (!orc) return
+    const servicos_aprovados = orc.servicos.filter(s => selecionados[s.id]).map(s => s.id)
+    const pecas_aprovadas    = orc.pecas.filter(p => selecionados[p.id]).map(p => p.id)
     setEnviando(true)
     try {
-      const r = await axios.post<{ status: string }>(`${API}/orcamento/${token}/responder`, { servicos_aprovados: ids })
+      const r = await axios.post<{ status: string }>(`${API}/orcamento/${token}/responder`, { servicos_aprovados, pecas_aprovadas })
       setFeito(r.data.status)
     } catch (e: unknown) {
       const msg = (e as { response?: { data?: { message?: string } } })?.response?.data?.message
@@ -143,15 +148,23 @@ export default function OrcamentoPublicoPage() {
 
           {orc.pecas.length > 0 && (
             <>
-              <h3 className="font-display" style={{ fontSize: 16, fontWeight: 800, margin: '4px 0 8px' }}>Peças a serem trocadas</h3>
-              <div style={{ marginBottom: 20 }}>
-                {orc.pecas.map((p, i) => (
-                  <div key={i} style={{ display: 'flex', justifyContent: 'space-between', padding: '8px 0', borderBottom: '1px solid var(--border)', fontSize: 14 }}>
-                    <span style={{ color: 'var(--muted)' }}>{p.descricao} {p.quantidade > 1 ? `(x${p.quantidade})` : ''}</span>
-                    <span style={{ fontFamily: "'JetBrains Mono', monospace" }}>{brl(Number(p.valor_total))}</span>
-                  </div>
+              <h3 className="font-display" style={{ fontSize: 16, fontWeight: 800, margin: '4px 0 8px' }}>
+                Peças — selecione as que deseja aprovar
+              </h3>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 8, marginBottom: 20 }}>
+                {orc.pecas.map(p => (
+                  <label key={p.id} style={{
+                    display: 'flex', alignItems: 'center', gap: 12, padding: '12px 14px', cursor: 'pointer',
+                    borderRadius: 9, border: `1px solid ${selecionados[p.id] ? 'var(--accent)' : 'var(--border)'}`,
+                    background: selecionados[p.id] ? 'rgba(245,166,35,.06)' : 'transparent',
+                  }}>
+                    <input type="checkbox" checked={!!selecionados[p.id]}
+                      onChange={e => setSelecionados(prev => ({ ...prev, [p.id]: e.target.checked }))}
+                      style={{ width: 18, height: 18, accentColor: 'var(--accent)' }} />
+                    <span style={{ flex: 1, fontSize: 14 }}>{p.descricao} {p.quantidade > 1 ? `(x${p.quantidade})` : ''}</span>
+                    <span style={{ fontFamily: "'JetBrains Mono', monospace", fontSize: 14 }}>{brl(Number(p.valor_total))}</span>
+                  </label>
                 ))}
-                <p style={{ fontSize: 11, color: 'var(--muted)', marginTop: 6 }}>As peças necessárias estão inclusas no serviço.</p>
               </div>
             </>
           )}
@@ -168,7 +181,7 @@ export default function OrcamentoPublicoPage() {
             {enviando ? '⟳ Enviando...' : 'Confirmar aprovação'}
           </button>
           <p style={{ fontSize: 11, color: 'var(--muted)', textAlign: 'center', marginTop: 10 }}>
-            Desmarque os serviços que não deseja aprovar. Itens não selecionados serão registrados como recusados.
+            Desmarque os serviços e peças que não deseja aprovar. Itens não selecionados serão registrados como recusados.
           </p>
         </div>
       </div>
