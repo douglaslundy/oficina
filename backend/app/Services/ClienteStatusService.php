@@ -41,6 +41,8 @@ class ClienteStatusService
                     'itens'              => $itensTexto,
                     '_telefone_cliente'  => $cliente->telefone ?? '',
                     '_email_cliente'     => $cliente->email ?? '',
+                    '_telefone_mecanico' => $os?->mecanico?->telefone ?? '',
+                    '_email_mecanico'    => $os?->mecanico?->email ?? '',
                 ]);
             }
             Cliente::where('id', $clienteId)->update(['status' => 'DIVIDA_VENCIDA']);
@@ -71,6 +73,8 @@ class ClienteStatusService
                     'itens'             => $itensTexto,
                     '_telefone_cliente' => $cliente->telefone ?? '',
                     '_email_cliente'    => $cliente->email ?? '',
+                    '_telefone_mecanico' => $os?->mecanico?->telefone ?? '',
+                    '_email_mecanico'    => $os?->mecanico?->email ?? '',
                 ]);
             }
             Cliente::where('id', $clienteId)->update(['status' => 'DEVEDOR']);

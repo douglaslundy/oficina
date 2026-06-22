@@ -393,6 +393,8 @@ class OrdemServicoController extends Controller
                 'saldo_devedor'      => 'R$ ' . number_format($saldoDevedor, 2, ',', '.'),
                 '_telefone_cliente'  => $os->cliente?->telefone ?? '',
                 '_email_cliente'     => $os->cliente?->email ?? '',
+                '_telefone_mecanico' => $os->mecanico?->telefone ?? '',
+                '_email_mecanico'    => $os->mecanico?->email ?? '',
             ]);
 
             return $pagamento;

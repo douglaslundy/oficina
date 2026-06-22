@@ -3,7 +3,6 @@ declare(strict_types=1);
 
 namespace App\Services;
 
-use App\Jobs\EnviarAlertaEstoque;
 use App\Models\MovimentacaoEstoque;
 use App\Models\OrdemServico;
 use App\Models\OsItem;
@@ -64,9 +63,26 @@ class EstoqueService
             ]);
 
             if ($produto->qty_atual < $produto->qty_minima) {
-                EnviarAlertaEstoque::dispatch($produto->fresh());
+                $this->dispararAlertaEstoque($produto->fresh());
             }
         });
+    }
+
+    /**
+     * Dispara o alerta de estoque pelo sistema unificado de alertas (respeita
+     * canais, destinatários, cota e ativação configurados em alerta_configs).
+     */
+    private function dispararAlertaEstoque(Produto $produto): void
+    {
+        $tipo = ($produto->qty_atual <= 0 || $produto->qty_atual < $produto->qty_minima * 0.4)
+            ? 'ESTOQUE_CRITICO'
+            : 'ESTOQUE_BAIXO';
+
+        app(AlertaDispatchService::class)->dispatch($tipo, [
+            'produto'    => $produto->nome,
+            'quantidade' => (string) $produto->qty_atual,
+            'unidade'    => $produto->unidade ?? '',
+        ]);
     }
 
     /**
