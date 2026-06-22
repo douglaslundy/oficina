@@ -73,14 +73,13 @@ export default function ContratarPage() {
                 <div style={{ fontSize: 16, fontWeight: 700, color: 'var(--text)', margin: '4px 0 8px' }}>{p.nome}</div>
                 <div style={{ fontSize: 13, color: 'var(--muted)' }}>{p.quantidade < 0 ? 'Ilimitado' : `${p.quantidade}/mês`} · {p.recorrente ? 'recorrente' : `${p.periodo_dias} dias`}</div>
                 <div className="font-display" style={{ fontSize: 22, fontWeight: 800, color: 'var(--accent)', margin: '10px 0' }}>{brl(p.valor)}<span style={{ fontSize: 12, color: 'var(--muted)', fontWeight: 400 }}> /mês</span></div>
-                {p.ja_disponivel ? (
-                  <span className="pill pill-success">Já disponível</span>
-                ) : (
-                  <button onClick={() => solicitar(p.id)} disabled={enviando === p.id}
-                    style={{ width: '100%', padding: '9px', borderRadius: 8, background: 'var(--accent)', border: 'none', color: '#000', fontWeight: 700, fontSize: 14, cursor: enviando === p.id ? 'not-allowed' : 'pointer' }}>
-                    {enviando === p.id ? '⟳ Solicitando...' : 'Solicitar'}
-                  </button>
+                {p.ja_disponivel && (
+                  <div style={{ fontSize: 11, color: 'var(--success)', marginBottom: 6 }}>✓ Já incluso no seu plano — contrate para cota/serviço adicional</div>
                 )}
+                <button onClick={() => solicitar(p.id)} disabled={enviando === p.id}
+                  style={{ width: '100%', padding: '9px', borderRadius: 8, background: 'var(--accent)', border: 'none', color: '#000', fontWeight: 700, fontSize: 14, cursor: enviando === p.id ? 'not-allowed' : 'pointer' }}>
+                  {enviando === p.id ? '⟳ Solicitando...' : 'Solicitar contratação'}
+                </button>
               </div>
             ))}
           </div>

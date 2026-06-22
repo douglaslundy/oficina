@@ -172,7 +172,7 @@ class OrcamentoController extends Controller
         TenancyContext::set($orcamento->oficina_id);
         try {
             return DB::transaction(function () use ($orcamento, $aprovados) {
-                $ordem = OrdemServico::with(['cliente', 'itens'])->findOrFail($orcamento->os_id);
+                $ordem = OrdemServico::with(['cliente', 'mecanico', 'itens'])->findOrFail($orcamento->os_id);
 
                 $servicos = $ordem->itens->where('tipo', 'SERVICO');
                 $totalServicos = $servicos->count();
@@ -217,6 +217,8 @@ class OrcamentoController extends Controller
                     'servicos_aprovados'  => $nomesAprovados ? implode(', ', $nomesAprovados) : 'nenhum',
                     '_telefone_cliente'   => $ordem->cliente?->telefone ?? '',
                     '_email_cliente'      => $ordem->cliente?->email ?? '',
+                    '_telefone_mecanico'  => $ordem->mecanico?->telefone ?? '',
+                    '_email_mecanico'     => $ordem->mecanico?->email ?? '',
                 ]);
 
                 return response()->json([
