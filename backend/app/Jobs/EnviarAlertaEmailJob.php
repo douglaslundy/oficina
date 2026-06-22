@@ -28,6 +28,7 @@ class EnviarAlertaEmailJob implements ShouldQueue
         private readonly string $assunto,
         private readonly string $corpo,
         private readonly string $tipo = 'ALERTA',
+        private readonly ?string $destinatarioTipo = null,
     ) {}
 
     public function handle(EmailService $email): void
@@ -37,13 +38,14 @@ class EnviarAlertaEmailJob implements ShouldQueue
             $resultado = $email->enviar($this->destinatarios, $this->assunto, $this->corpo);
 
             AlertaLog::create([
-                'oficina_id'   => $this->oficina_id,
-                'tipo'         => $this->tipo,
-                'canal'        => 'EMAIL',
-                'destinatario' => implode(', ', $this->destinatarios),
-                'mensagem'     => $this->corpo,
-                'sucesso'      => $resultado['ok'],
-                'erro'         => $resultado['error'] ?? null,
+                'oficina_id'        => $this->oficina_id,
+                'tipo'              => $this->tipo,
+                'canal'             => 'EMAIL',
+                'destinatario'      => implode(', ', $this->destinatarios),
+                'destinatario_tipo' => $this->destinatarioTipo,
+                'mensagem'          => $this->corpo,
+                'sucesso'           => $resultado['ok'],
+                'erro'              => $resultado['error'] ?? null,
             ]);
         } finally {
             TenancyContext::clear();

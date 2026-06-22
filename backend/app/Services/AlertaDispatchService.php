@@ -47,46 +47,62 @@ class AlertaDispatchService
         if (in_array('WHATSAPP', $canais, true)
             && $this->whatsApp->estaAtivo()
             && $this->ent->permiteEnvio($oficinaId, 'ALERTA_WHATSAPP')) {
-            $telefones = array_merge((array)($alerta->destinatarios ?? []), $extras);
-            if ($alerta->enviar_cliente && isset($vars['_telefone_cliente'])) {
-                $telefones[] = $vars['_telefone_cliente'];
-            }
-            if ($alerta->enviar_mecanico && isset($vars['_telefone_mecanico'])) {
-                $telefones[] = $vars['_telefone_mecanico'];
-            }
-            $telefones = array_unique(array_filter($telefones));
 
-            foreach ($telefones as $telefone) {
+            $alvos = $this->montarAlvos(
+                cadastrados: array_merge((array)($alerta->destinatarios ?? []), $extras),
+                cliente: $alerta->enviar_cliente ? ($vars['_telefone_cliente'] ?? null) : null,
+                mecanico: $alerta->enviar_mecanico ? ($vars['_telefone_mecanico'] ?? null) : null,
+            );
+
+            foreach ($alvos as $telefone => $origem) {
                 EnviarAlertaWhatsAppJob::dispatch(
-                    oficina_id: $oficinaId,
-                    telefone:   (string) $telefone,
-                    mensagem:   $mensagem,
-                    tipo:       $tipo,
+                    oficina_id:       $oficinaId,
+                    telefone:         (string) $telefone,
+                    mensagem:         $mensagem,
+                    tipo:             $tipo,
+                    destinatarioTipo: $origem,
                 )->onQueue('whatsapp');
             }
         }
 
         // ── Canal E-mail ─────────────────────────────────────────────────
         if (in_array('EMAIL', $canais, true) && $this->ent->permiteEnvio($oficinaId, 'ALERTA_EMAIL')) {
-            $emails = (array)($alerta->emails ?? []);
-            if ($alerta->enviar_cliente && !empty($vars['_email_cliente'])) {
-                $emails[] = $vars['_email_cliente'];
-            }
-            if ($alerta->enviar_mecanico && !empty($vars['_email_mecanico'])) {
-                $emails[] = $vars['_email_mecanico'];
-            }
-            $emails = array_values(array_unique(array_filter($emails)));
 
-            if (!empty($emails)) {
+            $alvos = $this->montarAlvos(
+                cadastrados: (array)($alerta->emails ?? []),
+                cliente: $alerta->enviar_cliente ? ($vars['_email_cliente'] ?? null) : null,
+                mecanico: $alerta->enviar_mecanico ? ($vars['_email_mecanico'] ?? null) : null,
+            );
+
+            foreach ($alvos as $email => $origem) {
                 EnviarAlertaEmailJob::dispatch(
-                    oficina_id:    $oficinaId,
-                    destinatarios: $emails,
-                    assunto:       'MecânicaPro · ' . ($alerta->nome ?: 'Alerta'),
-                    corpo:         $mensagem,
-                    tipo:          $tipo,
+                    oficina_id:       $oficinaId,
+                    destinatarios:    [(string) $email],
+                    assunto:          'MecânicaPro · ' . ($alerta->nome ?: 'Alerta'),
+                    corpo:            $mensagem,
+                    tipo:             $tipo,
+                    destinatarioTipo: $origem,
                 )->onQueue('whatsapp');
             }
         }
+    }
+
+    /**
+     * Monta o mapa destino => origem (CLIENTE | MECANICO | CADASTRADO), removendo
+     * vazios e duplicados. Cliente/mecânico têm prioridade sobre o número fixo.
+     *
+     * @return array<string,string>
+     */
+    private function montarAlvos(array $cadastrados, ?string $cliente, ?string $mecanico): array
+    {
+        $alvos = [];
+        if ($cliente)  { $c = trim($cliente);  if ($c !== '') $alvos[$c] ??= 'CLIENTE'; }
+        if ($mecanico) { $m = trim($mecanico); if ($m !== '') $alvos[$m] ??= 'MECANICO'; }
+        foreach ($cadastrados as $d) {
+            $d = trim((string) $d);
+            if ($d !== '') $alvos[$d] ??= 'CADASTRADO';
+        }
+        return $alvos;
     }
 
     private function renderTemplate(string $template, array $vars): string

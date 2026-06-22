@@ -159,11 +159,11 @@ class WhatsAppService
         }
     }
 
-    public function enviarMensagem(string $telefone, string $mensagem, string $tipo = 'MANUAL'): bool
+    public function enviarMensagem(string $telefone, string $mensagem, string $tipo = 'MANUAL', ?string $destinatarioTipo = null): bool
     {
         if (!$this->estaAtivo()) return false;
 
-        return $this->dispararMensagem($telefone, $mensagem, $tipo)['ok'];
+        return $this->dispararMensagem($telefone, $mensagem, $tipo, $destinatarioTipo)['ok'];
     }
 
     /**
@@ -216,7 +216,7 @@ class WhatsAppService
      *
      * @return array{ok: bool, error?: string}
      */
-    private function dispararMensagem(string $telefone, string $mensagem, string $tipo): array
+    private function dispararMensagem(string $telefone, string $mensagem, string $tipo, ?string $destinatarioTipo = null): array
     {
         $numero = preg_replace('/\D/', '', $telefone);
         if (!str_starts_with($numero, '55')) {
@@ -247,12 +247,14 @@ class WhatsAppService
         $oficinaId = TenancyContext::get();
         if ($oficinaId) {
             AlertaLog::create([
-                'oficina_id'   => $oficinaId,
-                'tipo'         => $tipo,
-                'destinatario' => $numero,
-                'mensagem'     => $mensagem,
-                'sucesso'      => $sucesso,
-                'erro'         => $erro,
+                'oficina_id'        => $oficinaId,
+                'tipo'              => $tipo,
+                'canal'             => 'WHATSAPP',
+                'destinatario'      => $numero,
+                'destinatario_tipo' => $destinatarioTipo,
+                'mensagem'          => $mensagem,
+                'sucesso'           => $sucesso,
+                'erro'              => $erro,
             ]);
         }
 

@@ -78,7 +78,7 @@ class OrcamentoController extends Controller
             $canais = [];
 
             if ($cliente->telefone && $this->whatsApp->estaAtivo()
-                && $this->whatsApp->enviarMensagem($cliente->telefone, $msg, 'ORCAMENTO')) {
+                && $this->whatsApp->enviarMensagem($cliente->telefone, $msg, 'ORCAMENTO', 'CLIENTE')) {
                 $canais[] = 'WHATSAPP';
             }
 

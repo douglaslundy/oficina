@@ -22,6 +22,7 @@ class AlertaLog extends Model
         'tipo',
         'canal',
         'destinatario',
+        'destinatario_tipo',
         'mensagem',
         'sucesso',
         'erro',

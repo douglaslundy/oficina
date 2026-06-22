@@ -23,13 +23,14 @@ class EnviarAlertaWhatsAppJob implements ShouldQueue
         private readonly string $telefone,
         private readonly string $mensagem,
         private readonly string $tipo = 'ALERTA',
+        private readonly ?string $destinatarioTipo = null,
     ) {}
 
     public function handle(WhatsAppService $whatsApp): void
     {
         TenancyContext::set($this->oficina_id);
         try {
-            $whatsApp->enviarMensagem($this->telefone, $this->mensagem, $this->tipo);
+            $whatsApp->enviarMensagem($this->telefone, $this->mensagem, $this->tipo, $this->destinatarioTipo);
         } finally {
             TenancyContext::clear();
         }

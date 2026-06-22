@@ -24,6 +24,7 @@ interface LogEntry {
   tipo: string
   canal?: string | null
   destinatario: string
+  destinatario_tipo?: string | null
   mensagem: string
   sucesso: boolean
   erro: string | null
@@ -33,6 +34,12 @@ interface LogEntry {
 const CANAL_LABEL: Record<string, string> = {
   WHATSAPP: '💬 WhatsApp',
   EMAIL: '✉️ E-mail',
+}
+
+const ORIGEM_LABEL: Record<string, string> = {
+  CLIENTE: '👤 Cliente',
+  MECANICO: '🔧 Mecânico',
+  CADASTRADO: '📇 Nº cadastrado',
 }
 
 interface PaginatedLogs {
@@ -100,6 +107,8 @@ export default function AlertaLogsPage() {
               <span>{CANAL_LABEL[selecionado.canal ?? ''] ?? (selecionado.canal ?? '—')}</span>
               <span style={{ color: 'var(--muted)' }}>Destinatário</span>
               <span style={{ fontFamily: 'monospace' }}>{selecionado.destinatario}</span>
+              <span style={{ color: 'var(--muted)' }}>Origem</span>
+              <span>{selecionado.destinatario_tipo ? (ORIGEM_LABEL[selecionado.destinatario_tipo] ?? selecionado.destinatario_tipo) : '—'}</span>
               <span style={{ color: 'var(--muted)' }}>Data/Hora</span>
               <span style={{ fontFamily: 'monospace' }}>{formatDate(selecionado.enviado_em)}</span>
             </div>
@@ -187,8 +196,11 @@ export default function AlertaLogsPage() {
                     <td style={{ padding: '10px 16px', fontSize: 12, whiteSpace: 'nowrap' }}>
                       {TIPO_LABELS[log.tipo] ?? log.tipo}
                     </td>
-                    <td style={{ padding: '10px 16px', fontSize: 13, fontFamily: 'monospace', color: 'var(--text)' }}>
-                      {log.destinatario}
+                    <td style={{ padding: '10px 16px', fontSize: 13, color: 'var(--text)' }}>
+                      <div style={{ fontFamily: 'monospace' }}>{log.destinatario}</div>
+                      {log.destinatario_tipo && (
+                        <span style={{ fontSize: 11, color: 'var(--muted)' }}>{ORIGEM_LABEL[log.destinatario_tipo] ?? log.destinatario_tipo}</span>
+                      )}
                     </td>
                     <td style={{ padding: '10px 16px', fontSize: 12, color: 'var(--muted)', maxWidth: 340 }}>
                       <div style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }} title={log.mensagem}>
