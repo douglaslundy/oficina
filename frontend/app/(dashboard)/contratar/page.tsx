@@ -32,6 +32,7 @@ export default function ContratarPage() {
   const [solics, setSolics] = useState<Solic[]>([])
   const [loading, setLoading] = useState(true)
   const [enviando, setEnviando] = useState<string | null>(null)
+  const [confirmar, setConfirmar] = useState<Pacote | null>(null)
 
   const carregar = useCallback(() => {
     setLoading(true)
@@ -50,6 +51,7 @@ export default function ContratarPage() {
     try {
       const r = await api.post<{ message: string }>('/solicitacoes', { pacote_id: pacoteId })
       toast(r.data.message, 'success')
+      setConfirmar(null)
       carregar()
     } catch (e: unknown) {
       toast((e as { response?: { data?: { message?: string } } })?.response?.data?.message ?? 'Erro ao solicitar.', 'danger')
@@ -58,6 +60,26 @@ export default function ContratarPage() {
 
   return (
     <div style={{ maxWidth: 900, margin: '0 auto' }}>
+      {confirmar && (
+        <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.65)', zIndex: 1000, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 20 }}>
+          <div style={{ background: 'var(--card)', border: '1px solid var(--border)', borderRadius: 14, padding: 28, width: 420, maxWidth: '100%' }}>
+            <div style={{ fontSize: 36, textAlign: 'center', marginBottom: 8 }}>🛍️</div>
+            <h3 className="font-display" style={{ fontSize: 20, fontWeight: 800, color: 'var(--text)', margin: 0, textAlign: 'center' }}>Confirmar solicitação?</h3>
+            <p style={{ color: 'var(--muted)', fontSize: 14, textAlign: 'center', margin: '10px 0 0', lineHeight: 1.5 }}>
+              Solicitar <b style={{ color: 'var(--text)' }}>{confirmar.nome}</b> ({SERVICO_LABEL[confirmar.servico] ?? confirmar.servico}) por <b style={{ color: 'var(--accent)' }}>{brl(confirmar.valor)}/mês</b>.
+              <br />O administrador precisará aprovar e o valor entrará na sua mensalidade.
+            </p>
+            <div style={{ display: 'flex', gap: 12, marginTop: 24, justifyContent: 'center' }}>
+              <button onClick={() => setConfirmar(null)} disabled={enviando === confirmar.id}
+                style={{ padding: '9px 22px', borderRadius: 8, background: 'transparent', border: '1px solid var(--border)', color: 'var(--muted)', cursor: 'pointer', fontSize: 14 }}>Cancelar</button>
+              <button onClick={() => solicitar(confirmar.id)} disabled={enviando === confirmar.id}
+                style={{ padding: '9px 24px', borderRadius: 8, background: 'var(--accent)', border: 'none', color: '#000', fontSize: 14, fontWeight: 700, cursor: enviando === confirmar.id ? 'not-allowed' : 'pointer', fontFamily: "'Barlow Condensed', sans-serif" }}>
+                {enviando === confirmar.id ? '⟳ Solicitando...' : 'Confirmar'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
       <div style={{ marginBottom: 24 }}>
         <h1 className="font-display" style={{ fontSize: 28, fontWeight: 800, color: 'var(--text)', margin: 0 }}>Contratar Serviços</h1>
         <p style={{ color: 'var(--muted)', fontSize: 14, margin: '4px 0 0' }}>Solicite serviços avulsos além do seu plano. O administrador aprovará e o valor entra na sua mensalidade.</p>
@@ -76,7 +98,7 @@ export default function ContratarPage() {
                 {p.ja_disponivel && (
                   <div style={{ fontSize: 11, color: 'var(--success)', marginBottom: 6 }}>✓ Já incluso no seu plano — contrate para cota/serviço adicional</div>
                 )}
-                <button onClick={() => solicitar(p.id)} disabled={enviando === p.id}
+                <button onClick={() => setConfirmar(p)} disabled={enviando === p.id}
                   style={{ width: '100%', padding: '9px', borderRadius: 8, background: 'var(--accent)', border: 'none', color: '#000', fontWeight: 700, fontSize: 14, cursor: enviando === p.id ? 'not-allowed' : 'pointer' }}>
                   {enviando === p.id ? '⟳ Solicitando...' : 'Solicitar contratação'}
                 </button>

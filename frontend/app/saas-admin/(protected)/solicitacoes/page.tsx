@@ -25,6 +25,8 @@ export default function SolicitacoesPage() {
   const [lista, setLista] = useState<Solic[]>([])
   const [loading, setLoading] = useState(true)
   const [busy, setBusy] = useState<string | null>(null)
+  const [recusando, setRecusando] = useState<Solic | null>(null)
+  const [obs, setObs] = useState('')
 
   const carregar = useCallback(() => {
     setLoading(true)
@@ -36,14 +38,39 @@ export default function SolicitacoesPage() {
     setBusy(id)
     try { await saasApi.post(`/saas/solicitacoes/${id}/aprovar`); carregar() } catch { /* ignore */ } finally { setBusy(null) }
   }
-  async function recusar(id: string) {
-    const obs = prompt('Motivo da recusa (opcional):') ?? undefined
-    setBusy(id)
-    try { await saasApi.post(`/saas/solicitacoes/${id}/recusar`, { observacao: obs }); carregar() } catch { /* ignore */ } finally { setBusy(null) }
+  async function confirmarRecusa() {
+    if (!recusando) return
+    setBusy(recusando.id)
+    try {
+      await saasApi.post(`/saas/solicitacoes/${recusando.id}/recusar`, { observacao: obs || null })
+      setRecusando(null); setObs(''); carregar()
+    } catch { /* ignore */ } finally { setBusy(null) }
   }
 
   return (
     <div style={{ padding: 32, maxWidth: 1000, margin: '0 auto', color: 'var(--text)' }}>
+      {recusando && (
+        <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.65)', zIndex: 1000, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 20 }}>
+          <div style={{ background: 'var(--card)', border: '1px solid var(--border)', borderRadius: 14, padding: 28, width: 440, maxWidth: '100%' }}>
+            <h3 className="font-display" style={{ fontSize: 20, fontWeight: 800, color: 'var(--text)', margin: 0 }}>Recusar solicitação</h3>
+            <p style={{ color: 'var(--muted)', fontSize: 14, margin: '8px 0 16px' }}>
+              {recusando.oficina?.nome} · {recusando.pacote?.nome}
+            </p>
+            <label style={{ display: 'block', fontSize: 12, fontWeight: 600, color: 'var(--muted)', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: 6 }}>Motivo (opcional)</label>
+            <textarea value={obs} onChange={e => setObs(e.target.value)} rows={3}
+              placeholder="Ex: pacote indisponível no momento"
+              style={{ width: '100%', padding: '9px 12px', borderRadius: 7, border: '1px solid var(--border)', background: 'var(--bg)', color: 'var(--text)', fontSize: 14, outline: 'none', boxSizing: 'border-box', resize: 'vertical' }} />
+            <div style={{ display: 'flex', gap: 12, justifyContent: 'flex-end', marginTop: 20 }}>
+              <button onClick={() => { setRecusando(null); setObs('') }} disabled={busy === recusando.id}
+                style={{ padding: '9px 20px', borderRadius: 8, background: 'transparent', border: '1px solid var(--border)', color: 'var(--muted)', cursor: 'pointer', fontSize: 14 }}>Cancelar</button>
+              <button onClick={confirmarRecusa} disabled={busy === recusando.id}
+                style={{ padding: '9px 22px', borderRadius: 8, background: 'var(--danger)', border: 'none', color: '#fff', fontWeight: 700, cursor: busy === recusando.id ? 'not-allowed' : 'pointer', fontSize: 14 }}>
+                {busy === recusando.id ? '⟳ Recusando...' : 'Confirmar recusa'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
       <div style={{ marginBottom: 24 }}>
         <h1 className="font-display" style={{ fontSize: 26, fontWeight: 800, margin: 0 }}>Solicitações de Serviço</h1>
         <p style={{ color: 'var(--muted)', fontSize: 14, margin: '4px 0 0' }}>Pedidos de pacotes avulsos feitos pelas oficinas</p>
@@ -70,7 +97,7 @@ export default function SolicitacoesPage() {
                     {s.status === 'PENDENTE' ? (
                       <div style={{ display: 'flex', gap: 8 }}>
                         <button onClick={() => aprovar(s.id)} disabled={busy === s.id} style={{ padding: '5px 12px', borderRadius: 6, background: 'rgba(67,160,71,.15)', border: '1px solid var(--success)', color: 'var(--success)', cursor: 'pointer', fontSize: 13, fontWeight: 700 }}>Aprovar</button>
-                        <button onClick={() => recusar(s.id)} disabled={busy === s.id} style={{ padding: '5px 12px', borderRadius: 6, background: 'rgba(229,57,53,.1)', border: '1px solid var(--danger)', color: 'var(--danger)', cursor: 'pointer', fontSize: 13 }}>Recusar</button>
+                        <button onClick={() => { setRecusando(s); setObs('') }} disabled={busy === s.id} style={{ padding: '5px 12px', borderRadius: 6, background: 'rgba(229,57,53,.1)', border: '1px solid var(--danger)', color: 'var(--danger)', cursor: 'pointer', fontSize: 13 }}>Recusar</button>
                       </div>
                     ) : <span style={{ color: 'var(--muted)', fontSize: 13 }}>—</span>}
                   </td>
