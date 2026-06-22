@@ -99,7 +99,11 @@ class AlertaDispatchService
     /** Garante que todos os alertas pré-definidos existam para o tenant (cria se não existir). */
     public function garantirAlertasPreDefinidos(string $oficinaId): void
     {
+        // Alertas de resposta do orçamento já nascem avisando cliente e mecânico.
+        $orcamento = ['ORCAMENTO_APROVADO', 'ORCAMENTO_RECUSADO'];
+
         foreach (AlertaConfig::TIPOS_PRE_DEFINIDOS() as $tipo => $meta) {
+            $ehOrcamento = in_array($tipo, $orcamento, true);
             AlertaConfig::withoutGlobalScopes()->firstOrCreate(
                 ['oficina_id' => $oficinaId, 'tipo' => $tipo, 'pre_definido' => true],
                 [
@@ -107,8 +111,8 @@ class AlertaDispatchService
                     'ativo'             => false,
                     'template_mensagem' => $meta['template'],
                     'destinatarios'     => [],
-                    'enviar_cliente'    => false,
-                    'enviar_mecanico'   => false,
+                    'enviar_cliente'    => $ehOrcamento,
+                    'enviar_mecanico'   => $ehOrcamento,
                 ]
             );
         }
