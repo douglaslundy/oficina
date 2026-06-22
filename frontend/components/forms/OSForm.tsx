@@ -62,6 +62,8 @@ interface OSFormProps {
     itens?: OsItemLoaded[]
   }
   onSuccess?: (os: Record<string, unknown>) => void
+  onConcluir?: () => void
+  onCancelar?: () => void
 }
 
 const S: React.CSSProperties = {
@@ -91,7 +93,7 @@ function produtoLabel(p: { nome: string; qty_atual: number; unidade?: string }):
   return `${p.nome} - (${p.qty_atual}${un})`
 }
 
-export function OSForm({ initialData, onSuccess }: OSFormProps) {
+export function OSForm({ initialData, onSuccess, onConcluir, onCancelar }: OSFormProps) {
   const isEdit = !!initialData?.id
   const [mecanicos, setMecanicos] = useState<Array<{ id: string; nome: string }>>([])
   const [produtos, setProdutos] = useState<Array<{ id: string; nome: string; qty_atual: number; unidade?: string; preco_venda: number | null }>>([])
@@ -602,7 +604,19 @@ export function OSForm({ initialData, onSuccess }: OSFormProps) {
         )}
       </div>
 
-      <div style={{ display: 'flex', justifyContent: 'flex-end' }}>
+      <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 12, alignItems: 'center', flexWrap: 'wrap' }}>
+        {isEdit && onConcluir && !['CONCLUIDA', 'CANCELADA'].includes(initialData?.status ?? '') && (
+          <button type="button" onClick={onConcluir} className="font-display"
+            style={{ padding: '10px 22px', background: 'transparent', color: 'var(--success)', borderRadius: 8, border: '1px solid var(--success)', fontWeight: 800, fontSize: 15, cursor: 'pointer' }}>
+            ✓ Concluir OS
+          </button>
+        )}
+        {isEdit && onCancelar && (initialData?.status ?? '') !== 'CANCELADA' && (
+          <button type="button" onClick={onCancelar} className="font-display"
+            style={{ padding: '10px 22px', background: 'transparent', color: 'var(--danger)', borderRadius: 8, border: '1px solid var(--danger)', fontWeight: 800, fontSize: 15, cursor: 'pointer' }}>
+            ✕ Cancelar OS
+          </button>
+        )}
         <button type="submit" disabled={isSubmitting} className="font-display"
           style={{ padding: '10px 28px', background: isSubmitting ? 'var(--muted)' : 'var(--accent)', color: '#000', borderRadius: 8, border: 'none', fontWeight: 800, fontSize: 16, cursor: isSubmitting ? 'not-allowed' : 'pointer' }}>
           {isSubmitting ? 'Salvando...' : isEdit ? 'Atualizar OS' : 'Criar OS'}

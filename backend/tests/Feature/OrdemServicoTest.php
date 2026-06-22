@@ -193,4 +193,49 @@ class OrdemServicoTest extends TestCase
 
         $this->assertEquals(10, $produto->fresh()->qty_atual);
     }
+
+    public function test_cancelar_os_com_devolver_estoque_false_nao_devolve(): void
+    {
+        [$token, $mecId, $cliId] = $this->setupEntities();
+        $produto = $this->criarProduto(10);
+
+        $os = $this->withToken($token)->postJson('/api/os', [
+            'cliente_id' => $cliId, 'mecanico_id' => $mecId, 'status' => 'ABERTA',
+            'itens' => [[
+                'tipo' => 'PECA', 'produto_id' => $produto->id,
+                'descricao' => 'Filtro', 'quantidade' => 2, 'valor_unitario' => 50,
+            ]],
+        ])->json('data');
+
+        $this->assertEquals(8, $produto->fresh()->qty_atual);
+
+        $this->withToken($token)->putJson("/api/os/{$os['id']}", [
+            'status' => 'CANCELADA', 'devolver_estoque' => false,
+        ])->assertOk();
+
+        // Opção de não devolver: estoque permanece baixado.
+        $this->assertEquals(8, $produto->fresh()->qty_atual);
+    }
+
+    public function test_cancelar_os_com_devolver_estoque_true_devolve(): void
+    {
+        [$token, $mecId, $cliId] = $this->setupEntities();
+        $produto = $this->criarProduto(10);
+
+        $os = $this->withToken($token)->postJson('/api/os', [
+            'cliente_id' => $cliId, 'mecanico_id' => $mecId, 'status' => 'ABERTA',
+            'itens' => [[
+                'tipo' => 'PECA', 'produto_id' => $produto->id,
+                'descricao' => 'Filtro', 'quantidade' => 2, 'valor_unitario' => 50,
+            ]],
+        ])->json('data');
+
+        $this->assertEquals(8, $produto->fresh()->qty_atual);
+
+        $this->withToken($token)->putJson("/api/os/{$os['id']}", [
+            'status' => 'CANCELADA', 'devolver_estoque' => true,
+        ])->assertOk();
+
+        $this->assertEquals(10, $produto->fresh()->qty_atual);
+    }
 }

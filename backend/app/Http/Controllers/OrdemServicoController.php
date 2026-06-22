@@ -205,7 +205,11 @@ class OrdemServicoController extends Controller
             'prazo_pagamento_dias' => ['sometimes', 'nullable', 'integer', 'min:1', 'max:365'],
         ]);
 
-        return DB::transaction(function () use ($os, $validated, $novoStatus) {
+        // Devolução de estoque ao cancelar é opcional (o usuário decide no modal).
+        // Ausência do campo mantém o comportamento antigo (devolve) por compatibilidade.
+        $devolverEstoque = $request->boolean('devolver_estoque', true);
+
+        return DB::transaction(function () use ($os, $validated, $novoStatus, $devolverEstoque) {
             $wasNotConcluida = $os->status !== 'CONCLUIDA';
             // Captura o status ANTES do update: após $os->update() o Eloquent
             // sincroniza os "originals", então getOriginal('status') passaria a
@@ -215,8 +219,8 @@ class OrdemServicoController extends Controller
             // O estoque é baixado no momento em que a peça é inserida na OS,
             // portanto a conclusão NÃO deve baixar novamente (evita duplicidade).
             // Ao cancelar uma OS que ainda não estava cancelada, devolvemos as
-            // peças ao estoque.
-            if ($novoStatus === 'CANCELADA' && $os->status !== 'CANCELADA') {
+            // peças ao estoque apenas quando o usuário optar por isso.
+            if ($novoStatus === 'CANCELADA' && $os->status !== 'CANCELADA' && $devolverEstoque) {
                 $this->estoqueService->devolverEstoqueOs($os);
             }
 

@@ -123,6 +123,39 @@ export default function OSDetailPage() {
   const [novoPag, setNovoPag] = useState({ forma: 'Dinheiro', valor: '' })
   const [addingPag, setAddingPag] = useState(false)
 
+  // Modais de conclusão/cancelamento da OS (Tarefas 1, 2 e 3).
+  const [confirmConcluir, setConfirmConcluir] = useState(false)
+  const [confirmCancelar, setConfirmCancelar] = useState(false)
+  const [devolverEstoque, setDevolverEstoque] = useState(true)
+  const [concluindo, setConcluindo] = useState(false)
+  const [cancelando, setCancelando] = useState(false)
+
+  async function concluirOS() {
+    setConcluindo(true)
+    try {
+      await api.put(`/os/${id}`, { status: 'CONCLUIDA' })
+      toast('OS concluída!', 'success')
+      setConfirmConcluir(false)
+      fetchOs()
+    } catch (e: unknown) {
+      const msg = (e as { response?: { data?: { message?: string } } })?.response?.data?.message
+      toast(msg ?? 'Erro ao concluir OS.', 'danger')
+    } finally { setConcluindo(false) }
+  }
+
+  async function cancelarOS(devolver: boolean) {
+    setCancelando(true)
+    try {
+      await api.put(`/os/${id}`, { status: 'CANCELADA', devolver_estoque: devolver })
+      toast(devolver ? 'OS cancelada e estoque devolvido.' : 'OS cancelada.', 'success')
+      setConfirmCancelar(false)
+      fetchOs()
+    } catch (e: unknown) {
+      const msg = (e as { response?: { data?: { message?: string } } })?.response?.data?.message
+      toast(msg ?? 'Erro ao cancelar OS.', 'danger')
+    } finally { setCancelando(false) }
+  }
+
   async function handleAddPagamento() {
     const valor = parseFloat(novoPag.valor)
     if (!valor || valor <= 0) { toast('Informe um valor válido.', 'danger'); return }
@@ -131,7 +164,9 @@ export default function OSDetailPage() {
       await api.post(`/os/${id}/pagamentos`, { forma_pagamento: novoPag.forma, valor })
       toast('Pagamento registrado!', 'success')
       setNovoPag({ forma: 'Dinheiro', valor: '' })
-      fetchOs()
+      await fetchOs()
+      // Após registrar, pergunta se deseja concluir a OS.
+      setConfirmConcluir(true)
     } catch {
       toast('Erro ao registrar pagamento.', 'danger')
     } finally {
@@ -140,10 +175,16 @@ export default function OSDetailPage() {
   }
 
   async function handleRemovePagamento(pagamentoId: string) {
+    // Se este for o último pagamento, ofereceremos o cancelamento da OS.
+    const eraUltimo = (os?.pagamentos ?? []).length <= 1
     try {
       await api.delete(`/os/${id}/pagamentos/${pagamentoId}`)
       toast('Pagamento removido.', 'success')
-      fetchOs()
+      await fetchOs()
+      if (eraUltimo) {
+        setDevolverEstoque(true)
+        setConfirmCancelar(true)
+      }
     } catch {
       toast('Erro ao remover pagamento.', 'danger')
     }
@@ -177,6 +218,58 @@ export default function OSDetailPage() {
               <button onClick={enviarOrcamento} disabled={enviandoOrc}
                 style={{ padding: '9px 24px', borderRadius: 8, background: 'var(--accent)', border: 'none', color: '#000', fontSize: 14, fontWeight: 700, cursor: enviandoOrc ? 'not-allowed' : 'pointer', fontFamily: "'Barlow Condensed', sans-serif" }}>
                 {enviandoOrc ? '⟳ Enviando...' : 'Confirmar envio'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+      {confirmConcluir && (
+        <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.65)', zIndex: 1000, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 24 }}>
+          <div style={{ background: 'var(--card)', border: '1px solid var(--border)', borderRadius: 14, padding: 28, width: 420, maxWidth: '100%' }}>
+            <div style={{ fontSize: 38, textAlign: 'center', marginBottom: 8 }}>✅</div>
+            <h3 className="font-display" style={{ fontSize: 20, fontWeight: 800, color: 'var(--text)', margin: 0, textAlign: 'center' }}>
+              Concluir esta OS?
+            </h3>
+            <p style={{ color: 'var(--muted)', fontSize: 14, textAlign: 'center', margin: '10px 0 0', lineHeight: 1.5 }}>
+              A OS #{os.numero} será marcada como <b style={{ color: 'var(--success)' }}>CONCLUÍDA</b>.
+            </p>
+            <div style={{ display: 'flex', gap: 12, marginTop: 24, justifyContent: 'center' }}>
+              <button onClick={() => setConfirmConcluir(false)} disabled={concluindo}
+                style={{ padding: '9px 22px', borderRadius: 8, background: 'transparent', border: '1px solid var(--border)', color: 'var(--muted)', cursor: 'pointer', fontSize: 14 }}>
+                Agora não
+              </button>
+              <button onClick={concluirOS} disabled={concluindo}
+                style={{ padding: '9px 24px', borderRadius: 8, background: 'var(--success)', border: 'none', color: '#fff', fontSize: 14, fontWeight: 700, cursor: concluindo ? 'not-allowed' : 'pointer', fontFamily: "'Barlow Condensed', sans-serif" }}>
+                {concluindo ? '⟳ Concluindo...' : 'Sim, concluir'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+      {confirmCancelar && (
+        <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.65)', zIndex: 1000, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 24 }}>
+          <div style={{ background: 'var(--card)', border: '1px solid var(--border)', borderRadius: 14, padding: 28, width: 440, maxWidth: '100%' }}>
+            <div style={{ fontSize: 38, textAlign: 'center', marginBottom: 8 }}>⚠️</div>
+            <h3 className="font-display" style={{ fontSize: 20, fontWeight: 800, color: 'var(--text)', margin: 0, textAlign: 'center' }}>
+              Cancelar esta OS?
+            </h3>
+            <p style={{ color: 'var(--muted)', fontSize: 14, textAlign: 'center', margin: '10px 0 16px', lineHeight: 1.5 }}>
+              A OS #{os.numero} será marcada como <b style={{ color: 'var(--danger)' }}>CANCELADA</b>.
+            </p>
+            <label style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '12px 14px', borderRadius: 9, border: '1px solid var(--border)', background: 'var(--bg)', cursor: 'pointer' }}>
+              <input type="checkbox" checked={devolverEstoque}
+                onChange={e => setDevolverEstoque(e.target.checked)}
+                style={{ width: 16, height: 16, accentColor: 'var(--accent)' }} />
+              <span style={{ fontSize: 14, color: 'var(--text)' }}>Devolver ao estoque as peças desta OS</span>
+            </label>
+            <div style={{ display: 'flex', gap: 12, marginTop: 24, justifyContent: 'center' }}>
+              <button onClick={() => setConfirmCancelar(false)} disabled={cancelando}
+                style={{ padding: '9px 22px', borderRadius: 8, background: 'transparent', border: '1px solid var(--border)', color: 'var(--muted)', cursor: 'pointer', fontSize: 14 }}>
+                Voltar
+              </button>
+              <button onClick={() => cancelarOS(devolverEstoque)} disabled={cancelando}
+                style={{ padding: '9px 24px', borderRadius: 8, background: 'var(--danger)', border: 'none', color: '#fff', fontSize: 14, fontWeight: 700, cursor: cancelando ? 'not-allowed' : 'pointer', fontFamily: "'Barlow Condensed', sans-serif" }}>
+                {cancelando ? '⟳ Cancelando...' : 'Confirmar cancelamento'}
               </button>
             </div>
           </div>
@@ -217,6 +310,8 @@ export default function OSDetailPage() {
         <OSForm
           initialData={formData}
           onSuccess={() => fetchOs()}
+          onConcluir={() => setConfirmConcluir(true)}
+          onCancelar={() => { setDevolverEstoque(true); setConfirmCancelar(true) }}
         />
       </div>
 
