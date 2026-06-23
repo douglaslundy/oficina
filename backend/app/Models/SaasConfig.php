@@ -27,6 +27,12 @@ class SaasConfig extends Model
         'smtp_from_address',
         'smtp_from_name',
         'smtp_ativo',
+        'provedor_fiscal_padrao',
+        'emissao_fiscal_modo_padrao',
+        'spedy_master_key_sandbox',
+        'spedy_master_key_producao',
+        'focus_master_token_homologacao',
+        'focus_master_token_producao',
     ];
 
     protected $casts = [
@@ -41,6 +47,10 @@ class SaasConfig extends Model
         'mp_public_key',
         'mp_webhook_secret',
         'smtp_password',
+        'spedy_master_key_sandbox',
+        'spedy_master_key_producao',
+        'focus_master_token_homologacao',
+        'focus_master_token_producao',
     ];
 
     /** Há SMTP configurado e ativo para envio de e-mails? */

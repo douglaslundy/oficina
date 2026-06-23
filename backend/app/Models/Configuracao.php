@@ -24,6 +24,7 @@ class Configuracao extends Model
         'proximo_numero_nf', 'aliquota_iss', 'cnae', 'codigo_ibge',
         'estoque_limite_padrao', 'alertas_email', 'email_alertas', 'certificado_pfx_encrypted',
         'oficina_id',
+        'certificado_senha_encrypted', 'certificado_validade', 'certificado_nome', 'certificado_status',
     ];
 
     protected $casts = ['alertas_email' => 'boolean'];

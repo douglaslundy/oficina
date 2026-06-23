@@ -28,6 +28,8 @@ class Oficina extends Model
         'mp_customer_id',
         'mp_subscription_id',
         'admin_email',
+        'provedor_fiscal',
+        'emissao_fiscal_modo',
     ];
 
     protected $casts = [

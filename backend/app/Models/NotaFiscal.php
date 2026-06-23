@@ -27,6 +27,7 @@ class NotaFiscal extends Model
         'aliquota_iss', 'valor_iss', 'valor_total', 'status',
         'chave_acesso', 'protocolo', 'xml_retorno', 'pdf_url', 'observacoes', 'emitido_em',
         'oficina_id',
+        'provedor', 'ambiente', 'referencia_externa',
     ];
 
     protected $casts = [

@@ -53,4 +53,14 @@ return [
         'ambiente'       => env('MP_AMBIENTE', 'sandbox'),
     ],
 
+    'spedy' => [
+        'sandbox_url'  => env('SPEDY_SANDBOX_URL', 'https://sandbox-api.spedy.com.br/v1'),
+        'producao_url' => env('SPEDY_PRODUCAO_URL', 'https://api.spedy.com.br/v1'),
+    ],
+
+    'focusnfe' => [
+        'homologacao_url' => env('FOCUS_HOMOLOGACAO_URL', 'https://homologacao.focusnfe.com.br'),
+        'producao_url'    => env('FOCUS_PRODUCAO_URL', 'https://api.focusnfe.com.br'),
+    ],
+
 ];
