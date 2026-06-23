@@ -25,7 +25,7 @@ class CertificadoValidator
             : null;
         $nome = $info['subject']['CN'] ?? null;
 
-        if ($validade !== null && strtotime($validade) < time()) {
+        if (isset($info['validTo_time_t']) && (int) $info['validTo_time_t'] < time()) {
             return ['ok' => false, 'validade' => $validade, 'nome' => $nome, 'erro' => 'Certificado expirado.'];
         }
 
