@@ -24,6 +24,12 @@ class SaasConfigController extends Controller
                 'mp_access_token'      => SaasConfig::mascarar($cfg->getRawOriginal('mp_access_token')),
                 'mp_public_key'        => SaasConfig::mascarar($cfg->getRawOriginal('mp_public_key')),
                 'mp_webhook_secret'    => SaasConfig::mascarar($cfg->getRawOriginal('mp_webhook_secret')),
+                'provedor_fiscal_padrao'         => $cfg->provedor_fiscal_padrao,
+                'emissao_fiscal_modo_padrao'     => $cfg->emissao_fiscal_modo_padrao,
+                'spedy_master_key_sandbox'       => SaasConfig::mascarar($cfg->getRawOriginal('spedy_master_key_sandbox')),
+                'spedy_master_key_producao'      => SaasConfig::mascarar($cfg->getRawOriginal('spedy_master_key_producao')),
+                'focus_master_token_homologacao' => SaasConfig::mascarar($cfg->getRawOriginal('focus_master_token_homologacao')),
+                'focus_master_token_producao'    => SaasConfig::mascarar($cfg->getRawOriginal('focus_master_token_producao')),
                 // SMTP — senha mascarada
                 'smtp_host'            => $cfg->smtp_host,
                 'smtp_port'            => $cfg->smtp_port,
@@ -69,6 +75,50 @@ class SaasConfigController extends Controller
         $resultado = app(\App\Services\EmailService::class)->enviarTeste($validated['destinatario']);
 
         return response()->json($resultado, $resultado['ok'] ? 200 : 422);
+    }
+
+    public function updateProvedorFiscal(Request $request): JsonResponse
+    {
+        $validated = $request->validate([
+            'provedor_fiscal_padrao'     => ['required', 'in:SPEDY,FOCUS'],
+            'emissao_fiscal_modo_padrao' => ['required', 'in:MANUAL,AUTOMATICO'],
+        ]);
+        SaasConfig::get()->update($validated);
+        return response()->json(['message' => 'Provedor fiscal padrão atualizado.', 'data' => $validated]);
+    }
+
+    public function updateSpedy(Request $request): JsonResponse
+    {
+        $validated = $request->validate([
+            'spedy_master_key_sandbox'  => ['nullable', 'string', 'min:8'],
+            'spedy_master_key_producao' => ['nullable', 'string', 'min:8'],
+        ]);
+        $this->salvarSegredos($validated, ['spedy_master_key_sandbox', 'spedy_master_key_producao']);
+        return response()->json(['message' => 'Credenciais Spedy salvas.']);
+    }
+
+    public function updateFocus(Request $request): JsonResponse
+    {
+        $validated = $request->validate([
+            'focus_master_token_homologacao' => ['nullable', 'string', 'min:8'],
+            'focus_master_token_producao'    => ['nullable', 'string', 'min:8'],
+        ]);
+        $this->salvarSegredos($validated, ['focus_master_token_homologacao', 'focus_master_token_producao']);
+        return response()->json(['message' => 'Credenciais Focus NFe salvas.']);
+    }
+
+    /** Cifra e salva segredos; ignora valores vazios ou ainda mascarados. */
+    private function salvarSegredos(array $validated, array $campos): void
+    {
+        $cfg = SaasConfig::get();
+        foreach ($campos as $campo) {
+            $valor = $validated[$campo] ?? null;
+            if (empty($valor) || str_contains($valor, '*')) {
+                continue;
+            }
+            $cfg->{$campo} = \Illuminate\Support\Facades\Crypt::encryptString($valor);
+        }
+        $cfg->save();
     }
 
     public function updateGateway(Request $request): JsonResponse

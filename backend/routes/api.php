@@ -87,6 +87,12 @@ Route::prefix('saas')->group(function () {
         Route::put('config/smtp',                [SaasConfigController::class, 'updateSmtp']);
         Route::post('config/smtp/testar',        [SaasConfigController::class, 'testarSmtp']);
 
+        // Configurações fiscais (SaaS Admin)
+        Route::put('config/fiscal',        [SaasConfigController::class, 'updateProvedorFiscal']);
+        Route::put('config/fiscal/spedy',  [SaasConfigController::class, 'updateSpedy']);
+        Route::put('config/fiscal/focus',  [SaasConfigController::class, 'updateFocus']);
+        Route::put('oficinas/{id}/fiscal', [SaaSOficinaController::class, 'updateFiscal']);
+
         // Notificações (avisos) — CRUD do admin SaaS
         Route::get('notificacoes',          [\App\Http\Controllers\SaaS\NotificacaoController::class, 'index']);
         Route::post('notificacoes',         [\App\Http\Controllers\SaaS\NotificacaoController::class, 'store']);

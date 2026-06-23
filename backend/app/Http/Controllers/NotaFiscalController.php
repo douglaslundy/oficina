@@ -78,7 +78,17 @@ class NotaFiscalController extends Controller
             return response()->json(['message' => 'NF já foi emitida.'], 400);
         }
 
-        $nota->update(['status' => 'PROCESSANDO', 'numero' => $this->nfeService->proximoNumeroNf()]);
+        $provedor = app(\App\Services\Fiscal\FiscalProviderManager::class)->provedorDaOficina(\App\Tenancy\TenancyContext::get() ?? '');
+        $ambiente = \App\Models\Configuracao::first()?->ambiente_fiscal ?? 'HOMOLOGACAO';
+        $ref      = $nota->referencia_externa ?: ('nf-' . $nota->id);
+
+        $nota->update([
+            'status'             => 'PROCESSANDO',
+            'numero'             => $this->nfeService->proximoNumeroNf(),
+            'provedor'           => $provedor,
+            'ambiente'           => $ambiente,
+            'referencia_externa' => $ref,
+        ]);
 
         try {
             $resultado = $this->nfeService->emitir($nota);
@@ -87,10 +97,11 @@ class NotaFiscalController extends Controller
                 'chave_acesso' => $resultado['chave'],
                 'protocolo'    => $resultado['protocolo'],
                 'xml_retorno'  => $resultado['xml_retorno'],
-                'emitido_em'   => now(),
+                'emitido_em'   => $resultado['status'] === 'AUTORIZADA' ? now() : null,
             ]);
 
-            if ($resultado['status'] === 'AUTORIZADA') {
+            // Billing e alertas só em PRODUCAO e quando AUTORIZADA.
+            if ($resultado['status'] === 'AUTORIZADA' && $ambiente === 'PRODUCAO') {
                 $notaFresh = $nota->fresh()->loadMissing('cliente');
                 $this->planLimit->registrarNotaSeExcedente($notaFresh);
                 $this->alertas->dispatch('NF_AUTORIZADA', [
@@ -101,6 +112,10 @@ class NotaFiscalController extends Controller
                     '_telefone_cliente' => $notaFresh->cliente?->telefone ?? '',
                     '_email_cliente'    => $notaFresh->cliente?->email ?? '',
                 ]);
+            }
+
+            if ($resultado['status'] === 'REJEITADA') {
+                return response()->json(['message' => $resultado['mensagem_erro'] ?? 'Nota rejeitada.'], 422);
             }
         } catch (\Exception $e) {
             $nota->update(['status' => 'REJEITADA']);

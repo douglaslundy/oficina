@@ -318,6 +318,20 @@ class OficinaController extends Controller
         return response()->json(['message' => 'Assinatura cancelada e oficina desativada.']);
     }
 
+    public function updateFiscal(Request $request, string $id): JsonResponse
+    {
+        $validated = $request->validate([
+            'provedor_fiscal'     => ['nullable', 'in:SPEDY,FOCUS'],
+            'emissao_fiscal_modo' => ['nullable', 'in:MANUAL,AUTOMATICO'],
+        ]);
+        $oficina = \App\Models\Oficina::findOrFail($id);
+        $oficina->update($validated);
+        return response()->json(['message' => 'Configuração fiscal da oficina atualizada.', 'data' => [
+            'provedor_fiscal'     => $oficina->provedor_fiscal,
+            'emissao_fiscal_modo' => $oficina->emissao_fiscal_modo,
+        ]]);
+    }
+
     private function formatOficina(Oficina $oficina, Carbon $inicioMes): array
     {
         $usersCount = Usuario::withoutGlobalScopes()
