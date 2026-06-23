@@ -255,6 +255,7 @@ interface AgendamentoCardProps {
 function AgendamentoCard({ ag, onRefresh }: AgendamentoCardProps) {
   const router = useRouter()
   const [loading, setLoading] = useState(false)
+  const [confirmCancel, setConfirmCancel] = useState(false)
 
   async function confirmar() {
     setLoading(true)
@@ -270,11 +271,11 @@ function AgendamentoCard({ ag, onRefresh }: AgendamentoCardProps) {
   }
 
   async function cancelar() {
-    if (!confirm('Cancelar este agendamento?')) return
     setLoading(true)
     try {
       await api.post(`/agendamentos/${ag.id}/cancelar`)
       toast('Agendamento cancelado.', 'success')
+      setConfirmCancel(false)
       onRefresh()
     } catch {
       toast('Erro ao cancelar.', 'danger')
@@ -329,7 +330,7 @@ function AgendamentoCard({ ag, onRefresh }: AgendamentoCardProps) {
               }}>
               ✓ Confirmar
             </button>
-            <button onClick={cancelar} disabled={loading}
+            <button onClick={() => setConfirmCancel(true)} disabled={loading}
               style={{
                 padding: '3px 10px',
                 background: 'transparent', border: '1px solid var(--border)',
@@ -351,6 +352,34 @@ function AgendamentoCard({ ag, onRefresh }: AgendamentoCardProps) {
           </button>
         )}
       </div>
+
+      {confirmCancel && (
+        <div style={{
+          position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.65)', zIndex: 1000,
+          display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 24,
+        }}>
+          <div style={{ background: 'var(--card)', border: '1px solid var(--border)', borderRadius: 14, padding: 28, width: 420, maxWidth: '100%' }}>
+            <div style={{ fontSize: 38, textAlign: 'center', marginBottom: 8 }}>⚠️</div>
+            <h3 className="font-display" style={{ fontSize: 20, fontWeight: 800, color: 'var(--text)', margin: 0, textAlign: 'center' }}>
+              Cancelar este agendamento?
+            </h3>
+            <p style={{ color: 'var(--muted)', fontSize: 14, textAlign: 'center', margin: '10px 0 0', lineHeight: 1.5 }}>
+              {ag.cliente?.nome ?? 'Cliente'} · {fmtHour(ag.data_hora_inicio)} · {ag.tipo_servico}.
+              {' '}O agendamento será marcado como <b style={{ color: 'var(--danger)' }}>CANCELADO</b>.
+            </p>
+            <div style={{ display: 'flex', gap: 12, marginTop: 24, justifyContent: 'center' }}>
+              <button onClick={() => setConfirmCancel(false)} disabled={loading}
+                style={{ padding: '9px 22px', borderRadius: 8, background: 'transparent', border: '1px solid var(--border)', color: 'var(--muted)', cursor: 'pointer', fontSize: 14 }}>
+                Voltar
+              </button>
+              <button onClick={cancelar} disabled={loading}
+                style={{ padding: '9px 24px', borderRadius: 8, background: 'var(--danger)', border: 'none', color: '#fff', fontSize: 14, fontWeight: 700, cursor: loading ? 'not-allowed' : 'pointer', fontFamily: "'Barlow Condensed', sans-serif" }}>
+                {loading ? '⟳ Cancelando...' : 'Confirmar cancelamento'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   )
 }
