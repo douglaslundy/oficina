@@ -21,7 +21,7 @@ class RegistrarEmissorMontagemTest extends TestCase
         ]);
 
         $service = new RegistrarEmissorService(
-            app(\App\Services\Fiscal\FiscalProviderManager::class),
+            new \App\Services\Fiscal\FiscalProviderManager(),
             new \App\Services\Fiscal\CertificadoValidator(),
         );
         $e = $service->montarEmissorData($cfg);
