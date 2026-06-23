@@ -53,7 +53,7 @@ class FiscalProviderManager
             ->where('provedor', $provedor)
             ->where('ambiente', $ambiente)
             ->first();
-        $emissorToken = $emissor?->token_encrypted ? Crypt::decryptString($emissor->token_encrypted) : null;
+        $emissorToken = $emissor?->token_encrypted ? ($this->decifrar($emissor->token_encrypted) ?: null) : null;
         $emissorExtId = $emissor?->emissor_externo_id;
 
         return $this->build($provedor, $ambiente, $cfg, $emissorToken, $emissorExtId);
