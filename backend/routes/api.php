@@ -230,9 +230,10 @@ Route::middleware(['tenant', 'auth:sanctum', 'role:ADMIN'])->group(function () {
 
 // ─── Configurações — somente ADMIN ───────────────────────────────────────────
 Route::middleware(['tenant', 'auth:sanctum', 'role:ADMIN'])->group(function () {
-    Route::post('configuracoes/certificado', [ConfiguracaoController::class, 'uploadCertificado']);
-    Route::get('configuracoes',              [ConfiguracaoController::class, 'show']);
-    Route::put('configuracoes',              [ConfiguracaoController::class, 'update']);
+    Route::post('configuracoes/certificado',    [ConfiguracaoController::class, 'uploadCertificado']);
+    Route::post('configuracoes/ativar-emissao', [ConfiguracaoController::class, 'ativarEmissao']);
+    Route::get('configuracoes',                 [ConfiguracaoController::class, 'show']);
+    Route::put('configuracoes',                 [ConfiguracaoController::class, 'update']);
 });
 
 // ─── WhatsApp — somente ADMIN ────────────────────────────────────────────────

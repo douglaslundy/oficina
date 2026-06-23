@@ -60,7 +60,7 @@ class ConfiguracaoController extends Controller
         return response()->json(['message' => 'Configurações atualizadas.', 'data' => $config]);
     }
 
-    public function uploadCertificado(Request $request): JsonResponse
+    public function uploadCertificado(Request $request, \App\Services\Fiscal\CertificadoValidator $validator): JsonResponse
     {
         $request->validate([
             'certificado' => ['required', 'file', 'mimes:pfx,p12', 'max:5120'],
@@ -70,9 +70,9 @@ class ConfiguracaoController extends Controller
         $file     = $request->file('certificado');
         $conteudo = file_get_contents($file->getRealPath());
 
-        $pfx = [];
-        if (!openssl_pkcs12_read($conteudo, $pfx, $request->senha)) {
-            return response()->json(['message' => 'Certificado inválido ou senha incorreta.'], 422);
+        $resultado = $validator->validar($conteudo, $request->senha);
+        if (!$resultado['ok']) {
+            return response()->json(['message' => $resultado['erro'] ?? 'Certificado inválido.'], 422);
         }
 
         $key       = substr(hash('sha256', config('app.key'), true), 0, 32);
@@ -81,8 +81,29 @@ class ConfiguracaoController extends Controller
         $stored    = base64_encode($iv . $encrypted);
 
         $config = Configuracao::firstOrCreate([]);
-        $config->update(['certificado_pfx_encrypted' => $stored]);
+        $config->update([
+            'certificado_pfx_encrypted'   => $stored,
+            'certificado_senha_encrypted' => \Illuminate\Support\Facades\Crypt::encryptString($request->senha),
+            'certificado_validade'        => $resultado['validade'],
+            'certificado_nome'            => $resultado['nome'] ?? $file->getClientOriginalName(),
+            'certificado_status'          => 'OK',
+        ]);
 
-        return response()->json(['message' => 'Certificado enviado com sucesso.', 'tem_certificado' => true]);
+        return response()->json([
+            'message'         => 'Certificado enviado com sucesso.',
+            'tem_certificado' => true,
+            'validade'        => $resultado['validade'],
+        ]);
+    }
+
+    public function ativarEmissao(\App\Services\Fiscal\RegistrarEmissorService $service): JsonResponse
+    {
+        $oficinaId = \App\Tenancy\TenancyContext::get();
+        if (!$oficinaId) {
+            return response()->json(['message' => 'Tenant não identificado.'], 422);
+        }
+
+        $resultado = $service->registrar($oficinaId);
+        return response()->json(['message' => $resultado['mensagem']], $resultado['ok'] ? 200 : 422);
     }
 }
