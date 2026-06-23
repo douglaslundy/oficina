@@ -238,4 +238,25 @@ class OrdemServicoTest extends TestCase
 
         $this->assertEquals(10, $produto->fresh()->qty_atual);
     }
+
+    public function test_os_cancelada_nao_pode_mudar_de_status(): void
+    {
+        [$token, $mecId, $cliId] = $this->setupEntities();
+
+        $os = $this->withToken($token)->postJson('/api/os', [
+            'cliente_id' => $cliId, 'mecanico_id' => $mecId, 'status' => 'ABERTA',
+        ])->json('data');
+
+        $this->withToken($token)->putJson("/api/os/{$os['id']}", [
+            'status' => 'CANCELADA', 'devolver_estoque' => false,
+        ])->assertOk();
+
+        // Tentar reabrir/concluir uma OS cancelada deve ser rejeitado.
+        $this->withToken($token)->putJson("/api/os/{$os['id']}", [
+            'status' => 'EM_ANDAMENTO',
+        ])->assertStatus(422)
+          ->assertJsonFragment(['message' => 'OS cancelada não pode ter o status alterado.']);
+
+        $this->assertEquals('CANCELADA', \App\Models\OrdemServico::find($os['id'])->status);
+    }
 }

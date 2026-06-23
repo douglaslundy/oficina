@@ -193,6 +193,12 @@ class OrdemServicoController extends Controller
     public function update(Request $request, string $id): OrdemServicoResource
     {
         $os = OrdemServico::with('itens')->findOrFail($id);
+
+        // Regra: OS cancelada é terminal — seu status não pode mais ser alterado.
+        if ($os->status === 'CANCELADA' && $request->filled('status') && $request->status !== 'CANCELADA') {
+            abort(422, 'OS cancelada não pode ter o status alterado.');
+        }
+
         $novoStatus = $request->status;
 
         $validated = $request->validate([

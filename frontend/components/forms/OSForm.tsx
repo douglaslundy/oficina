@@ -137,6 +137,15 @@ export function OSForm({ initialData, onSuccess, onConcluir, onCancelar }: OSFor
   const mecanicoId = watch('mecanico_id')
   const veiculo_id = watch('veiculo_id')
 
+  // Mantém o select de Status sincronizado quando o status persistido muda
+  // (ex.: após Concluir/Cancelar a OS pelos botões e modais, o fetch traz o
+  // novo status e o dropdown precisa refletir imediatamente).
+  useEffect(() => {
+    if (initialData?.status) {
+      setValue('status', initialData.status)
+    }
+  }, [initialData?.status, setValue])
+
   // Recarrega a lista de produtos (com estoque atual) — usado após inserir/
   // remover peça para o select refletir o estoque sem precisar de F5.
   const fetchProdutos = useCallback(async () => {
@@ -384,9 +393,13 @@ export function OSForm({ initialData, onSuccess, onConcluir, onCancelar }: OSFor
         {/* Status */}
         <div>
           <label style={L}>Status</label>
-          <select {...register('status')} style={S}>
+          <select {...register('status')} disabled={initialData?.status === 'CANCELADA'}
+            style={{ ...S, ...(initialData?.status === 'CANCELADA' ? { opacity: 0.6, cursor: 'not-allowed' } : {}) }}>
             {STATUS_OPTIONS.map(s => <option key={s} value={s}>{s.replace(/_/g, ' ')}</option>)}
           </select>
+          {initialData?.status === 'CANCELADA' && (
+            <span style={{ color: 'var(--muted)', fontSize: 12 }}>OS cancelada — status não pode ser alterado.</span>
+          )}
         </div>
 
         {/* Problema relatado */}
