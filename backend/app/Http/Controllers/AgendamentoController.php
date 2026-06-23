@@ -24,7 +24,13 @@ class AgendamentoController extends Controller
         $inicio = $request->input('inicio', $request->input('data_inicio'));
         $fim    = $request->input('fim',    $request->input('data_fim'));
         if ($inicio && $fim) {
-            $query->whereBetween('data_hora_inicio', [$inicio, $fim . ' 23:59:59']);
+            // O fim pode vir como date-only (YYYY-MM-DD) — estende até o fim do dia.
+            // Quando vem como datetime ISO 8601 completo (o que o frontend envia),
+            // usa-se como está; concatenar ' 23:59:59' geraria um timestamp inválido.
+            $fimBound = preg_match('/^\d{4}-\d{2}-\d{2}$/', (string) $fim)
+                ? $fim . ' 23:59:59'
+                : $fim;
+            $query->whereBetween('data_hora_inicio', [$inicio, $fimBound]);
         }
 
         if ($request->has('status')) {

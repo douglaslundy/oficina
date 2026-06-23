@@ -83,6 +83,30 @@ class AgendamentoTest extends TestCase
         $this->assertSame('Revisão', $response->json('data.0.tipo_servico'));
     }
 
+    public function test_index_aceita_periodo_em_iso8601_completo(): void
+    {
+        $token   = $this->loginAdmin();
+        $cliente = $this->criarCliente();
+
+        Agendamento::create([
+            'cliente_id'       => $cliente->id,
+            'tipo_servico'     => 'Revisão',
+            'data_hora_inicio' => '2026-07-15 09:00:00',
+            'data_hora_fim'    => '2026-07-15 10:00:00',
+            'status'           => 'AGENDADO',
+        ]);
+
+        // O frontend envia o período em ISO 8601 completo (com T e Z), não date-only.
+        $inicio = '2026-07-13T00:00:00.000Z';
+        $fim    = '2026-07-20T00:00:00.000Z';
+
+        $response = $this->withToken($token)->getJson("/api/agendamentos?inicio={$inicio}&fim={$fim}");
+
+        $response->assertStatus(200);
+        $this->assertCount(1, $response->json('data'));
+        $this->assertSame('Revisão', $response->json('data.0.tipo_servico'));
+    }
+
     public function test_confirmar_agendamento_cria_os(): void
     {
         $token   = $this->loginAdmin();
