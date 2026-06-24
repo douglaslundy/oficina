@@ -21,6 +21,8 @@ interface Oficina {
   criado_em: string
   asaas_customer_id?: string | null
   asaas_subscription_id?: string | null
+  provedor_fiscal?: 'SPEDY' | 'FOCUS' | null
+  emissao_fiscal_modo?: 'MANUAL' | 'AUTOMATICO' | null
 }
 
 interface AsaasStatus {
@@ -128,6 +130,10 @@ export default function OficinaDetailPage() {
   const [gerarVencimento, setGerarVencimento] = useState('')
   const [gerarLoading, setGerarLoading] = useState(false)
 
+  const [provFiscal, setProvFiscal] = useState<string>('')
+  const [modoFiscal, setModoFiscal] = useState<string>('')
+  const [savingFiscal, setSavingFiscal] = useState(false)
+
   const showToast = (msg: string, type: 'ok' | 'err' = 'ok') => {
     setToast({ msg, type })
     setTimeout(() => setToast(null), 3500)
@@ -137,6 +143,8 @@ export default function OficinaDetailPage() {
     try {
       const res = await saasApi.get<{ data: Oficina }>(`/saas/oficinas/${id}`)
       setOficina(res.data.data)
+      setProvFiscal(res.data.data.provedor_fiscal ?? '')
+      setModoFiscal(res.data.data.emissao_fiscal_modo ?? '')
     } catch {
       showToast('Erro ao carregar oficina.', 'err')
     } finally {
@@ -233,6 +241,22 @@ export default function OficinaDetailPage() {
     } catch (e: unknown) {
       const msg = (e as { response?: { data?: { message?: string } } })?.response?.data?.message ?? 'Erro ao cancelar.'
       showToast(msg, 'err')
+    }
+  }
+
+  async function salvarFiscal() {
+    setSavingFiscal(true)
+    try {
+      await saasApi.put(`/saas/oficinas/${id}/fiscal`, {
+        provedor_fiscal: provFiscal || null,
+        emissao_fiscal_modo: modoFiscal || null,
+      })
+      showToast('Configuração fiscal da oficina salva.')
+    } catch (e: unknown) {
+      const msg = (e as { response?: { data?: { message?: string } } })?.response?.data?.message ?? 'Erro ao salvar.'
+      showToast(msg, 'err')
+    } finally {
+      setSavingFiscal(false)
     }
   }
 
@@ -442,6 +466,38 @@ export default function OficinaDetailPage() {
               </>
             )}
           </div>
+        </div>
+
+        {/* ── Fiscal (provedor por oficina) ── */}
+        <div style={{ background: 'var(--card)', border: '1px solid var(--border)', borderRadius: 10, padding: 20, marginTop: 20 }}>
+          <h2 className="font-display" style={{ fontSize: 16, fontWeight: 700, color: 'var(--text)', margin: '0 0 4px' }}>Emissão Fiscal</h2>
+          <p style={{ fontSize: 13, color: 'var(--muted)', margin: '0 0 16px' }}>
+            Sobrescreve o provedor/modo globais só para esta oficina. Deixe em &quot;Padrão da plataforma&quot; para herdar.
+          </p>
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16, maxWidth: 560 }}>
+            <div>
+              <label style={{ fontSize: 12, fontWeight: 600, color: 'var(--muted)', display: 'block', marginBottom: 6 }}>Provedor</label>
+              <select value={provFiscal} onChange={e => setProvFiscal(e.target.value)}
+                style={{ width: '100%', background: 'var(--bg)', border: '1px solid var(--border)', borderRadius: 8, color: 'var(--text)', fontSize: 14, padding: '9px 12px', outline: 'none' }}>
+                <option value="">Padrão da plataforma</option>
+                <option value="SPEDY">Spedy</option>
+                <option value="FOCUS">Focus NFe</option>
+              </select>
+            </div>
+            <div>
+              <label style={{ fontSize: 12, fontWeight: 600, color: 'var(--muted)', display: 'block', marginBottom: 6 }}>Modo de emissão</label>
+              <select value={modoFiscal} onChange={e => setModoFiscal(e.target.value)}
+                style={{ width: '100%', background: 'var(--bg)', border: '1px solid var(--border)', borderRadius: 8, color: 'var(--text)', fontSize: 14, padding: '9px 12px', outline: 'none' }}>
+                <option value="">Padrão da plataforma</option>
+                <option value="MANUAL">Manual</option>
+                <option value="AUTOMATICO">Automático</option>
+              </select>
+            </div>
+          </div>
+          <button onClick={salvarFiscal} disabled={savingFiscal}
+            style={{ marginTop: 16, padding: '8px 18px', background: savingFiscal ? 'var(--border)' : 'var(--accent)', color: savingFiscal ? 'var(--muted)' : '#000', border: 'none', borderRadius: 8, fontWeight: 700, fontSize: 13, fontFamily: "'Barlow Condensed', sans-serif", cursor: savingFiscal ? 'not-allowed' : 'pointer' }}>
+            {savingFiscal ? 'Salvando…' : 'Salvar Fiscal'}
+          </button>
         </div>
 
         {/* ── Últimos Pagamentos Asaas ── */}

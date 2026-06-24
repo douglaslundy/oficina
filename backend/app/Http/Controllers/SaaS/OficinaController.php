@@ -356,8 +356,10 @@ class OficinaController extends Controller
             ] : null,
             'users_count'  => $usersCount,
             'os_mes_count' => $osMesCount,
-            'admin_email'  => $oficina->admin_email,
-            'criado_em'    => $oficina->criado_em?->toIso8601String(),
+            'admin_email'         => $oficina->admin_email,
+            'criado_em'           => $oficina->criado_em?->toIso8601String(),
+            'provedor_fiscal'     => $oficina->provedor_fiscal,
+            'emissao_fiscal_modo' => $oficina->emissao_fiscal_modo,
         ];
     }
 
