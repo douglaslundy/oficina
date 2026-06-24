@@ -9,11 +9,17 @@ export default function EmpresaPage() {
   const [form, setForm] = useState<FormState>({})
   const [saving, setSaving] = useState(false)
   const [temCertificado, setTemCertificado] = useState(false)
+  const [certFile, setCertFile] = useState<File | null>(null)
+  const [certSenha, setCertSenha] = useState('')
+  const [certValidade, setCertValidade] = useState<string | null>(null)
+  const [uploadingCert, setUploadingCert] = useState(false)
+  const [ativando, setAtivando] = useState(false)
 
   useEffect(() => {
     api.get('/configuracoes').then(r => {
       setForm(r.data)
       setTemCertificado(r.data.tem_certificado ?? false)
+      setCertValidade(r.data.certificado_validade ?? null)
     }).catch(() => {})
   }, [])
 
@@ -28,6 +34,41 @@ export default function EmpresaPage() {
     } catch {
       toast('Erro ao salvar.', 'danger')
     } finally { setSaving(false) }
+  }
+
+  async function enviarCertificado() {
+    if (!certFile) { toast('Selecione o arquivo .pfx do certificado.', 'danger'); return }
+    if (!certSenha) { toast('Informe a senha do certificado.', 'danger'); return }
+    setUploadingCert(true)
+    try {
+      const fd = new FormData()
+      fd.append('certificado', certFile)
+      fd.append('senha', certSenha)
+      const r = await api.post('/configuracoes/certificado', fd, { headers: { 'Content-Type': 'multipart/form-data' } })
+      setTemCertificado(true)
+      setCertValidade(r.data.validade ?? null)
+      setCertSenha('')
+      setCertFile(null)
+      toast('Certificado enviado com sucesso!', 'success')
+    } catch (e: unknown) {
+      const msg = (e as { response?: { data?: { message?: string } } })?.response?.data?.message
+      toast(msg ?? 'Erro ao enviar certificado.', 'danger')
+    } finally {
+      setUploadingCert(false)
+    }
+  }
+
+  async function ativarEmissao() {
+    setAtivando(true)
+    try {
+      const r = await api.post('/configuracoes/ativar-emissao')
+      toast(r.data.message ?? 'Emissão ativada!', 'success')
+    } catch (e: unknown) {
+      const msg = (e as { response?: { data?: { message?: string } } })?.response?.data?.message
+      toast(msg ?? 'Erro ao ativar emissão.', 'danger')
+    } finally {
+      setAtivando(false)
+    }
   }
 
   const iStyle: React.CSSProperties = {
@@ -90,21 +131,39 @@ export default function EmpresaPage() {
 
           <div style={{ gridColumn: '1 / -1' }}>
             <label style={lStyle}>Certificado Digital A1 (.pfx)</label>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap' as const }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap' as const, marginBottom: 10 }}>
               {temCertificado && <span style={{ color: 'var(--success)', fontSize: 13 }}>✓ Certificado carregado</span>}
-              <input type="file" accept=".pfx"
-                onChange={e => {
-                  const file = e.target.files?.[0]
-                  if (!file) return
-                  const reader = new FileReader()
-                  reader.onload = ev => setForm(f => ({ ...f, certificado_base64: btoa(ev.target?.result as string) }))
-                  reader.readAsBinaryString(file)
-                }}
-                style={{ color: 'var(--muted)', fontSize: 14 }} />
+              {certValidade && <span style={{ color: 'var(--muted)', fontSize: 12 }}>Válido até {certValidade.split('-').reverse().join('/')}</span>}
             </div>
-            <p style={{ color: 'var(--muted)', fontSize: 12, marginTop: 4 }}>
-              O certificado é armazenado com criptografia AES-256.
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr auto', gap: 12, alignItems: 'end' }}>
+              <div>
+                <label style={{ ...lStyle, fontSize: 12 }}>Arquivo .pfx</label>
+                <input type="file" accept=".pfx,.p12"
+                  onChange={e => setCertFile(e.target.files?.[0] ?? null)}
+                  style={{ color: 'var(--muted)', fontSize: 14 }} />
+              </div>
+              <div>
+                <label style={{ ...lStyle, fontSize: 12 }}>Senha do certificado</label>
+                <input type="password" value={certSenha} onChange={e => setCertSenha(e.target.value)} style={iStyle} />
+              </div>
+              <button type="button" onClick={enviarCertificado} disabled={uploadingCert} className="font-display"
+                style={{ padding: '10px 20px', background: uploadingCert ? 'var(--muted)' : 'var(--accent)', color: '#000', borderRadius: 8, border: 'none', fontWeight: 800, fontSize: 14, cursor: uploadingCert ? 'not-allowed' : 'pointer', whiteSpace: 'nowrap' }}>
+                {uploadingCert ? 'Enviando…' : 'Enviar certificado'}
+              </button>
+            </div>
+            <p style={{ color: 'var(--muted)', fontSize: 12, marginTop: 6 }}>
+              O certificado é validado e armazenado com criptografia AES-256. A senha é guardada cifrada.
             </p>
+
+            <div style={{ marginTop: 16, paddingTop: 16, borderTop: '1px solid var(--border)' }}>
+              <button type="button" onClick={ativarEmissao} disabled={ativando || !temCertificado} className="font-display"
+                style={{ padding: '10px 24px', background: (ativando || !temCertificado) ? 'var(--border)' : 'var(--success)', color: (ativando || !temCertificado) ? 'var(--muted)' : '#fff', borderRadius: 8, border: 'none', fontWeight: 800, fontSize: 15, cursor: (ativando || !temCertificado) ? 'not-allowed' : 'pointer' }}>
+                {ativando ? 'Ativando…' : '⚡ Ativar emissão'}
+              </button>
+              <p style={{ color: 'var(--muted)', fontSize: 12, marginTop: 6 }}>
+                Registra esta oficina como emissora no provedor fiscal (usa o ambiente configurado acima). Salve os dados da empresa e envie o certificado antes de ativar.
+              </p>
+            </div>
           </div>
         </div>
 
