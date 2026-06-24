@@ -21,6 +21,12 @@ interface SaasConfigData {
   smtp_from_address: string | null
   smtp_from_name: string | null
   smtp_ativo: boolean
+  provedor_fiscal_padrao: string
+  emissao_fiscal_modo_padrao: string
+  spedy_master_key_sandbox: string | null
+  spedy_master_key_producao: string | null
+  focus_master_token_homologacao: string | null
+  focus_master_token_producao: string | null
 }
 
 type ToastType = 'success' | 'danger'
@@ -174,6 +180,17 @@ export default function SaasConfigPage() {
   const [smtpTestTo, setSmtpTestTo] = useState('')
   const [testingSmtp, setTestingSmtp] = useState(false)
 
+  // Fiscal
+  const [provedorFiscal, setProvedorFiscal] = useState('SPEDY')
+  const [modoEmissao, setModoEmissao] = useState('MANUAL')
+  const [savingFiscal, setSavingFiscal] = useState(false)
+  const [spedySandbox, setSpedySandbox] = useState('')
+  const [spedyProducao, setSpedyProducao] = useState('')
+  const [savingSpedy, setSavingSpedy] = useState(false)
+  const [focusHomolog, setFocusHomolog] = useState('')
+  const [focusProducao, setFocusProducao] = useState('')
+  const [savingFocus, setSavingFocus] = useState(false)
+
   const showToast = useCallback((msg: string, type: ToastType) => setToast({ msg, type }), [])
 
   useEffect(() => {
@@ -195,6 +212,12 @@ export default function SaasConfigPage() {
         setSmtpFromAddress(d.smtp_from_address ?? '')
         setSmtpFromName(d.smtp_from_name ?? 'MecânicaPro')
         setSmtpAtivo(d.smtp_ativo ?? false)
+        setProvedorFiscal(d.provedor_fiscal_padrao ?? 'SPEDY')
+        setModoEmissao(d.emissao_fiscal_modo_padrao ?? 'MANUAL')
+        setSpedySandbox(d.spedy_master_key_sandbox ?? '')
+        setSpedyProducao(d.spedy_master_key_producao ?? '')
+        setFocusHomolog(d.focus_master_token_homologacao ?? '')
+        setFocusProducao(d.focus_master_token_producao ?? '')
       })
       .catch(() => showToast('Erro ao carregar configurações.', 'danger'))
       .finally(() => setLoading(false))
@@ -265,6 +288,54 @@ export default function SaasConfigPage() {
       showToast(msg ?? 'Erro ao salvar SMTP.', 'danger')
     } finally {
       setSavingSmtp(false)
+    }
+  }
+
+  async function salvarProvedorFiscal() {
+    setSavingFiscal(true)
+    try {
+      await saasApi.put('/saas/config/fiscal', {
+        provedor_fiscal_padrao: provedorFiscal,
+        emissao_fiscal_modo_padrao: modoEmissao,
+      })
+      showToast('Provedor fiscal padrão salvo.', 'success')
+    } catch (e: unknown) {
+      const msg = (e as { response?: { data?: { message?: string } } })?.response?.data?.message
+      showToast(msg ?? 'Erro ao salvar provedor fiscal.', 'danger')
+    } finally {
+      setSavingFiscal(false)
+    }
+  }
+
+  async function salvarSpedy() {
+    setSavingSpedy(true)
+    try {
+      await saasApi.put('/saas/config/fiscal/spedy', {
+        spedy_master_key_sandbox: spedySandbox,
+        spedy_master_key_producao: spedyProducao,
+      })
+      showToast('Credenciais Spedy salvas.', 'success')
+    } catch (e: unknown) {
+      const msg = (e as { response?: { data?: { message?: string } } })?.response?.data?.message
+      showToast(msg ?? 'Erro ao salvar credenciais Spedy.', 'danger')
+    } finally {
+      setSavingSpedy(false)
+    }
+  }
+
+  async function salvarFocus() {
+    setSavingFocus(true)
+    try {
+      await saasApi.put('/saas/config/fiscal/focus', {
+        focus_master_token_homologacao: focusHomolog,
+        focus_master_token_producao: focusProducao,
+      })
+      showToast('Credenciais Focus NFe salvas.', 'success')
+    } catch (e: unknown) {
+      const msg = (e as { response?: { data?: { message?: string } } })?.response?.data?.message
+      showToast(msg ?? 'Erro ao salvar credenciais Focus.', 'danger')
+    } finally {
+      setSavingFocus(false)
     }
   }
 
@@ -475,6 +546,60 @@ export default function SaasConfigPage() {
             {testingSmtp ? '⟳ Enviando...' : '📨 Enviar teste'}
           </button>
         </div>
+      </SectionCard>
+
+      {/* ── Seção 5 — Emissão de Notas Fiscais ──────────────────────────── */}
+      <SectionCard
+        title="Emissão de Notas Fiscais"
+        subtitle="Provedor padrão da plataforma e credenciais das contas-parceiras (Spedy / Focus NFe)"
+      >
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 12, marginBottom: 20 }}>
+          {[
+            { value: 'SPEDY', label: 'Spedy', desc: 'Emissão via API Spedy (NFS-e/NF-e). Sandbox e produção.' },
+            { value: 'FOCUS', label: 'Focus NFe', desc: 'Emissão via API Focus NFe (assíncrona). Homologação e produção.' },
+          ].map(opt => (
+            <label key={opt.value} style={{
+              display: 'flex', alignItems: 'flex-start', gap: 12,
+              padding: '14px 16px', borderRadius: 8, cursor: 'pointer',
+              border: `1px solid ${provedorFiscal === opt.value ? 'var(--accent)' : 'var(--border)'}`,
+              background: provedorFiscal === opt.value ? 'rgba(245,166,35,.06)' : 'transparent',
+            }}>
+              <input type="radio" name="provedorFiscal" value={opt.value}
+                checked={provedorFiscal === opt.value}
+                onChange={() => setProvedorFiscal(opt.value)}
+                style={{ marginTop: 2, accentColor: 'var(--accent)' }} />
+              <div>
+                <div style={{ fontSize: 14, fontWeight: 700 }}>{opt.label}</div>
+                <div style={{ fontSize: 12, color: 'var(--muted)', marginTop: 2 }}>{opt.desc}</div>
+              </div>
+            </label>
+          ))}
+        </div>
+
+        <div style={{ marginBottom: 16 }}>
+          <label style={{ display: 'block', fontSize: 12, fontWeight: 600, color: 'var(--muted)', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: 6 }}>
+            Modo de emissão padrão
+          </label>
+          <select value={modoEmissao} onChange={e => setModoEmissao(e.target.value)} style={selectStyle}>
+            <option value="MANUAL">Manual (emite por botão)</option>
+            <option value="AUTOMATICO">Automático (emite ao concluir a OS)</option>
+          </select>
+        </div>
+        <SaveButton loading={savingFiscal} onClick={salvarProvedorFiscal} label="Salvar Provedor Padrão" />
+
+        <div style={{ height: 1, background: 'var(--border)', margin: '20px 0' }} />
+
+        <div style={{ fontSize: 13, fontWeight: 700, color: 'var(--text)', marginBottom: 12 }}>Credenciais Spedy (conta-parceira)</div>
+        <SecretInput label="X-API-Key Sandbox" value={spedySandbox} onChange={setSpedySandbox} />
+        <SecretInput label="X-API-Key Produção" value={spedyProducao} onChange={setSpedyProducao} />
+        <SaveButton loading={savingSpedy} onClick={salvarSpedy} label="Salvar Credenciais Spedy" />
+
+        <div style={{ height: 1, background: 'var(--border)', margin: '20px 0' }} />
+
+        <div style={{ fontSize: 13, fontWeight: 700, color: 'var(--text)', marginBottom: 12 }}>Credenciais Focus NFe (conta-parceira)</div>
+        <SecretInput label="Token Homologação" value={focusHomolog} onChange={setFocusHomolog} />
+        <SecretInput label="Token Produção" value={focusProducao} onChange={setFocusProducao} />
+        <SaveButton loading={savingFocus} onClick={salvarFocus} label="Salvar Credenciais Focus NFe" />
       </SectionCard>
     </div>
   )
