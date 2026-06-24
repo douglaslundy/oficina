@@ -58,7 +58,10 @@ class NfeService
 
     public function emitir(NotaFiscal $nota): array
     {
-        $config   = Configuracao::first();
+        $config = Configuracao::first();
+        if (!$config) {
+            throw new \RuntimeException('Configurações fiscais da empresa não encontradas. Preencha os dados da empresa antes de emitir.');
+        }
         $manager  = app(FiscalProviderManager::class);
         $provider = $manager->forTenant();
 

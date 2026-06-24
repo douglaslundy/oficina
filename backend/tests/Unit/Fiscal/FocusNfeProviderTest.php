@@ -85,4 +85,38 @@ class FocusNfeProviderTest extends TestCase
         $this->assertSame('AUTORIZADA', $r->status);
         $this->assertSame('77', $r->numero);
     }
+
+    public function test_registrar_emissor_retorna_token_homologacao(): void
+    {
+        Http::fake([
+            '*/v2/empresas' => Http::response([
+                'id' => 'emp-99',
+                'token_homologacao' => 'focus-homolog-1',
+                'token_producao' => 'focus-prod-1',
+            ], 201),
+        ]);
+
+        $p = new FocusNfeProvider('https://homologacao.focusnfe.com.br', 'master', null);
+        $e = new \App\Services\Fiscal\Data\EmissorData(
+            cnpj: '12.345.678/0001-99', razaoSocial: 'Oficina X Ltda', nomeFantasia: 'Oficina X',
+            inscricaoEstadual: '123', inscricaoMunicipal: '456', regimeTributario: 'Simples Nacional',
+            email: 'of@x.com', telefone: '11999999999', cep: '01310-100', logradouro: 'Av Paulista',
+            numero: '1000', complemento: null, bairro: 'Centro', cidade: 'São Paulo', uf: 'SP',
+            codigoIbge: '3550308', cnae: '4520-0/01',
+        );
+        $r = $p->registrarEmissor($e);
+
+        $this->assertSame('REGISTRADO', $r->status);
+        $this->assertSame('focus-homolog-1', $r->token);
+    }
+
+    public function test_cancelar_sucesso(): void
+    {
+        Http::fake(['*/v2/nfse/os-1' => Http::response([], 200)]);
+
+        $p = new FocusNfeProvider('https://homologacao.focusnfe.com.br', 'master', 'tok');
+        $r = $p->cancelar('os-1', 'Serviço não prestado conforme acordado');
+
+        $this->assertSame('CANCELADA', $r->status);
+    }
 }

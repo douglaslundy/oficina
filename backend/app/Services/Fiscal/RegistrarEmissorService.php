@@ -43,8 +43,8 @@ class RegistrarEmissorService
     public function registrar(string $oficinaId): array
     {
         $cfg = Configuracao::first();
-        if (!$cfg || empty($cfg->cnpj) || empty($cfg->certificado_pfx_encrypted)) {
-            return ['ok' => false, 'mensagem' => 'Preencha os dados da empresa e envie o certificado antes de ativar a emissão.'];
+        if (!$cfg || empty($cfg->cnpj) || empty($cfg->certificado_pfx_encrypted) || empty($cfg->certificado_senha_encrypted)) {
+            return ['ok' => false, 'mensagem' => 'Preencha os dados da empresa e envie o certificado (com senha) antes de ativar a emissão.'];
         }
 
         $provedor = $this->manager->provedorDaOficina($oficinaId);
@@ -59,6 +59,9 @@ class RegistrarEmissorService
 
         // Decifra o certificado armazenado (padrão openssl do ConfiguracaoController).
         $pfxBinary = $this->decifrarCertificado($cfg->certificado_pfx_encrypted);
+        if ($pfxBinary === '') {
+            return ['ok' => false, 'mensagem' => 'Não foi possível decifrar o certificado armazenado. Reenvie o certificado.'];
+        }
         $senha     = $cfg->certificado_senha_encrypted
             ? Crypt::decryptString($cfg->certificado_senha_encrypted) : '';
 
@@ -84,7 +87,15 @@ class RegistrarEmissorService
             );
             $providerComEmissor->enviarCertificado($emissorData, $pfxBinary, $senha);
         } catch (\Throwable $ex) {
-            // Focus pode já ter o certificado; loga mas não falha o registro.
+            EmissorFiscal::updateOrCreate(
+                ['oficina_id' => $oficinaId, 'provedor' => $provedor, 'ambiente' => $ambiente],
+                [
+                    'emissor_externo_id' => $registro->emissorExternoId,
+                    'status'             => 'ERRO',
+                    'ultimo_erro'        => 'Falha ao enviar certificado: ' . $ex->getMessage(),
+                ],
+            );
+            return ['ok' => false, 'mensagem' => 'Emissor criado, mas falha ao enviar o certificado: ' . $ex->getMessage()];
         }
 
         EmissorFiscal::updateOrCreate(

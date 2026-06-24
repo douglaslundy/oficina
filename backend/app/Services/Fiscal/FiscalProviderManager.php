@@ -86,8 +86,9 @@ class FiscalProviderManager
         if (empty($valor)) return '';
         try {
             return Crypt::decryptString($valor);
-        } catch (\Throwable) {
-            return $valor; // valor já em claro (compatibilidade)
+        } catch (\Throwable $e) {
+            \Illuminate\Support\Facades\Log::warning('Falha ao decifrar credencial fiscal: ' . $e->getMessage());
+            return '';
         }
     }
 }
