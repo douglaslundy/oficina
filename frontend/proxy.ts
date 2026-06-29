@@ -5,6 +5,16 @@ const PUBLIC_PATHS = ['/login', '/forgot-password', '/reset-password', '/orcamen
 
 export function proxy(request: NextRequest) {
   const { pathname } = request.nextUrl
+  const host = request.headers.get('host') ?? ''
+
+  // --- saas.dlsistemas.com.br → redireciona tudo para /saas-admin ---
+  if (host.startsWith('saas.')) {
+    if (!pathname.startsWith('/saas-admin')) {
+      const saasToken = request.cookies.get('saas_token')?.value
+      const dest = saasToken ? '/saas-admin' : '/saas-admin/login'
+      return NextResponse.redirect(new URL(dest, request.url))
+    }
+  }
 
   // --- SaaS Admin routes ---
   if (pathname.startsWith('/saas-admin')) {

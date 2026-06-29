@@ -55,7 +55,7 @@ services:
       QUEUE_CONNECTION: redis
       SANCTUM_STATEFUL_DOMAINS: "oficina.dlsistemas.com.br,localhost:8080"
       SESSION_DOMAIN: "oficina.dlsistemas.com.br"
-      CORS_ALLOWED_ORIGINS: "https://oficina.dlsistemas.com.br,http://localhost:3000"
+      CORS_ALLOWED_ORIGINS: "https://oficina.dlsistemas.com.br,https://saas.dlsistemas.com.br,http://localhost:3000"
       LOG_CHANNEL: stderr
       APP_KEY: ${APP_KEY}
     depends_on:
