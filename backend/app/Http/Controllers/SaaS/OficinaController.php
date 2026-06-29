@@ -412,10 +412,33 @@ class OficinaController extends Controller
             'os_mes_count'        => $osMesCount,
             'admin_nome'          => $adminUser?->nome,
             'admin_email'         => $oficina->admin_email,
+            'admin_cpf'           => $oficina->admin_cpf ? $this->formatCpf($oficina->admin_cpf) : null,
             'criado_em'           => $oficina->criado_em?->toIso8601String(),
             'provedor_fiscal'     => $oficina->provedor_fiscal,
             'emissao_fiscal_modo' => $oficina->emissao_fiscal_modo,
         ];
+    }
+
+    public function destroy(string $id): JsonResponse
+    {
+        $oficina = Oficina::findOrFail($id);
+
+        $temDados = \App\Models\Cliente::withoutGlobalScopes()->where('oficina_id', $oficina->id)->exists()
+            || OrdemServico::withoutGlobalScopes()->where('oficina_id', $oficina->id)->exists()
+            || \App\Models\Produto::withoutGlobalScopes()->where('oficina_id', $oficina->id)->exists()
+            || \App\Models\NotaFiscal::withoutGlobalScopes()->where('oficina_id', $oficina->id)->exists();
+
+        if ($temDados) {
+            return response()->json([
+                'message' => 'Não é possível excluir esta oficina pois ela possui dados cadastrados (clientes, OS, produtos ou notas fiscais).',
+            ], 422);
+        }
+
+        // Remove usuários e depois a oficina
+        Usuario::withoutGlobalScopes()->where('oficina_id', $oficina->id)->delete();
+        $oficina->delete();
+
+        return response()->json(['message' => 'Oficina excluída com sucesso.']);
     }
 
     private function formatCnpj(string $cnpj): string
@@ -425,5 +448,14 @@ class OficinaController extends Controller
             return preg_replace('/(\d{2})(\d{3})(\d{3})(\d{4})(\d{2})/', '$1.$2.$3/$4-$5', $cnpj);
         }
         return $cnpj;
+    }
+
+    private function formatCpf(string $cpf): string
+    {
+        $cpf = preg_replace('/\D/', '', $cpf);
+        if (strlen($cpf) === 11) {
+            return preg_replace('/(\d{3})(\d{3})(\d{3})(\d{2})/', '$1.$2.$3-$4', $cpf);
+        }
+        return $cpf;
     }
 }

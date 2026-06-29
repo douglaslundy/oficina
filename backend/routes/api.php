@@ -58,6 +58,7 @@ Route::prefix('saas')->group(function () {
         Route::post('oficinas',                  [SaaSOficinaController::class, 'store']);
         Route::get('oficinas/{id}',              [SaaSOficinaController::class, 'show']);
         Route::put('oficinas/{id}',              [SaaSOficinaController::class, 'update']);
+        Route::delete('oficinas/{id}',           [SaaSOficinaController::class, 'destroy']);
         Route::post('oficinas/{id}/suspender',   [SaaSOficinaController::class, 'suspender']);
         Route::post('oficinas/{id}/reativar',    [SaaSOficinaController::class, 'reativar']);
 
