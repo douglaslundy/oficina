@@ -5,6 +5,7 @@ namespace App\Http\Controllers\SaaS;
 
 use App\Http\Controllers\Controller;
 use App\Models\SaasConfig;
+use App\Services\WhatsAppService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 
@@ -18,19 +19,19 @@ class SaasConfigController extends Controller
             'data' => [
                 'gateway_preferido'    => $cfg->gateway_preferido,
                 'mp_ambiente'          => $cfg->mp_ambiente,
-                // Chaves mascaradas — nunca expõe o valor real
                 'asaas_api_key'        => SaasConfig::mascarar($cfg->getRawOriginal('asaas_api_key')),
                 'asaas_webhook_token'  => SaasConfig::mascarar($cfg->getRawOriginal('asaas_webhook_token')),
                 'mp_access_token'      => SaasConfig::mascarar($cfg->getRawOriginal('mp_access_token')),
                 'mp_public_key'        => SaasConfig::mascarar($cfg->getRawOriginal('mp_public_key')),
                 'mp_webhook_secret'    => SaasConfig::mascarar($cfg->getRawOriginal('mp_webhook_secret')),
+                'evolution_url'        => $cfg->evolution_url,
+                'evolution_api_key'    => SaasConfig::mascarar($cfg->getRawOriginal('evolution_api_key')),
                 'provedor_fiscal_padrao'         => $cfg->provedor_fiscal_padrao,
                 'emissao_fiscal_modo_padrao'     => $cfg->emissao_fiscal_modo_padrao,
                 'spedy_master_key_sandbox'       => SaasConfig::mascarar($cfg->getRawOriginal('spedy_master_key_sandbox')),
                 'spedy_master_key_producao'      => SaasConfig::mascarar($cfg->getRawOriginal('spedy_master_key_producao')),
                 'focus_master_token_homologacao' => SaasConfig::mascarar($cfg->getRawOriginal('focus_master_token_homologacao')),
                 'focus_master_token_producao'    => SaasConfig::mascarar($cfg->getRawOriginal('focus_master_token_producao')),
-                // SMTP — senha mascarada
                 'smtp_host'            => $cfg->smtp_host,
                 'smtp_port'            => $cfg->smtp_port,
                 'smtp_username'        => $cfg->smtp_username,
@@ -41,6 +42,52 @@ class SaasConfigController extends Controller
                 'smtp_ativo'           => (bool) $cfg->smtp_ativo,
             ],
         ]);
+    }
+
+    public function showEvolution(): JsonResponse
+    {
+        $cfg = SaasConfig::get();
+
+        return response()->json([
+            'data' => [
+                'evolution_url'     => $cfg->evolution_url,
+                'evolution_api_key' => SaasConfig::mascarar($cfg->getRawOriginal('evolution_api_key')),
+            ],
+        ]);
+    }
+
+    public function updateEvolution(Request $request): JsonResponse
+    {
+        $validated = $request->validate([
+            'evolution_url'     => ['required', 'url', 'max:255'],
+            'evolution_api_key' => ['nullable', 'string', 'min:6', 'max:500'],
+        ]);
+
+        $cfg = SaasConfig::get();
+        $cfg->evolution_url = $validated['evolution_url'];
+
+        if (!empty($validated['evolution_api_key']) && !str_contains($validated['evolution_api_key'], '*')) {
+            $cfg->evolution_api_key = $validated['evolution_api_key'];
+        }
+
+        $cfg->save();
+
+        return response()->json(['message' => 'Configurações da Evolution API salvas.']);
+    }
+
+    public function testarEvolution(): JsonResponse
+    {
+        $cfg = SaasConfig::get();
+        $url    = $cfg->getRawOriginal('evolution_url') ?? '';
+        $apiKey = $cfg->getRawOriginal('evolution_api_key') ?? '';
+
+        if (empty($url) || empty($apiKey)) {
+            return response()->json(['ok' => false, 'error' => 'URL e API Key precisam ser configuradas antes de testar.'], 422);
+        }
+
+        $resultado = app(WhatsAppService::class)->testarConexao($url, $apiKey);
+
+        return response()->json($resultado, 200);
     }
 
     public function updateSmtp(Request $request): JsonResponse

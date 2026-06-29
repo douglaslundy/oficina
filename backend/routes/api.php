@@ -106,6 +106,11 @@ Route::prefix('saas')->group(function () {
         Route::put('config/smtp',                [SaasConfigController::class, 'updateSmtp']);
         Route::post('config/smtp/testar',        [SaasConfigController::class, 'testarSmtp']);
 
+        // Configurações Evolution API (SaaS Admin)
+        Route::get('config/evolution',           [SaasConfigController::class, 'showEvolution']);
+        Route::put('config/evolution',           [SaasConfigController::class, 'updateEvolution']);
+        Route::post('config/evolution/testar',   [SaasConfigController::class, 'testarEvolution']);
+
         // Configurações fiscais (SaaS Admin)
         Route::put('config/fiscal',        [SaasConfigController::class, 'updateProvedorFiscal']);
         Route::put('config/fiscal/spedy',  [SaasConfigController::class, 'updateSpedy']);
@@ -262,13 +267,12 @@ Route::middleware(['tenant', 'auth:sanctum', 'role:ADMIN'])->group(function () {
 
 // ─── WhatsApp — somente ADMIN ────────────────────────────────────────────────
 Route::middleware(['tenant', 'auth:sanctum', 'role:ADMIN'])->group(function () {
-    Route::get('whatsapp/config',   [WhatsAppConfigController::class, 'show']);
-    Route::post('whatsapp/config',  [WhatsAppConfigController::class, 'upsert']);
-    Route::post('whatsapp/testar',  [WhatsAppConfigController::class, 'testarConexao']);
-    Route::get('whatsapp/status',   [WhatsAppConfigController::class, 'statusInstancia']);
-    Route::get('whatsapp/qrcode',   [WhatsAppConfigController::class, 'qrCode']);
-    Route::post('whatsapp/desconectar',   [WhatsAppConfigController::class, 'desconectar']);
-    Route::post('whatsapp/enviar-teste',  [WhatsAppConfigController::class, 'enviarTeste']);
+    Route::get('whatsapp/config',          [WhatsAppConfigController::class, 'show']);
+    Route::post('whatsapp/config',         [WhatsAppConfigController::class, 'upsert']);
+    Route::get('whatsapp/status',          [WhatsAppConfigController::class, 'statusInstancia']);
+    Route::get('whatsapp/qrcode',          [WhatsAppConfigController::class, 'qrCode']);
+    Route::post('whatsapp/desconectar',    [WhatsAppConfigController::class, 'desconectar']);
+    Route::post('whatsapp/enviar-teste',   [WhatsAppConfigController::class, 'enviarTeste']);
 });
 
 // ─── Alertas WhatsApp — ADMIN e ATENDENTE ────────────────────────────────────

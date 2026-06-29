@@ -3,6 +3,8 @@ declare(strict_types=1);
 
 namespace App\Http\Controllers;
 
+use App\Models\Oficina;
+use App\Models\SaasConfig;
 use App\Models\WhatsAppConfig;
 use App\Services\AlertaDispatchService;
 use App\Services\WhatsAppService;
@@ -20,69 +22,41 @@ class WhatsAppConfigController extends Controller
     public function show(): JsonResponse
     {
         $cfg = WhatsAppConfig::first();
-        if (!$cfg) {
-            return response()->json(['data' => null]);
-        }
-        return response()->json(['data' => $cfg->mascarado()]);
+
+        return response()->json([
+            'data' => $cfg ? [
+                'instance_name'  => $cfg->instance_name,
+                'ativo'          => $cfg->ativo,
+            ] : null,
+            'credenciais_ok' => $this->whatsApp->credenciaisConfiguradas(),
+        ]);
     }
 
     public function upsert(Request $request): JsonResponse
     {
         $validated = $request->validate([
-            'evolution_url'     => ['required', 'url', 'max:255'],
-            'evolution_api_key' => ['required', 'string', 'min:6'],
-            'instance_name'     => ['required', 'string', 'max:100'],
-            'instance_token'    => ['nullable', 'string'],
-            'ativo'             => ['boolean'],
+            'ativo' => ['boolean'],
         ]);
 
         $oficinaId = TenancyContext::get();
 
         $cfg = WhatsAppConfig::firstOrNew(['oficina_id' => $oficinaId]);
+        $cfg->ativo      = (bool)($validated['ativo'] ?? $cfg->ativo ?? false);
+        $cfg->oficina_id = $oficinaId;
 
-        // Só atualiza campos sensíveis se não forem mascarados
-        if (!str_contains($validated['evolution_api_key'], '*')) {
-            $cfg->evolution_api_key = $validated['evolution_api_key'];
-        }
-        if (!empty($validated['instance_token']) && !str_contains((string)$validated['instance_token'], '*')) {
-            $cfg->instance_token = $validated['instance_token'];
+        if (empty($cfg->instance_name)) {
+            $slug = Oficina::find($oficinaId)?->slug ?? substr($oficinaId ?? '', 0, 8);
+            $cfg->instance_name = 'mec-' . $slug;
         }
 
-        $cfg->evolution_url  = $validated['evolution_url'];
-        $cfg->instance_name  = $validated['instance_name'];
-        $cfg->ativo          = (bool)($validated['ativo'] ?? false);
-        $cfg->oficina_id     = $oficinaId;
         $cfg->save();
 
-        // Garante alertas pré-definidos para este tenant
         $this->alertaDispatch->garantirAlertasPreDefinidos($oficinaId);
 
-        return response()->json(['data' => $cfg->mascarado(), 'message' => 'Configuração salva.']);
-    }
-
-    public function testarConexao(Request $request): JsonResponse
-    {
-        $validated = $request->validate([
-            'evolution_url'     => ['required', 'url'],
-            'evolution_api_key' => ['required', 'string'],
-            'instance_name'     => ['required', 'string'],
+        return response()->json([
+            'data'    => ['instance_name' => $cfg->instance_name, 'ativo' => $cfg->ativo],
+            'message' => 'Configuração salva.',
         ]);
-
-        // Se vier mascarado, usa o salvo no banco
-        $cfg = WhatsAppConfig::first();
-        $apiKey = str_contains($validated['evolution_api_key'], '*')
-            ? ($cfg?->getRawOriginal('evolution_api_key') ?? '')
-            : $validated['evolution_api_key'];
-
-        $resultado = $this->whatsApp->testarConexao(
-            $validated['evolution_url'],
-            $apiKey,
-            $validated['instance_name'],
-        );
-
-        // Sempre 200: o teste "rodou"; o resultado (ok/erro) vai no corpo para o
-        // frontend exibir a mensagem real em vez de um erro HTTP genérico.
-        return response()->json($resultado, 200);
     }
 
     public function statusInstancia(): JsonResponse
@@ -95,7 +69,7 @@ class WhatsAppConfigController extends Controller
         $r = $this->whatsApp->qrCode();
         if (empty($r['qrcode'])) {
             return response()->json([
-                'message' => $r['error'] ?? 'Não foi possível obter o QR code. Verifique a configuração.',
+                'message' => $r['error'] ?? 'Não foi possível obter o QR code.',
             ], 422);
         }
         return response()->json(['qrcode' => $r['qrcode']]);

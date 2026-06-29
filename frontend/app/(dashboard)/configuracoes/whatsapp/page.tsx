@@ -4,10 +4,7 @@ import api from '@/lib/api'
 import { toast } from '@/hooks/useToast'
 
 interface WaConfig {
-  evolution_url: string
-  evolution_api_key: string | null
   instance_name: string
-  instance_token: string | null
   ativo: boolean
 }
 
@@ -27,30 +24,6 @@ const lStyle: React.CSSProperties = {
   letterSpacing: '0.05em', marginBottom: 6,
 }
 
-function SecretInput({ label, value, onChange, placeholder }: {
-  label: string; value: string; onChange: (v: string) => void; placeholder?: string
-}) {
-  const [visible, setVisible] = useState(false)
-  return (
-    <div>
-      <label style={lStyle}>{label}</label>
-      <div style={{ position: 'relative' }}>
-        <input
-          type={visible ? 'text' : 'password'}
-          value={value}
-          onChange={e => onChange(e.target.value)}
-          placeholder={placeholder ?? '••••••••••••'}
-          style={{ ...iStyle, paddingRight: 40 }}
-        />
-        <button type="button" onClick={() => setVisible(v => !v)}
-          style={{ position: 'absolute', right: 10, top: '50%', transform: 'translateY(-50%)', background: 'none', border: 'none', cursor: 'pointer', color: 'var(--muted)', fontSize: 14 }}>
-          {visible ? '🙈' : '👁'}
-        </button>
-      </div>
-    </div>
-  )
-}
-
 function StatusChip({ status }: { status: string }) {
   const map: Record<string, { color: string; label: string }> = {
     open:         { color: 'var(--success)', label: '● Conectado' },
@@ -68,24 +41,18 @@ function StatusChip({ status }: { status: string }) {
 }
 
 export default function WhatsAppConfigPage() {
-  const [loading, setLoading]           = useState(true)
-  const [saving, setSaving]             = useState(false)
-  const [testing, setTesting]           = useState(false)
+  const [loading, setLoading]             = useState(true)
+  const [saving, setSaving]               = useState(false)
   const [disconnecting, setDisconnecting] = useState(false)
-  const [status, setStatus]             = useState<InstanceStatus>({ status: 'unknown', number: null })
-  const [qrCode, setQrCode]             = useState<string | null>(null)
-  const [showQr, setShowQr]             = useState(false)
-  const [testPhone, setTestPhone]       = useState('')
-  const [sendingTest, setSendingTest]   = useState(false)
+  const [status, setStatus]               = useState<InstanceStatus>({ status: 'unknown', number: null })
+  const [qrCode, setQrCode]               = useState<string | null>(null)
+  const [showQr, setShowQr]               = useState(false)
+  const [testPhone, setTestPhone]         = useState('')
+  const [sendingTest, setSendingTest]     = useState(false)
+  const [credenciaisOk, setCredenciaisOk] = useState(false)
+  const [config, setConfig]               = useState<WaConfig | null>(null)
+  const [ativo, setAtivo]                 = useState(false)
   const pollRef = useRef<ReturnType<typeof setInterval> | null>(null)
-
-  const [form, setForm] = useState({
-    evolution_url:     'http://192.168.0.115:8081',
-    evolution_api_key: '',
-    instance_name:     'mecanicapro',
-    instance_token:    '',
-    ativo:             false,
-  })
 
   const fetchStatus = useCallback(async () => {
     try {
@@ -101,15 +68,13 @@ export default function WhatsAppConfigPage() {
   }, [showQr])
 
   useEffect(() => {
-    api.get<{ data: WaConfig | null }>('/whatsapp/config').then(r => {
+    api.get<{ data: WaConfig | null; credenciais_ok: boolean }>('/whatsapp/config').then(r => {
+      setCredenciaisOk(r.data.credenciais_ok)
       const d = r.data.data
-      if (d) setForm({
-        evolution_url:     d.evolution_url,
-        evolution_api_key: d.evolution_api_key ?? '',
-        instance_name:     d.instance_name,
-        instance_token:    d.instance_token ?? '',
-        ativo:             d.ativo,
-      })
+      if (d) {
+        setConfig(d)
+        setAtivo(d.ativo)
+      }
     }).catch(() => {}).finally(() => setLoading(false))
 
     fetchStatus()
@@ -124,40 +89,23 @@ export default function WhatsAppConfigPage() {
     return () => { if (pollRef.current) clearInterval(pollRef.current) }
   }, [showQr, fetchStatus])
 
-  const set = (k: string) => (v: string | boolean) => setForm(f => ({ ...f, [k]: v }))
-
   async function salvar() {
     setSaving(true)
     try {
-      await api.post('/whatsapp/config', form)
+      const r = await api.post<{ data: WaConfig }>('/whatsapp/config', { ativo })
+      setConfig(r.data.data)
       toast('Configuração salva!', 'success')
-      fetchStatus()
     } catch (e: unknown) {
       const msg = (e as { response?: { data?: { message?: string } } })?.response?.data?.message
       toast(msg ?? 'Erro ao salvar.', 'danger')
     } finally { setSaving(false) }
   }
 
-  async function testar() {
-    setTesting(true)
-    try {
-      const r = await api.post<{ ok: boolean; status?: string; error?: string }>('/whatsapp/testar', {
-        evolution_url:     form.evolution_url,
-        evolution_api_key: form.evolution_api_key,
-        instance_name:     form.instance_name,
-      })
-      if (r.data.ok) {
-        toast(`Conexão OK! Status: ${r.data.status ?? 'open'}`, 'success')
-      } else {
-        toast(`Falhou: ${r.data.error}`, 'danger')
-      }
-    } catch (e: unknown) {
-      const msg = (e as { response?: { data?: { message?: string } } })?.response?.data?.message
-      toast(msg ?? 'Erro ao testar.', 'danger')
-    } finally { setTesting(false) }
-  }
-
   async function verQrCode() {
+    if (!credenciaisOk) {
+      toast('A Evolution API ainda não foi configurada pelo administrador da plataforma.', 'danger')
+      return
+    }
     try {
       const r = await api.get<{ qrcode: string }>('/whatsapp/qrcode')
       setQrCode(r.data.qrcode)
@@ -211,10 +159,18 @@ export default function WhatsAppConfigPage() {
         </p>
       </div>
 
+      {/* Aviso quando credenciais não configuradas */}
+      {!credenciaisOk && (
+        <div style={{ marginBottom: 20, padding: '12px 16px', background: 'rgba(229,57,53,.08)', border: '1px solid rgba(229,57,53,.25)', borderRadius: 8, fontSize: 13, color: 'var(--danger)' }}>
+          ⚠️ A Evolution API ainda não foi configurada pelo administrador da plataforma. Entre em contato com o suporte para habilitá-la.
+        </div>
+      )}
+
       {/* Status card */}
       <div style={{
         background: 'var(--card)', border: '1px solid var(--border)', borderRadius: 10,
         padding: '16px 20px', marginBottom: 20, display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+        flexWrap: 'wrap', gap: 12,
       }}>
         <div>
           <div style={{ fontSize: 12, color: 'var(--muted)', marginBottom: 4, textTransform: 'uppercase', letterSpacing: '0.05em' }}>Status da Instância</div>
@@ -224,11 +180,16 @@ export default function WhatsAppConfigPage() {
               📱 {status.number.replace('@s.whatsapp.net', '')}
             </div>
           )}
+          {config?.instance_name && (
+            <div style={{ fontSize: 11, color: 'var(--muted)', marginTop: 2 }}>
+              Instância: <code style={{ fontFamily: 'monospace' }}>{config.instance_name}</code>
+            </div>
+          )}
         </div>
-        <div style={{ display: 'flex', gap: 10 }}>
+        <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap' }}>
           {status.status !== 'open' && (
-            <button onClick={verQrCode}
-              style={{ padding: '8px 16px', borderRadius: 7, background: 'var(--accent)', color: '#000', border: 'none', fontSize: 13, fontWeight: 700, cursor: 'pointer' }}>
+            <button onClick={verQrCode} disabled={!credenciaisOk}
+              style={{ padding: '8px 16px', borderRadius: 7, background: credenciaisOk ? 'var(--accent)' : 'var(--border)', color: credenciaisOk ? '#000' : 'var(--muted)', border: 'none', fontSize: 13, fontWeight: 700, cursor: credenciaisOk ? 'pointer' : 'not-allowed' }}>
               📷 Escanear QR Code
             </button>
           )}
@@ -275,48 +236,26 @@ export default function WhatsAppConfigPage() {
         </div>
       )}
 
-      {/* Config Form */}
+      {/* Config: ativo toggle */}
       <div style={{ background: 'var(--card)', border: '1px solid var(--border)', borderRadius: 10, overflow: 'hidden' }}>
         <div style={{ padding: '14px 20px', borderBottom: '1px solid var(--border)' }}>
-          <div style={{ fontSize: 15, fontWeight: 700 }}>Credenciais da Evolution API</div>
+          <div style={{ fontSize: 15, fontWeight: 700 }}>Configurações de alertas</div>
         </div>
         <div style={{ padding: 24, display: 'flex', flexDirection: 'column', gap: 16 }}>
-          <div>
-            <label style={lStyle}>URL da Evolution API</label>
-            <input value={form.evolution_url} onChange={e => set('evolution_url')(e.target.value)} style={iStyle}
-              placeholder="http://192.168.0.115:8081" />
-          </div>
-
-          <SecretInput label="API Key (apikey)" value={form.evolution_api_key}
-            onChange={set('evolution_api_key')} placeholder="620096bf1e66..." />
-
-          <div>
-            <label style={lStyle}>Nome da Instância</label>
-            <input value={form.instance_name} onChange={e => set('instance_name')(e.target.value)} style={iStyle}
-              placeholder="mecanicapro" />
-          </div>
-
-          <SecretInput label="Token da Instância (opcional)" value={form.instance_token}
-            onChange={set('instance_token')} />
-
           <label style={{ display: 'flex', alignItems: 'center', gap: 10, cursor: 'pointer' }}>
             <input
               type="checkbox"
-              checked={form.ativo}
-              onChange={e => set('ativo')(e.target.checked)}
+              checked={ativo}
+              onChange={e => setAtivo(e.target.checked)}
               style={{ width: 16, height: 16, accentColor: 'var(--accent)', cursor: 'pointer' }}
             />
             <span style={{ fontSize: 14, fontWeight: 600 }}>Ativar envio de alertas via WhatsApp</span>
           </label>
 
-          <div style={{ display: 'flex', gap: 12, paddingTop: 8, borderTop: '1px solid var(--border)' }}>
-            <button onClick={testar} disabled={testing}
-              style={{ padding: '9px 20px', borderRadius: 7, background: 'transparent', border: '1px solid var(--accent)', color: 'var(--accent)', fontSize: 14, fontWeight: 600, cursor: testing ? 'not-allowed' : 'pointer' }}>
-              {testing ? '⟳ Testando...' : '🔌 Testar Conexão'}
-            </button>
+          <div style={{ display: 'flex', justifyContent: 'flex-end', paddingTop: 8, borderTop: '1px solid var(--border)' }}>
             <button onClick={salvar} disabled={saving}
               style={{ padding: '9px 24px', borderRadius: 7, background: saving ? 'var(--border)' : 'var(--accent)', color: saving ? 'var(--muted)' : '#000', border: 'none', fontSize: 14, fontWeight: 700, cursor: saving ? 'not-allowed' : 'pointer', fontFamily: "'Barlow Condensed', sans-serif" }}>
-              {saving ? '⟳ Salvando...' : 'Salvar Configuração'}
+              {saving ? '⟳ Salvando...' : 'Salvar'}
             </button>
           </div>
         </div>
@@ -356,10 +295,6 @@ export default function WhatsAppConfigPage() {
             </button>
           </div>
         </div>
-      </div>
-
-      <div style={{ marginTop: 16, padding: '12px 16px', background: 'rgba(30,136,229,.08)', border: '1px solid rgba(30,136,229,.2)', borderRadius: 8, fontSize: 13, color: 'var(--info)' }}>
-        ℹ️ A Evolution API já está instalada neste servidor em <code style={{ fontFamily: 'monospace' }}>http://192.168.0.115:8081</code>. API Key e instância já estão configurados — insira os valores acima e teste a conexão.
       </div>
     </div>
   )

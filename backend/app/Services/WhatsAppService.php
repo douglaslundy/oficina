@@ -4,6 +4,8 @@ declare(strict_types=1);
 namespace App\Services;
 
 use App\Models\AlertaLog;
+use App\Models\Oficina;
+use App\Models\SaasConfig;
 use App\Models\WhatsAppConfig;
 use App\Tenancy\TenancyContext;
 use Illuminate\Support\Facades\Http;
@@ -13,7 +15,8 @@ class WhatsAppService
 {
     private ?WhatsAppConfig $config = null;
 
-    private function config(): ?WhatsAppConfig
+    /** Configuração por tenant (instance_name, ativo). */
+    private function tenantConfig(): ?WhatsAppConfig
     {
         if ($this->config) return $this->config;
         $id = TenancyContext::get();
@@ -21,27 +24,48 @@ class WhatsAppService
         return $this->config = WhatsAppConfig::where('oficina_id', $id)->first();
     }
 
+    /** Credenciais globais da Evolution API (gerenciadas pelo SaaS Admin). */
+    private function saasConfig(): SaasConfig
+    {
+        return SaasConfig::get();
+    }
+
     private function http(): \Illuminate\Http\Client\PendingRequest
     {
-        $cfg = $this->config();
-        return Http::baseUrl(rtrim((string)($cfg?->getRawOriginal('evolution_url') ?? ''), '/'))
-            ->withHeaders(['apikey' => $cfg?->getRawOriginal('evolution_api_key') ?? ''])
+        $saas = $this->saasConfig();
+        return Http::baseUrl(rtrim((string)($saas->getRawOriginal('evolution_url') ?? ''), '/'))
+            ->withHeaders(['apikey' => $saas->getRawOriginal('evolution_api_key') ?? ''])
             ->timeout(10);
     }
 
     private function instance(): string
     {
-        return $this->config()?->instance_name ?? 'mecanicapro';
+        return $this->tenantConfig()?->instance_name ?? 'mecanicapro';
     }
 
     public function estaAtivo(): bool
     {
-        $cfg = $this->config();
-        return $cfg !== null && $cfg->ativo && !empty($cfg->getRawOriginal('evolution_api_key'));
+        $cfg  = $this->tenantConfig();
+        $saas = $this->saasConfig();
+        return $cfg !== null
+            && $cfg->ativo
+            && !empty($saas->getRawOriginal('evolution_url'))
+            && !empty($saas->getRawOriginal('evolution_api_key'));
+    }
+
+    /** Verifica se as credenciais globais (SaaS) estão configuradas. */
+    public function credenciaisConfiguradas(): bool
+    {
+        $saas = $this->saasConfig();
+        return !empty($saas->getRawOriginal('evolution_url'))
+            && !empty($saas->getRawOriginal('evolution_api_key'));
     }
 
     public function statusInstancia(): array
     {
+        if (!$this->credenciaisConfiguradas() || !$this->tenantConfig()) {
+            return ['status' => 'disconnected', 'number' => null];
+        }
         try {
             $resp = $this->http()->get("/instance/connectionState/{$this->instance()}");
             if ($resp->successful()) {
@@ -62,19 +86,32 @@ class WhatsAppService
      */
     public function qrCode(): array
     {
-        if (!$this->config()) {
-            return ['qrcode' => null, 'error' => 'Configuração do WhatsApp não encontrada. Salve a configuração primeiro.'];
+        if (!$this->credenciaisConfiguradas()) {
+            return ['qrcode' => null, 'error' => 'A Evolution API ainda não foi configurada pelo administrador da plataforma.'];
+        }
+
+        $oficinaId = TenancyContext::get();
+        if (!$oficinaId) {
+            return ['qrcode' => null, 'error' => 'Contexto de oficina não encontrado.'];
+        }
+
+        // Auto-cria o WhatsAppConfig do tenant se ainda não existir.
+        if (!$this->tenantConfig()) {
+            $slug = Oficina::find($oficinaId)?->slug ?? substr($oficinaId, 0, 8);
+            $cfg  = WhatsAppConfig::create([
+                'oficina_id'    => $oficinaId,
+                'instance_name' => 'mec-' . $slug,
+                'ativo'         => false,
+            ]);
+            $this->config = $cfg;
         }
 
         try {
-            // A Evolution não cria a instância automaticamente em /connect.
-            // Se ela ainda não existe, criamos agora — o /create já devolve o QR.
             $qrCriacao = $this->garantirInstancia();
             if ($qrCriacao !== null) {
                 return ['qrcode' => $qrCriacao];
             }
 
-            // Instância já existia: solicita o connect para obter o QR atual.
             $resp = $this->http()->get("/instance/connect/{$this->instance()}");
             if ($resp->successful()) {
                 $qr = $resp->json('base64') ?? $resp->json('qrcode.base64');
@@ -88,7 +125,8 @@ class WhatsAppService
             return ['qrcode' => null, 'error' => "Evolution retornou HTTP {$resp->status()}: " . substr($resp->body(), 0, 200)];
         } catch (\Throwable $e) {
             Log::warning('WhatsApp QR code failed: ' . $e->getMessage());
-            return ['qrcode' => null, 'error' => 'Falha ao conectar na Evolution (' . $this->config()->getRawOriginal('evolution_url') . '): ' . $e->getMessage()];
+            $url = $this->saasConfig()->getRawOriginal('evolution_url') ?? '';
+            return ['qrcode' => null, 'error' => "Falha ao conectar na Evolution ({$url}): " . $e->getMessage()];
         }
     }
 
@@ -96,19 +134,17 @@ class WhatsAppService
      * Garante que a instância exista na Evolution API.
      *
      * @return string|null  QR code em base64 se a instância foi criada agora;
-     *                      null se ela já existia (use /instance/connect nesse caso).
+     *                      null se ela já existia.
      */
     private function garantirInstancia(): ?string
     {
         $instance = $this->instance();
 
-        // Já existe? connectionState responde 2xx para instâncias existentes.
         $estado = $this->http()->get("/instance/connectionState/{$instance}");
         if ($estado->successful()) {
             return null;
         }
 
-        // Cria a instância. Na Evolution v2, qrcode:true retorna o base64 na resposta.
         $resp = $this->http()->post('/instance/create', [
             'instanceName' => $instance,
             'integration'  => 'WHATSAPP-BAILEYS',
@@ -120,10 +156,9 @@ class WhatsAppService
             return null;
         }
 
-        // Persiste o token (hash) gerado pela Evolution para esta instância.
-        $hash = $resp->json('hash');
+        $hash  = $resp->json('hash');
         $token = is_array($hash) ? ($hash['apikey'] ?? null) : $hash;
-        if ($token && ($cfg = $this->config())) {
+        if ($token && ($cfg = $this->tenantConfig())) {
             $cfg->instance_token = $token;
             $cfg->save();
         }
@@ -131,29 +166,24 @@ class WhatsAppService
         return $resp->json('qrcode.base64') ?? $resp->json('base64');
     }
 
-    public function testarConexao(string $url, string $apiKey, string $instance): array
+    public function testarConexao(string $url, string $apiKey): array
     {
         try {
             $resp = Http::baseUrl(rtrim($url, '/'))
                 ->withHeaders(['apikey' => $apiKey])
                 ->timeout(8)
-                ->get("/instance/connectionState/{$instance}");
+                ->get('/instance/fetchInstances');
 
             if ($resp->successful()) {
-                $state = $resp->json('instance.state') ?? 'open';
-                return ['ok' => true, 'status' => $state];
+                return ['ok' => true, 'status' => 'conectado'];
             }
 
-            // Credenciais válidas, porém a instância ainda não foi criada na Evolution.
-            if ($resp->status() === 404 && str_contains($resp->body(), 'does not exist')) {
-                return [
-                    'ok'     => false,
-                    'status' => 'nao_criada',
-                    'error'  => 'Conexão com a Evolution OK, mas a instância "' . $instance . '" ainda não existe. Clique em "Escanear QR Code" para criá-la.',
-                ];
+            // 401 = API Key inválida
+            if ($resp->status() === 401) {
+                return ['ok' => false, 'error' => 'API Key inválida ou sem permissão.'];
             }
 
-            return ['ok' => false, 'error' => "HTTP {$resp->status()}: " . $resp->body()];
+            return ['ok' => false, 'error' => "HTTP {$resp->status()}: " . substr($resp->body(), 0, 200)];
         } catch (\Throwable $e) {
             return ['ok' => false, 'error' => $e->getMessage()];
         }
@@ -167,17 +197,19 @@ class WhatsAppService
     }
 
     /**
-     * Envia uma mensagem de teste para validar a integração.
-     * Não exige o flag "ativo" (este controla apenas os alertas automáticos);
-     * basta a configuração existir e a instância estar conectada.
+     * Envia uma mensagem de teste. Não exige o flag "ativo".
      *
      * @return array{ok: bool, error?: string}
      */
     public function enviarTeste(string $telefone): array
     {
-        $cfg = $this->config();
-        if (!$cfg || empty($cfg->getRawOriginal('evolution_api_key'))) {
-            return ['ok' => false, 'error' => 'Configuração do WhatsApp não encontrada. Salve a configuração primeiro.'];
+        if (!$this->credenciaisConfiguradas()) {
+            return ['ok' => false, 'error' => 'A Evolution API ainda não foi configurada pelo administrador da plataforma.'];
+        }
+
+        $cfg = $this->tenantConfig();
+        if (!$cfg) {
+            return ['ok' => false, 'error' => 'WhatsApp ainda não configurado para esta oficina. Escaneie o QR code primeiro.'];
         }
 
         $mensagem = "✅ *MecânicaPro*\n\nMensagem de teste. Se você recebeu isto, a integração com o WhatsApp está funcionando! 🚀";
@@ -186,16 +218,14 @@ class WhatsAppService
     }
 
     /**
-     * Desconecta (logout) a sessão atual do WhatsApp, mantendo a instância.
-     * Após o logout o status volta para "close" e o QR code fica disponível
-     * novamente para reconectar.
+     * Desconecta a sessão atual do WhatsApp, mantendo a instância.
      *
      * @return array{ok: bool, error?: string}
      */
     public function desconectar(): array
     {
-        if (!$this->config()) {
-            return ['ok' => false, 'error' => 'Configuração do WhatsApp não encontrada.'];
+        if (!$this->tenantConfig()) {
+            return ['ok' => false, 'error' => 'WhatsApp ainda não configurado para esta oficina.'];
         }
 
         try {
@@ -243,7 +273,6 @@ class WhatsAppService
             Log::error("WhatsApp exception [{$numero}]: " . $e->getMessage());
         }
 
-        // Grava log de envio
         $oficinaId = TenancyContext::get();
         if ($oficinaId) {
             AlertaLog::create([

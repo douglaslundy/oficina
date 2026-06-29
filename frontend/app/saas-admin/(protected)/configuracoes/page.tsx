@@ -13,6 +13,8 @@ interface SaasConfigData {
   mp_access_token: string | null
   mp_public_key: string | null
   mp_webhook_secret: string | null
+  evolution_url: string | null
+  evolution_api_key: string | null
   smtp_host: string | null
   smtp_port: number | null
   smtp_username: string | null
@@ -180,6 +182,12 @@ export default function SaasConfigPage() {
   const [smtpTestTo, setSmtpTestTo] = useState('')
   const [testingSmtp, setTestingSmtp] = useState(false)
 
+  // Evolution API
+  const [evolutionUrl, setEvolutionUrl] = useState('')
+  const [evolutionApiKey, setEvolutionApiKey] = useState('')
+  const [savingEvolution, setSavingEvolution] = useState(false)
+  const [testingEvolution, setTestingEvolution] = useState(false)
+
   // Fiscal
   const [provedorFiscal, setProvedorFiscal] = useState('SPEDY')
   const [modoEmissao, setModoEmissao] = useState('MANUAL')
@@ -210,6 +218,8 @@ export default function SaasConfigPage() {
         setSmtpPassword(d.smtp_password ?? '')
         setSmtpEncryption(d.smtp_encryption ?? 'tls')
         setSmtpFromAddress(d.smtp_from_address ?? '')
+        setEvolutionUrl(d.evolution_url ?? '')
+        setEvolutionApiKey(d.evolution_api_key ?? '')
         setSmtpFromName(d.smtp_from_name ?? 'MecânicaPro')
         setSmtpAtivo(d.smtp_ativo ?? false)
         setProvedorFiscal(d.provedor_fiscal_padrao ?? 'SPEDY')
@@ -266,6 +276,40 @@ export default function SaasConfigPage() {
       showToast(msg ?? 'Erro ao salvar configurações Mercado Pago.', 'danger')
     } finally {
       setSavingMp(false)
+    }
+  }
+
+  async function salvarEvolution() {
+    setSavingEvolution(true)
+    try {
+      await saasApi.put('/saas/config/evolution', {
+        evolution_url:     evolutionUrl,
+        evolution_api_key: evolutionApiKey,
+      })
+      showToast('Configurações Evolution API salvas.', 'success')
+    } catch (e: unknown) {
+      const msg = (e as { response?: { data?: { message?: string } } })?.response?.data?.message
+      showToast(msg ?? 'Erro ao salvar Evolution API.', 'danger')
+    } finally {
+      setSavingEvolution(false)
+    }
+  }
+
+  async function testarEvolution() {
+    setTestingEvolution(true)
+    try {
+      const r = await saasApi.post<{ ok: boolean; status?: string; error?: string }>('/saas/config/evolution/testar', {})
+      if (r.data.ok) {
+        showToast(`Conexão OK! Evolution API respondeu.`, 'success')
+      } else {
+        showToast(`Falhou: ${r.data.error}`, 'danger')
+      }
+    } catch (e: unknown) {
+      const msg = (e as { response?: { data?: { error?: string; message?: string } } })?.response?.data?.error
+        ?? (e as { response?: { data?: { message?: string } } })?.response?.data?.message
+      showToast(msg ?? 'Erro ao testar conexão.', 'danger')
+    } finally {
+      setTestingEvolution(false)
     }
   }
 
@@ -600,6 +644,51 @@ export default function SaasConfigPage() {
         <SecretInput label="Token Homologação" value={focusHomolog} onChange={setFocusHomolog} />
         <SecretInput label="Token Produção" value={focusProducao} onChange={setFocusProducao} />
         <SaveButton loading={savingFocus} onClick={salvarFocus} label="Salvar Credenciais Focus NFe" />
+      </SectionCard>
+
+      {/* ── Seção 6 — Evolution API (WhatsApp) ──────────────────────────── */}
+      <SectionCard
+        title="Evolution API — WhatsApp"
+        subtitle="Credenciais globais da Evolution API. Cada oficina cria sua própria instância ao escanear o QR code."
+      >
+        <div style={{ marginBottom: 16 }}>
+          <label style={{ display: 'block', fontSize: 12, fontWeight: 600, color: 'var(--muted)', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: 6 }}>
+            URL da Evolution API
+          </label>
+          <input
+            type="url"
+            value={evolutionUrl}
+            onChange={e => setEvolutionUrl(e.target.value)}
+            placeholder="https://evolution.seudominio.com"
+            style={{
+              width: '100%', padding: '9px 12px', borderRadius: 7,
+              border: '1px solid var(--border)', background: 'var(--card)',
+              color: 'var(--text)', fontSize: 14, outline: 'none', boxSizing: 'border-box',
+            }}
+          />
+        </div>
+
+        <SecretInput label="API Key (apikey)" value={evolutionApiKey} onChange={setEvolutionApiKey} placeholder="sua-api-key-global" />
+
+        <div style={{ display: 'flex', gap: 12, marginTop: 8 }}>
+          <button
+            onClick={testarEvolution}
+            disabled={testingEvolution || !evolutionUrl}
+            style={{
+              padding: '9px 20px', borderRadius: 7, border: '1px solid var(--accent)',
+              background: 'transparent', color: 'var(--accent)', fontSize: 14, fontWeight: 600,
+              cursor: (testingEvolution || !evolutionUrl) ? 'not-allowed' : 'pointer',
+              opacity: (testingEvolution || !evolutionUrl) ? 0.6 : 1,
+            }}
+          >
+            {testingEvolution ? '⟳ Testando...' : '🔌 Testar Conexão'}
+          </button>
+          <SaveButton loading={savingEvolution} onClick={salvarEvolution} label="Salvar Credenciais" />
+        </div>
+
+        <div style={{ marginTop: 16, padding: '10px 14px', background: 'rgba(30,136,229,.06)', border: '1px solid rgba(30,136,229,.2)', borderRadius: 7, fontSize: 12, color: 'var(--info)' }}>
+          ℹ️ Após salvar, cada oficina poderá conectar seu próprio WhatsApp em <strong>Config WhatsApp</strong> clicando em "Escanear QR Code". A instância é criada automaticamente na primeira vez.
+        </div>
       </SectionCard>
     </div>
   )
