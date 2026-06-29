@@ -138,9 +138,42 @@ export default function EmpresaPage() {
             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr auto', gap: 12, alignItems: 'end' }}>
               <div>
                 <label style={{ ...lStyle, fontSize: 12 }}>Arquivo .pfx</label>
-                <input type="file" accept=".pfx,.p12"
+                <label
+                  htmlFor="cert-file-input"
+                  style={{
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: 10,
+                    background: 'var(--bg)',
+                    border: `1px dashed ${certFile ? 'var(--success)' : 'var(--border)'}`,
+                    borderRadius: 8,
+                    padding: '9px 12px',
+                    cursor: 'pointer',
+                    transition: 'border-color 0.15s',
+                    minHeight: 42,
+                  }}
+                  onMouseEnter={e => (e.currentTarget.style.borderColor = 'var(--accent)')}
+                  onMouseLeave={e => (e.currentTarget.style.borderColor = certFile ? 'var(--success)' : 'var(--border)')}
+                >
+                  <span style={{ fontSize: 18, lineHeight: 1 }}>{certFile ? '✓' : '📎'}</span>
+                  <span style={{
+                    fontSize: 13,
+                    color: certFile ? 'var(--success)' : 'var(--muted)',
+                    overflow: 'hidden',
+                    textOverflow: 'ellipsis',
+                    whiteSpace: 'nowrap',
+                    maxWidth: 180,
+                  }}>
+                    {certFile ? certFile.name : 'Selecionar arquivo .pfx'}
+                  </span>
+                </label>
+                <input
+                  id="cert-file-input"
+                  type="file"
+                  accept=".pfx,.p12"
                   onChange={e => setCertFile(e.target.files?.[0] ?? null)}
-                  style={{ color: 'var(--muted)', fontSize: 14 }} />
+                  style={{ display: 'none' }}
+                />
               </div>
               <div>
                 <label style={{ ...lStyle, fontSize: 12 }}>Senha do certificado</label>
