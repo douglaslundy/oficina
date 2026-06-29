@@ -152,7 +152,7 @@ export function Sidebar({ clientesDevedores = 0, produtosAlerta = 0, isMobile = 
       {/* User pill */}
       {user && (
         <div style={{ padding: '8px 14px', borderTop: '1px solid var(--border)' }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 6 }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 8 }}>
             <div style={{
               width: 28, height: 28, borderRadius: '50%',
               background: 'var(--card)', display: 'flex', alignItems: 'center',
@@ -166,14 +166,24 @@ export function Sidebar({ clientesDevedores = 0, produtosAlerta = 0, isMobile = 
               <p style={{ color: 'var(--muted)', fontSize: 10, margin: 0 }}>{user.role}</p>
             </div>
           </div>
-          <button onClick={logout}
-            style={{
-              width: '100%', padding: '4px 0', borderRadius: 6,
+          <div style={{ display: 'flex', gap: 6 }}>
+            <Link href="/meus-dados" style={{
+              flex: 1, padding: '4px 0', borderRadius: 6, textAlign: 'center',
               background: 'transparent', border: '1px solid var(--border)',
-              color: 'var(--muted)', fontSize: 12, cursor: 'pointer',
+              color: 'var(--muted)', fontSize: 12, cursor: 'pointer', textDecoration: 'none',
+              display: 'block',
             }}>
-            Sair
-          </button>
+              Meus dados
+            </Link>
+            <button onClick={logout}
+              style={{
+                flex: 1, padding: '4px 0', borderRadius: 6,
+                background: 'transparent', border: '1px solid var(--border)',
+                color: 'var(--muted)', fontSize: 12, cursor: 'pointer',
+              }}>
+              Sair
+            </button>
+          </div>
         </div>
       )}
     </aside>

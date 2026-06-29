@@ -80,4 +80,51 @@ class LoginController extends Controller
             'role'  => $u->role,
         ]);
     }
+
+    public function perfil(Request $request): JsonResponse
+    {
+        $u = $request->user();
+        return response()->json([
+            'id'       => $u->id,
+            'nome'     => $u->nome,
+            'email'    => $u->email,
+            'cpf'      => $u->cpf,
+            'telefone' => $u->telefone,
+            'role'     => $u->role,
+            'status'   => $u->status,
+        ]);
+    }
+
+    public function updatePerfil(Request $request): JsonResponse
+    {
+        $u = $request->user();
+
+        $validated = $request->validate([
+            'nome'     => ['sometimes', 'required', 'string', 'max:120'],
+            'email'    => ['sometimes', 'required', 'email', "unique:usuarios,email,{$u->id}"],
+            'telefone' => ['sometimes', 'nullable', 'string', 'max:15'],
+            'senha'    => ['sometimes', 'nullable', 'string', 'min:8'],
+        ]);
+
+        if (!empty($validated['senha'])) {
+            $validated['senha_hash'] = Hash::make($validated['senha']);
+            unset($validated['senha']);
+        } else {
+            unset($validated['senha']);
+        }
+
+        $u->update($validated);
+
+        return response()->json([
+            'message' => 'Dados atualizados com sucesso.',
+            'data'    => [
+                'id'       => $u->id,
+                'nome'     => $u->nome,
+                'email'    => $u->email,
+                'cpf'      => $u->cpf,
+                'telefone' => $u->telefone,
+                'role'     => $u->role,
+            ],
+        ]);
+    }
 }

@@ -149,6 +149,11 @@ Route::middleware(['tenant', 'auth:sanctum'])->prefix('auth')->group(function ()
     Route::get('/me',      [LoginController::class, 'me']);
 });
 
+Route::middleware(['tenant', 'auth:sanctum'])->group(function () {
+    Route::get('/perfil',  [LoginController::class, 'perfil']);
+    Route::put('/perfil',  [LoginController::class, 'updatePerfil']);
+});
+
 // ─── Dashboard — todos os roles ───────────────────────────────────────────────
 Route::middleware(['tenant', 'auth:sanctum'])->group(function () {
     Route::get('dashboard',      [DashboardController::class, 'index']);
