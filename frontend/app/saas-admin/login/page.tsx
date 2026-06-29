@@ -1,6 +1,7 @@
 'use client'
 import { useState } from 'react'
 import { useRouter } from 'next/navigation'
+import Link from 'next/link'
 import { z } from 'zod'
 import saasApi from '@/lib/saas-api'
 
@@ -213,6 +214,16 @@ export default function SaasAdminLoginPage() {
               {fieldErrors.senha && (
                 <p style={{ color: 'var(--danger)', fontSize: 12, marginTop: 4 }}>{fieldErrors.senha}</p>
               )}
+            </div>
+
+            {/* Forgot password link */}
+            <div style={{ textAlign: 'right', marginTop: -8 }}>
+              <Link
+                href="/saas-admin/forgot-password"
+                style={{ color: 'var(--muted)', fontSize: 13, textDecoration: 'none' }}
+              >
+                Esqueci minha senha
+              </Link>
             </div>
 
             {/* Global error */}

@@ -45,7 +45,9 @@ Route::post('orcamento/{token}/responder', [OrcamentoController::class, 'respond
 
 // SaaS Admin — Auth (público, sem middleware de tenant)
 Route::prefix('saas')->group(function () {
-    Route::post('/auth/login',  [SaaSAuthController::class, 'login']);
+    Route::post('/auth/login',          [SaaSAuthController::class, 'login']);
+    Route::post('/auth/forgot-password', [SaaSAuthController::class, 'forgotPassword']);
+    Route::post('/auth/reset-password',  [SaaSAuthController::class, 'resetPassword']);
     Route::post('/auth/logout', [SaaSAuthController::class, 'logout'])->middleware('auth:saas');
     Route::get('/auth/me',      [SaaSAuthController::class, 'me'])->middleware('auth:saas');
 
