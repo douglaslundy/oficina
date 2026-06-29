@@ -39,7 +39,8 @@ interface TopbarProps {
 export function Topbar({ onMenuClick, isMobile = false }: TopbarProps) {
   const pathname = usePathname()
   const { theme, setTheme } = useTheme()
-  const { user } = useAuth()
+  const { getUser } = useAuth()
+  const user = getUser()
   const breadcrumb = BREADCRUMBS[pathname] ?? pathname.split('/').filter(Boolean).join(' / ')
   const action = ACTION_BUTTONS[pathname]
 
