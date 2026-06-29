@@ -1,0 +1,192 @@
+version: '3.9'
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    container_name: mecanicapro-postgres
+    environment:
+      POSTGRES_DB: mecanicapro
+      POSTGRES_USER: mecanicapro
+      POSTGRES_PASSWORD: Mp2026Secret
+    volumes:
+      - mecanicapro_pgdata:/var/lib/postgresql/data
+    networks:
+      - mecanicapro_net
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U mecanicapro"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  redis:
+    image: redis:7-alpine
+    container_name: mecanicapro-redis
+    networks:
+      - mecanicapro_net
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile.prod
+    container_name: mecanicapro-backend
+    environment:
+      APP_NAME: "MecânicaPro"
+      APP_ENV: production
+      APP_DEBUG: "false"
+      APP_URL: https://oficina.dlsistemas.com.br
+      FRONTEND_URL: https://oficina.dlsistemas.com.br
+      DB_CONNECTION: pgsql
+      DB_HOST: postgres
+      DB_PORT: 5432
+      DB_DATABASE: mecanicapro
+      DB_USERNAME: mecanicapro
+      DB_PASSWORD: Mp2026Secret
+      REDIS_CLIENT: predis
+      REDIS_HOST: redis
+      REDIS_PORT: 6379
+      CACHE_STORE: redis
+      SESSION_DRIVER: redis
+      QUEUE_CONNECTION: redis
+      SANCTUM_STATEFUL_DOMAINS: "oficina.dlsistemas.com.br,.dlsistemas.com.br"
+      SESSION_DOMAIN: ".dlsistemas.com.br"
+      CORS_ALLOWED_ORIGINS: "https://oficina.dlsistemas.com.br"
+      LOG_CHANNEL: stderr
+      APP_KEY: ${APP_KEY}
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    networks:
+      - mecanicapro_net
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD-SHELL", "php -r \"file_get_contents('http://localhost:8000/api/health') or exit(1);\""]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+      start_period: 60s
+
+  worker:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile.prod
+    container_name: mecanicapro-worker
+    environment:
+      APP_NAME: "MecânicaPro"
+      APP_ENV: production
+      APP_DEBUG: "false"
+      APP_URL: https://oficina.dlsistemas.com.br
+      FRONTEND_URL: https://oficina.dlsistemas.com.br
+      DB_CONNECTION: pgsql
+      DB_HOST: postgres
+      DB_PORT: 5432
+      DB_DATABASE: mecanicapro
+      DB_USERNAME: mecanicapro
+      DB_PASSWORD: Mp2026Secret
+      REDIS_CLIENT: predis
+      REDIS_HOST: redis
+      REDIS_PORT: 6379
+      CACHE_STORE: redis
+      SESSION_DRIVER: redis
+      QUEUE_CONNECTION: redis
+      SANCTUM_STATEFUL_DOMAINS: "oficina.dlsistemas.com.br,.dlsistemas.com.br"
+      SESSION_DOMAIN: ".dlsistemas.com.br"
+      CORS_ALLOWED_ORIGINS: "https://oficina.dlsistemas.com.br"
+      LOG_CHANNEL: stderr
+      APP_KEY: ${APP_KEY}
+      CONTAINER_ROLE: worker
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    networks:
+      - mecanicapro_net
+    restart: unless-stopped
+
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile.prod
+      args:
+        NEXT_PUBLIC_API_URL: https://oficina.dlsistemas.com.br
+        NEXT_PUBLIC_DEFAULT_TENANT: oficina-silva
+    container_name: mecanicapro-frontend
+    networks:
+      - mecanicapro_net
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://localhost:3000/ > /dev/null 2>&1 || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+      start_period: 30s
+
+  nginx:
+    image: nginx:1.27-alpine
+    container_name: mecanicapro-nginx
+    volumes:
+      - ./docker/nginx/mecanicapro.conf:/etc/nginx/conf.d/default.conf:ro
+    depends_on:
+      backend:
+        condition: service_healthy
+      frontend:
+        condition: service_healthy
+    networks:
+      - mecanicapro_net
+      - proxy
+    restart: unless-stopped
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.mecanicapro.rule=Host(`oficina.dlsistemas.com.br`)"
+      - "traefik.http.routers.mecanicapro.entrypoints=websecure"
+      - "traefik.http.routers.mecanicapro.tls=true"
+      - "traefik.http.routers.mecanicapro.tls.certresolver=letsencrypt"
+      - "traefik.http.routers.mecanicapro.priority=10"
+      - "traefik.http.services.mecanicapro.loadbalancer.server.port=80"
+      - "traefik.docker.network=proxy"
+      - "traefik.http.routers.mecanicapro-http.rule=Host(`oficina.dlsistemas.com.br`)"
+      - "traefik.http.routers.mecanicapro-http.entrypoints=web"
+      - "traefik.http.routers.mecanicapro-http.middlewares=mecanicapro-https@docker"
+      - "traefik.http.routers.mecanicapro-http.priority=10"
+      - "traefik.http.middlewares.mecanicapro-https.redirectscheme.scheme=https"
+      - "traefik.http.middlewares.mecanicapro-https.redirectscheme.permanent=true"
+      # Wildcard router para subdomínios de tenant (HTTPS)
+      - "traefik.http.routers.mecanicapro-tenant.rule=HostRegexp(`{subdomain:[a-z0-9-]+}.dlsistemas.com.br`)"
+      - "traefik.http.routers.mecanicapro-tenant.entrypoints=websecure"
+      - "traefik.http.routers.mecanicapro-tenant.tls=true"
+      - "traefik.http.routers.mecanicapro-tenant.tls.certresolver=letsencrypt"
+      - "traefik.http.routers.mecanicapro-tenant.priority=1"
+      # Wildcard router para subdomínios de tenant (HTTP -> HTTPS redirect)
+      - "traefik.http.routers.mecanicapro-tenant-http.rule=HostRegexp(`{subdomain:[a-z0-9-]+}.dlsistemas.com.br`)"
+      - "traefik.http.routers.mecanicapro-tenant-http.entrypoints=web"
+      - "traefik.http.routers.mecanicapro-tenant-http.middlewares=mecanicapro-https@docker"
+      - "traefik.http.routers.mecanicapro-tenant-http.priority=1"
+      # Router para saas.dlsistemas.com.br (HTTPS)
+      - "traefik.http.routers.mecanicapro-saas.rule=Host(`saas.dlsistemas.com.br`)"
+      - "traefik.http.routers.mecanicapro-saas.entrypoints=websecure"
+      - "traefik.http.routers.mecanicapro-saas.tls=true"
+      - "traefik.http.routers.mecanicapro-saas.tls.certresolver=letsencrypt"
+      - "traefik.http.routers.mecanicapro-saas.priority=10"
+      # Router para saas.dlsistemas.com.br (HTTP -> HTTPS)
+      - "traefik.http.routers.mecanicapro-saas-http.rule=Host(`saas.dlsistemas.com.br`)"
+      - "traefik.http.routers.mecanicapro-saas-http.entrypoints=web"
+      - "traefik.http.routers.mecanicapro-saas-http.middlewares=mecanicapro-https@docker"
+      - "traefik.http.routers.mecanicapro-saas-http.priority=10"
+
+networks:
+  mecanicapro_net:
+    driver: bridge
+  proxy:
+    external: true
+
+volumes:
+  mecanicapro_pgdata:

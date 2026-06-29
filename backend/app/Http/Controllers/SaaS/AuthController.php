@@ -21,7 +21,7 @@ class AuthController extends Controller
         $admin = SuperAdmin::where('email', $request->email)->first();
 
         if (!$admin || !Hash::check($request->senha, $admin->senha_hash)) {
-            return response()->json(['message' => 'Credenciais inválidas.'], 401);
+            return response()->json(['message' => 'Credenciais inv?lidas.'], 401);
         }
 
         $token = $admin->createToken('saas-token')->plainTextToken;
@@ -50,5 +50,45 @@ class AuthController extends Controller
             'nome'  => $admin->nome,
             'email' => $admin->email,
         ]);
+    }
+
+    public function updateProfile(Request $request): JsonResponse
+    {
+        $admin = $request->user('saas');
+
+        $validated = $request->validate([
+            'nome'  => ['required', 'string', 'max:120'],
+            'email' => ['required', 'email', 'max:120', 'unique:super_admins,email,' . $admin->id],
+        ]);
+
+        $admin->update([
+            'nome'  => $validated['nome'],
+            'email' => $validated['email'],
+        ]);
+
+        return response()->json([
+            'id'    => $admin->id,
+            'nome'  => $admin->nome,
+            'email' => $admin->email,
+        ]);
+    }
+
+    public function updatePassword(Request $request): JsonResponse
+    {
+        $admin = $request->user('saas');
+
+        $validated = $request->validate([
+            'senha_atual'             => ['required', 'string'],
+            'nova_senha'              => ['required', 'string', 'min:8', 'confirmed'],
+            'nova_senha_confirmation' => ['required', 'string'],
+        ]);
+
+        if (!Hash::check($validated['senha_atual'], $admin->senha_hash)) {
+            return response()->json(['message' => 'Senha atual incorreta.'], 422);
+        }
+
+        $admin->update(['senha_hash' => Hash::make($validated['nova_senha'])]);
+
+        return response()->json(['message' => 'Senha alterada com sucesso.']);
     }
 }

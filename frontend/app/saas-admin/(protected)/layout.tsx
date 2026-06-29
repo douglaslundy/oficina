@@ -10,6 +10,8 @@ const NAV_ITEMS = [
   { label: 'Cobranças', href: '/saas-admin/cobrancas' },
   { label: 'Notificações', href: '/saas-admin/notificacoes' },
   { label: 'Configurações', href: '/saas-admin/configuracoes' },
+  { label: 'Backup', href: '/saas-admin/backup' },
+  { label: 'VPS', href: '/saas-admin/vps' },
 ] as const
 
 export default function SaasAdminLayout({ children }: { children: React.ReactNode }) {
@@ -38,9 +40,10 @@ export default function SaasAdminLayout({ children }: { children: React.ReactNod
         padding: '0 24px',
         zIndex: 100,
         gap: 24,
+        overflowX: 'auto',
       }}>
         {/* Logo + badge */}
-        <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginRight: 16 }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginRight: 16, flexShrink: 0 }}>
           <span className="font-display" style={{ fontSize: 18, fontWeight: 700, color: 'var(--text)' }}>
             🔧 MecânicaPro
           </span>
@@ -58,7 +61,7 @@ export default function SaasAdminLayout({ children }: { children: React.ReactNod
         </div>
 
         {/* Nav links */}
-        <nav style={{ display: 'flex', alignItems: 'center', gap: 4, flex: 1 }}>
+        <nav style={{ display: 'flex', alignItems: 'center', gap: 2, flex: 1, minWidth: 0 }}>
           {NAV_ITEMS.map((item) => {
             const isActive =
               item.href === '/saas-admin'
@@ -69,14 +72,16 @@ export default function SaasAdminLayout({ children }: { children: React.ReactNod
                 key={item.href}
                 href={item.href}
                 style={{
-                  padding: '6px 14px',
+                  padding: '6px 10px',
                   borderRadius: 6,
-                  fontSize: 14,
+                  fontSize: 13,
                   fontWeight: isActive ? 600 : 400,
                   color: isActive ? 'var(--accent)' : 'var(--muted)',
                   textDecoration: 'none',
                   borderBottom: isActive ? '2px solid var(--accent)' : '2px solid transparent',
                   transition: 'color 0.15s, border-color 0.15s',
+                  whiteSpace: 'nowrap',
+                  flexShrink: 0,
                 }}
               >
                 {item.label}
@@ -85,24 +90,43 @@ export default function SaasAdminLayout({ children }: { children: React.ReactNod
           })}
         </nav>
 
-        {/* Logout */}
-        <button
-          onClick={handleLogout}
-          style={{
-            background: 'none',
-            border: 'none',
-            color: 'var(--muted)',
-            fontSize: 14,
-            cursor: 'pointer',
-            padding: '6px 12px',
-            borderRadius: 6,
-            transition: 'color 0.15s',
-          }}
-          onMouseEnter={(e) => { (e.currentTarget as HTMLButtonElement).style.color = 'var(--danger)' }}
-          onMouseLeave={(e) => { (e.currentTarget as HTMLButtonElement).style.color = 'var(--muted)' }}
-        >
-          Sair
-        </button>
+        {/* Perfil + Logout */}
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexShrink: 0 }}>
+          <a
+            href="/saas-admin/perfil"
+            style={{
+              padding: '6px 12px',
+              borderRadius: 6,
+              fontSize: 13,
+              fontWeight: pathname.startsWith('/saas-admin/perfil') ? 600 : 400,
+              color: pathname.startsWith('/saas-admin/perfil') ? 'var(--accent)' : 'var(--muted)',
+              textDecoration: 'none',
+              borderBottom: pathname.startsWith('/saas-admin/perfil') ? '2px solid var(--accent)' : '2px solid transparent',
+              transition: 'color 0.15s',
+              whiteSpace: 'nowrap',
+            }}
+          >
+            👤 Perfil
+          </a>
+          <button
+            onClick={handleLogout}
+            style={{
+              background: 'none',
+              border: 'none',
+              color: 'var(--muted)',
+              fontSize: 13,
+              cursor: 'pointer',
+              padding: '6px 12px',
+              borderRadius: 6,
+              transition: 'color 0.15s',
+              whiteSpace: 'nowrap',
+            }}
+            onMouseEnter={(e) => { (e.currentTarget as HTMLButtonElement).style.color = 'var(--danger)' }}
+            onMouseLeave={(e) => { (e.currentTarget as HTMLButtonElement).style.color = 'var(--muted)' }}
+          >
+            Sair
+          </button>
+        </div>
       </header>
 
       {/* Main content — offset for fixed topbar */}

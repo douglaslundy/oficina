@@ -29,6 +29,8 @@ use App\Http\Controllers\SaaS\OficinaController as SaaSOficinaController;
 use App\Http\Controllers\SaaS\PlanoController as SaaSPlanoController;
 use App\Http\Controllers\SaaS\WebhookController as SaaSWebhookController;
 use App\Http\Controllers\SaaS\SaasConfigController;
+use App\Http\Controllers\SaaS\BackupController as SaaSBackupController;
+use App\Http\Controllers\SaaS\VpsController as SaaSVpsController;
 
 // Health check — para docker-compose healthcheck e monitoramento
 Route::get('/health', fn() => response()->json(['status' => 'ok']));
@@ -75,6 +77,20 @@ Route::prefix('saas')->group(function () {
         Route::post('oficinas/{id}/cancelar-assinatura',       [SaaSOficinaController::class, 'cancelarAssinatura']);
         Route::get('oficinas/{id}/mensalidade',                [SaaSOficinaController::class, 'mensalidade']);
         Route::post('oficinas/{id}/sincronizar-assinatura',    [SaaSOficinaController::class, 'sincronizarAssinatura']);
+
+        // Perfil do super admin
+        Route::put('auth/profile',  [SaaSAuthController::class, 'updateProfile']);
+        Route::put('auth/password', [SaaSAuthController::class, 'updatePassword']);
+
+        // Backup do banco
+        Route::get('backup/listar',              [SaaSBackupController::class, 'listar']);
+        Route::post('backup/gerar',              [SaaSBackupController::class, 'gerar']);
+        Route::get('backup/{arquivo}/download',  [SaaSBackupController::class, 'download']);
+        Route::delete('backup/{arquivo}',        [SaaSBackupController::class, 'apagar']);
+        Route::post('backup/importar',           [SaaSBackupController::class, 'importar']);
+
+        // Monitor VPS
+        Route::get('vps/status', [SaaSVpsController::class, 'status']);
 
         // Dashboard SaaS
         Route::get('dashboard', [SaaSDashboardController::class, 'index']);
