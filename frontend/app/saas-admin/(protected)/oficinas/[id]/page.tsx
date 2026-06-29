@@ -369,9 +369,9 @@ export default function OficinaDetailPage() {
           oficina={oficina}
           planos={planos}
           onClose={() => setShowEditModal(false)}
-          onSuccess={(updated) => {
+          onSuccess={() => {
             setShowEditModal(false)
-            setOficina(prev => prev ? { ...prev, ...updated } : prev)
+            fetchOficina()
             showToast('Dados da oficina atualizados.')
           }}
         />

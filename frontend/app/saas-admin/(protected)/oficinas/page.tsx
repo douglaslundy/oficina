@@ -571,7 +571,7 @@ export default function OficinasPage() {
     fetchOficinas(page)
   }
 
-  function handleEditSuccess(updated: Oficina) {
+  function handleEditSuccess() {
     setEditingOficina(null)
     showSuccess('Dados da oficina atualizados.')
     fetchOficinas(meta.current_page)

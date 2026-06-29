@@ -21,7 +21,7 @@ interface EditOficinaModalProps {
   oficina: Oficina
   planos: Plano[]
   onClose: () => void
-  onSuccess: (updated: Oficina) => void
+  onSuccess: () => void
 }
 
 const inputStyle: React.CSSProperties = {
@@ -91,8 +91,8 @@ export function EditOficinaModal({ oficina, planos, onClose, onSuccess }: EditOf
 
     setSubmitting(true)
     try {
-      const res = await saasApi.put<{ data: Oficina }>(`/saas/oficinas/${oficina.id}`, payload)
-      onSuccess(res.data.data)
+      await saasApi.put(`/saas/oficinas/${oficina.id}`, payload)
+      onSuccess()
     } catch (err: unknown) {
       const axiosErr = err as { response?: { data?: { message?: string } } }
       setError(axiosErr.response?.data?.message ?? 'Erro ao salvar. Tente novamente.')
