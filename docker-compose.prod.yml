@@ -37,10 +37,10 @@ services:
       APP_NAME: MecânicaPro
       APP_ENV: production
       APP_DEBUG: "false"
-      APP_URL: http://192.168.0.115:8080
+      APP_URL: https://oficina.dlsistemas.com.br
       # URL pública do frontend p/ links enviados ao cliente (orçamento/reset).
       # Mesmo endereço do nginx. Para link clicável no WhatsApp use um domínio público (TLD).
-      FRONTEND_URL: http://192.168.0.115:8080
+      FRONTEND_URL: https://oficina.dlsistemas.com.br
       DB_CONNECTION: pgsql
       DB_HOST: postgres
       DB_PORT: 5432
@@ -53,9 +53,9 @@ services:
       CACHE_STORE: redis
       SESSION_DRIVER: redis
       QUEUE_CONNECTION: redis
-      SANCTUM_STATEFUL_DOMAINS: "192.168.0.115:8080,localhost:8080"
-      SESSION_DOMAIN: "192.168.0.115"
-      CORS_ALLOWED_ORIGINS: "http://192.168.0.115:8080,http://localhost:3000"
+      SANCTUM_STATEFUL_DOMAINS: "oficina.dlsistemas.com.br,localhost:8080"
+      SESSION_DOMAIN: "oficina.dlsistemas.com.br"
+      CORS_ALLOWED_ORIGINS: "https://oficina.dlsistemas.com.br,http://localhost:3000"
       LOG_CHANNEL: stderr
       APP_KEY: ${APP_KEY}
     depends_on:
@@ -95,8 +95,8 @@ services:
       context: ./frontend
       dockerfile: Dockerfile.prod
       args:
-        NEXT_PUBLIC_API_URL: http://192.168.0.115:8080
-        NEXT_PUBLIC_DEFAULT_TENANT: oficina-silva
+        NEXT_PUBLIC_API_URL: https://oficina.dlsistemas.com.br
+        NEXT_PUBLIC_DEFAULT_TENANT: stuntmotos
     networks:
       - mecanicapro_net
     restart: unless-stopped
