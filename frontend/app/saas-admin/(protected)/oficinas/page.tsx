@@ -3,6 +3,7 @@
 import { useState, useEffect, useCallback } from 'react'
 import Link from 'next/link'
 import saasApi from '@/lib/saas-api'
+import { EditOficinaModal } from '@/components/saas/EditOficinaModal'
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -494,6 +495,7 @@ export default function OficinasPage() {
   // confirmação inline: key = oficina id, value = 'suspender' | 'reativar' | null
   const [confirmMap, setConfirmMap] = useState<Record<string, 'suspender' | 'reativar'>>({})
   const [actionLoading, setActionLoading] = useState<string | null>(null)
+  const [editingOficina, setEditingOficina] = useState<Oficina | null>(null)
 
   const totalPages = Math.ceil(meta.total / meta.per_page)
 
@@ -567,6 +569,12 @@ export default function OficinasPage() {
   function goToPage(page: number) {
     if (page < 1 || page > totalPages) return
     fetchOficinas(page)
+  }
+
+  function handleEditSuccess(updated: Oficina) {
+    setEditingOficina(null)
+    showSuccess('Dados da oficina atualizados.')
+    fetchOficinas(meta.current_page)
   }
 
   const TABLE_COLS = ['Nome', 'CNPJ', 'Plano', 'Status', 'Usuários', 'OS/mês', 'Ações', '']
@@ -957,11 +965,28 @@ export default function OficinasPage() {
                             <span style={{ color: 'var(--muted)', fontSize: 13 }}>—</span>
                           )}
                         </td>
-                        <td style={{ padding: '12px 16px' }}>
-                          <Link href={`/saas-admin/oficinas/${oficina.id}`}
-                            style={{ fontSize: 13, color: 'var(--info)', textDecoration: 'none', fontWeight: 600 }}>
-                            Detalhes →
-                          </Link>
+                        <td style={{ padding: '12px 16px', whiteSpace: 'nowrap' }}>
+                          <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+                            <button
+                              onClick={() => setEditingOficina(oficina)}
+                              style={{
+                                background: 'none',
+                                border: '1px solid var(--info)',
+                                color: 'var(--info)',
+                                borderRadius: 6,
+                                padding: '4px 12px',
+                                fontSize: 12,
+                                fontWeight: 600,
+                                cursor: 'pointer',
+                              }}
+                            >
+                              Editar
+                            </button>
+                            <Link href={`/saas-admin/oficinas/${oficina.id}`}
+                              style={{ fontSize: 13, color: 'var(--info)', textDecoration: 'none', fontWeight: 600 }}>
+                              Detalhes →
+                            </Link>
+                          </div>
                         </td>
                       </tr>
                     )
@@ -1047,6 +1072,16 @@ export default function OficinasPage() {
           planos={planos}
           onClose={() => setShowModal(false)}
           onSuccess={handleModalSuccess}
+        />
+      )}
+
+      {/* Edit modal */}
+      {editingOficina && (
+        <EditOficinaModal
+          oficina={editingOficina}
+          planos={planos}
+          onClose={() => setEditingOficina(null)}
+          onSuccess={handleEditSuccess}
         />
       )}
     </>

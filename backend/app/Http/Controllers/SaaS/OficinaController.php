@@ -16,6 +16,7 @@ use App\Models\SaasConfig;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Carbon;
+use Illuminate\Support\Facades\Hash;
 
 class OficinaController extends Controller
 {
@@ -136,11 +137,28 @@ class OficinaController extends Controller
             'nome'         => 'sometimes|string|max:150',
             'plano_id'     => 'sometimes|uuid|exists:planos,id',
             'status'       => 'sometimes|string|in:ATIVA,SUSPENSA,CANCELADA',
+            'admin_nome'   => 'sometimes|string|max:120',
             'admin_email'  => 'sometimes|email|max:120',
+            'admin_senha'  => 'sometimes|nullable|string|min:8',
         ]);
 
-        $oficina->update($validated);
+        $oficinaFields = array_intersect_key($validated, array_flip(['nome', 'plano_id', 'status', 'admin_email']));
+        if (!empty($oficinaFields)) {
+            $oficina->update($oficinaFields);
+        }
         $oficina->load('plano');
+
+        $adminUser = Usuario::withoutGlobalScopes()
+            ->where('oficina_id', $id)
+            ->where('role', 'ADMIN')
+            ->first();
+
+        if ($adminUser) {
+            if (!empty($validated['admin_nome']))  $adminUser->nome       = strtoupper($validated['admin_nome']);
+            if (!empty($validated['admin_email'])) $adminUser->email      = $validated['admin_email'];
+            if (!empty($validated['admin_senha'])) $adminUser->senha_hash = Hash::make($validated['admin_senha']);
+            $adminUser->save();
+        }
 
         $inicioMes = Carbon::now()->startOfMonth();
 
@@ -343,6 +361,12 @@ class OficinaController extends Controller
             ->where('criado_em', '>=', $inicioMes)
             ->count();
 
+        $adminUser = Usuario::withoutGlobalScopes()
+            ->where('oficina_id', $oficina->id)
+            ->where('role', 'ADMIN')
+            ->select('nome')
+            ->first();
+
         return [
             'id'          => $oficina->id,
             'nome'        => $oficina->nome,
@@ -354,8 +378,9 @@ class OficinaController extends Controller
                 'nome'         => $oficina->plano->nome,
                 'preco_mensal' => number_format((float) $oficina->plano->preco_mensal, 2, '.', ''),
             ] : null,
-            'users_count'  => $usersCount,
-            'os_mes_count' => $osMesCount,
+            'users_count'         => $usersCount,
+            'os_mes_count'        => $osMesCount,
+            'admin_nome'          => $adminUser?->nome,
             'admin_email'         => $oficina->admin_email,
             'criado_em'           => $oficina->criado_em?->toIso8601String(),
             'provedor_fiscal'     => $oficina->provedor_fiscal,

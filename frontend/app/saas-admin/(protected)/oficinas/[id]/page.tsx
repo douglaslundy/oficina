@@ -5,8 +5,15 @@ import { useParams, useRouter } from 'next/navigation'
 import Link from 'next/link'
 import saasApi from '@/lib/saas-api'
 import { ServicosAvulsosSection } from '@/components/saas/ServicosAvulsosSection'
+import { EditOficinaModal } from '@/components/saas/EditOficinaModal'
 
 // ─── Types ────────────────────────────────────────────────────────────────────
+
+interface Plano {
+  id: string
+  nome: string
+  preco_mensal: string
+}
 
 interface Oficina {
   id: string
@@ -15,6 +22,7 @@ interface Oficina {
   slug: string
   status: 'ATIVA' | 'SUSPENSA' | 'CANCELADA' | 'INADIMPLENTE'
   plano: { id: string; nome: string; preco_mensal: string } | null
+  admin_nome?: string | null
   admin_email: string
   users_count: number
   os_mes_count: number
@@ -134,6 +142,9 @@ export default function OficinaDetailPage() {
   const [modoFiscal, setModoFiscal] = useState<string>('')
   const [savingFiscal, setSavingFiscal] = useState(false)
 
+  const [showEditModal, setShowEditModal] = useState(false)
+  const [planos, setPlanos] = useState<Plano[]>([])
+
   const showToast = (msg: string, type: 'ok' | 'err' = 'ok') => {
     setToast({ msg, type })
     setTimeout(() => setToast(null), 3500)
@@ -179,6 +190,9 @@ export default function OficinaDetailPage() {
     fetchOficina()
     fetchAsaas()
     fetchCobrancas()
+    saasApi.get<{ data: Plano[] }>('/saas/planos')
+      .then(res => setPlanos(res.data.data ?? []))
+      .catch(() => setPlanos([]))
   }, [fetchOficina, fetchAsaas, fetchCobrancas])
 
   async function handleAction(action: string, label: string) {
@@ -350,6 +364,19 @@ export default function OficinaDetailPage() {
         </div>
       )}
 
+      {showEditModal && oficina && (
+        <EditOficinaModal
+          oficina={oficina}
+          planos={planos}
+          onClose={() => setShowEditModal(false)}
+          onSuccess={(updated) => {
+            setShowEditModal(false)
+            setOficina(prev => prev ? { ...prev, ...updated } : prev)
+            showToast('Dados da oficina atualizados.')
+          }}
+        />
+      )}
+
       <div style={{ padding: '32px 32px 48px', maxWidth: 1200, color: 'var(--text)', margin: '0 auto' }}>
         {/* Breadcrumb */}
         <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 24 }}>
@@ -388,6 +415,7 @@ export default function OficinaDetailPage() {
 
           {!loadingOficina && oficina && (
             <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+              {sBtn('Editar Dados', () => setShowEditModal(true), 'muted')}
               {oficina.status === 'ATIVA' && sBtn('Suspender', () => handleAction('suspender', 'Suspender oficina'), 'danger', actionLoading === 'suspender')}
               {(oficina.status === 'SUSPENSA' || oficina.status === 'INADIMPLENTE') && sBtn('Reativar', () => handleAction('reativar', 'Reativar oficina'), 'primary', actionLoading === 'reativar')}
               {oficina.status !== 'CANCELADA' && sBtn('Cancelar Assinatura', handleCancelarAssinatura, 'danger', actionLoading === 'cancelar-assinatura')}
@@ -408,7 +436,8 @@ export default function OficinaDetailPage() {
                 <InfoRow label="CNPJ" value={<span style={{ fontFamily: "'JetBrains Mono', monospace" }}>{oficina.cnpj}</span>} />
                 <InfoRow label="Plano" value={oficina.plano?.nome ?? '—'} />
                 <InfoRow label="Valor/mês" value={oficina.plano ? fmtBRL(oficina.plano.preco_mensal) : '—'} />
-                <InfoRow label="Admin" value={oficina.admin_email} />
+                {oficina.admin_nome && <InfoRow label="Admin" value={oficina.admin_nome} />}
+                <InfoRow label="E-mail Admin" value={oficina.admin_email} />
                 <InfoRow label="Usuários" value={oficina.users_count} />
                 <InfoRow label="OS neste mês" value={oficina.os_mes_count} />
                 <InfoRow label="Cadastro" value={fmt(oficina.criado_em)} />
