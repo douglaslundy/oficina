@@ -8,7 +8,8 @@ export function proxy(request: NextRequest) {
 
   // --- SaaS Admin routes ---
   if (pathname.startsWith('/saas-admin')) {
-    if (pathname.startsWith('/saas-admin/login')) {
+    const SAAS_PUBLIC = ['/saas-admin/login', '/saas-admin/forgot-password', '/saas-admin/reset-password']
+    if (SAAS_PUBLIC.some(p => pathname.startsWith(p))) {
       return NextResponse.next()
     }
     const saasToken = request.cookies.get('saas_token')?.value
