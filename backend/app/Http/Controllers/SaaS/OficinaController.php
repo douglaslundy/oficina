@@ -153,17 +153,45 @@ class OficinaController extends Controller
             ->where('role', 'ADMIN')
             ->first();
 
+        $adminUserCriado = false;
+
         if ($adminUser) {
             if (!empty($validated['admin_nome']))  $adminUser->nome       = strtoupper($validated['admin_nome']);
             if (!empty($validated['admin_email'])) $adminUser->email      = $validated['admin_email'];
             if (!empty($validated['admin_senha'])) $adminUser->senha_hash = Hash::make($validated['admin_senha']);
             $adminUser->save();
+        } elseif (!empty($validated['admin_senha'])) {
+            // Usuário admin não encontrado — cria automaticamente (auto-healing)
+            $email = $validated['admin_email'] ?? $oficina->admin_email;
+            $nome  = $validated['admin_nome']  ?? ($oficina->nome . ' ADMIN');
+
+            if ($email) {
+                \App\Tenancy\TenancyContext::set($oficina->id);
+
+                Usuario::create([
+                    'nome'       => strtoupper($nome),
+                    'email'      => $email,
+                    'role'       => 'ADMIN',
+                    'status'     => 'ATIVO',
+                    'senha_hash' => Hash::make($validated['admin_senha']),
+                    // oficina_id auto-set by HasTenantScope; cpf nullable
+                ]);
+
+                \App\Tenancy\TenancyContext::clear();
+
+                $adminUserCriado = true;
+            }
         }
 
         $inicioMes = Carbon::now()->startOfMonth();
 
+        $message = 'Oficina atualizada com sucesso.';
+        if ($adminUserCriado) {
+            $message = 'Oficina atualizada. Usuário administrador criado com a nova senha.';
+        }
+
         return response()->json([
-            'message' => 'Oficina atualizada com sucesso.',
+            'message' => $message,
             'data'    => $this->formatOficina($oficina, $inicioMes),
         ]);
     }
