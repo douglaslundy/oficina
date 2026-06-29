@@ -8,6 +8,9 @@ const api = axios.create({
 
 api.interceptors.request.use((config) => {
   if (typeof window !== 'undefined') {
+    // Use current origin so tenant subdomains (e.g. stuntmotos.dlsistemas.com.br)
+    // call /api relative to themselves — avoids cross-origin CORS entirely
+    config.baseURL = window.location.origin + '/api'
     const token = localStorage.getItem('auth_token')
     if (token) config.headers.Authorization = `Bearer ${token}`
     const slug = localStorage.getItem('oficina_slug')

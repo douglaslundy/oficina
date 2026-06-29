@@ -144,16 +144,14 @@ export function EditOficinaModal({ oficina, planos, onClose, onSuccess }: EditOf
             />
           </Field>
 
-          {oficina.cnpj && (
-            <Field label="CNPJ" hint="Não editável após cadastro">
-              <input
-                style={{ ...inputStyle, opacity: 0.6, cursor: 'not-allowed' }}
-                value={oficina.cnpj}
-                disabled
-                readOnly
-              />
-            </Field>
-          )}
+          <Field label="CNPJ" hint="Não editável após cadastro">
+            <input
+              style={{ ...inputStyle, opacity: 0.6, cursor: 'not-allowed' }}
+              value={oficina.cnpj || '—'}
+              disabled
+              readOnly
+            />
+          </Field>
 
           <Field label="Plano">
             <select
@@ -171,16 +169,14 @@ export function EditOficinaModal({ oficina, planos, onClose, onSuccess }: EditOf
 
           <SectionLabel>Admin</SectionLabel>
 
-          {oficina.admin_cpf && (
-            <Field label="CPF do Admin" hint="Não editável após cadastro">
-              <input
-                style={{ ...inputStyle, opacity: 0.6, cursor: 'not-allowed' }}
-                value={oficina.admin_cpf}
-                disabled
-                readOnly
-              />
-            </Field>
-          )}
+          <Field label="CPF do Admin" hint="Não editável após cadastro">
+            <input
+              style={{ ...inputStyle, opacity: 0.6, cursor: 'not-allowed' }}
+              value={oficina.admin_cpf || '—'}
+              disabled
+              readOnly
+            />
+          </Field>
 
           <Field label="Nome Completo">
             <input

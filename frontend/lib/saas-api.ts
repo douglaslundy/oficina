@@ -8,6 +8,7 @@ const saasApi = axios.create({
 
 saasApi.interceptors.request.use((config) => {
   if (typeof window !== 'undefined') {
+    config.baseURL = window.location.origin + '/api'
     const token = localStorage.getItem('saas_token')
     if (token) config.headers.Authorization = `Bearer ${token}`
   }
