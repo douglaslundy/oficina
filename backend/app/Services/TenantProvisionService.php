@@ -3,6 +3,7 @@ declare(strict_types=1);
 
 namespace App\Services;
 
+use App\Mail\BoasVindasOficina;
 use App\Models\Configuracao;
 use App\Models\Oficina;
 use App\Models\Plano;
@@ -34,6 +35,7 @@ class TenantProvisionService
                 'plano_id'    => $plano->id,
                 'status'      => 'ATIVA',
                 'admin_email' => $data['admin_email'],
+                'admin_cpf'   => preg_replace('/\D/', '', $data['admin_cpf']),
             ]);
 
             // 2. Create admin usuario scoped to tenant
@@ -106,11 +108,17 @@ class TenantProvisionService
 
             // 5. Send welcome email (non-blocking)
             try {
-                Mail::raw(
-                    "Bem-vindo ao MecânicaPro!\n\nSua oficina foi criada.\nE-mail: {$data['admin_email']}\nSenha: {$senha}\n\nAcesse: " . config('app.url', 'http://localhost:3000'),
-                    fn($msg) => $msg->to($data['admin_email'], $data['admin_nome'])
-                                    ->subject('Bem-vindo ao MecânicaPro!')
-                );
+                $urlAcesso = rtrim(env('FRONTEND_URL', config('app.url', 'http://localhost:3000')), '/') . '/login';
+
+                Mail::to($data['admin_email'], $data['admin_nome'])
+                    ->send(new BoasVindasOficina(
+                        nomeAdmin:   $data['admin_nome'],
+                        nomeOficina: $data['nome'],
+                        email:       $data['admin_email'],
+                        senha:       $senha,
+                        slug:        $data['slug'],
+                        urlAcesso:   $urlAcesso,
+                    ));
             } catch (\Throwable) {
                 // Mail failure should not abort provisioning
             }

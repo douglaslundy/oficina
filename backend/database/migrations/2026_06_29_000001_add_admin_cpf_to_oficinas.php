@@ -9,15 +9,15 @@ return new class extends Migration
 {
     public function up(): void
     {
-        Schema::table('usuarios', function (Blueprint $table) {
-            $table->string('cpf', 11)->nullable()->change();
+        Schema::table('oficinas', function (Blueprint $table) {
+            $table->string('admin_cpf', 11)->nullable()->after('admin_email');
         });
     }
 
     public function down(): void
     {
-        Schema::table('usuarios', function (Blueprint $table) {
-            $table->string('cpf', 11)->nullable(false)->change();
+        Schema::table('oficinas', function (Blueprint $table) {
+            $table->dropColumn('admin_cpf');
         });
     }
 };

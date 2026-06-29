@@ -28,6 +28,7 @@ class Oficina extends Model
         'mp_customer_id',
         'mp_subscription_id',
         'admin_email',
+        'admin_cpf',
         'provedor_fiscal',
         'emissao_fiscal_modo',
     ];

@@ -161,20 +161,22 @@ class OficinaController extends Controller
             if (!empty($validated['admin_senha'])) $adminUser->senha_hash = Hash::make($validated['admin_senha']);
             $adminUser->save();
         } elseif (!empty($validated['admin_senha'])) {
-            // Usuário admin não encontrado — cria automaticamente (auto-healing)
+            // Usuário admin não encontrado — auto-healing: cria com CPF armazenado na oficina
             $email = $validated['admin_email'] ?? $oficina->admin_email;
             $nome  = $validated['admin_nome']  ?? ($oficina->nome . ' ADMIN');
+            $cpf   = $oficina->admin_cpf;
 
-            if ($email) {
+            if ($email && $cpf) {
                 \App\Tenancy\TenancyContext::set($oficina->id);
 
                 Usuario::create([
                     'nome'       => strtoupper($nome),
                     'email'      => $email,
+                    'cpf'        => $cpf,
                     'role'       => 'ADMIN',
                     'status'     => 'ATIVO',
                     'senha_hash' => Hash::make($validated['admin_senha']),
-                    // oficina_id auto-set by HasTenantScope; cpf nullable
+                    // oficina_id auto-set by HasTenantScope
                 ]);
 
                 \App\Tenancy\TenancyContext::clear();
