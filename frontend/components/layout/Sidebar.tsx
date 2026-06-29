@@ -166,24 +166,14 @@ export function Sidebar({ clientesDevedores = 0, produtosAlerta = 0, isMobile = 
               <p style={{ color: 'var(--muted)', fontSize: 10, margin: 0 }}>{user.role}</p>
             </div>
           </div>
-          <div style={{ display: 'flex', gap: 6 }}>
-            <Link href="/meus-dados" style={{
-              flex: 1, padding: '4px 0', borderRadius: 6, textAlign: 'center',
+          <button onClick={logout}
+            style={{
+              width: '100%', padding: '4px 0', borderRadius: 6,
               background: 'transparent', border: '1px solid var(--border)',
-              color: 'var(--muted)', fontSize: 12, cursor: 'pointer', textDecoration: 'none',
-              display: 'block',
+              color: 'var(--muted)', fontSize: 12, cursor: 'pointer',
             }}>
-              Meus dados
-            </Link>
-            <button onClick={logout}
-              style={{
-                flex: 1, padding: '4px 0', borderRadius: 6,
-                background: 'transparent', border: '1px solid var(--border)',
-                color: 'var(--muted)', fontSize: 12, cursor: 'pointer',
-              }}>
-              Sair
-            </button>
-          </div>
+            Sair
+          </button>
         </div>
       )}
     </aside>

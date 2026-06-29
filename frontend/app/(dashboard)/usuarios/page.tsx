@@ -1,6 +1,7 @@
 'use client'
 import { useState, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
+import Link from 'next/link'
 import { DataTable, Column } from '@/components/ui/DataTable'
 import { StatusPill } from '@/components/ui/StatusPill'
 import { formatarData } from '@/lib/formatters'
@@ -49,6 +50,28 @@ export default function UsuariosPage() {
     { key: 'role', label: 'Perfil', render: r => <span className="pill pill-info">{r.role}</span> },
     { key: 'ultimo_acesso', label: 'Último acesso', render: r => formatarData(r.ultimo_acesso) },
     { key: 'status', label: 'Status', render: r => <StatusPill status={r.status} /> },
+    {
+      key: 'id', label: '',
+      render: r => (
+        <Link
+          href={`/usuarios/${r.id}`}
+          onClick={e => e.stopPropagation()}
+          style={{
+            display: 'inline-block',
+            padding: '4px 14px',
+            border: '1px solid var(--info)',
+            borderRadius: 6,
+            color: 'var(--info)',
+            fontSize: 12,
+            fontWeight: 600,
+            textDecoration: 'none',
+            whiteSpace: 'nowrap',
+          }}
+        >
+          Editar
+        </Link>
+      ),
+    },
   ]
 
   return (
