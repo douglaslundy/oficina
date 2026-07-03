@@ -8,6 +8,8 @@ export default function ConfiguracoesPage() {
     estoque_limite_padrao: 5,
     alertas_email: true,
     email_alertas: '',
+    markup_padrao_entrada_nf: 40,
+    atualizar_custo_entrada_nf: true,
   })
   const [saving, setSaving] = useState(false)
 
@@ -18,6 +20,8 @@ export default function ConfiguracoesPage() {
         estoque_limite_padrao: d.estoque_limite_padrao ?? 5,
         alertas_email: d.alertas_email ?? true,
         email_alertas: d.email_alertas ?? '',
+        markup_padrao_entrada_nf: d.markup_padrao_entrada_nf ?? 40,
+        atualizar_custo_entrada_nf: d.atualizar_custo_entrada_nf ?? true,
       })
     }).catch(() => {})
   }, [])
@@ -52,6 +56,22 @@ export default function ConfiguracoesPage() {
           <p style={{ color: 'var(--muted)', fontSize: 12, marginTop: 4 }}>
             Produtos com estoque abaixo deste valor receberão alerta.
           </p>
+        </div>
+        <div style={{ marginBottom: 24 }}>
+          <label style={lStyle}>Markup padrão para produtos novos na entrada de NF (%)</label>
+          <input type="number" min={0} step="0.1" value={form.markup_padrao_entrada_nf}
+            onChange={e => setForm(f => ({ ...f, markup_padrao_entrada_nf: +e.target.value }))}
+            style={{ ...iStyle, width: 120 }} />
+          <p style={{ color: 'var(--muted)', fontSize: 12, marginTop: 4 }}>
+            Usado para sugerir o preço de venda de produtos criados ao importar uma nota fiscal de compra.
+          </p>
+        </div>
+        <div style={{ marginBottom: 24 }}>
+          <label style={{ display: 'flex', alignItems: 'center', gap: 10, cursor: 'pointer' }}>
+            <input type="checkbox" checked={form.atualizar_custo_entrada_nf}
+              onChange={e => setForm(f => ({ ...f, atualizar_custo_entrada_nf: e.target.checked }))} />
+            <span style={{ color: 'var(--text)', fontSize: 14 }}>Atualizar o custo do produto ao lançar entrada por NF</span>
+          </label>
         </div>
 
         <h3 className="font-display" style={{ fontSize: 16, fontWeight: 700, color: 'var(--text)', marginBottom: 16, marginTop: 24 }}>Notificações</h3>
