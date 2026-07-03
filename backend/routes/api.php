@@ -191,6 +191,8 @@ Route::middleware(['tenant', 'auth:sanctum'])->group(function () {
     Route::get('produtos',            [ProdutoController::class, 'index']);
     Route::get('produtos/{produto}',  [ProdutoController::class, 'show']);
     Route::get('produtos/{produto}/estoque/historico', [EstoqueController::class, 'historico']);
+    Route::get('entradas-nf',      [EntradaNfController::class, 'index']);
+    Route::get('entradas-nf/{id}', [EntradaNfController::class, 'show']);
 });
 Route::middleware(['tenant', 'auth:sanctum', 'role:ADMIN,ATENDENTE'])->group(function () {
     Route::post('produtos',              [ProdutoController::class, 'store']);

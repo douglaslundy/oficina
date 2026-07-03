@@ -192,4 +192,32 @@ XML;
 
         $response->assertStatus(422);
     }
+
+    public function test_listar_entradas_nf(): void
+    {
+        $token = $this->loginAdmin();
+        NotaEntrada::create(['numero_nf' => '1']);
+        NotaEntrada::create(['numero_nf' => '2']);
+
+        $response = $this->withToken($token)->getJson('/api/entradas-nf');
+
+        $response->assertStatus(200);
+        $this->assertCount(2, $response->json('data'));
+    }
+
+    public function test_detalhe_entrada_nf_com_itens(): void
+    {
+        $token   = $this->loginAdmin();
+        $produto = Produto::create(['nome' => 'X', 'sku' => 'X1', 'categoria' => 'Outros']);
+        $nota    = NotaEntrada::create(['numero_nf' => '1']);
+        \App\Models\NotaEntradaItem::create([
+            'nota_entrada_id' => $nota->id, 'produto_id' => $produto->id,
+            'quantidade' => 2, 'valor_unitario' => 10,
+        ]);
+
+        $response = $this->withToken($token)->getJson("/api/entradas-nf/{$nota->id}");
+
+        $response->assertStatus(200);
+        $this->assertCount(1, $response->json('data.itens'));
+    }
 }

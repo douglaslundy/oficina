@@ -13,6 +13,7 @@ use App\Services\NotaEntradaXmlParser;
 use App\Services\PlanLimitService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
+use Illuminate\Http\Resources\Json\AnonymousResourceCollection;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Str;
 
@@ -185,5 +186,17 @@ class EntradaNfController extends Controller
         });
 
         return (new NotaEntradaResource($nota->load('itens')))->response()->setStatusCode(201);
+    }
+
+    public function index(): AnonymousResourceCollection
+    {
+        return NotaEntradaResource::collection(
+            NotaEntrada::orderByDesc('criado_em')->paginate(20)
+        );
+    }
+
+    public function show(string $id): NotaEntradaResource
+    {
+        return new NotaEntradaResource(NotaEntrada::with('itens')->findOrFail($id));
     }
 }
