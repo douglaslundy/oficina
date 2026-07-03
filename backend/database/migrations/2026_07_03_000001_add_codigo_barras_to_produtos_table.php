@@ -11,14 +11,14 @@ return new class extends Migration
     {
         Schema::table('produtos', function (Blueprint $table) {
             $table->string('codigo_barras', 20)->nullable()->after('sku');
-            $table->index(['oficina_id', 'codigo_barras']);
+            $table->unique(['oficina_id', 'codigo_barras']);
         });
     }
 
     public function down(): void
     {
         Schema::table('produtos', function (Blueprint $table) {
-            $table->dropIndex(['oficina_id', 'codigo_barras']);
+            $table->dropUnique(['oficina_id', 'codigo_barras']);
             $table->dropColumn('codigo_barras');
         });
     }

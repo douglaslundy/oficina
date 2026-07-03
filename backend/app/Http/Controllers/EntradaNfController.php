@@ -34,8 +34,8 @@ class EntradaNfController extends Controller
         }
 
         $config          = Configuracao::first();
-        $markup          = (float) ($config->markup_padrao_entrada_nf ?? 40);
-        $qtyMinimaPadrao = (int) ($config->estoque_limite_padrao ?? 5);
+        $markup          = (float) ($config?->markup_padrao_entrada_nf ?? 40);
+        $qtyMinimaPadrao = (int) ($config?->estoque_limite_padrao ?? 5);
 
         $itens = array_map(function (array $item) use ($markup, $qtyMinimaPadrao) {
             $produto = $item['codigo_barras']
@@ -122,7 +122,7 @@ class EntradaNfController extends Controller
         }
 
         $config         = Configuracao::first();
-        $atualizarCusto = (bool) ($config->atualizar_custo_entrada_nf ?? true);
+        $atualizarCusto = (bool) ($config?->atualizar_custo_entrada_nf ?? true);
         $usuarioId      = (string) auth()->id();
 
         $nota = DB::transaction(function () use ($validated, $estoqueService, $planLimit, $atualizarCusto, $usuarioId) {
