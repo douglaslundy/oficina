@@ -1,5 +1,5 @@
 'use client'
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { useForm } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
 import { z } from 'zod'
@@ -53,6 +53,10 @@ export function ClienteForm({ initialData, onSuccess }: ClienteFormProps) {
   const [veiculos, setVeiculos] = useState<VeiculoRow[]>([])
 
   const cep = watch('cep')
+  // O CEP salvo já vem preenchido em modo de edição, o que dispararia o
+  // autofill do ViaCEP no primeiro render e sobrescreveria o endereço
+  // carregado do banco — pular essa primeira execução.
+  const skipNextCepAutoFill = useRef(isEdit)
 
   // Fetch existing vehicles in edit mode
   useEffect(() => {
@@ -75,19 +79,23 @@ export function ClienteForm({ initialData, onSuccess }: ClienteFormProps) {
   // ViaCEP auto-fill
   useEffect(() => {
     const digits = (cep ?? '').replace(/\D/g, '')
-    if (digits.length === 8) {
-      fetch(`https://viacep.com.br/ws/${digits}/json/`)
-        .then(r => r.json())
-        .then((d: { erro?: boolean; logradouro?: string; bairro?: string; localidade?: string; uf?: string }) => {
-          if (!d.erro) {
-            setValue('endereco', (d.logradouro ?? '').toUpperCase())
-            setValue('bairro', (d.bairro ?? '').toUpperCase())
-            setValue('cidade', d.localidade ?? '')
-            setValue('uf', d.uf ?? '')
-          }
-        })
-        .catch(() => {})
+    if (digits.length !== 8) return
+    if (skipNextCepAutoFill.current) {
+      skipNextCepAutoFill.current = false
+      return
     }
+    fetch(`https://viacep.com.br/ws/${digits}/json/`)
+      .then(r => r.json())
+      .then((d: { erro?: boolean; logradouro?: string; bairro?: string; localidade?: string; uf?: string }) => {
+        if (d.erro) return
+        // CEPs rurais/genéricos retornam logradouro/bairro vazios — nunca
+        // apagar um valor já preenchido (digitado ou carregado do banco).
+        if (d.logradouro) setValue('endereco', d.logradouro.toUpperCase())
+        if (d.bairro) setValue('bairro', d.bairro.toUpperCase())
+        if (d.localidade) setValue('cidade', d.localidade)
+        if (d.uf) setValue('uf', d.uf)
+      })
+      .catch(() => {})
   }, [cep, setValue])
 
   function addVeiculo() {
