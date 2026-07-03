@@ -21,7 +21,7 @@ class Produto extends Model
     public $timestamps = false;
 
     protected $fillable = [
-        'nome', 'sku', 'categoria', 'unidade',
+        'nome', 'sku', 'codigo_barras', 'categoria', 'unidade',
         'qty_atual', 'qty_minima', 'preco_custo', 'preco_venda', 'ativo', 'oficina_id',
     ];
 

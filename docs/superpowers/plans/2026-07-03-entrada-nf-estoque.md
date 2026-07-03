@@ -262,7 +262,9 @@ git commit -m "feat(estoque): schema para entrada de NF por XML"
 - Create: `backend/app/Models/NotaEntradaItem.php`
 - Modify: `backend/app/Models/Produto.php:24-27` (fillable — adicionar `codigo_barras`)
 - Modify: `backend/app/Models/MovimentacaoEstoque.php:20` (fillable — adicionar `nota_entrada_id`)
-- Modify: `backend/app/Models/Configuracao.php:20-28` (fillable — adicionar os 2 campos novos; casts)
+
+Nota: `Configuracao.php` (fillable/casts para `markup_padrao_entrada_nf`/`atualizar_custo_entrada_nf`)
+é responsabilidade do Task 3, não deste — referência removida daqui para evitar duplicidade.
 
 **Interfaces:**
 - Consumes: tabelas do Task 1.

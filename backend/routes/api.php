@@ -8,6 +8,7 @@ use App\Http\Controllers\AgendamentoController;
 use App\Http\Controllers\ClienteController;
 use App\Http\Controllers\ConfiguracaoController;
 use App\Http\Controllers\DashboardController;
+use App\Http\Controllers\EntradaNfController;
 use App\Http\Controllers\EstoqueController;
 use App\Http\Controllers\NotaFiscalController;
 use App\Http\Controllers\OrdemServicoController;
@@ -190,12 +191,16 @@ Route::middleware(['tenant', 'auth:sanctum'])->group(function () {
     Route::get('produtos',            [ProdutoController::class, 'index']);
     Route::get('produtos/{produto}',  [ProdutoController::class, 'show']);
     Route::get('produtos/{produto}/estoque/historico', [EstoqueController::class, 'historico']);
+    Route::get('entradas-nf',      [EntradaNfController::class, 'index']);
+    Route::get('entradas-nf/{id}', [EntradaNfController::class, 'show']);
 });
 Route::middleware(['tenant', 'auth:sanctum', 'role:ADMIN,ATENDENTE'])->group(function () {
     Route::post('produtos',              [ProdutoController::class, 'store']);
     Route::put('produtos/{produto}',     [ProdutoController::class, 'update']);
     Route::delete('produtos/{produto}',  [ProdutoController::class, 'destroy']);
     Route::post('produtos/{produto}/estoque/entrada', [EstoqueController::class, 'entrada']);
+    Route::post('entradas-nf/parse', [EntradaNfController::class, 'parse']);
+    Route::post('entradas-nf', [EntradaNfController::class, 'store']);
 });
 
 // ─── Serviços — leitura: todos; escrita: ADMIN, ATENDENTE; desativar: ADMIN ───

@@ -154,4 +154,39 @@ class EstoqueServiceTest extends TestCase
 
         $this->service->baixarEstoqueOs($os);
     }
+
+    // -------------------------------------------------------------------------
+    // registrarEntradaItem (entrada por NF-e)
+    // -------------------------------------------------------------------------
+
+    public function test_registrar_entrada_item_soma_estoque_e_cria_movimentacao(): void
+    {
+        $admin = $this->criarAdmin();
+        Auth::login($admin);
+
+        $produto = Produto::create([
+            'nome'        => 'Vela de Ignição',
+            'sku'         => 'VEL-001',
+            'categoria'   => 'Elétrica',
+            'qty_atual'   => 5,
+            'qty_minima'  => 2,
+            'preco_venda' => 30,
+        ]);
+
+        $nota = \App\Models\NotaEntrada::create([
+            'numero_nf'   => '999',
+            'valor_total' => 240,
+        ]);
+
+        $atualizado = $this->service->registrarEntradaItem($produto->id, 8, $nota->id, $admin->id);
+
+        $this->assertSame(13, $atualizado->qty_atual);
+        $this->assertDatabaseHas('movimentacoes_estoque', [
+            'produto_id'      => $produto->id,
+            'tipo'            => 'ENTRADA',
+            'quantidade'      => 8,
+            'nota_entrada_id' => $nota->id,
+            'usuario_id'      => $admin->id,
+        ]);
+    }
 }

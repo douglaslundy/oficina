@@ -172,21 +172,37 @@ export default function ProdutosPage() {
           style={{ fontSize: 28, fontWeight: 800, color: 'var(--text)', margin: 0 }}>
           Produtos / Estoque
         </h1>
-        <input
-          value={search}
-          onChange={e => setSearch(e.target.value)}
-          placeholder="Buscar por nome ou SKU..."
-          style={{
-            padding: '8px 14px',
-            borderRadius: 8,
-            background: 'var(--card)',
-            border: '1px solid var(--border)',
-            color: 'var(--text)',
-            fontSize: 14,
-            width: 280,
-            outline: 'none',
-          }}
-        />
+        <div style={{ display: 'flex', gap: 12 }}>
+          <button
+            onClick={() => router.push('/produtos/entrada-nf')}
+            style={{
+              padding: '8px 16px',
+              borderRadius: 8,
+              background: 'rgba(245,166,35,0.12)',
+              border: '1px solid var(--accent)',
+              color: 'var(--accent)',
+              cursor: 'pointer',
+              fontSize: 14,
+              whiteSpace: 'nowrap',
+            }}>
+            + Lançar NF
+          </button>
+          <input
+            value={search}
+            onChange={e => setSearch(e.target.value)}
+            placeholder="Buscar por nome ou SKU..."
+            style={{
+              padding: '8px 14px',
+              borderRadius: 8,
+              background: 'var(--card)',
+              border: '1px solid var(--border)',
+              color: 'var(--text)',
+              fontSize: 14,
+              width: 280,
+              outline: 'none',
+            }}
+          />
+        </div>
       </div>
 
       {limites?.produtos && (

@@ -34,6 +34,28 @@ class EstoqueService
     }
 
     /**
+     * Entrada de estoque originada de uma nota fiscal de compra (ver EntradaNfController).
+     */
+    public function registrarEntradaItem(string $produtoId, int $quantidade, string $notaEntradaId, string $usuarioId): Produto
+    {
+        return DB::transaction(function () use ($produtoId, $quantidade, $notaEntradaId, $usuarioId) {
+            $produto = Produto::lockForUpdate()->findOrFail($produtoId);
+            $produto->increment('qty_atual', $quantidade);
+
+            MovimentacaoEstoque::create([
+                'produto_id'      => $produto->id,
+                'tipo'            => 'ENTRADA',
+                'quantidade'      => $quantidade,
+                'motivo'          => 'Entrada por NF-e',
+                'nota_entrada_id' => $notaEntradaId,
+                'usuario_id'      => $usuarioId,
+            ]);
+
+            return $produto->fresh();
+        });
+    }
+
+    /**
      * Dá baixa imediata no estoque de um único item de peça da OS.
      * Cria a movimentação de SAIDA e dispara alerta se cruzar o mínimo.
      */
