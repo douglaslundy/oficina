@@ -23,11 +23,15 @@ class Configuracao extends Model
         'cidade', 'uf', 'telefone', 'email', 'ambiente_fiscal', 'serie_nf',
         'proximo_numero_nf', 'aliquota_iss', 'cnae', 'codigo_ibge',
         'estoque_limite_padrao', 'alertas_email', 'email_alertas', 'certificado_pfx_encrypted',
-        'oficina_id',
+        'oficina_id', 'markup_padrao_entrada_nf', 'atualizar_custo_entrada_nf',
         'certificado_senha_encrypted', 'certificado_validade', 'certificado_nome', 'certificado_status',
     ];
 
-    protected $casts = ['alertas_email' => 'boolean'];
+    protected $casts = [
+        'alertas_email'              => 'boolean',
+        'atualizar_custo_entrada_nf' => 'boolean',
+        'markup_padrao_entrada_nf'   => 'float',
+    ];
 
     protected static function boot(): void
     {

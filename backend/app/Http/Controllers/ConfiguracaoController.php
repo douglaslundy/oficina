@@ -43,6 +43,8 @@ class ConfiguracaoController extends Controller
             'alertas_email'         => ['nullable', 'boolean'],
             'email_alertas'         => ['nullable', 'email', 'max:120'],
             'certificado_base64'    => ['nullable', 'string'],
+            'markup_padrao_entrada_nf'   => ['nullable', 'numeric', 'min:0', 'max:1000'],
+            'atualizar_custo_entrada_nf' => ['nullable', 'boolean'],
         ]);
 
         if (!empty($validated['certificado_base64'])) {
