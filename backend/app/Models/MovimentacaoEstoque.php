@@ -17,7 +17,7 @@ class MovimentacaoEstoque extends Model
 
     use HasTenantScope;
 
-    protected $fillable = ['produto_id', 'tipo', 'quantidade', 'motivo', 'os_id', 'usuario_id', 'oficina_id'];
+    protected $fillable = ['produto_id', 'tipo', 'quantidade', 'motivo', 'os_id', 'nota_entrada_id', 'usuario_id', 'oficina_id'];
     protected $casts = ['criado_em' => 'datetime'];
 
     protected static function boot(): void
