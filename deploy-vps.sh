@@ -69,24 +69,21 @@ echo "[6/6] Containers saudáveis. Checando domínio público real..."
 # Checagem de saúde interna dos containers NÃO garante que o domínio público
 # está acessível de fato (proxy reverso compartilhado, DNS, roteamento por
 # tenant) — só isso já causou uma indisponibilidade não detectada em produção.
-# Ajuste PUBLIC_HEALTH_URL abaixo para um domínio real e acessível deste ambiente.
-PUBLIC_HEALTH_URL="${PUBLIC_HEALTH_URL:-$(grep -m1 '^FRONTEND_URL=' .env | cut -d= -f2-)/api/health}"
+# Domínio-âncora: qualquer subdomínio de dlsistemas.com.br passa pelo mesmo
+# roteador do Traefik (ver project-vps-infra-traefik), então saas.dlsistemas.com.br
+# serve como checagem representativa. Sobrescrever com PUBLIC_HEALTH_URL se
+# o domínio de produção mudar.
+PUBLIC_HEALTH_URL="${PUBLIC_HEALTH_URL:-https://saas.dlsistemas.com.br/api/health}"
 
-if [ -n "$PUBLIC_HEALTH_URL" ] && [ "$PUBLIC_HEALTH_URL" != "/api/health" ]; then
-    HTTP_CODE=$(curl -s -o /dev/null -w "%{http_code}" --max-time 15 "$PUBLIC_HEALTH_URL" || echo "000")
-    if [ "$HTTP_CODE" = "200" ]; then
-        echo "Domínio público OK: $PUBLIC_HEALTH_URL respondeu 200."
-    else
-        echo ""
-        echo "AVISO: $PUBLIC_HEALTH_URL respondeu $HTTP_CODE (esperado 200)."
-        echo "Os containers estão saudáveis internamente, mas o domínio público"
-        echo "pode não estar acessível (proxy reverso, DNS, certificado, etc)."
-        echo "Verifique manualmente antes de considerar o deploy concluído."
-    fi
+HTTP_CODE=$(curl -s -o /dev/null -w "%{http_code}" --max-time 15 "$PUBLIC_HEALTH_URL" || echo "000")
+if [ "$HTTP_CODE" = "200" ]; then
+    echo "Domínio público OK: $PUBLIC_HEALTH_URL respondeu 200."
 else
-    echo "AVISO: PUBLIC_HEALTH_URL/FRONTEND_URL não configurado — pulando checagem"
-    echo "do domínio público. Defina FRONTEND_URL no .env ou exporte"
-    echo "PUBLIC_HEALTH_URL=https://seu-dominio/api/health antes de rodar este script."
+    echo ""
+    echo "AVISO: $PUBLIC_HEALTH_URL respondeu $HTTP_CODE (esperado 200)."
+    echo "Os containers estão saudáveis internamente, mas o domínio público"
+    echo "pode não estar acessível (proxy reverso, DNS, certificado, etc)."
+    echo "Verifique manualmente antes de considerar o deploy concluído."
 fi
 
 echo ""
