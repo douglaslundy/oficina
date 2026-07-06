@@ -19,6 +19,7 @@ class NotificacaoController extends Controller
     public function store(Request $request): JsonResponse
     {
         $data = $this->validatePayload($request);
+        $data['ativo'] = false;
         $notificacao = Notificacao::create($data);
         return response()->json(['message' => 'Notificação criada.', 'data' => $notificacao], 201);
     }
@@ -34,6 +35,14 @@ class NotificacaoController extends Controller
     {
         Notificacao::findOrFail($id)->delete();
         return response()->json(['message' => 'Notificação removida.']);
+    }
+
+    public function publicar(Request $request, string $id): JsonResponse
+    {
+        $validated = $request->validate(['ativo' => ['required', 'boolean']]);
+        $notificacao = Notificacao::findOrFail($id);
+        $notificacao->update(['ativo' => $validated['ativo']]);
+        return response()->json(['message' => 'Status atualizado.', 'data' => $notificacao]);
     }
 
     private function validatePayload(Request $request): array
