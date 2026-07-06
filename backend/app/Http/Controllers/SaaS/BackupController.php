@@ -33,7 +33,7 @@ class BackupController extends Controller
 
         $env = 'PGPASSWORD=' . escapeshellarg((string) $password);
         $cmd = sprintf(
-            '%s pg_dump -h %s -p %s -U %s -d %s --no-owner --no-acl -F p -f %s 2>&1',
+            '%s pg_dump -h %s -p %s -U %s -d %s --no-owner --no-acl --clean --if-exists -F p -f %s 2>&1',
             $env,
             escapeshellarg((string) $host),
             escapeshellarg((string) $port),
@@ -88,13 +88,13 @@ class BackupController extends Controller
     public function download(string $arquivo): StreamedResponse|JsonResponse
     {
         if (str_contains($arquivo, '..') || str_contains($arquivo, '/')) {
-            return response()->json(['message' => 'Nome de arquivo inv?lido.'], 422);
+            return response()->json(['message' => 'Nome de arquivo inválido.'], 422);
         }
 
         $filepath = $this->backupPath . '/' . $arquivo;
 
         if (!file_exists($filepath)) {
-            return response()->json(['message' => 'Arquivo n?o encontrado.'], 404);
+            return response()->json(['message' => 'Arquivo não encontrado.'], 404);
         }
 
         return response()->streamDownload(function () use ($filepath) {
@@ -114,13 +114,13 @@ class BackupController extends Controller
     public function apagar(string $arquivo): JsonResponse
     {
         if (str_contains($arquivo, '..') || str_contains($arquivo, '/')) {
-            return response()->json(['message' => 'Nome de arquivo inv?lido.'], 422);
+            return response()->json(['message' => 'Nome de arquivo inválido.'], 422);
         }
 
         $filepath = $this->backupPath . '/' . $arquivo;
 
         if (!file_exists($filepath)) {
-            return response()->json(['message' => 'Arquivo n?o encontrado.'], 404);
+            return response()->json(['message' => 'Arquivo não encontrado.'], 404);
         }
 
         unlink($filepath);
@@ -160,8 +160,31 @@ class BackupController extends Controller
             $sqlPath = $tmpSql;
         }
 
+        $resetCmd = sprintf(
+            '%s psql -h %s -p %s -U %s -d %s -v ON_ERROR_STOP=1 -c %s 2>&1',
+            $env,
+            escapeshellarg((string) $host),
+            escapeshellarg((string) $port),
+            escapeshellarg((string) $username),
+            escapeshellarg((string) $database),
+            escapeshellarg('DROP SCHEMA public CASCADE; CREATE SCHEMA public;')
+        );
+
+        exec($resetCmd, $resetOutput, $resetExitCode);
+
+        if ($resetExitCode !== 0) {
+            if ($tmpSql && file_exists($tmpSql)) {
+                unlink($tmpSql);
+            }
+
+            return response()->json([
+                'message' => 'Erro ao limpar banco antes da restauração.',
+                'detalhe' => implode("\n", array_slice($resetOutput, -10)),
+            ], 500);
+        }
+
         $cmd = sprintf(
-            '%s psql -h %s -p %s -U %s -d %s -f %s 2>&1',
+            '%s psql -h %s -p %s -U %s -d %s -v ON_ERROR_STOP=1 -f %s 2>&1',
             $env,
             escapeshellarg((string) $host),
             escapeshellarg((string) $port),
@@ -178,7 +201,7 @@ class BackupController extends Controller
 
         if ($exitCode !== 0) {
             return response()->json([
-                'message' => 'Erro ao importar backup.',
+                'message' => 'Erro ao importar backup. O banco foi limpo mas a restauração falhou — restaure um backup válido o quanto antes.',
                 'detalhe' => implode("\n", array_slice($output, -10)),
             ], 500);
         }
