@@ -1,6 +1,7 @@
 'use client'
 import { useEffect, useState } from 'react'
 import api from '@/lib/api'
+import { NotificacaoCard } from '@/components/NotificacaoCard'
 
 interface Notificacao {
   id: string
@@ -59,33 +60,5 @@ export function NotificacaoModal() {
 
   if (!atual) return null
 
-  return (
-    <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.7)', zIndex: 2000, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 20 }}>
-      <div style={{ background: 'var(--card)', border: '1px solid var(--border)', borderRadius: 16, width: 460, maxWidth: '100%', maxHeight: '90vh', overflowY: 'auto', boxShadow: '0 12px 48px rgba(0,0,0,.5)' }}>
-        {atual.imagem && (
-          <img src={atual.imagem} alt={atual.titulo}
-            style={{ width: '100%', maxHeight: 220, objectFit: 'cover', display: 'block', borderTopLeftRadius: 16, borderTopRightRadius: 16 }} />
-        )}
-        <div style={{ padding: 28 }}>
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 12 }}>
-            <h2 className="font-display" style={{ fontSize: 22, fontWeight: 800, color: 'var(--text)', margin: 0 }}>
-              {atual.titulo}
-            </h2>
-            <button onClick={fechar} aria-label="Fechar"
-              style={{ background: 'none', border: 'none', color: 'var(--muted)', fontSize: 24, cursor: 'pointer', lineHeight: 1, padding: 0 }}>×</button>
-          </div>
-          {atual.subtitulo && (
-            <p style={{ color: 'var(--accent)', fontSize: 14, fontWeight: 600, margin: '6px 0 0' }}>{atual.subtitulo}</p>
-          )}
-          <p style={{ color: 'var(--text)', fontSize: 14, lineHeight: 1.6, marginTop: 14, whiteSpace: 'pre-wrap' }}>
-            {atual.texto}
-          </p>
-          <button onClick={fechar}
-            style={{ width: '100%', marginTop: 22, padding: '11px', borderRadius: 9, border: 'none', background: 'var(--accent)', color: '#000', fontSize: 15, fontWeight: 800, cursor: 'pointer', fontFamily: "'Barlow Condensed', sans-serif" }}>
-            Fechar
-          </button>
-        </div>
-      </div>
-    </div>
-  )
+  return <NotificacaoCard notificacao={atual} onFechar={fechar} />
 }
