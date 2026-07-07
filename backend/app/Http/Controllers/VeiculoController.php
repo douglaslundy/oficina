@@ -183,6 +183,36 @@ class VeiculoController extends Controller
         ]);
     }
 
+    public function transferir(Request $request, string $id): JsonResponse
+    {
+        $validated = $request->validate([
+            'novo_cliente_id' => ['required', 'string', 'exists:clientes,id'],
+        ]);
+
+        $veiculo = Veiculo::findOrFail($id);
+
+        if ($veiculo->cliente_id === $validated['novo_cliente_id']) {
+            return response()->json(['message' => 'O veículo já pertence a este cliente.'], 422);
+        }
+
+        DB::transaction(function () use ($veiculo, $validated) {
+            VeiculoProprietario::where('veiculo_id', $veiculo->id)
+                ->whereNull('data_fim')
+                ->update(['data_fim' => now()]);
+
+            $veiculo->update(['cliente_id' => $validated['novo_cliente_id']]);
+
+            VeiculoProprietario::create([
+                'veiculo_id'  => $veiculo->id,
+                'cliente_id'  => $validated['novo_cliente_id'],
+                'data_inicio' => now(),
+                'data_fim'    => null,
+            ]);
+        });
+
+        return response()->json($this->shape($veiculo->fresh()));
+    }
+
     private function shape(Veiculo $v): array
     {
         return [

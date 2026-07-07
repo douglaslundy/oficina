@@ -187,6 +187,7 @@ Route::middleware(['tenant', 'auth:sanctum', 'role:ADMIN,ATENDENTE'])->group(fun
     Route::post('clientes/{clienteId}/veiculos', [VeiculoController::class, 'store']);
     Route::put('veiculos/{id}',         [VeiculoController::class, 'update']);
     Route::delete('veiculos/{id}',      [VeiculoController::class, 'destroy']);
+    Route::post('veiculos/{id}/transferir', [VeiculoController::class, 'transferir']);
 });
 
 // ─── Produtos — leitura: todos; escrita: ADMIN, ATENDENTE ───────────────────

@@ -186,4 +186,69 @@ class VeiculoTest extends TestCase
             ->assertJsonCount(1, 'historico_proprietarios')
             ->assertJsonCount(1, 'historico_os');
     }
+
+    public function test_transferir_veiculo_atualiza_proprietario_e_historico(): void
+    {
+        $oficina = $this->criarOficina();
+        $token = $this->loginAdmin($oficina->id);
+        $clienteAntigo = $this->criarCliente($oficina->id, 'João Silva', '11111111111');
+        $clienteNovo = $this->criarCliente($oficina->id, 'Maria Souza', '22222222222');
+
+        $veiculoId = $this->withToken($token)->withHeaders(['X-Tenant' => $oficina->slug])
+            ->postJson("/api/clientes/{$clienteAntigo->id}/veiculos", ['modelo' => 'Honda Civic', 'placa' => 'ABC1234'])
+            ->json('id');
+
+        $response = $this->withToken($token)->withHeaders(['X-Tenant' => $oficina->slug])
+            ->postJson("/api/veiculos/{$veiculoId}/transferir", ['novo_cliente_id' => $clienteNovo->id]);
+
+        $response->assertStatus(200);
+        $this->assertDatabaseHas('veiculos', ['id' => $veiculoId, 'cliente_id' => $clienteNovo->id]);
+        $this->assertDatabaseHas('veiculo_proprietarios', [
+            'veiculo_id' => $veiculoId, 'cliente_id' => $clienteNovo->id, 'data_fim' => null,
+        ]);
+
+        $antigo = \App\Models\VeiculoProprietario::where('veiculo_id', $veiculoId)
+            ->where('cliente_id', $clienteAntigo->id)->first();
+        $this->assertNotNull($antigo->data_fim);
+    }
+
+    public function test_transferir_para_o_mesmo_cliente_e_rejeitado(): void
+    {
+        $oficina = $this->criarOficina();
+        $token = $this->loginAdmin($oficina->id);
+        $cliente = $this->criarCliente($oficina->id, 'João Silva', '11111111111');
+
+        $veiculoId = $this->withToken($token)->withHeaders(['X-Tenant' => $oficina->slug])
+            ->postJson("/api/clientes/{$cliente->id}/veiculos", ['modelo' => 'Honda Civic', 'placa' => 'ABC1234'])
+            ->json('id');
+
+        $response = $this->withToken($token)->withHeaders(['X-Tenant' => $oficina->slug])
+            ->postJson("/api/veiculos/{$veiculoId}/transferir", ['novo_cliente_id' => $cliente->id]);
+
+        $response->assertStatus(422);
+    }
+
+    public function test_mecanico_nao_pode_transferir_veiculo(): void
+    {
+        $oficina = $this->criarOficina();
+        $adminToken = $this->loginAdmin($oficina->id);
+        $cliente = $this->criarCliente($oficina->id, 'João Silva', '11111111111');
+        $outroCliente = $this->criarCliente($oficina->id, 'Maria Souza', '22222222222');
+
+        $veiculoId = $this->withToken($adminToken)->withHeaders(['X-Tenant' => $oficina->slug])
+            ->postJson("/api/clientes/{$cliente->id}/veiculos", ['modelo' => 'Honda Civic', 'placa' => 'ABC1234'])
+            ->json('id');
+
+        $mecanico = \App\Models\Usuario::create([
+            'nome' => 'Mecânico', 'email' => 'mec@test.com', 'cpf' => '33333333333',
+            'role' => 'MECANICO', 'status' => 'ATIVO', 'senha_hash' => \Illuminate\Support\Facades\Hash::make('123'),
+            'oficina_id' => $oficina->id,
+        ]);
+        $mecToken = $mecanico->createToken('t')->plainTextToken;
+
+        $response = $this->withToken($mecToken)->withHeaders(['X-Tenant' => $oficina->slug])
+            ->postJson("/api/veiculos/{$veiculoId}/transferir", ['novo_cliente_id' => $outroCliente->id]);
+
+        $response->assertStatus(403);
+    }
 }
