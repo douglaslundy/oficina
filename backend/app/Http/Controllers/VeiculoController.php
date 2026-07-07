@@ -4,8 +4,10 @@ declare(strict_types=1);
 namespace App\Http\Controllers;
 
 use App\Models\Veiculo;
+use App\Models\VeiculoProprietario;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\DB;
 
 class VeiculoController extends Controller
 {
@@ -27,9 +29,33 @@ class VeiculoController extends Controller
             'chassi' => ['nullable', 'string', 'max:20'],
         ]);
 
-        $veiculo = Veiculo::create(array_merge($validated, [
-            'cliente_id' => $clienteId,
-        ]));
+        if (!empty($validated['placa'])) {
+            $normalizada = strtoupper(preg_replace('/[^A-Za-z0-9]/', '', $validated['placa']));
+            $duplicado = Veiculo::where('ativo', true)
+                ->whereRaw("REPLACE(REPLACE(UPPER(placa), '-', ''), ' ', '') = ?", [$normalizada])
+                ->exists();
+
+            if ($duplicado) {
+                return response()->json([
+                    'message' => 'Já existe um veículo cadastrado com esta placa. Use a opção Transferir no veículo existente para trocar o proprietário.',
+                ], 422);
+            }
+        }
+
+        $veiculo = DB::transaction(function () use ($validated, $clienteId) {
+            $veiculo = Veiculo::create(array_merge($validated, [
+                'cliente_id' => $clienteId,
+            ]));
+
+            VeiculoProprietario::create([
+                'veiculo_id'  => $veiculo->id,
+                'cliente_id'  => $clienteId,
+                'data_inicio' => now(),
+                'data_fim'    => null,
+            ]);
+
+            return $veiculo;
+        });
 
         return response()->json($this->shape($veiculo->fresh()), 201);
     }
