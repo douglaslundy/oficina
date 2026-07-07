@@ -26,6 +26,7 @@ interface Entitlements {
 const NAV_ITEMS: NavItem[] = [
   { href: '/',                 label: 'Dashboard',         icon: '📊' },
   { href: '/clientes',         label: 'Clientes',          icon: '👥' },
+  { href: '/veiculos',         label: 'Veículos',          icon: '🚗' },
   { href: '/produtos',         label: 'Produtos',          icon: '📦' },
   { href: '/servicos',         label: 'Serviços',          icon: '🛠️' },
   { href: '/pdv',               label: 'Venda Balcão',      icon: '🛒' },
