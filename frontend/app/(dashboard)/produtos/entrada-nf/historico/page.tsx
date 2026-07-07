@@ -61,8 +61,8 @@ export default function HistoricoEntradaNfPage() {
   async function abrirDetalhe(nota: NotaEntradaListItem) {
     setCarregandoDetalhe(true)
     try {
-      const res = await api.get<NotaEntradaDetail>(`/entradas-nf/${nota.id}`)
-      setDetalhe(res.data)
+      const res = await api.get<{ data: NotaEntradaDetail }>(`/entradas-nf/${nota.id}`)
+      setDetalhe(res.data.data)
     } catch {
       setDetalhe(null)
     } finally {

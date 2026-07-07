@@ -25,7 +25,9 @@ class ProdutoController extends Controller
 
         if ($request->has('search')) {
             $search = $request->search;
-            $query->where(fn($q) => $q->where('nome', 'ilike', "%{$search}%")->orWhere('sku', 'ilike', "%{$search}%"));
+            $query->where(fn($q) => $q->where('nome', 'ilike', "%{$search}%")
+                ->orWhere('sku', 'ilike', "%{$search}%")
+                ->orWhere('codigo_barras', 'ilike', "%{$search}%"));
         }
         if ($request->has('categoria')) {
             $query->where('categoria', $request->categoria);

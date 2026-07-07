@@ -256,6 +256,7 @@ function AgendamentoCard({ ag, onRefresh }: AgendamentoCardProps) {
   const router = useRouter()
   const [loading, setLoading] = useState(false)
   const [confirmCancel, setConfirmCancel] = useState(false)
+  const [showView, setShowView] = useState(false)
 
   async function confirmar() {
     setLoading(true)
@@ -291,23 +292,31 @@ function AgendamentoCard({ ag, onRefresh }: AgendamentoCardProps) {
       borderLeft: `3px solid ${STATUS_COLOR[ag.status] ?? 'var(--border)'}`,
       borderRadius: 8, padding: '8px 10px', marginBottom: 6, fontSize: 13,
     }}>
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 8 }}>
-        <div style={{ flex: 1, minWidth: 0 }}>
-          <p style={{
+      <div style={{ minWidth: 0 }}>
+        <p
+          onClick={ag.status === 'AGENDADO' ? () => setShowView(true) : undefined}
+          title={ag.status === 'AGENDADO' ? 'Ver agendamento' : undefined}
+          style={{
             fontWeight: 600, color: 'var(--text)', margin: 0,
             overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
+            cursor: ag.status === 'AGENDADO' ? 'pointer' : 'default',
+            textDecoration: ag.status === 'AGENDADO' ? 'underline' : 'none',
+            textDecorationColor: 'var(--border)',
           }}>
-            {ag.cliente?.nome ?? 'Cliente'}
+          {ag.cliente?.nome ?? 'Cliente'}
+        </p>
+        <p style={{ color: 'var(--muted)', fontSize: 12, margin: '2px 0 0' }}>
+          {fmtHour(ag.data_hora_inicio)}–{fmtHour(ag.data_hora_fim)} · {ag.tipo_servico}
+        </p>
+        {ag.mecanico && (
+          <p style={{ color: 'var(--muted)', fontSize: 11, margin: '2px 0 0' }}>
+            👤 {ag.mecanico.nome}
           </p>
-          <p style={{ color: 'var(--muted)', fontSize: 12, margin: '2px 0 0' }}>
-            {fmtHour(ag.data_hora_inicio)}–{fmtHour(ag.data_hora_fim)} · {ag.tipo_servico}
-          </p>
-          {ag.mecanico && (
-            <p style={{ color: 'var(--muted)', fontSize: 11, margin: '2px 0 0' }}>
-              👤 {ag.mecanico.nome}
-            </p>
-          )}
-        </div>
+        )}
+      </div>
+
+      {/* Status */}
+      <div style={{ marginTop: 6 }}>
         <span style={{
           fontSize: 10, fontWeight: 700, color: STATUS_COLOR[ag.status],
           whiteSpace: 'nowrap', padding: '2px 6px', borderRadius: 4,
@@ -375,6 +384,84 @@ function AgendamentoCard({ ag, onRefresh }: AgendamentoCardProps) {
               <button onClick={cancelar} disabled={loading}
                 style={{ padding: '9px 24px', borderRadius: 8, background: 'var(--danger)', border: 'none', color: '#fff', fontSize: 14, fontWeight: 700, cursor: loading ? 'not-allowed' : 'pointer', fontFamily: "'Barlow Condensed', sans-serif" }}>
                 {loading ? '⟳ Cancelando...' : 'Confirmar cancelamento'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {showView && (
+        <div style={{
+          position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.65)', zIndex: 1000,
+          display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 24,
+        }}
+          onClick={() => setShowView(false)}>
+          <div style={{ background: 'var(--card)', border: '1px solid var(--border)', borderRadius: 14, padding: 28, width: 420, maxWidth: '100%' }}
+            onClick={e => e.stopPropagation()}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 16 }}>
+              <h3 className="font-display" style={{ fontSize: 20, fontWeight: 800, color: 'var(--text)', margin: 0 }}>
+                Ver Agendamento
+              </h3>
+              <button onClick={() => setShowView(false)} aria-label="Fechar"
+                style={{ background: 'none', border: 'none', color: 'var(--muted)', fontSize: 22, cursor: 'pointer', lineHeight: 1, padding: 0 }}>×</button>
+            </div>
+
+            <div style={{ marginBottom: 14 }}>
+              <span style={{
+                fontSize: 11, fontWeight: 700, color: STATUS_COLOR[ag.status],
+                whiteSpace: 'nowrap', padding: '3px 8px', borderRadius: 4,
+                background: STATUS_BG[ag.status],
+              }}>
+                {STATUS_LABEL[ag.status]}
+              </span>
+            </div>
+
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+              <div>
+                <p style={{ color: 'var(--muted)', fontSize: 12, textTransform: 'uppercase', letterSpacing: '0.05em', margin: '0 0 4px' }}>Cliente</p>
+                <p style={{ color: 'var(--text)', fontSize: 14, margin: 0 }}>
+                  {ag.cliente?.nome ?? 'Cliente'}{ag.cliente?.veiculo_placa ? ` — ${ag.cliente.veiculo_placa}` : ''}
+                </p>
+              </div>
+              <div>
+                <p style={{ color: 'var(--muted)', fontSize: 12, textTransform: 'uppercase', letterSpacing: '0.05em', margin: '0 0 4px' }}>Tipo de serviço</p>
+                <p style={{ color: 'var(--text)', fontSize: 14, margin: 0 }}>{ag.tipo_servico}</p>
+              </div>
+              <div>
+                <p style={{ color: 'var(--muted)', fontSize: 12, textTransform: 'uppercase', letterSpacing: '0.05em', margin: '0 0 4px' }}>Data e horário</p>
+                <p style={{ color: 'var(--text)', fontSize: 14, margin: 0, textTransform: 'capitalize' }}>
+                  {fmtDate(new Date(ag.data_hora_inicio.replace(' ', 'T')))} · {fmtHour(ag.data_hora_inicio)}–{fmtHour(ag.data_hora_fim)}
+                </p>
+              </div>
+              <div>
+                <p style={{ color: 'var(--muted)', fontSize: 12, textTransform: 'uppercase', letterSpacing: '0.05em', margin: '0 0 4px' }}>Mecânico responsável</p>
+                <p style={{ color: 'var(--text)', fontSize: 14, margin: 0 }}>{ag.mecanico?.nome ?? 'Qualquer mecânico'}</p>
+              </div>
+              {ag.observacoes && (
+                <div>
+                  <p style={{ color: 'var(--muted)', fontSize: 12, textTransform: 'uppercase', letterSpacing: '0.05em', margin: '0 0 4px' }}>Observações</p>
+                  <p style={{ color: 'var(--text)', fontSize: 14, margin: 0, lineHeight: 1.5 }}>{ag.observacoes}</p>
+                </div>
+              )}
+            </div>
+
+            <div style={{ display: 'flex', gap: 12, marginTop: 22 }}>
+              <button onClick={() => { setShowView(false); setConfirmCancel(true) }} disabled={loading}
+                style={{
+                  flex: 1, padding: 10, borderRadius: 8,
+                  background: 'transparent', border: '1px solid var(--border)',
+                  color: 'var(--muted)', cursor: loading ? 'not-allowed' : 'pointer', fontSize: 14,
+                }}>
+                Cancelar
+              </button>
+              <button onClick={() => { confirmar(); setShowView(false) }} disabled={loading} className="font-display"
+                style={{
+                  flex: 2, padding: 10, borderRadius: 8,
+                  background: loading ? 'var(--muted)' : 'var(--success)',
+                  color: '#fff', border: 'none', fontWeight: 800, fontSize: 15,
+                  cursor: loading ? 'not-allowed' : 'pointer',
+                }}>
+                {loading ? 'Salvando...' : '✓ Confirmar agendamento'}
               </button>
             </div>
           </div>

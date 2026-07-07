@@ -96,7 +96,7 @@ function produtoLabel(p: { nome: string; qty_atual: number; unidade?: string }):
 export function OSForm({ initialData, onSuccess, onConcluir, onCancelar }: OSFormProps) {
   const isEdit = !!initialData?.id
   const [mecanicos, setMecanicos] = useState<Array<{ id: string; nome: string }>>([])
-  const [produtos, setProdutos] = useState<Array<{ id: string; nome: string; qty_atual: number; unidade?: string; preco_venda: number | null }>>([])
+  const [produtos, setProdutos] = useState<Array<{ id: string; nome: string; qty_atual: number; unidade?: string; preco_venda: number | null; codigo_barras?: string | null }>>([])
   const [servicos, setServicos] = useState<Array<{ id: string; nome: string; valor_padrao: number }>>([])
 
   // New mode only
@@ -130,6 +130,7 @@ export function OSForm({ initialData, onSuccess, onConcluir, onCancelar }: OSFor
 
   const { fields, append, remove } = useFieldArray({ control, name: 'itens' })
   const [manualServiceFields, setManualServiceFields] = useState<Set<number>>(new Set<number>())
+  const [codigoBarrasNovo, setCodigoBarrasNovo] = useState('')
   const itens = watch('itens')
   const total = itens.reduce((acc, i) => acc + (Number(i.quantidade || 0) * Number(i.valor_unitario || 0)), 0)
 
@@ -241,6 +242,21 @@ export function OSForm({ initialData, onSuccess, onConcluir, onCancelar }: OSFor
       setValue('veiculo_descricao', veiculoLabel(v))
       setValue('veiculo_placa', v.placa ?? '')
     }
+  }
+
+  function handleCodigoBarrasNovoKeyDown(e: React.KeyboardEvent<HTMLInputElement>) {
+    if (e.key !== 'Enter') return
+    e.preventDefault()
+    const codigo = codigoBarrasNovo.trim()
+    if (!codigo) return
+    const produto = produtos.find(p => p.codigo_barras === codigo)
+    if (!produto) {
+      toast('Nenhuma peça encontrada para este código de barras.', 'danger')
+      setCodigoBarrasNovo('')
+      return
+    }
+    append({ tipo: 'PECA', produto_id: produto.id, descricao: produto.nome, quantidade: 1, valor_unitario: produto.preco_venda ?? 0 })
+    setCodigoBarrasNovo('')
   }
 
   function handleServicoSelect(idx: number, value: string) {
@@ -525,6 +541,19 @@ export function OSForm({ initialData, onSuccess, onConcluir, onCancelar }: OSFor
         ) : (
           // Editable items in new mode
           <>
+            <div style={{ marginBottom: 12 }}>
+              <label style={{ color: 'var(--muted)', fontSize: 11, display: 'block', marginBottom: 4 }}>
+                📷 Leitor de código de barras
+              </label>
+              <input
+                value={codigoBarrasNovo}
+                onChange={e => setCodigoBarrasNovo(e.target.value)}
+                onKeyDown={handleCodigoBarrasNovoKeyDown}
+                placeholder="Escaneie ou digite o código e pressione Enter..."
+                style={{ ...S, width: '100%' }}
+              />
+            </div>
+
             <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 8, marginBottom: 12 }}>
               <button type="button" onClick={() => append({ tipo: 'SERVICO', descricao: '', quantidade: 1, valor_unitario: 0 })}
                 style={{ padding: '6px 12px', background: 'rgba(30,136,229,0.15)', border: '1px solid var(--info)', color: 'var(--info)', borderRadius: 6, cursor: 'pointer', fontSize: 13 }}>
@@ -641,7 +670,7 @@ export function OSForm({ initialData, onSuccess, onConcluir, onCancelar }: OSFor
 
 function NewItemInline({ osId, produtos, servicos, onAdded }: {
   osId: string
-  produtos: Array<{ id: string; nome: string; qty_atual: number; unidade?: string; preco_venda: number | null }>
+  produtos: Array<{ id: string; nome: string; qty_atual: number; unidade?: string; preco_venda: number | null; codigo_barras?: string | null }>
   servicos: Array<{ id: string; nome: string; valor_padrao: number }>
   onAdded?: (data: Record<string, unknown>) => void
 }) {
@@ -653,6 +682,7 @@ function NewItemInline({ osId, produtos, servicos, onAdded }: {
   const [loading, setLoading] = useState(false)
   const [servicoId, setServicoId] = useState('')
   const [isManual, setIsManual] = useState(false)
+  const [codigoBarras, setCodigoBarras] = useState('')
 
   function handleProdutoSelect(id: string) {
     setProdutoId(id)
@@ -663,16 +693,17 @@ function NewItemInline({ osId, produtos, servicos, onAdded }: {
     }
   }
 
-  async function handleAdd() {
-    if (!descricao || quantidade <= 0) return
+  async function handleAdd(overrides?: { produtoId: string; descricao: string; valorUnitario: number }) {
+    const desc = overrides?.descricao ?? descricao
+    if (!desc || quantidade <= 0) return
     setLoading(true)
     try {
       await api.post(`/os/${osId}/itens`, {
-        tipo,
-        produto_id: produtoId || null,
-        descricao,
+        tipo: overrides ? 'PECA' : tipo,
+        produto_id: overrides?.produtoId ?? produtoId ?? null,
+        descricao: desc,
         quantidade,
-        valor_unitario: valorUnitario,
+        valor_unitario: overrides?.valorUnitario ?? valorUnitario,
       })
       toast('Item adicionado.', 'success')
       setDescricao('')
@@ -690,6 +721,22 @@ function NewItemInline({ osId, produtos, servicos, onAdded }: {
     }
   }
 
+  function handleCodigoBarrasKeyDown(e: React.KeyboardEvent<HTMLInputElement>) {
+    if (e.key !== 'Enter') return
+    e.preventDefault()
+    const codigo = codigoBarras.trim()
+    if (!codigo) return
+    const produto = produtos.find(p => p.codigo_barras === codigo)
+    if (!produto) {
+      toast('Nenhuma peça encontrada para este código de barras.', 'danger')
+      setCodigoBarras('')
+      return
+    }
+    setTipo('PECA')
+    handleAdd({ produtoId: produto.id, descricao: produto.nome, valorUnitario: produto.preco_venda ?? 0 })
+    setCodigoBarras('')
+  }
+
   const SI: React.CSSProperties = {
     padding: '7px 10px', borderRadius: 6, background: 'var(--bg)',
     border: '1px solid var(--border)', color: 'var(--text)', fontSize: 13, outline: 'none',
@@ -698,6 +745,21 @@ function NewItemInline({ osId, produtos, servicos, onAdded }: {
   return (
     <div style={{ marginTop: 12, padding: 12, borderRadius: 8, border: '1px dashed var(--border)', background: 'var(--surface)' }}>
       <p style={{ color: 'var(--muted)', fontSize: 12, marginBottom: 8, fontWeight: 600 }}>+ Adicionar item</p>
+
+      <div style={{ marginBottom: 10 }}>
+        <label style={{ color: 'var(--muted)', fontSize: 11, display: 'block', marginBottom: 4 }}>
+          📷 Leitor de código de barras
+        </label>
+        <input
+          value={codigoBarras}
+          onChange={e => setCodigoBarras(e.target.value)}
+          onKeyDown={handleCodigoBarrasKeyDown}
+          placeholder="Escaneie ou digite o código e pressione Enter..."
+          disabled={loading}
+          style={{ ...SI, width: '100%', boxSizing: 'border-box' }}
+        />
+      </div>
+
       <div style={{ display: 'grid', gridTemplateColumns: '100px 1fr', gap: 8, marginBottom: 8 }}>
         <select value={tipo} onChange={e => {
           setTipo(e.target.value as 'SERVICO' | 'PECA')
@@ -753,7 +815,7 @@ function NewItemInline({ osId, produtos, servicos, onAdded }: {
         <input type="number" value={valorUnitario} min={0} step={0.01}
           onChange={e => setValorUnitario(Number(e.target.value))}
           placeholder="Valor unit. (R$)" style={SI} />
-        <button type="button" onClick={handleAdd} disabled={loading}
+        <button type="button" onClick={() => handleAdd()} disabled={loading}
           style={{ padding: '7px 16px', background: 'var(--accent)', color: '#000', borderRadius: 6, border: 'none', cursor: loading ? 'not-allowed' : 'pointer', fontSize: 13, fontWeight: 700 }}>
           {loading ? '...' : 'Adicionar'}
         </button>
