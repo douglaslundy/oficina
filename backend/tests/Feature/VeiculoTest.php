@@ -14,21 +14,23 @@ class VeiculoTest extends TestCase
 {
     use RefreshDatabase;
 
-    private function criarOficina(): Oficina
+    private function criarOficina(?string $slug = null, ?string $nome = null): Oficina
     {
+        $slug ??= 'oficina-teste';
+
         return Oficina::create([
-            'nome'   => 'Oficina Teste',
-            'slug'   => 'oficina-teste',
+            'nome'   => $nome ?? 'Oficina Teste',
+            'slug'   => $slug,
             'status' => 'ATIVA',
         ]);
     }
 
-    private function loginAdmin(string $oficinaId): string
+    private function loginAdmin(string $oficinaId, ?string $email = null, ?string $cpf = null): string
     {
         $user = Usuario::create([
             'nome'       => 'Admin',
-            'email'      => 'admin@test.com',
-            'cpf'        => '52998224725',
+            'email'      => $email ?? 'admin@test.com',
+            'cpf'        => $cpf ?? '52998224725',
             'role'       => 'ADMIN',
             'status'     => 'ATIVO',
             'senha_hash' => Hash::make('admin123'),
@@ -87,5 +89,28 @@ class VeiculoTest extends TestCase
             ]);
 
         $response->assertStatus(422);
+    }
+
+    public function test_placa_duplicada_permitida_em_oficinas_diferentes(): void
+    {
+        $oficina1 = $this->criarOficina();
+        $token1 = $this->loginAdmin($oficina1->id);
+        $cliente1 = $this->criarCliente($oficina1->id, 'João Silva', '11111111111');
+
+        $this->withToken($token1)->withHeaders(['X-Tenant' => $oficina1->slug])
+            ->postJson("/api/clientes/{$cliente1->id}/veiculos", [
+                'modelo' => 'Honda Civic', 'placa' => 'ABC1234',
+            ])->assertStatus(201);
+
+        $oficina2 = $this->criarOficina('oficina-teste-2', 'Oficina Teste 2');
+        $token2 = $this->loginAdmin($oficina2->id, 'admin2@test.com', '22233344409');
+        $cliente2 = $this->criarCliente($oficina2->id, 'Maria Souza', '33333333333');
+
+        $response = $this->withToken($token2)->withHeaders(['X-Tenant' => $oficina2->slug])
+            ->postJson("/api/clientes/{$cliente2->id}/veiculos", [
+                'modelo' => 'Toyota Corolla', 'placa' => 'ABC1234',
+            ]);
+
+        $response->assertStatus(201);
     }
 }
