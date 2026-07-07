@@ -142,4 +142,36 @@ class VeiculoTest extends TestCase
 
         $response->assertStatus(200)->assertJsonCount(0);
     }
+
+    public function test_detalhe_do_veiculo_retorna_proprietario_historico_e_os(): void
+    {
+        $oficina = $this->criarOficina();
+        $token = $this->loginAdmin($oficina->id);
+        $cliente = $this->criarCliente($oficina->id, 'João Silva', '11111111111');
+
+        $veiculoResp = $this->withToken($token)->withHeaders(['X-Tenant' => $oficina->slug])
+            ->postJson("/api/clientes/{$cliente->id}/veiculos", [
+                'modelo' => 'Honda Civic', 'ano' => 2020, 'placa' => 'ABC-1234',
+            ]);
+        $veiculoId = $veiculoResp->json('id');
+
+        \App\Models\OrdemServico::create([
+            'cliente_id'  => $cliente->id,
+            'veiculo_id'  => $veiculoId,
+            'oficina_id'  => $oficina->id,
+            'status'      => 'CONCLUIDA',
+            'valor_total' => 150,
+            'valor_pago'  => 150,
+        ]);
+
+        $response = $this->withToken($token)->withHeaders(['X-Tenant' => $oficina->slug])
+            ->getJson("/api/veiculos/{$veiculoId}");
+
+        $response->assertStatus(200)
+            ->assertJsonPath('proprietario_atual.nome', 'João Silva')
+            ->assertJsonPath('resumo.total_os', 1)
+            ->assertJsonPath('resumo.valor_total_gasto', 150)
+            ->assertJsonCount(1, 'historico_proprietarios')
+            ->assertJsonCount(1, 'historico_os');
+    }
 }

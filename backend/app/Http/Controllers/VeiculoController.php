@@ -3,6 +3,7 @@ declare(strict_types=1);
 
 namespace App\Http\Controllers;
 
+use App\Models\OrdemServico;
 use App\Models\Veiculo;
 use App\Models\VeiculoProprietario;
 use App\Tenancy\TenancyContext;
@@ -120,6 +121,66 @@ class VeiculoController extends Controller
             'cliente_id'   => $v->cliente_id,
             'cliente_nome' => $v->cliente?->nome,
         ]));
+    }
+
+    public function show(string $id): JsonResponse
+    {
+        $veiculo = Veiculo::findOrFail($id);
+
+        $proprietarioAtual = VeiculoProprietario::with('cliente')
+            ->where('veiculo_id', $veiculo->id)
+            ->whereNull('data_fim')
+            ->first();
+
+        $clienteAtual = $proprietarioAtual?->cliente ?? $veiculo->cliente;
+
+        $historicoProprietarios = VeiculoProprietario::with('cliente')
+            ->where('veiculo_id', $veiculo->id)
+            ->orderBy('data_inicio', 'desc')
+            ->get()
+            ->map(fn($p) => [
+                'cliente_id'   => $p->cliente_id,
+                'cliente_nome' => $p->cliente?->nome,
+                'data_inicio'  => $p->data_inicio?->format('d/m/Y'),
+                'data_fim'     => $p->data_fim?->format('d/m/Y'),
+            ]);
+
+        $historicoOs = OrdemServico::with('mecanico')
+            ->where('veiculo_id', $veiculo->id)
+            ->where('status', '!=', 'CANCELADA')
+            ->orderBy('criado_em', 'desc')
+            ->get()
+            ->map(fn($os) => [
+                'id'          => $os->id,
+                'numero'      => $os->numero,
+                'tipo'        => $os->tipo,
+                'status'      => $os->status,
+                'valor_total' => $os->valor_total,
+                'valor_pago'  => $os->valor_pago,
+                'mecanico'    => $os->mecanico?->nome,
+                'criado_em'   => $os->criado_em?->format('d/m/Y'),
+            ]);
+
+        return response()->json([
+            'id'     => $veiculo->id,
+            'modelo' => $veiculo->modelo,
+            'ano'    => $veiculo->ano,
+            'placa'  => $veiculo->placa,
+            'chassi' => $veiculo->chassi,
+            'ativo'  => $veiculo->ativo,
+            'proprietario_atual' => $clienteAtual ? [
+                'id'       => $clienteAtual->id,
+                'nome'     => $clienteAtual->nome,
+                'telefone' => $clienteAtual->telefone,
+            ] : null,
+            'historico_proprietarios' => $historicoProprietarios,
+            'historico_os'            => $historicoOs,
+            'resumo' => [
+                'total_os'          => $historicoOs->count(),
+                'valor_total_gasto' => $historicoOs->sum('valor_pago'),
+                'ultima_visita'     => $historicoOs->first()['criado_em'] ?? null,
+            ],
+        ]);
     }
 
     private function shape(Veiculo $v): array
