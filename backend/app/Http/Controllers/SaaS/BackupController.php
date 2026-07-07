@@ -221,13 +221,17 @@ class BackupController extends Controller
             ], 500);
         }
 
-        $cleanupCmd = $psqlBase . ' -c ' . escapeshellarg(
-            sprintf('DROP SCHEMA %s CASCADE;', $backupSchema)
-        ) . ' 2>&1';
-        exec($cleanupCmd, $cleanupOutput, $cleanupExitCode);
-        // Falha na limpeza não compromete a restauração em si — só deixa um
-        // schema órfão para remover depois; não é motivo para reportar erro.
+        // O schema de backup NÃO é apagado automaticamente aqui. Extensões
+        // (ex.: pgcrypto) pertencem a um único schema do banco mas são usadas
+        // por tabelas em qualquer schema — um DROP SCHEMA ... CASCADE no
+        // schema antigo pode arrastar consigo uma extensão que as tabelas
+        // recém-restauradas em "public" ainda dependem, destruindo os dados
+        // que acabaram de ser restaurados (isso foi reproduzido manualmente
+        // durante o diagnóstico deste bug). Fica a critério do admin apagar
+        // o schema antigo manualmente quando tiver certeza de que é seguro.
 
-        return response()->json(['message' => 'Backup importado com sucesso.']);
+        return response()->json([
+            'message' => "Backup importado com sucesso. Os dados anteriores foram preservados no schema \"{$backupSchema}\" — remova-o manualmente quando não precisar mais dele.",
+        ]);
     }
 }
