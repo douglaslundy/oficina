@@ -4,6 +4,7 @@ import { useState, useEffect, useCallback } from 'react'
 import { useParams, useRouter } from 'next/navigation'
 import Link from 'next/link'
 import saasApi from '@/lib/saas-api'
+import { formatarDataUTC, formatarDataHora } from '@/lib/formatters'
 import { ServicosAvulsosSection } from '@/components/saas/ServicosAvulsosSection'
 import { EditOficinaModal } from '@/components/saas/EditOficinaModal'
 
@@ -62,11 +63,6 @@ interface Cobranca {
 }
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
-
-function fmt(iso: string): string {
-  const d = new Date(iso)
-  return `${String(d.getUTCDate()).padStart(2, '0')}/${String(d.getUTCMonth() + 1).padStart(2, '0')}/${d.getUTCFullYear()}`
-}
 
 function fmtBRL(v: number | string): string {
   return new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(Number(v))
@@ -440,7 +436,7 @@ export default function OficinaDetailPage() {
                 <InfoRow label="E-mail Admin" value={oficina.admin_email} />
                 <InfoRow label="Usuários" value={oficina.users_count} />
                 <InfoRow label="OS neste mês" value={oficina.os_mes_count} />
-                <InfoRow label="Cadastro" value={fmt(oficina.criado_em)} />
+                <InfoRow label="Cadastro" value={formatarDataHora(oficina.criado_em)} />
               </>
             ) : null}
           </div>
@@ -483,7 +479,7 @@ export default function OficinaDetailPage() {
                     } />
                     <InfoRow label="Próx. vencimento" value={
                       asaas.subscription['nextDueDate']
-                        ? fmt(String(asaas.subscription['nextDueDate']))
+                        ? formatarDataUTC(String(asaas.subscription['nextDueDate']))
                         : '—'
                     } />
                     <InfoRow label="Valor mensal" value={fmtBRL(Number(asaas.subscription['value'] ?? 0))} />
@@ -550,13 +546,13 @@ export default function OficinaDetailPage() {
                   {asaas.ultimos_pagamentos.map((p, i) => (
                     <tr key={p.id} style={{ borderBottom: i < asaas.ultimos_pagamentos.length - 1 ? '1px solid var(--border)' : 'none' }}>
                       <td style={{ padding: '10px 12px', fontFamily: "'JetBrains Mono', monospace", fontSize: 11, color: 'var(--muted)' }}>{p.id}</td>
-                      <td style={{ padding: '10px 12px', fontFamily: "'JetBrains Mono', monospace", fontSize: 13, color: 'var(--text)' }}>{fmt(p.dueDate)}</td>
+                      <td style={{ padding: '10px 12px', fontFamily: "'JetBrains Mono', monospace", fontSize: 13, color: 'var(--text)' }}>{formatarDataUTC(p.dueDate)}</td>
                       <td style={{ padding: '10px 12px', fontFamily: "'JetBrains Mono', monospace", fontSize: 13, color: 'var(--text)' }}>{fmtBRL(p.value)}</td>
                       <td style={{ padding: '10px 12px' }}>
                         <span style={{ fontSize: 11, fontWeight: 700, color: asaasPaymentColor(p.status), textTransform: 'uppercase' }}>{p.status}</span>
                       </td>
                       <td style={{ padding: '10px 12px', fontSize: 13, color: p.paymentDate ? 'var(--success)' : 'var(--muted)' }}>
-                        {p.paymentDate ? fmt(p.paymentDate) : '—'}
+                        {p.paymentDate ? formatarDataUTC(p.paymentDate) : '—'}
                       </td>
                       <td style={{ padding: '10px 12px' }}>
                         <div style={{ display: 'flex', gap: 6 }}>
@@ -626,7 +622,7 @@ export default function OficinaDetailPage() {
                     return (
                       <tr key={c.id} style={{ borderBottom: i < cobrancas.length - 1 ? '1px solid var(--border)' : 'none' }}>
                         <td style={{ padding: '10px 12px', fontFamily: "'JetBrains Mono', monospace", fontSize: 13, color: 'var(--text)' }}>{fmtMes(c.mes_referencia)}</td>
-                        <td style={{ padding: '10px 12px', fontFamily: "'JetBrains Mono', monospace", fontSize: 13, color: 'var(--text)' }}>{fmt(c.vencimento)}</td>
+                        <td style={{ padding: '10px 12px', fontFamily: "'JetBrains Mono', monospace", fontSize: 13, color: 'var(--text)' }}>{formatarDataUTC(c.vencimento)}</td>
                         <td style={{ padding: '10px 12px', fontFamily: "'JetBrains Mono', monospace", fontSize: 13, color: 'var(--text)' }}>{fmtBRL(c.valor)}</td>
                         <td style={{ padding: '10px 12px' }}>
                           <span style={{ padding: '2px 10px', borderRadius: 999, fontSize: 11, fontWeight: 700, background: bg, color, textTransform: 'uppercase' }}>
@@ -634,7 +630,7 @@ export default function OficinaDetailPage() {
                           </span>
                         </td>
                         <td style={{ padding: '10px 12px', fontSize: 13, color: c.pago_em ? 'var(--success)' : 'var(--muted)' }}>
-                          {c.pago_em ? fmt(c.pago_em) : '—'}
+                          {c.pago_em ? formatarDataHora(c.pago_em) : '—'}
                         </td>
                         <td style={{ padding: '10px 12px', fontFamily: "'JetBrains Mono', monospace", fontSize: 11, color: 'var(--muted)' }}>
                           {c.asaas_payment_id ?? '—'}

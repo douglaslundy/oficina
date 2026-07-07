@@ -3,7 +3,7 @@ import { useCallback, useEffect, useState } from 'react'
 import { useParams, useRouter } from 'next/navigation'
 import { OSForm } from '@/components/forms/OSForm'
 import { StatusPill } from '@/components/ui/StatusPill'
-import { formatarMoeda } from '@/lib/formatters'
+import { formatarMoeda, formatarDataHora } from '@/lib/formatters'
 import { toast } from '@/hooks/useToast'
 import api from '@/lib/api'
 
@@ -328,7 +328,7 @@ export default function OSDetailPage() {
               {(os.pagamentos ?? []).map(p => (
                 <div key={p.id} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '10px 0', borderBottom: '1px solid var(--border)' }}>
                   <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-                    <span style={{ color: 'var(--muted)', fontSize: 13 }}>{p.criado_em}</span>
+                    <span style={{ color: 'var(--muted)', fontSize: 13 }}>{formatarDataHora(p.criado_em)}</span>
                     <span style={{ padding: '2px 10px', borderRadius: 999, background: 'rgba(30,136,229,.15)', color: 'var(--info)', fontSize: 12, fontWeight: 600 }}>{p.forma_pagamento}</span>
                   </div>
                   <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>

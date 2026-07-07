@@ -3,7 +3,7 @@
 import { useState, useEffect, useCallback } from 'react'
 import { useParams, useRouter } from 'next/navigation'
 import api from '@/lib/api'
-import { formatarMoeda, formatarData } from '@/lib/formatters'
+import { formatarMoeda, formatarData, formatarDataHora } from '@/lib/formatters'
 
 interface Pagamento {
   id: string
@@ -279,7 +279,7 @@ export default function VendaDetalhe() {
             <tbody>
               {venda.pagamentos.map((pag, idx) => (
                 <tr key={pag.id} style={{ borderBottom: idx < venda.pagamentos.length - 1 ? '1px solid var(--border)' : 'none' }}>
-                  <td style={{ padding: '10px 14px', fontSize: 12, color: 'var(--muted)' }}>{pag.criado_em}</td>
+                  <td style={{ padding: '10px 14px', fontSize: 12, color: 'var(--muted)' }}>{formatarDataHora(pag.criado_em)}</td>
                   <td style={{ padding: '10px 14px', fontSize: 13 }}>{pag.forma_pagamento.replace(/_/g, ' ')}</td>
                   <td style={{ padding: '10px 14px', fontSize: 13, fontFamily: 'monospace', fontWeight: 700, color: 'var(--success)' }}>
                     {formatarMoeda(pag.valor)}

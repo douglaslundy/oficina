@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useCallback, useRef } from 'react'
 import saasApi from '@/lib/saas-api'
+import { formatarDataHora } from '@/lib/formatters'
 
 type ToastType = 'success' | 'danger'
 
@@ -283,7 +284,7 @@ export default function BackupPage() {
                     {formatBytes(b.tamanho)}
                   </td>
                   <td style={{ padding: '10px 12px', fontSize: 13, color: 'var(--muted)' }}>
-                    {b.criado_em}
+                    {formatarDataHora(b.criado_em)}
                   </td>
                   <td style={{ padding: '10px 12px' }}>
                     <div style={{ display: 'flex', gap: 8 }}>

@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useCallback } from 'react'
 import api from '@/lib/api'
+import { formatarDataHora } from '@/lib/formatters'
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -232,7 +233,7 @@ export default function AuditoriaPage() {
                       Detalhe do Log #{detail.id}
                     </h3>
                     <p style={{ color: 'var(--muted)', fontSize: 13, margin: '4px 0 0' }}>
-                      {detail.criado_em} · {detail.causer_nome}
+                      {formatarDataHora(detail.criado_em)} · {detail.causer_nome}
                     </p>
                   </div>
                   <button onClick={() => setDetail(null)}
@@ -373,7 +374,7 @@ export default function AuditoriaPage() {
                       {/* Data/Hora */}
                       <td style={{ padding: '11px 14px', whiteSpace: 'nowrap' }}>
                         <span style={{ fontFamily: "'JetBrains Mono', monospace", fontSize: 12, color: 'var(--muted)' }}>
-                          {entry.criado_em}
+                          {formatarDataHora(entry.criado_em)}
                         </span>
                       </td>
 

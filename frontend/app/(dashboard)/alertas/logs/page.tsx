@@ -1,6 +1,7 @@
 'use client'
 import { useState, useEffect, useCallback } from 'react'
 import api from '@/lib/api'
+import { formatarDataHora } from '@/lib/formatters'
 
 const TIPO_LABELS: Record<string, string> = {
   ESTOQUE_BAIXO:          '📦 Estoque Baixo',
@@ -48,11 +49,6 @@ interface PaginatedLogs {
   last_page: number
   total: number
   per_page: number
-}
-
-function formatDate(iso: string) {
-  const d = new Date(iso)
-  return d.toLocaleString('pt-BR', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' })
 }
 
 export default function AlertaLogsPage() {
@@ -110,7 +106,7 @@ export default function AlertaLogsPage() {
               <span style={{ color: 'var(--muted)' }}>Origem</span>
               <span>{selecionado.destinatario_tipo ? (ORIGEM_LABEL[selecionado.destinatario_tipo] ?? selecionado.destinatario_tipo) : '—'}</span>
               <span style={{ color: 'var(--muted)' }}>Data/Hora</span>
-              <span style={{ fontFamily: 'monospace' }}>{formatDate(selecionado.enviado_em)}</span>
+              <span style={{ fontFamily: 'monospace' }}>{formatarDataHora(selecionado.enviado_em)}</span>
             </div>
             <div style={{ marginTop: 18 }}>
               <div style={{ fontSize: 12, fontWeight: 600, color: 'var(--muted)', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: 6 }}>Mensagem</div>
@@ -191,7 +187,7 @@ export default function AlertaLogsPage() {
                     onMouseLeave={e => { (e.currentTarget as HTMLTableRowElement).style.background = log.sucesso ? '' : 'rgba(229,57,53,.04)' }}>
 
                     <td style={{ padding: '10px 16px', fontSize: 12, color: 'var(--muted)', whiteSpace: 'nowrap', fontFamily: 'monospace' }}>
-                      {formatDate(log.enviado_em)}
+                      {formatarDataHora(log.enviado_em)}
                     </td>
                     <td style={{ padding: '10px 16px', fontSize: 12, whiteSpace: 'nowrap' }}>
                       {TIPO_LABELS[log.tipo] ?? log.tipo}

@@ -31,3 +31,36 @@ export const formatarData = (iso?: string | null): string => {
     return '-'
   }
 }
+
+// Para campos de DATA PURA (sem hora significativa: `date` cast do Laravel,
+// ou datas de gateways externos tipo Asaas). app.timezone do backend é UTC,
+// então esses campos chegam como "2025-11-30T00:00:00.000000Z" — ler via
+// toLocaleDateString (hora local do navegador) subtrai 3h e mostra o dia
+// anterior no Brasil. Lendo os componentes UTC direto evita esse shift.
+export const formatarDataUTC = (iso?: string | null): string => {
+  if (!iso) return '-'
+  const m = iso.match(/^(\d{4})-(\d{2})-(\d{2})/)
+  if (m) return `${m[3]}/${m[2]}/${m[1]}`
+  try {
+    const d = new Date(iso)
+    if (isNaN(d.getTime())) return '-'
+    const dia = String(d.getUTCDate()).padStart(2, '0')
+    const mes = String(d.getUTCMonth() + 1).padStart(2, '0')
+    return `${dia}/${mes}/${d.getUTCFullYear()}`
+  } catch {
+    return '-'
+  }
+}
+
+export const formatarDataHora = (iso?: string | null): string => {
+  if (!iso) return '-'
+  try {
+    const d = new Date(iso.replace(' ', 'T'))
+    if (isNaN(d.getTime())) return '-'
+    const data = d.toLocaleDateString('pt-BR')
+    const hora = d.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit', second: '2-digit' })
+    return `${data} ${hora}`
+  } catch {
+    return '-'
+  }
+}

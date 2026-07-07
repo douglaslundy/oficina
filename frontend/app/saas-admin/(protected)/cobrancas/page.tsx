@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useCallback } from 'react'
 import saasApi from '@/lib/saas-api'
+import { formatarDataUTC, formatarDataHora } from '@/lib/formatters'
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -48,15 +49,6 @@ function formatarMesReferencia(isoDate: string): string {
   const [year, month] = isoDate.split('-').map(Number)
   const mesAbrev = MESES_PT[month - 1] ?? String(month)
   return `${mesAbrev}/${year}`
-}
-
-function formatarData(isoDate: string): string {
-  // isoDate = "2025-11-30" or "2025-11-15T10:00:00Z" → "30/11/2025"
-  const date = new Date(isoDate)
-  const d = String(date.getUTCDate()).padStart(2, '0')
-  const m = String(date.getUTCMonth() + 1).padStart(2, '0')
-  const y = date.getUTCFullYear()
-  return `${d}/${m}/${y}`
 }
 
 function formatarValor(value: string): string {
@@ -503,7 +495,7 @@ export default function CobrancasPage() {
                               color: 'var(--text)',
                             }}
                           >
-                            {formatarData(cobranca.vencimento)}
+                            {formatarDataUTC(cobranca.vencimento)}
                           </span>
                         </td>
 
@@ -537,7 +529,7 @@ export default function CobrancasPage() {
                                 color: 'var(--success)',
                               }}
                             >
-                              {formatarData(cobranca.pago_em)}
+                              {formatarDataHora(cobranca.pago_em)}
                             </span>
                           ) : (
                             <span style={{ color: 'var(--muted)', fontSize: 14 }}>—</span>
