@@ -155,13 +155,25 @@ class VeiculoTest extends TestCase
             ]);
         $veiculoId = $veiculoResp->json('id');
 
+        // OS parcialmente paga: valor_total e valor_pago propositalmente diferentes
+        // para provar que o resumo soma valor_pago (recebido), não valor_total (faturado).
         \App\Models\OrdemServico::create([
             'cliente_id'  => $cliente->id,
             'veiculo_id'  => $veiculoId,
             'oficina_id'  => $oficina->id,
             'status'      => 'CONCLUIDA',
-            'valor_total' => 150,
+            'valor_total' => 200,
             'valor_pago'  => 150,
+        ]);
+
+        // OS cancelada: deve ser excluída do resumo e do histórico.
+        \App\Models\OrdemServico::create([
+            'cliente_id'  => $cliente->id,
+            'veiculo_id'  => $veiculoId,
+            'oficina_id'  => $oficina->id,
+            'status'      => 'CANCELADA',
+            'valor_total' => 500,
+            'valor_pago'  => 500,
         ]);
 
         $response = $this->withToken($token)->withHeaders(['X-Tenant' => $oficina->slug])
