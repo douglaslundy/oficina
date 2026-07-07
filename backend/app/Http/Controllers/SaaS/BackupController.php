@@ -160,51 +160,73 @@ class BackupController extends Controller
             $sqlPath = $tmpSql;
         }
 
-        $resetCmd = sprintf(
-            '%s psql -h %s -p %s -U %s -d %s -v ON_ERROR_STOP=1 -c %s 2>&1',
+        $psqlBase = sprintf(
+            '%s psql -h %s -p %s -U %s -d %s -v ON_ERROR_STOP=1',
             $env,
             escapeshellarg((string) $host),
             escapeshellarg((string) $port),
             escapeshellarg((string) $username),
-            escapeshellarg((string) $database),
-            escapeshellarg('DROP SCHEMA public CASCADE; CREATE SCHEMA public;')
+            escapeshellarg((string) $database)
         );
 
-        exec($resetCmd, $resetOutput, $resetExitCode);
+        // Em vez de apagar o schema direto, ele é renomeado para um schema de
+        // backup temporário. O dump é restaurado num "public" novo e vazio —
+        // como o pg_dump referencia "public.*" explicitamente em cada
+        // statement, a restauração cai automaticamente no schema certo sem
+        // precisar reescrever o dump. Se a restauração falhar por qualquer
+        // motivo (SQL inválido, incompatibilidade de versão do psql, etc.),
+        // o schema original é trazido de volta e nenhum dado é perdido.
+        $backupSchema = '_restore_backup_' . date('Ymd_His');
 
-        if ($resetExitCode !== 0) {
+        $renameCmd = $psqlBase . ' -c ' . escapeshellarg(
+            sprintf('ALTER SCHEMA public RENAME TO %s; CREATE SCHEMA public;', $backupSchema)
+        ) . ' 2>&1';
+
+        exec($renameCmd, $renameOutput, $renameExitCode);
+
+        if ($renameExitCode !== 0) {
             if ($tmpSql && file_exists($tmpSql)) {
                 unlink($tmpSql);
             }
 
             return response()->json([
-                'message' => 'Erro ao limpar banco antes da restauração.',
-                'detalhe' => implode("\n", array_slice($resetOutput, -10)),
+                'message' => 'Erro ao preparar o banco para a restauração. Nenhum dado foi alterado.',
+                'detalhe' => implode("\n", array_slice($renameOutput, -10)),
             ], 500);
         }
 
-        $cmd = sprintf(
-            '%s psql -h %s -p %s -U %s -d %s -v ON_ERROR_STOP=1 -f %s 2>&1',
-            $env,
-            escapeshellarg((string) $host),
-            escapeshellarg((string) $port),
-            escapeshellarg((string) $username),
-            escapeshellarg((string) $database),
-            escapeshellarg($sqlPath)
-        );
-
-        exec($cmd, $output, $exitCode);
+        $restoreCmd = $psqlBase . ' -f ' . escapeshellarg($sqlPath) . ' 2>&1';
+        exec($restoreCmd, $output, $exitCode);
 
         if ($tmpSql && file_exists($tmpSql)) {
             unlink($tmpSql);
         }
 
         if ($exitCode !== 0) {
+            $rollbackCmd = $psqlBase . ' -c ' . escapeshellarg(
+                sprintf('DROP SCHEMA public CASCADE; ALTER SCHEMA %s RENAME TO public;', $backupSchema)
+            ) . ' 2>&1';
+            exec($rollbackCmd, $rollbackOutput, $rollbackExitCode);
+
+            if ($rollbackExitCode !== 0) {
+                return response()->json([
+                    'message' => "Erro ao importar backup, e a reversão automática também falhou. Os dados originais estão preservados no schema \"{$backupSchema}\" — restaure-o manualmente (ALTER SCHEMA ... RENAME TO public) antes de tentar novamente.",
+                    'detalhe' => implode("\n", array_slice($output, -10)) . "\n---\n" . implode("\n", array_slice($rollbackOutput, -10)),
+                ], 500);
+            }
+
             return response()->json([
-                'message' => 'Erro ao importar backup. O banco foi limpo mas a restauração falhou — restaure um backup válido o quanto antes.',
+                'message' => 'Erro ao importar backup. A restauração foi cancelada e os dados originais foram preservados.',
                 'detalhe' => implode("\n", array_slice($output, -10)),
             ], 500);
         }
+
+        $cleanupCmd = $psqlBase . ' -c ' . escapeshellarg(
+            sprintf('DROP SCHEMA %s CASCADE;', $backupSchema)
+        ) . ' 2>&1';
+        exec($cleanupCmd, $cleanupOutput, $cleanupExitCode);
+        // Falha na limpeza não compromete a restauração em si — só deixa um
+        // schema órfão para remover depois; não é motivo para reportar erro.
 
         return response()->json(['message' => 'Backup importado com sucesso.']);
     }

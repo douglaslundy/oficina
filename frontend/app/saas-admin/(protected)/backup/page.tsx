@@ -14,18 +14,20 @@ interface Backup {
 
 function Toast({ msg, type, onClose }: { msg: string; type: ToastType; onClose: () => void }) {
   useEffect(() => {
-    const t = setTimeout(onClose, 4000)
+    const t = setTimeout(onClose, type === 'danger' ? 12000 : 4000)
     return () => clearTimeout(t)
-  }, [onClose])
+  }, [onClose, type])
   return (
     <div style={{
       position: 'fixed', bottom: 24, right: 24, zIndex: 9999,
       background: type === 'success' ? 'var(--success)' : 'var(--danger)',
       color: '#fff', padding: '12px 20px', borderRadius: 8,
       fontSize: 14, fontWeight: 600, boxShadow: '0 4px 20px rgba(0,0,0,.35)',
-      display: 'flex', alignItems: 'center', gap: 10,
+      display: 'flex', alignItems: 'flex-start', gap: 10,
+      maxWidth: 480, whiteSpace: 'pre-wrap',
     }}>
-      <span>{type === 'success' ? '✓' : '✕'}</span>{msg}
+      <span>{type === 'success' ? '✓' : '✕'}</span>
+      <span style={{ fontFamily: type === 'danger' ? 'monospace' : 'inherit', fontSize: type === 'danger' ? 12 : 14 }}>{msg}</span>
     </div>
   )
 }
@@ -141,8 +143,10 @@ export default function BackupPage() {
       if (fileRef.current) fileRef.current.value = ''
       carregarLista()
     } catch (e: unknown) {
-      const msg = (e as { response?: { data?: { message?: string } } })?.response?.data?.message
-      showToast(msg ?? 'Erro ao importar backup.', 'danger')
+      const data = (e as { response?: { data?: { message?: string; detalhe?: string } } })?.response?.data
+      const msg = data?.message ?? 'Erro ao importar backup.'
+      const detalhe = data?.detalhe ? '\n\n' + data.detalhe.split('\n').slice(-6).join('\n') : ''
+      showToast(msg + detalhe, 'danger')
     } finally {
       setImportando(false)
     }
