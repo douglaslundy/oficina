@@ -11,11 +11,16 @@ use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Http\Resources\Json\AnonymousResourceCollection;
 use Illuminate\Support\Str;
+use Illuminate\Validation\Rule;
 
 class ProdutoController extends Controller
 {
     public function index(Request $request): AnonymousResourceCollection
     {
+        $valorTotalEstoque = (float) Produto::where('ativo', true)
+            ->selectRaw('COALESCE(SUM(preco_custo * qty_atual), 0) as total')
+            ->value('total');
+
         $query = Produto::where('ativo', true);
 
         if ($request->has('search')) {
@@ -41,7 +46,12 @@ class ProdutoController extends Controller
         $items   = $all->slice(($page - 1) * $perPage, $perPage)->values();
 
         return ProdutoResource::collection($items)->additional([
-            'meta' => ['total' => $total, 'per_page' => $perPage, 'current_page' => $page],
+            'meta' => [
+                'total' => $total,
+                'per_page' => $perPage,
+                'current_page' => $page,
+                'valor_total_estoque' => $valorTotalEstoque,
+            ],
         ]);
     }
 
@@ -50,14 +60,15 @@ class ProdutoController extends Controller
         $planLimit->verificarLimiteProdutos();
 
         $validated = $request->validate([
-            'nome'        => ['required', 'string', 'max:150'],
-            'sku'         => ['nullable', 'string', 'max:30', 'unique:produtos,sku'],
-            'categoria'   => ['required', 'string', 'max:40'],
-            'unidade'     => ['nullable', 'string', 'max:10'],
-            'qty_atual'   => ['nullable', 'integer', 'min:0'],
-            'qty_minima'  => ['nullable', 'integer', 'min:0'],
-            'preco_custo' => ['nullable', 'numeric', 'min:0'],
-            'preco_venda' => ['nullable', 'numeric', 'min:0'],
+            'nome'          => ['required', 'string', 'max:150'],
+            'sku'           => ['nullable', 'string', 'max:30', 'unique:produtos,sku'],
+            'codigo_barras' => ['nullable', 'string', 'max:20', Rule::unique('produtos', 'codigo_barras')->where('oficina_id', TenancyContext::get())],
+            'categoria'     => ['required', 'string', 'max:40'],
+            'unidade'       => ['nullable', 'string', 'max:10'],
+            'qty_atual'     => ['nullable', 'integer', 'min:0'],
+            'qty_minima'    => ['nullable', 'integer', 'min:0'],
+            'preco_custo'   => ['nullable', 'numeric', 'min:0'],
+            'preco_venda'   => ['nullable', 'numeric', 'min:0'],
         ]);
 
         $validated['sku'] = $validated['sku'] ?? strtoupper(Str::random(8));
@@ -84,13 +95,14 @@ class ProdutoController extends Controller
     {
         $produto   = Produto::findOrFail($id);
         $validated = $request->validate([
-            'nome'        => ['sometimes', 'required', 'string', 'max:150'],
-            'sku'         => ['sometimes', 'required', 'string', 'max:30', "unique:produtos,sku,{$id}"],
-            'categoria'   => ['sometimes', 'required', 'string', 'max:40'],
-            'unidade'     => ['nullable', 'string', 'max:10'],
-            'qty_minima'  => ['nullable', 'integer', 'min:0'],
-            'preco_custo' => ['nullable', 'numeric', 'min:0'],
-            'preco_venda' => ['nullable', 'numeric', 'min:0'],
+            'nome'          => ['sometimes', 'required', 'string', 'max:150'],
+            'sku'           => ['sometimes', 'required', 'string', 'max:30', "unique:produtos,sku,{$id}"],
+            'codigo_barras' => ['nullable', 'string', 'max:20', Rule::unique('produtos', 'codigo_barras')->where('oficina_id', TenancyContext::get())->ignore($id)],
+            'categoria'     => ['sometimes', 'required', 'string', 'max:40'],
+            'unidade'       => ['nullable', 'string', 'max:10'],
+            'qty_minima'    => ['nullable', 'integer', 'min:0'],
+            'preco_custo'   => ['nullable', 'numeric', 'min:0'],
+            'preco_venda'   => ['nullable', 'numeric', 'min:0'],
         ]);
         $produto->update($validated);
         return new ProdutoResource($produto->fresh());

@@ -34,6 +34,32 @@ class EstoqueController extends Controller
         ]);
     }
 
+    public function saida(Request $request, string $produtoId): JsonResponse
+    {
+        $request->validate([
+            'quantidade' => ['required', 'integer', 'min:1'],
+            'motivo'     => ['required', 'string', 'max:100'],
+        ]);
+
+        $produto = Produto::findOrFail($produtoId);
+
+        try {
+            $this->estoqueService->saidaManual(
+                $produto,
+                $request->quantidade,
+                $request->motivo,
+                (string) auth()->id()
+            );
+        } catch (\RuntimeException $e) {
+            return response()->json(['message' => $e->getMessage()], 422);
+        }
+
+        return response()->json([
+            'message'   => 'Saída registrada com sucesso.',
+            'qty_atual' => $produto->fresh()->qty_atual,
+        ]);
+    }
+
     public function historico(string $produtoId): JsonResponse
     {
         $movs = MovimentacaoEstoque::where('produto_id', $produtoId)

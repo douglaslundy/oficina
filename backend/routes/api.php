@@ -200,6 +200,7 @@ Route::middleware(['tenant', 'auth:sanctum', 'role:ADMIN,ATENDENTE'])->group(fun
     Route::put('produtos/{produto}',     [ProdutoController::class, 'update']);
     Route::delete('produtos/{produto}',  [ProdutoController::class, 'destroy']);
     Route::post('produtos/{produto}/estoque/entrada', [EstoqueController::class, 'entrada']);
+    Route::post('produtos/{produto}/estoque/saida', [EstoqueController::class, 'saida']);
     Route::post('entradas-nf/parse', [EntradaNfController::class, 'parse']);
     Route::post('entradas-nf', [EntradaNfController::class, 'store']);
 });

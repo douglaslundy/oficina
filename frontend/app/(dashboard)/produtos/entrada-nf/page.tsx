@@ -113,9 +113,15 @@ export default function EntradaNfPage() {
 
   return (
     <div style={{ maxWidth: 1100, margin: '0 auto' }}>
-      <h1 className="font-display" style={{ fontSize: 28, fontWeight: 800, color: 'var(--text)', marginBottom: 24 }}>
-        Lançar Entrada de Nota Fiscal
-      </h1>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 24 }}>
+        <h1 className="font-display" style={{ fontSize: 28, fontWeight: 800, color: 'var(--text)', margin: 0 }}>
+          Lançar Entrada de Nota Fiscal
+        </h1>
+        <button onClick={() => router.push('/produtos/entrada-nf/historico')}
+          style={{ padding: '8px 16px', borderRadius: 8, background: 'none', border: '1px solid var(--border)', color: 'var(--muted)', cursor: 'pointer', fontSize: 14, whiteSpace: 'nowrap' }}>
+          📜 Ver histórico
+        </button>
+      </div>
 
       {!preview && (
         <div style={{ background: 'var(--card)', borderRadius: 12, border: '1px solid var(--border)', padding: 32, textAlign: 'center' }}>

@@ -4,7 +4,7 @@ import { useParams, useRouter } from 'next/navigation'
 import { ProdutoForm } from '@/components/forms/ProdutoForm'
 import { StatusPill } from '@/components/ui/StatusPill'
 import { StockBar } from '@/components/ui/StockBar'
-import { formatarMoeda } from '@/lib/formatters'
+import { formatarMoeda, formatarDataHora } from '@/lib/formatters'
 import api from '@/lib/api'
 import { toast } from '@/hooks/useToast'
 
@@ -12,6 +12,7 @@ interface Produto {
   id: string
   nome: string
   sku: string
+  codigo_barras: string | null
   categoria: string
   unidade: string
   qty_atual: number
@@ -83,9 +84,10 @@ export default function ProdutoDetailPage() {
       </div>
 
       {/* Info rápida */}
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 12, marginBottom: 24 }}>
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(5, 1fr)', gap: 12, marginBottom: 24 }}>
         {[
           { label: 'SKU', value: produto.sku, mono: true },
+          { label: 'Código de barras (EAN)', value: produto.codigo_barras ?? '-', mono: true },
           { label: 'Estoque atual', value: produto.qty_atual, mono: true },
           { label: 'Preço custo', value: produto.preco_custo ? formatarMoeda(produto.preco_custo) : '-', mono: true },
           { label: 'Preço venda', value: produto.preco_venda ? formatarMoeda(produto.preco_venda) : '-', mono: true },
@@ -115,6 +117,7 @@ export default function ProdutoDetailPage() {
           <ProdutoForm
             initialData={{
               ...produto,
+              codigo_barras: produto.codigo_barras ?? undefined,
               preco_custo: produto.preco_custo ?? undefined,
               preco_venda: produto.preco_venda ?? undefined,
             }}
@@ -134,7 +137,7 @@ export default function ProdutoDetailPage() {
               <div key={m.id} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '8px 0', borderBottom: '1px solid var(--border)' }}>
                 <div>
                   <p style={{ margin: 0, fontSize: 13, color: 'var(--text)' }}>{m.motivo ?? (m.tipo === 'ENTRADA' ? 'Entrada manual' : 'Saída')}</p>
-                  <p style={{ margin: 0, fontSize: 12, color: 'var(--muted)' }}>{m.criado_em}</p>
+                  <p style={{ margin: 0, fontSize: 12, color: 'var(--muted)' }}>{formatarDataHora(m.criado_em)}</p>
                 </div>
                 <span className="font-mono" style={{
                   fontWeight: 700, fontSize: 14,

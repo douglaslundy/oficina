@@ -4,6 +4,7 @@ import { useRouter } from 'next/navigation'
 import { DataTable, Column } from '@/components/ui/DataTable'
 import { StatusPill } from '@/components/ui/StatusPill'
 import { StockBar } from '@/components/ui/StockBar'
+import { StatCard } from '@/components/ui/StatCard'
 import { formatarMoeda } from '@/lib/formatters'
 import { usePlanLimites } from '@/hooks/usePlanLimites'
 import api from '@/lib/api'
@@ -40,17 +41,21 @@ interface Produto {
 export default function ProdutosPage() {
   const router = useRouter()
   const [produtos, setProdutos] = useState<Produto[]>([])
+  const [valorTotalEstoque, setValorTotalEstoque] = useState(0)
   const [loading, setLoading] = useState(true)
   const [search, setSearch] = useState('')
-  const [showEntrada, setShowEntrada] = useState<string | null>(null)
-  const [qtdEntrada, setQtdEntrada] = useState(1)
-  const [motivoEntrada, setMotivoEntrada] = useState('')
+  const [movimentacao, setMovimentacao] = useState<{ produtoId: string; tipo: 'entrada' | 'saida' } | null>(null)
+  const [qtdMovimentacao, setQtdMovimentacao] = useState(1)
+  const [motivoMovimentacao, setMotivoMovimentacao] = useState('')
   const { limites } = usePlanLimites()
 
   const fetchProdutos = useCallback(() => {
     setLoading(true)
     api.get('/produtos', { params: search ? { search } : {} })
-      .then(res => setProdutos(res.data.data ?? []))
+      .then(res => {
+        setProdutos(res.data.data ?? [])
+        setValorTotalEstoque(res.data.meta?.valor_total_estoque ?? 0)
+      })
       .catch(() => setProdutos([]))
       .finally(() => setLoading(false))
   }, [search])
@@ -60,17 +65,20 @@ export default function ProdutosPage() {
     return () => clearTimeout(t)
   }, [fetchProdutos])
 
-  async function registrarEntrada(produtoId: string) {
+  async function registrarMovimentacao() {
+    if (!movimentacao) return
+    const { produtoId, tipo } = movimentacao
     try {
-      await api.post(`/produtos/${produtoId}/estoque/entrada`, {
-        quantidade: qtdEntrada,
-        motivo: motivoEntrada || 'Compra de fornecedor',
+      await api.post(`/produtos/${produtoId}/estoque/${tipo}`, {
+        quantidade: qtdMovimentacao,
+        motivo: motivoMovimentacao || (tipo === 'entrada' ? 'Compra de fornecedor' : 'Ajuste manual'),
       })
-      toast('Entrada registrada com sucesso!', 'success')
-      setShowEntrada(null)
+      toast(tipo === 'entrada' ? 'Entrada registrada com sucesso!' : 'Saída registrada com sucesso!', 'success')
+      setMovimentacao(null)
       fetchProdutos()
-    } catch {
-      toast('Erro ao registrar entrada.', 'danger')
+    } catch (err: unknown) {
+      const e = err as { response?: { data?: { message?: string } } }
+      toast(e.response?.data?.message ?? `Erro ao registrar ${tipo}.`, 'danger')
     }
   }
 
@@ -115,9 +123,9 @@ export default function ProdutosPage() {
           <button
             onClick={e => {
               e.stopPropagation()
-              setShowEntrada(r.id)
-              setQtdEntrada(1)
-              setMotivoEntrada('')
+              setMovimentacao({ produtoId: r.id, tipo: 'entrada' })
+              setQtdMovimentacao(1)
+              setMotivoMovimentacao('')
             }}
             style={{
               background: 'none',
@@ -130,6 +138,25 @@ export default function ProdutosPage() {
               whiteSpace: 'nowrap',
             }}>
             + Entrada
+          </button>
+          <button
+            onClick={e => {
+              e.stopPropagation()
+              setMovimentacao({ produtoId: r.id, tipo: 'saida' })
+              setQtdMovimentacao(1)
+              setMotivoMovimentacao('')
+            }}
+            style={{
+              background: 'none',
+              border: '1px solid var(--border)',
+              color: 'var(--danger)',
+              borderRadius: 6,
+              padding: '4px 10px',
+              cursor: 'pointer',
+              fontSize: 13,
+              whiteSpace: 'nowrap',
+            }}>
+            − Saída
           </button>
           <button
             onClick={e => {
@@ -205,6 +232,16 @@ export default function ProdutosPage() {
         </div>
       </div>
 
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: 16, marginBottom: 20, maxWidth: 380 }}>
+        <StatCard
+          title="Valor total em estoque"
+          value={formatarMoeda(valorTotalEstoque)}
+          icon="💰"
+          color="var(--success)"
+          subtitle="Custo × quantidade dos produtos ativos"
+        />
+      </div>
+
       {limites?.produtos && (
         <PlanUsageBar atual={limites.produtos.atual} limite={limites.produtos.limite} label="Produtos cadastrados no plano" />
       )}
@@ -220,8 +257,8 @@ export default function ProdutosPage() {
         emptyMessage="Nenhum produto cadastrado."
       />
 
-      {/* Modal entrada estoque */}
-      {showEntrada && (
+      {/* Modal entrada/saída de estoque */}
+      {movimentacao && (
         <div
           style={{
             position: 'fixed',
@@ -243,7 +280,7 @@ export default function ProdutosPage() {
             <h3
               className="font-display"
               style={{ fontSize: 20, fontWeight: 800, color: 'var(--text)', marginBottom: 20 }}>
-              Entrada de Estoque
+              {movimentacao.tipo === 'entrada' ? 'Entrada de Estoque' : 'Saída de Estoque'}
             </h3>
             <div style={{ marginBottom: 16 }}>
               <label
@@ -253,8 +290,8 @@ export default function ProdutosPage() {
               <input
                 type="number"
                 min={1}
-                value={qtdEntrada}
-                onChange={e => setQtdEntrada(Math.max(1, parseInt(e.target.value) || 1))}
+                value={qtdMovimentacao}
+                onChange={e => setQtdMovimentacao(Math.max(1, parseInt(e.target.value) || 1))}
                 style={inputStyle}
               />
             </div>
@@ -264,15 +301,15 @@ export default function ProdutosPage() {
                 Motivo
               </label>
               <input
-                value={motivoEntrada}
-                onChange={e => setMotivoEntrada(e.target.value)}
-                placeholder="Compra de fornecedor"
+                value={motivoMovimentacao}
+                onChange={e => setMotivoMovimentacao(e.target.value)}
+                placeholder={movimentacao.tipo === 'entrada' ? 'Compra de fornecedor' : 'Perda, quebra, ajuste de inventário...'}
                 style={inputStyle}
               />
             </div>
             <div style={{ display: 'flex', gap: 12 }}>
               <button
-                onClick={() => setShowEntrada(null)}
+                onClick={() => setMovimentacao(null)}
                 style={{
                   flex: 1,
                   padding: 10,
@@ -285,14 +322,14 @@ export default function ProdutosPage() {
                 Cancelar
               </button>
               <button
-                onClick={() => registrarEntrada(showEntrada)}
+                onClick={registrarMovimentacao}
                 className="font-display"
                 style={{
                   flex: 1,
                   padding: 10,
                   borderRadius: 8,
-                  background: 'var(--accent)',
-                  color: '#000',
+                  background: movimentacao.tipo === 'entrada' ? 'var(--accent)' : 'var(--danger)',
+                  color: movimentacao.tipo === 'entrada' ? '#000' : '#fff',
                   border: 'none',
                   fontWeight: 800,
                   cursor: 'pointer',

@@ -34,6 +34,35 @@ class EstoqueService
     }
 
     /**
+     * Saída manual de estoque (perda, quebra, ajuste de inventário, uso interno),
+     * sem vínculo com uma OS. Espelha entradaManual().
+     */
+    public function saidaManual(Produto $produto, int $quantidade, string $motivo, string $usuarioId): void
+    {
+        DB::transaction(function () use ($produto, $quantidade, $motivo, $usuarioId) {
+            $produto = Produto::lockForUpdate()->findOrFail($produto->id);
+
+            if ($produto->qty_atual < $quantidade) {
+                throw new \RuntimeException("Estoque insuficiente para: {$produto->nome}");
+            }
+
+            $produto->decrement('qty_atual', $quantidade);
+
+            MovimentacaoEstoque::create([
+                'produto_id' => $produto->id,
+                'tipo'       => 'SAIDA',
+                'quantidade' => $quantidade,
+                'motivo'     => $motivo,
+                'usuario_id' => $usuarioId,
+            ]);
+
+            if ($produto->qty_atual < $produto->qty_minima) {
+                $this->dispararAlertaEstoque($produto->fresh());
+            }
+        });
+    }
+
+    /**
      * Entrada de estoque originada de uma nota fiscal de compra (ver EntradaNfController).
      */
     public function registrarEntradaItem(string $produtoId, int $quantidade, string $notaEntradaId, string $usuarioId): Produto

@@ -9,9 +9,10 @@ const CATEGORIAS = ['Filtros', 'Óleo/Fluidos', 'Freios', 'Suspensão', 'Elétri
 const UNIDADES = ['Un', 'L', 'Par', 'Cx', 'Kg', 'm']
 
 const schema = z.object({
-  nome:        z.string().min(2, 'Nome do produto é obrigatório'),
-  sku:         z.string().optional(),
-  categoria:   z.string().min(1, 'Selecione uma categoria'),
+  nome:          z.string().min(2, 'Nome do produto é obrigatório'),
+  sku:           z.string().optional(),
+  codigo_barras: z.string().optional(),
+  categoria:     z.string().min(1, 'Selecione uma categoria'),
   unidade:     z.string(),
   qty_atual:   z.number().min(0, 'A quantidade não pode ser negativa').optional(),
   qty_minima:  z.number().min(0, 'O estoque mínimo não pode ser negativo'),
@@ -39,9 +40,10 @@ export function ProdutoForm({ initialData, onSuccess }: ProdutoFormProps) {
   const { register, handleSubmit, setValue, formState: { errors, isSubmitting } } = useForm<FormData>({
     resolver: zodResolver(schema),
     defaultValues: {
-      nome:        initialData?.nome ?? '',
-      sku:         initialData?.sku ?? '',
-      categoria:   initialData?.categoria ?? 'Filtros',
+      nome:          initialData?.nome ?? '',
+      sku:           initialData?.sku ?? '',
+      codigo_barras: initialData?.codigo_barras ?? '',
+      categoria:     initialData?.categoria ?? 'Filtros',
       unidade:     initialData?.unidade ?? 'Un',
       qty_atual:   initialData?.qty_atual ?? 0,
       qty_minima:  initialData?.qty_minima ?? 5,
@@ -85,6 +87,17 @@ export function ProdutoForm({ initialData, onSuccess }: ProdutoFormProps) {
           <label style={lStyle}>SKU / Código</label>
           <input {...register('sku')} style={iStyle} placeholder="Auto-gerado se vazio" className="font-mono" />
           <p style={{ color: 'var(--muted)', fontSize: 12, marginTop: 4 }}>Deixe em branco para gerar automaticamente.</p>
+        </div>
+
+        {/* Código de barras / EAN */}
+        <div>
+          <label style={lStyle}>Código de barras (EAN)</label>
+          <input {...register('codigo_barras')}
+            style={{ ...iStyle, borderColor: errors.codigo_barras ? 'var(--danger)' : 'var(--border)' }}
+            placeholder="Ex: 7891234567895" className="font-mono" />
+          {errors.codigo_barras
+            ? <p style={{ color: 'var(--danger)', fontSize: 12, marginTop: 4 }}>{errors.codigo_barras.message}</p>
+            : <p style={{ color: 'var(--muted)', fontSize: 12, marginTop: 4 }}>Opcional — usado para casar com itens de entrada de NF-e.</p>}
         </div>
 
         {/* Categoria */}

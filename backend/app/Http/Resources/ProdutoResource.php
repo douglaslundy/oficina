@@ -14,6 +14,7 @@ class ProdutoResource extends JsonResource
             'id'             => $this->id,
             'nome'           => $this->nome,
             'sku'            => $this->sku,
+            'codigo_barras'  => $this->codigo_barras,
             'categoria'      => $this->categoria,
             'unidade'        => $this->unidade,
             'qty_atual'      => $this->qty_atual,
