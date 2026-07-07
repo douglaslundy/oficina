@@ -1,6 +1,7 @@
 'use client'
 import { useState, useEffect, useCallback } from 'react'
 import saasApi from '@/lib/saas-api'
+import { NotificacaoCard } from '@/components/NotificacaoCard'
 
 interface Notif {
   id: string
@@ -54,7 +55,7 @@ function Modal({ inicial, planos, oficinas, onClose, onSaved }: {
       alvo_tipo: f.alvo_tipo, plano_id: f.alvo_tipo === 'PLANO' ? f.plano_id : null,
       oficina_ids: f.alvo_tipo === 'OFICINAS' ? f.oficina_ids : [],
       vezes_dia: f.vezes_dia, intervalo_minutos: f.intervalo_minutos,
-      data_inicio: f.data_inicio || null, data_fim: f.data_fim || null, ativo: f.ativo,
+      data_inicio: f.data_inicio || null, data_fim: f.data_fim || null,
     }
     try {
       if (f.id) await saasApi.put(`/saas/notificacoes/${f.id}`, payload)
@@ -134,11 +135,6 @@ function Modal({ inicial, planos, oficinas, onClose, onSaved }: {
             <div><label style={lbl}>Início (opcional)</label><input type="date" style={inp} value={f.data_inicio ?? ''} onChange={e => set('data_inicio', e.target.value || null)} /></div>
             <div><label style={lbl}>Fim (opcional)</label><input type="date" style={inp} value={f.data_fim ?? ''} onChange={e => set('data_fim', e.target.value || null)} /></div>
           </div>
-
-          <label style={{ display: 'flex', alignItems: 'center', gap: 10, cursor: 'pointer', fontSize: 14, color: 'var(--text)' }}>
-            <input type="checkbox" checked={f.ativo} onChange={e => set('ativo', e.target.checked)} style={{ width: 16, height: 16, accentColor: 'var(--accent)' }} />
-            Ativa
-          </label>
         </div>
 
         <div style={{ display: 'flex', gap: 12, justifyContent: 'flex-end', marginTop: 22 }}>
@@ -158,6 +154,8 @@ export default function NotificacoesPage() {
   const [oficinas, setOficinas] = useState<Opt[]>([])
   const [editando, setEditando] = useState<Notif | null>(null)
   const [loading, setLoading] = useState(true)
+  const [previewing, setPreviewing] = useState<Notif | null>(null)
+  const [togglingId, setTogglingId] = useState<string | null>(null)
 
   const carregar = useCallback(() => {
     setLoading(true)
@@ -178,11 +176,27 @@ export default function NotificacoesPage() {
     try { await saasApi.delete(`/saas/notificacoes/${id}`); carregar() } catch { /* ignore */ }
   }
 
+  async function alternarAtivo(n: Notif) {
+    setTogglingId(n.id)
+    try {
+      await saasApi.patch(`/saas/notificacoes/${n.id}/ativo`, { ativo: !n.ativo })
+      carregar()
+    } catch { /* ignore */ }
+    finally { setTogglingId(null) }
+  }
+
   const ALVO: Record<string, string> = { TODOS: 'Todas', PLANO: 'Por plano', OFICINAS: 'Específicas' }
 
   return (
     <div style={{ padding: '32px', maxWidth: 1100, margin: '0 auto', color: 'var(--text)' }}>
       {editando && <Modal inicial={editando} planos={planos} oficinas={oficinas} onClose={() => setEditando(null)} onSaved={carregar} />}
+
+      {previewing && (
+        <NotificacaoCard
+          notificacao={{ titulo: previewing.titulo, subtitulo: previewing.subtitulo, texto: previewing.texto, imagem: previewing.imagem }}
+          onFechar={() => setPreviewing(null)}
+        />
+      )}
 
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-end', marginBottom: 24 }}>
         <div>
@@ -217,10 +231,14 @@ export default function NotificacoesPage() {
                 <td style={{ padding: '12px 16px', fontSize: 13, color: 'var(--muted)' }}>{ALVO[n.alvo_tipo]}</td>
                 <td style={{ padding: '12px 16px', fontSize: 13, color: 'var(--muted)' }}>{n.vezes_dia}x/dia · {n.intervalo_minutos}min</td>
                 <td style={{ padding: '12px 16px' }}>
-                  <span className={`pill ${n.ativo ? 'pill-success' : 'pill-muted'}`}>{n.ativo ? 'Ativa' : 'Inativa'}</span>
+                  <span className={`pill ${n.ativo ? 'pill-success' : 'pill-muted'}`}>{n.ativo ? 'Publicada' : 'Rascunho'}</span>
                 </td>
                 <td style={{ padding: '12px 16px' }}>
-                  <div style={{ display: 'flex', gap: 8 }}>
+                  <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+                    <button onClick={() => setPreviewing(n)} style={{ padding: '5px 12px', borderRadius: 6, background: 'rgba(30,136,229,.1)', border: '1px solid rgba(30,136,229,.3)', color: 'var(--info)', cursor: 'pointer', fontSize: 13 }}>👁 Visualizar</button>
+                    <button onClick={() => alternarAtivo(n)} disabled={togglingId === n.id} style={{ padding: '5px 12px', borderRadius: 6, background: n.ativo ? 'rgba(122,128,144,.15)' : 'rgba(67,160,71,.1)', border: `1px solid ${n.ativo ? 'var(--border)' : 'rgba(67,160,71,.3)'}`, color: n.ativo ? 'var(--muted)' : 'var(--success)', cursor: togglingId === n.id ? 'not-allowed' : 'pointer', fontSize: 13 }}>
+                      {togglingId === n.id ? '⟳' : n.ativo ? 'Despublicar' : 'Publicar'}
+                    </button>
                     <button onClick={() => setEditando(n)} style={{ padding: '5px 12px', borderRadius: 6, background: 'rgba(245,166,35,.1)', border: '1px solid rgba(245,166,35,.3)', color: 'var(--accent)', cursor: 'pointer', fontSize: 13 }}>Editar</button>
                     <button onClick={() => remover(n.id)} style={{ padding: '5px 12px', borderRadius: 6, background: 'rgba(229,57,53,.1)', border: '1px solid rgba(229,57,53,.3)', color: 'var(--danger)', cursor: 'pointer', fontSize: 13 }}>🗑</button>
                   </div>
