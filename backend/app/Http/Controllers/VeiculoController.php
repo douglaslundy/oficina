@@ -96,6 +96,32 @@ class VeiculoController extends Controller
         return response()->json(['message' => 'Veículo removido.']);
     }
 
+    public function buscar(Request $request): JsonResponse
+    {
+        $placa = (string) $request->query('placa', '');
+        $normalizada = strtoupper(preg_replace('/[^A-Za-z0-9]/', '', $placa));
+
+        if ($normalizada === '') {
+            return response()->json([]);
+        }
+
+        $veiculos = Veiculo::with('cliente')
+            ->whereRaw("REPLACE(REPLACE(UPPER(placa), '-', ''), ' ', '') LIKE ?", ["%{$normalizada}%"])
+            ->orderBy('criado_em', 'desc')
+            ->limit(10)
+            ->get();
+
+        return response()->json($veiculos->map(fn($v) => [
+            'id'           => $v->id,
+            'placa'        => $v->placa,
+            'modelo'       => $v->modelo,
+            'ano'          => $v->ano,
+            'ativo'        => $v->ativo,
+            'cliente_id'   => $v->cliente_id,
+            'cliente_nome' => $v->cliente?->nome,
+        ]));
+    }
+
     private function shape(Veiculo $v): array
     {
         return [

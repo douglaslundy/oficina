@@ -177,6 +177,7 @@ Route::middleware(['tenant', 'auth:sanctum'])->group(function () {
     Route::get('clientes',           [ClienteController::class, 'index']);
     Route::get('clientes/{cliente}', [ClienteController::class, 'show']);
     Route::get('clientes/{clienteId}/veiculos', [VeiculoController::class, 'index']);
+    Route::get('veiculos/busca', [VeiculoController::class, 'buscar']);
 });
 Route::middleware(['tenant', 'auth:sanctum', 'role:ADMIN,ATENDENTE'])->group(function () {
     Route::post('clientes',             [ClienteController::class, 'store']);

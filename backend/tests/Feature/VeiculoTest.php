@@ -113,4 +113,33 @@ class VeiculoTest extends TestCase
 
         $response->assertStatus(201);
     }
+
+    public function test_busca_por_placa_parcial_normaliza_case_e_hifen(): void
+    {
+        $oficina = $this->criarOficina();
+        $token = $this->loginAdmin($oficina->id);
+        $cliente = $this->criarCliente($oficina->id, 'João Silva', '11111111111');
+
+        $this->withToken($token)->withHeaders(['X-Tenant' => $oficina->slug])
+            ->postJson("/api/clientes/{$cliente->id}/veiculos", [
+                'modelo' => 'Honda Civic', 'placa' => 'ABC-1234',
+            ])->assertStatus(201);
+
+        $response = $this->withToken($token)->withHeaders(['X-Tenant' => $oficina->slug])
+            ->getJson('/api/veiculos/busca?placa=abc123');
+
+        $response->assertStatus(200)->assertJsonCount(1);
+        $this->assertSame('João Silva', $response->json('0.cliente_nome'));
+    }
+
+    public function test_busca_sem_correspondencia_retorna_vazio(): void
+    {
+        $oficina = $this->criarOficina();
+        $token = $this->loginAdmin($oficina->id);
+
+        $response = $this->withToken($token)->withHeaders(['X-Tenant' => $oficina->slug])
+            ->getJson('/api/veiculos/busca?placa=zzz9999');
+
+        $response->assertStatus(200)->assertJsonCount(0);
+    }
 }
