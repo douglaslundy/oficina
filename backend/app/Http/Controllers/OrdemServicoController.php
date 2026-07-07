@@ -6,6 +6,7 @@ namespace App\Http\Controllers;
 use App\Http\Resources\OrdemServicoResource;
 use App\Models\OrdemServico;
 use App\Models\OsPagamento;
+use App\Models\Veiculo;
 use App\Services\AlertaDispatchService;
 use App\Services\ClienteStatusService;
 use App\Services\EstoqueService;
@@ -38,6 +39,9 @@ class OrdemServicoController extends Controller
         }
         if ($request->has('mecanico_id')) {
             $query->where('mecanico_id', $request->mecanico_id);
+        }
+        if ($request->has('veiculo_id')) {
+            $query->where('veiculo_id', $request->veiculo_id);
         }
         if ($request->has('numero')) {
             $query->where('numero', (int)$request->numero);
@@ -84,6 +88,7 @@ class OrdemServicoController extends Controller
             'tipo'                    => ['nullable', 'string', 'in:OS,VENDA_BALCAO'],
             'cliente_id'              => [$isVendaBalcao ? 'nullable' : 'required', 'string', 'exists:clientes,id'],
             'mecanico_id'             => ['nullable', 'string', 'exists:usuarios,id'],
+            'veiculo_id'              => ['nullable', 'string', 'max:60'],
             'veiculo_descricao'       => ['nullable', 'string', 'max:100'],
             'veiculo_placa'           => ['nullable', 'string', 'max:10'],
             'problema_relatado'       => ['nullable', 'string'],
@@ -107,6 +112,14 @@ class OrdemServicoController extends Controller
         if ($isVendaBalcao) {
             $validated['status'] = 'CONCLUIDA';
             $validated['tipo']   = 'VENDA_BALCAO';
+        }
+
+        // O frontend pode enviar um id sintético "__proprio_<clienteId>" quando o
+        // veículo vem do campo legado do cliente (sem registro real em `veiculos`).
+        // Nesse caso, ou em qualquer id que não exista mais, degrada para null —
+        // mesmo comportamento de hoje (só texto livre em veiculo_descricao/placa).
+        if (!empty($validated['veiculo_id']) && !Veiculo::where('id', $validated['veiculo_id'])->exists()) {
+            $validated['veiculo_id'] = null;
         }
 
         try {
