@@ -251,4 +251,31 @@ class VeiculoTest extends TestCase
 
         $response->assertStatus(403);
     }
+
+    public function test_veiculo_de_outra_oficina_nao_e_visivel_via_show_ou_busca(): void
+    {
+        $oficinaA = $this->criarOficina('oficina-a', 'Oficina A');
+        $tokenA = $this->loginAdmin($oficinaA->id, 'adminA@test.com', '11111111111');
+        $clienteA = $this->criarCliente($oficinaA->id, 'Cliente A', '11111111111');
+
+        $veiculoId = $this->withToken($tokenA)->withHeaders(['X-Tenant' => $oficinaA->slug])
+            ->postJson("/api/clientes/{$clienteA->id}/veiculos", [
+                'modelo' => 'Honda Civic', 'placa' => 'XYZ9988',
+            ])->json('id');
+
+        $oficinaB = $this->criarOficina('oficina-b', 'Oficina B');
+        $tokenB = $this->loginAdmin($oficinaB->id, 'adminB@test.com', '22222222222');
+
+        // show() não deve encontrar veículo de outra oficina.
+        $this->withToken($tokenB)->withHeaders(['X-Tenant' => $oficinaB->slug])
+            ->getJson("/api/veiculos/{$veiculoId}")
+            ->assertStatus(404);
+
+        // busca() também não deve retorná-lo.
+        $response = $this->withToken($tokenB)->withHeaders(['X-Tenant' => $oficinaB->slug])
+            ->getJson('/api/veiculos/busca?placa=XYZ9988');
+        $response->assertStatus(200);
+        $ids = collect($response->json())->pluck('id')->all();
+        $this->assertNotContains($veiculoId, $ids);
+    }
 }

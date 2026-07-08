@@ -25,17 +25,25 @@ return new class extends Migration
         });
 
         // Backfill: 1 período aberto (dono atual) por veículo já existente.
-        $veiculos = DB::table('veiculos')->select('id', 'cliente_id', 'oficina_id', 'criado_em')->get();
-        foreach ($veiculos as $veiculo) {
-            DB::table('veiculo_proprietarios')->insert([
-                'id'          => (string) Str::uuid(),
-                'veiculo_id'  => $veiculo->id,
-                'cliente_id'  => $veiculo->cliente_id,
-                'oficina_id'  => $veiculo->oficina_id,
-                'data_inicio' => $veiculo->criado_em,
-                'data_fim'    => null,
-            ]);
-        }
+        // Em lote e dentro de uma transação — evita N queries e garante que uma
+        // falha no meio do backfill não deixe a tabela parcialmente populada.
+        DB::transaction(function () {
+            DB::table('veiculos')
+                ->select('id', 'cliente_id', 'oficina_id', 'criado_em')
+                ->orderBy('id')
+                ->chunkById(500, function ($veiculos) {
+                    $rows = $veiculos->map(fn ($veiculo) => [
+                        'id'          => (string) Str::uuid(),
+                        'veiculo_id'  => $veiculo->id,
+                        'cliente_id'  => $veiculo->cliente_id,
+                        'oficina_id'  => $veiculo->oficina_id,
+                        'data_inicio' => $veiculo->criado_em,
+                        'data_fim'    => null,
+                    ])->all();
+
+                    DB::table('veiculo_proprietarios')->insert($rows);
+                });
+        });
     }
 
     public function down(): void
