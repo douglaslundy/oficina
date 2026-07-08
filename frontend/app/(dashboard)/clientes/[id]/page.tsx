@@ -1,6 +1,7 @@
 'use client'
 import { useEffect, useState } from 'react'
 import { useParams, useRouter } from 'next/navigation'
+import Link from 'next/link'
 import { ClienteForm } from '@/components/forms/ClienteForm'
 import { StatusPill } from '@/components/ui/StatusPill'
 import { formatarMoeda, formatarData } from '@/lib/formatters'
@@ -286,6 +287,9 @@ export default function ClienteDetailPage() {
                   {v.modelo}{v.ano ? ` ${v.ano}` : ''}
                 </p>
                 {v.placa && <p style={{ margin: 0, fontSize: 12, color: 'var(--muted)' }}>{v.placa}</p>}
+                <Link href={`/veiculos/${v.id}`} style={{ fontSize: 12, color: 'var(--accent)', textDecoration: 'none' }}>
+                  Ver histórico completo →
+                </Link>
               </div>
               <button
                 onClick={() => handleRemoverVeiculo(v.id)}
