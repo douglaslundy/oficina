@@ -3,6 +3,7 @@ declare(strict_types=1);
 
 use Illuminate\Database\Migrations\Migration;
 use Illuminate\Database\Schema\Blueprint;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Schema;
 
 return new class extends Migration
@@ -20,10 +21,18 @@ return new class extends Migration
             $table->dropUnique('ordens_servico_numero_unique');
             $table->unique(['oficina_id', 'numero']);
         });
+
+        // oficina_id é nullable (requisição sem header X-Tenant): o Postgres
+        // trata cada NULL como distinto num índice único composto, então a
+        // unique(oficina_id, numero) acima não pega duas OS sem tenant com o
+        // mesmo numero. Índice parcial cobre esse caso à parte.
+        DB::statement('CREATE UNIQUE INDEX ordens_servico_numero_sem_oficina_unique ON ordens_servico (numero) WHERE oficina_id IS NULL');
     }
 
     public function down(): void
     {
+        DB::statement('DROP INDEX IF EXISTS ordens_servico_numero_sem_oficina_unique');
+
         Schema::table('ordens_servico', function (Blueprint $table) {
             $table->dropUnique(['oficina_id', 'numero']);
             $table->unique('numero');
