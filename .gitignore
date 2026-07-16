@@ -5,3 +5,4 @@ frontend/.next/
 .env
 *.tar.gz
 *.zip
+docker/nginx/logs/
