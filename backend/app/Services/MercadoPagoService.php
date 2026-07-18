@@ -96,7 +96,7 @@ class MercadoPagoService
      * Cria uma cobrança avulsa via Checkout Pro — gera um link de pagamento
      * (PIX, cartão ou boleto) com vencimento definido pela data de expiração.
      */
-    public function criarCobrancaAvulsa(string $customerId, float $valor, string $vencimento): array
+    public function criarCobrancaAvulsa(string $customerId, float $valor, string $vencimento, ?string $externalReference = null): array
     {
         $response = $this->http()->post('/checkout/preferences', [
             'items' => [[
@@ -105,7 +105,7 @@ class MercadoPagoService
                 'currency_id' => 'BRL',
                 'unit_price'  => $valor,
             ]],
-            'external_reference' => $customerId,
+            'external_reference' => $externalReference ?? $customerId,
             'expires'             => true,
             'expiration_date_to'  => $vencimento . 'T23:59:59.000-03:00',
         ]);
