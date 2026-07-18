@@ -31,11 +31,18 @@ class Oficina extends Model
         'admin_cpf',
         'provedor_fiscal',
         'emissao_fiscal_modo',
+        'ciclo_cobranca',
+        'proximo_vencimento',
+        'dias_antecedencia_cobranca',
+        'dias_suspensao_vencido',
     ];
 
     protected $casts = [
-        'criado_em'     => 'datetime',
-        'atualizado_em' => 'datetime',
+        'criado_em'                  => 'datetime',
+        'atualizado_em'              => 'datetime',
+        'proximo_vencimento'         => 'date',
+        'dias_antecedencia_cobranca' => 'integer',
+        'dias_suspensao_vencido'     => 'integer',
     ];
 
     protected static function boot(): void

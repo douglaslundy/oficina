@@ -16,6 +16,7 @@ class Cobranca extends Model
     public $timestamps = false;
 
     protected $fillable = [
+        'id',
         'oficina_id',
         'mes_referencia',
         'valor',
