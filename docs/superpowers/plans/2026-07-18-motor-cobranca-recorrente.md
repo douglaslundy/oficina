@@ -189,7 +189,7 @@ namespace Tests\Unit;
 
 use App\Models\Oficina;
 use Illuminate\Support\Carbon;
-use PHPUnit\Framework\TestCase;
+use Tests\TestCase;
 
 class OficinaVencimentoTest extends TestCase
 {
@@ -545,11 +545,12 @@ class CobrancaRecorrenteServiceTest extends TestCase
         $oficina = $this->criarOficina();
 
         Cobranca::create([
-            'oficina_id' => $oficina->id,
-            'tipo'       => 'ASSINATURA',
-            'valor'      => 199.90,
-            'status'     => 'PENDENTE',
-            'vencimento' => $oficina->proximo_vencimento,
+            'oficina_id'     => $oficina->id,
+            'tipo'           => 'ASSINATURA',
+            'valor'          => 199.90,
+            'status'         => 'PENDENTE',
+            'vencimento'     => $oficina->proximo_vencimento,
+            'mes_referencia' => $oficina->proximo_vencimento->copy()->startOfMonth(),
         ]);
 
         Http::fake(['*/payments' => Http::response(['id' => 'pay_abc'], 200)]);
