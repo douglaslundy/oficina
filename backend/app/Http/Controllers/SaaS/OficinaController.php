@@ -303,9 +303,12 @@ class OficinaController extends Controller
     public function gerarCobrancaAvulsa(Request $request, string $id): JsonResponse
     {
         $oficina = Oficina::findOrFail($id);
+        $gateway = $oficina->gateway ?: (SaasConfig::get()->gateway_preferido ?? 'ASAAS');
+        $nomeGateway = $gateway === 'MERCADOPAGO' ? 'Mercado Pago' : 'Asaas';
+        $customerId = $gateway === 'MERCADOPAGO' ? $oficina->mp_customer_id : $oficina->asaas_customer_id;
 
-        if (!$oficina->asaas_customer_id) {
-            return response()->json(['message' => 'Oficina não possui customer no Asaas.'], 422);
+        if (!$customerId) {
+            return response()->json(['message' => "Oficina não possui customer no {$nomeGateway}."], 422);
         }
 
         $validated = $request->validate([
@@ -314,13 +317,11 @@ class OficinaController extends Controller
         ]);
 
         try {
-            $payment = $this->asaas->criarCobrancaAvulsa(
-                $oficina->asaas_customer_id,
-                (float) $validated['valor'],
-                $validated['vencimento'],
-            );
+            $payment = $gateway === 'MERCADOPAGO'
+                ? $this->mercadoPago->criarCobrancaAvulsa($customerId, (float) $validated['valor'], $validated['vencimento'])
+                : $this->asaas->criarCobrancaAvulsa($customerId, (float) $validated['valor'], $validated['vencimento']);
         } catch (\Throwable $e) {
-            return response()->json(['message' => 'Falha ao criar cobrança no Asaas: ' . $e->getMessage()], 502);
+            return response()->json(['message' => "Falha ao criar cobrança no {$nomeGateway}: " . $e->getMessage()], 502);
         }
 
         $cobranca = Cobranca::create([
@@ -328,15 +329,22 @@ class OficinaController extends Controller
             'mes_referencia'   => Carbon::parse($validated['vencimento'])->startOfMonth(),
             'valor'            => $validated['valor'],
             'status'           => 'PENDENTE',
-            'asaas_payment_id' => $payment['id'],
+            'gateway'          => $gateway,
+            'asaas_payment_id' => $gateway === 'ASAAS' ? ($payment['id'] ?? null) : null,
+            'mp_payment_id'    => $gateway === 'MERCADOPAGO' ? ($payment['id'] ?? null) : null,
             'vencimento'       => $validated['vencimento'],
         ]);
 
+        $linkPagamento = $gateway === 'MERCADOPAGO' ? ($payment['init_point'] ?? null) : null;
+
         return response()->json([
-            'message'  => 'Cobrança avulsa criada com sucesso.',
+            'message'  => 'Cobrança avulsa criada com sucesso.' . ($linkPagamento ? " Link de pagamento: {$linkPagamento}" : ''),
             'cobranca' => [
                 'id'               => $cobranca->id,
+                'gateway'          => $cobranca->gateway,
                 'asaas_payment_id' => $cobranca->asaas_payment_id,
+                'mp_payment_id'    => $cobranca->mp_payment_id,
+                'link_pagamento'   => $linkPagamento,
                 'valor'            => number_format($cobranca->valor, 2, '.', ''),
                 'vencimento'       => $cobranca->vencimento?->toDateString(),
                 'status'           => $cobranca->status,
@@ -347,21 +355,28 @@ class OficinaController extends Controller
     public function cancelarAssinatura(string $id): JsonResponse
     {
         $oficina = Oficina::findOrFail($id);
+        $gateway = $oficina->gateway ?: (SaasConfig::get()->gateway_preferido ?? 'ASAAS');
+        $nomeGateway = $gateway === 'MERCADOPAGO' ? 'Mercado Pago' : 'Asaas';
+        $subscriptionId = $gateway === 'MERCADOPAGO' ? $oficina->mp_subscription_id : $oficina->asaas_subscription_id;
 
-        if (!$oficina->asaas_subscription_id) {
-            return response()->json(['message' => 'Oficina não possui assinatura no Asaas.'], 422);
+        if (!$subscriptionId) {
+            return response()->json(['message' => "Oficina não possui assinatura no {$nomeGateway}."], 422);
         }
 
         try {
-            $this->asaas->cancelarSubscription($oficina->asaas_subscription_id);
+            if ($gateway === 'MERCADOPAGO') {
+                $this->mercadoPago->cancelarSubscription($subscriptionId);
+            } else {
+                $this->asaas->cancelarSubscription($subscriptionId);
+            }
         } catch (\Throwable $e) {
-            return response()->json(['message' => 'Falha ao cancelar no Asaas: ' . $e->getMessage()], 502);
+            return response()->json(['message' => "Falha ao cancelar no {$nomeGateway}: " . $e->getMessage()], 502);
         }
 
-        $oficina->update([
-            'status'                 => 'CANCELADA',
-            'asaas_subscription_id'  => null,
-        ]);
+        $oficina->update(array_merge(
+            ['status' => 'CANCELADA'],
+            $gateway === 'MERCADOPAGO' ? ['mp_subscription_id' => null] : ['asaas_subscription_id' => null],
+        ));
 
         return response()->json(['message' => 'Assinatura cancelada e oficina desativada.']);
     }

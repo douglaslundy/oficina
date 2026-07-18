@@ -243,7 +243,7 @@ export default function OficinaDetailPage() {
   }
 
   async function handleCancelarCobranca(cId: string) {
-    if (!confirm('Cancelar esta cobrança no Asaas?')) return
+    if (!confirm('Cancelar esta cobrança?')) return
     try {
       await saasApi.delete(`/saas/cobrancas/${cId}`)
       showToast('Cobrança cancelada.')
@@ -271,7 +271,7 @@ export default function OficinaDetailPage() {
   }
 
   async function handleCancelarAssinatura() {
-    if (!confirm('ATENÇÃO: Esta ação cancela a assinatura no Asaas e desativa a oficina. Continuar?')) return
+    if (!confirm('ATENÇÃO: Esta ação cancela a assinatura no gateway de pagamento e desativa a oficina. Continuar?')) return
     setActionLoading('cancelar-assinatura')
     try {
       await saasApi.post(`/saas/oficinas/${id}/cancelar-assinatura`)

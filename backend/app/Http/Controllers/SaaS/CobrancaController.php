@@ -69,7 +69,10 @@ class CobrancaController extends Controller
             return response()->json(['message' => 'Não é possível cancelar uma cobrança já paga.'], 422);
         }
 
-        if ($cobranca->asaas_payment_id) {
+        if ($cobranca->gateway === 'MERCADOPAGO') {
+            // Cobrança avulsa no Mercado Pago é um link de pagamento (preference) sem
+            // pagamento efetivado ainda — não há o que cancelar na API, só localmente.
+        } elseif ($cobranca->asaas_payment_id) {
             try {
                 $this->asaas->cancelarPagamento($cobranca->asaas_payment_id);
             } catch (\Throwable $e) {
