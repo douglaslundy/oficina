@@ -73,6 +73,28 @@ class OficinaController extends Controller
         return response()->json(['message' => 'Assinatura atualizada para R$ ' . number_format($total, 2, ',', '.') . '.']);
     }
 
+    public function mudarCiclo(Request $request, string $id): JsonResponse
+    {
+        $validated = $request->validate(['ciclo' => 'required|in:MENSAL,ANUAL']);
+        $oficina   = Oficina::findOrFail($id);
+
+        Cobranca::where('oficina_id', $oficina->id)
+            ->where('tipo', 'ASSINATURA')
+            ->where('status', 'PENDENTE')
+            ->update(['status' => 'CANCELADA']);
+
+        $meses = $validated['ciclo'] === 'ANUAL' ? 12 : 1;
+        $oficina->update([
+            'ciclo_cobranca'     => $validated['ciclo'],
+            'proximo_vencimento' => now()->addMonths($meses)->toDateString(),
+        ]);
+
+        return response()->json(['message' => 'Ciclo de cobrança atualizado.', 'data' => [
+            'ciclo_cobranca'     => $oficina->ciclo_cobranca,
+            'proximo_vencimento' => $oficina->proximo_vencimento->toDateString(),
+        ]]);
+    }
+
     public function index(Request $request): JsonResponse
     {
         $oficinas = Oficina::with('plano')
@@ -140,9 +162,15 @@ class OficinaController extends Controller
             'admin_nome'   => 'sometimes|string|max:120',
             'admin_email'  => 'sometimes|email|max:120',
             'admin_senha'  => 'sometimes|nullable|string|min:8',
+            'proximo_vencimento'         => 'sometimes|date',
+            'dias_antecedencia_cobranca' => 'sometimes|nullable|integer|min:0',
+            'dias_suspensao_vencido'     => 'sometimes|nullable|integer|min:0',
         ]);
 
-        $oficinaFields = array_intersect_key($validated, array_flip(['nome', 'plano_id', 'status', 'admin_email']));
+        $oficinaFields = array_intersect_key($validated, array_flip([
+            'nome', 'plano_id', 'status', 'admin_email',
+            'proximo_vencimento', 'dias_antecedencia_cobranca', 'dias_suspensao_vencido',
+        ]));
         if (!empty($oficinaFields)) {
             $oficina->update($oficinaFields);
         }
@@ -316,15 +344,18 @@ class OficinaController extends Controller
             'vencimento' => 'required|date|after:yesterday',
         ]);
 
+        $cobrancaId = (string) \Illuminate\Support\Str::uuid();
+
         try {
             $payment = $gateway === 'MERCADOPAGO'
-                ? $this->mercadoPago->criarCobrancaAvulsa($customerId, (float) $validated['valor'], $validated['vencimento'])
-                : $this->asaas->criarCobrancaAvulsa($customerId, (float) $validated['valor'], $validated['vencimento']);
+                ? $this->mercadoPago->criarCobrancaAvulsa($customerId, (float) $validated['valor'], $validated['vencimento'], $cobrancaId)
+                : $this->asaas->criarCobrancaAvulsa($customerId, (float) $validated['valor'], $validated['vencimento'], $cobrancaId);
         } catch (\Throwable $e) {
             return response()->json(['message' => "Falha ao criar cobrança no {$nomeGateway}: " . $e->getMessage()], 502);
         }
 
         $cobranca = Cobranca::create([
+            'id'               => $cobrancaId,
             'oficina_id'       => $oficina->id,
             'mes_referencia'   => Carbon::parse($validated['vencimento'])->startOfMonth(),
             'valor'            => $validated['valor'],

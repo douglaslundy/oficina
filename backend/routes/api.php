@@ -78,6 +78,7 @@ Route::prefix('saas')->group(function () {
         Route::get('oficinas/{id}/asaas',                      [SaaSOficinaController::class, 'asaasStatus']);
         Route::post('oficinas/{id}/sincronizar-cobrancas',     [SaaSOficinaController::class, 'sincronizarCobrancas']);
         Route::post('oficinas/{id}/gerar-cobranca',            [SaaSOficinaController::class, 'gerarCobrancaAvulsa']);
+        Route::post('oficinas/{id}/mudar-ciclo',                [SaaSOficinaController::class, 'mudarCiclo']);
         Route::post('oficinas/{id}/cancelar-assinatura',       [SaaSOficinaController::class, 'cancelarAssinatura']);
         Route::get('oficinas/{id}/mensalidade',                [SaaSOficinaController::class, 'mensalidade']);
         Route::post('oficinas/{id}/sincronizar-assinatura',    [SaaSOficinaController::class, 'sincronizarAssinatura']);
