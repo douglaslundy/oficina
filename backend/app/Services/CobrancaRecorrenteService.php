@@ -61,6 +61,25 @@ class CobrancaRecorrenteService
         return $geradas;
     }
 
+    public function marcarVencidas(): int
+    {
+        $vencidas = Cobranca::where('tipo', 'ASSINATURA')
+            ->where('status', 'PENDENTE')
+            ->whereDate('vencimento', '<', now()->toDateString())
+            ->get();
+
+        foreach ($vencidas as $cobranca) {
+            $cobranca->update(['status' => 'VENCIDA']);
+
+            $oficina = Oficina::find($cobranca->oficina_id);
+            if ($oficina && $oficina->status === 'ATIVA') {
+                $oficina->update(['status' => 'INADIMPLENTE']);
+            }
+        }
+
+        return $vencidas->count();
+    }
+
     private function criarCobranca(Oficina $oficina, SaasConfig $cfg): bool
     {
         $gateway    = $oficina->gateway ?: ($cfg->gateway_preferido ?? 'ASAAS');
