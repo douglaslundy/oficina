@@ -64,4 +64,15 @@ class Oficina extends Model
     {
         return $this->hasMany(Cobranca::class);
     }
+
+    public function calcularProximoVencimento(): \Illuminate\Support\Carbon
+    {
+        $meses = $this->ciclo_cobranca === 'ANUAL' ? 12 : 1;
+        return $this->proximo_vencimento->copy()->addMonths($meses);
+    }
+
+    public function avancarVencimento(): void
+    {
+        $this->update(['proximo_vencimento' => $this->calcularProximoVencimento()]);
+    }
 }
