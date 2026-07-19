@@ -37,6 +37,7 @@ class Oficina extends Model
         'dias_suspensao_vencido',
         'alerta_cobranca_exibicoes_hoje',
         'alerta_cobranca_ultima_exibicao_em',
+        'voto_confianca_ate',
     ];
 
     protected $casts = [
@@ -47,6 +48,7 @@ class Oficina extends Model
         'dias_suspensao_vencido'             => 'integer',
         'alerta_cobranca_exibicoes_hoje'     => 'integer',
         'alerta_cobranca_ultima_exibicao_em' => 'date',
+        'voto_confianca_ate'                 => 'date',
     ];
 
     protected static function boot(): void

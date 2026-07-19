@@ -40,6 +40,7 @@ class SaasConfig extends Model
         'desconto_anual_pct',
         'alerta_cobranca_vezes_dia',
         'alerta_cobranca_dias_exibicao',
+        'voto_confianca_dias',
     ];
 
     protected $casts = [
@@ -50,6 +51,7 @@ class SaasConfig extends Model
         'desconto_anual_pct'                => 'decimal:2',
         'alerta_cobranca_vezes_dia'         => 'integer',
         'alerta_cobranca_dias_exibicao'     => 'integer',
+        'voto_confianca_dias'               => 'integer',
     ];
 
     protected $hidden = [
