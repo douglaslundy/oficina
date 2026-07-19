@@ -32,6 +32,8 @@ interface SaasConfigData {
   cobranca_dias_antecedencia_padrao: number
   cobranca_dias_suspensao_padrao: number
   desconto_anual_pct: number
+  alerta_cobranca_vezes_dia: number
+  alerta_cobranca_dias_exibicao: number
 }
 
 type ToastType = 'success' | 'danger'
@@ -207,6 +209,8 @@ export default function SaasConfigPage() {
   const [diasSuspensao, setDiasSuspensao] = useState('10')
   const [descontoAnual, setDescontoAnual] = useState('0')
   const [savingCobranca, setSavingCobranca] = useState(false)
+  const [alertaVezesDia, setAlertaVezesDia] = useState('1')
+  const [alertaDiasExibicao, setAlertaDiasExibicao] = useState('30')
 
   const showToast = useCallback((msg: string, type: ToastType) => setToast({ msg, type }), [])
 
@@ -240,6 +244,8 @@ export default function SaasConfigPage() {
         setDiasAntecedencia(String(d.cobranca_dias_antecedencia_padrao ?? 5))
         setDiasSuspensao(String(d.cobranca_dias_suspensao_padrao ?? 10))
         setDescontoAnual(String(d.desconto_anual_pct ?? 0))
+        setAlertaVezesDia(String(d.alerta_cobranca_vezes_dia ?? 1))
+        setAlertaDiasExibicao(String(d.alerta_cobranca_dias_exibicao ?? 30))
       })
       .catch(() => showToast('Erro ao carregar configurações.', 'danger'))
       .finally(() => setLoading(false))
@@ -402,6 +408,8 @@ export default function SaasConfigPage() {
         cobranca_dias_antecedencia_padrao: parseInt(diasAntecedencia, 10) || 5,
         cobranca_dias_suspensao_padrao: parseInt(diasSuspensao, 10) || 10,
         desconto_anual_pct: parseFloat(descontoAnual) || 0,
+        alerta_cobranca_vezes_dia: parseInt(alertaVezesDia, 10) || 1,
+        alerta_cobranca_dias_exibicao: parseInt(alertaDiasExibicao, 10) || 30,
       })
       showToast('Configurações de cobrança salvas.', 'success')
     } catch (e: unknown) {
@@ -702,6 +710,22 @@ export default function SaasConfigPage() {
           </label>
           <input value={descontoAnual} onChange={e => setDescontoAnual(e.target.value)} type="number" min={0} max={90} step="0.5"
             style={{ width: '100%', padding: '9px 12px', borderRadius: 7, border: '1px solid var(--border)', background: 'var(--card)', color: 'var(--text)', fontSize: 14, outline: 'none', boxSizing: 'border-box' }} />
+        </div>
+        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
+          <div style={{ marginBottom: 16 }}>
+            <label style={{ display: 'block', fontSize: 12, fontWeight: 600, color: 'var(--muted)', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: 6 }}>
+              Alerta de cobrança: vezes/dia
+            </label>
+            <input value={alertaVezesDia} onChange={e => setAlertaVezesDia(e.target.value)} type="number" min={1} max={10}
+              style={{ width: '100%', padding: '9px 12px', borderRadius: 7, border: '1px solid var(--border)', background: 'var(--card)', color: 'var(--text)', fontSize: 14, outline: 'none', boxSizing: 'border-box' }} />
+          </div>
+          <div style={{ marginBottom: 16 }}>
+            <label style={{ display: 'block', fontSize: 12, fontWeight: 600, color: 'var(--muted)', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: 6 }}>
+              Dias de exibição (antes do vencimento)
+            </label>
+            <input value={alertaDiasExibicao} onChange={e => setAlertaDiasExibicao(e.target.value)} type="number" min={1} max={90}
+              style={{ width: '100%', padding: '9px 12px', borderRadius: 7, border: '1px solid var(--border)', background: 'var(--card)', color: 'var(--text)', fontSize: 14, outline: 'none', boxSizing: 'border-box' }} />
+          </div>
         </div>
         <SaveButton loading={savingCobranca} onClick={salvarCobranca} label="Salvar Cobrança" />
       </SectionCard>
