@@ -9,6 +9,7 @@ use App\Models\Oficina;
 use App\Models\OrdemServico;
 use App\Models\Usuario;
 use App\Services\AsaasService;
+use App\Services\AssinaturaService;
 use App\Services\EntitlementService;
 use App\Services\MercadoPagoService;
 use App\Services\TenantProvisionService;
@@ -25,6 +26,7 @@ class OficinaController extends Controller
         private AsaasService $asaas,
         private MercadoPagoService $mercadoPago,
         private EntitlementService $ent,
+        private AssinaturaService $assinatura,
     ) {}
 
     /** Composição da mensalidade efetiva (plano + serviços avulsos ativos). */
@@ -78,16 +80,7 @@ class OficinaController extends Controller
         $validated = $request->validate(['ciclo' => 'required|in:MENSAL,ANUAL']);
         $oficina   = Oficina::findOrFail($id);
 
-        Cobranca::where('oficina_id', $oficina->id)
-            ->where('tipo', 'ASSINATURA')
-            ->where('status', 'PENDENTE')
-            ->update(['status' => 'CANCELADA']);
-
-        $meses = $validated['ciclo'] === 'ANUAL' ? 12 : 1;
-        $oficina->update([
-            'ciclo_cobranca'     => $validated['ciclo'],
-            'proximo_vencimento' => now()->addMonths($meses)->toDateString(),
-        ]);
+        $this->assinatura->mudarCiclo($oficina, $validated['ciclo']);
 
         return response()->json(['message' => 'Ciclo de cobrança atualizado.', 'data' => [
             'ciclo_cobranca'     => $oficina->ciclo_cobranca,
