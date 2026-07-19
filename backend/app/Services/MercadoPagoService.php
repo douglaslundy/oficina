@@ -9,20 +9,22 @@ use Illuminate\Http\Client\Response;
 
 class MercadoPagoService
 {
-    private string $baseUrl;
-    private string $accessToken;
+    private string $baseUrl = 'https://api.mercadopago.com';
 
-    public function __construct()
+    /**
+     * Não lê SaasConfig no construtor: este service é injetado no
+     * construtor de controllers/commands que nem sempre chegam a fazer uma
+     * chamada HTTP (ex: Artisan resolve todo Command registrado só para
+     * descobrir a assinatura). Ler a config aqui obrigaria uma conexão de
+     * banco só para instanciar a classe.
+     */
+    private function accessToken(): string
     {
-        $cfg = SaasConfig::get();
+        $cfg   = SaasConfig::get();
         $token = $cfg->getRawOriginal('mp_access_token');
 
         // Fallback para env caso a tabela ainda não tenha sido configurada
-        $this->accessToken = $token ?: (string) config('services.mercadopago.access_token', '');
-
-        $ambiente = $cfg->mp_ambiente ?? 'sandbox';
-        $this->baseUrl = 'https://api.mercadopago.com';
-        unset($ambiente);
+        return $token ?: (string) config('services.mercadopago.access_token', '');
     }
 
     public function criarCustomer(string $nome, string $email, string $cpfCnpj): array
@@ -121,7 +123,7 @@ class MercadoPagoService
 
     private function http()
     {
-        return Http::withToken($this->accessToken)
+        return Http::withToken($this->accessToken())
             ->baseUrl($this->baseUrl)
             ->acceptJson();
     }
