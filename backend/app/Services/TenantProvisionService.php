@@ -64,8 +64,15 @@ class TenantProvisionService
 
             TenancyContext::clear();
 
-            // 4. Call payment gateway for paid plans (non-blocking)
+            // 4. Call payment gateway for paid plans (non-blocking) — só cria o customer;
+            // a cobrança recorrente é gerada pelo CobrancaRecorrenteService a partir do
+            // proximo_vencimento, não por subscription nativa do gateway.
             $gateway = SaasConfig::get()->gateway_preferido ?? 'ASAAS';
+            $oficina->update([
+                'ciclo_cobranca'     => 'MENSAL',
+                'proximo_vencimento' => now()->addMonth()->toDateString(),
+            ]);
+
             if ((float) $plano->preco_mensal > 0) {
                 try {
                     if ($gateway === 'MERCADOPAGO') {
@@ -74,15 +81,9 @@ class TenantProvisionService
                             $data['admin_email'],
                             $data['cnpj'],
                         );
-                        $subscription = $this->mercadoPago->criarSubscription(
-                            $customer['id'],
-                            (float) $plano->preco_mensal,
-                            now()->addDay()->format('Y-m-d')
-                        );
                         $oficina->update([
-                            'gateway'           => 'MERCADOPAGO',
-                            'mp_customer_id'    => $customer['id'],
-                            'mp_subscription_id'=> $subscription['id'],
+                            'gateway'        => 'MERCADOPAGO',
+                            'mp_customer_id' => $customer['id'],
                         ]);
                     } else {
                         $customer = $this->asaas->criarCustomer(
@@ -90,15 +91,9 @@ class TenantProvisionService
                             $data['cnpj'],
                             $data['admin_email']
                         );
-                        $subscription = $this->asaas->criarSubscription(
-                            $customer['id'],
-                            (float) $plano->preco_mensal,
-                            now()->addDay()->format('Y-m-d')
-                        );
                         $oficina->update([
-                            'gateway'               => 'ASAAS',
-                            'asaas_customer_id'     => $customer['id'],
-                            'asaas_subscription_id' => $subscription['id'],
+                            'gateway'           => 'ASAAS',
+                            'asaas_customer_id' => $customer['id'],
                         ]);
                     }
                 } catch (\Throwable $e) {
