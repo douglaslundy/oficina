@@ -43,6 +43,8 @@ class SaasConfigController extends Controller
                 'cobranca_dias_antecedencia_padrao' => $cfg->cobranca_dias_antecedencia_padrao,
                 'cobranca_dias_suspensao_padrao'    => $cfg->cobranca_dias_suspensao_padrao,
                 'desconto_anual_pct'                => (float) $cfg->desconto_anual_pct,
+                'alerta_cobranca_vezes_dia'         => $cfg->alerta_cobranca_vezes_dia,
+                'alerta_cobranca_dias_exibicao'     => $cfg->alerta_cobranca_dias_exibicao,
             ],
         ]);
     }
@@ -214,6 +216,8 @@ class SaasConfigController extends Controller
             'cobranca_dias_antecedencia_padrao' => ['required', 'integer', 'min:1', 'max:60'],
             'cobranca_dias_suspensao_padrao'    => ['required', 'integer', 'min:1', 'max:90'],
             'desconto_anual_pct'                => ['required', 'numeric', 'min:0', 'max:90'],
+            'alerta_cobranca_vezes_dia'         => ['required', 'integer', 'min:1', 'max:10'],
+            'alerta_cobranca_dias_exibicao'     => ['required', 'integer', 'min:1', 'max:90'],
         ]);
 
         SaasConfig::get()->update($validated);
