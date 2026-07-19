@@ -170,6 +170,7 @@ Route::middleware(['tenant', 'auth:sanctum'])->group(function () {
     Route::get('plano/limites',  [PlanController::class, 'limites']);
     Route::get('notificacoes/ativas', [\App\Http\Controllers\NotificacaoController::class, 'ativas']);
     Route::get('assinatura/alerta', [AssinaturaController::class, 'alerta']);
+    Route::get('assinatura/status-bloqueio', [AssinaturaController::class, 'statusBloqueio']);
     // Contratação de serviços avulsos (oficina solicita)
     Route::get('pacotes-disponiveis', [\App\Http\Controllers\SolicitacaoServicoController::class, 'pacotesDisponiveis']);
     Route::get('solicitacoes',        [\App\Http\Controllers\SolicitacaoServicoController::class, 'index']);
@@ -292,6 +293,7 @@ Route::middleware(['tenant', 'auth:sanctum', 'role:ADMIN'])->group(function () {
 // ─── Assinatura — somente ADMIN ──────────────────────────────────────────────
 Route::middleware(['tenant', 'auth:sanctum', 'role:ADMIN'])->group(function () {
     Route::post('assinatura/mudar-ciclo', [AssinaturaController::class, 'mudarCiclo']);
+    Route::post('assinatura/voto-confianca', [AssinaturaController::class, 'votoConfianca']);
 });
 
 // ─── Alertas WhatsApp — ADMIN e ATENDENTE ────────────────────────────────────

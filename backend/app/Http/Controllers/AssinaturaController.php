@@ -5,6 +5,7 @@ namespace App\Http\Controllers;
 
 use App\Models\Cobranca;
 use App\Models\Oficina;
+use App\Models\SaasConfig;
 use App\Services\AssinaturaAlertaService;
 use App\Services\AssinaturaService;
 use App\Tenancy\TenancyContext;
@@ -50,5 +51,51 @@ class AssinaturaController extends Controller
             'ciclo_cobranca'     => $oficina->ciclo_cobranca,
             'proximo_vencimento' => $oficina->proximo_vencimento->toDateString(),
         ]]);
+    }
+
+    public function statusBloqueio(): JsonResponse
+    {
+        $oficina = Oficina::find(TenancyContext::get());
+        if (!$oficina) {
+            return response()->json(['suspensa' => false, 'voto_confianca_disponivel' => false]);
+        }
+
+        return response()->json($this->alertaService->statusBloqueio($oficina));
+    }
+
+    public function votoConfianca(): JsonResponse
+    {
+        $oficina = Oficina::findOrFail(TenancyContext::get());
+
+        if ($oficina->status !== 'SUSPENSA') {
+            return response()->json(['message' => 'Oficina não está suspensa.'], 422);
+        }
+
+        $cobranca = Cobranca::where('oficina_id', $oficina->id)
+            ->where('tipo', 'ASSINATURA')
+            ->where('status', 'VENCIDA')
+            ->orderByDesc('vencimento')
+            ->first();
+
+        if (!$cobranca) {
+            return response()->json(['message' => 'Nenhuma fatura vencida encontrada.'], 422);
+        }
+
+        if ($cobranca->voto_confianca_usado_em !== null) {
+            return response()->json(['message' => 'Voto de confiança já utilizado para esta fatura.'], 422);
+        }
+
+        $dias = SaasConfig::get()->voto_confianca_dias;
+
+        $oficina->update([
+            'status'             => 'ATIVA',
+            'voto_confianca_ate' => now()->addDays($dias)->toDateString(),
+        ]);
+        $cobranca->update(['voto_confianca_usado_em' => now()]);
+
+        return response()->json([
+            'message'            => "Seu acesso foi liberado por {$dias} dias em voto de confiança.",
+            'voto_confianca_ate' => $oficina->voto_confianca_ate->toDateString(),
+        ]);
     }
 }
