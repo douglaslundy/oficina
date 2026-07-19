@@ -241,6 +241,30 @@ class OficinaController extends Controller
         ]);
     }
 
+    public function votoConfianca(string $id): JsonResponse
+    {
+        $oficina = Oficina::findOrFail($id);
+        $dias    = SaasConfig::get()->voto_confianca_dias;
+
+        $oficina->update([
+            'status'             => 'ATIVA',
+            'voto_confianca_ate' => now()->addDays($dias)->toDateString(),
+        ]);
+
+        $cobranca = Cobranca::where('oficina_id', $oficina->id)
+            ->where('tipo', 'ASSINATURA')
+            ->where('status', 'VENCIDA')
+            ->orderByDesc('vencimento')
+            ->first();
+
+        $cobranca?->update(['voto_confianca_usado_em' => now()]);
+
+        return response()->json([
+            'message' => "Voto de confiança concedido. Acesso liberado por {$dias} dias.",
+            'data'    => ['id' => $oficina->id, 'status' => 'ATIVA', 'voto_confianca_ate' => $oficina->voto_confianca_ate->toDateString()],
+        ]);
+    }
+
     public function asaasStatus(string $id): JsonResponse
     {
         $oficina = Oficina::findOrFail($id);

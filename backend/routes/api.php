@@ -63,6 +63,7 @@ Route::prefix('saas')->group(function () {
         Route::delete('oficinas/{id}',           [SaaSOficinaController::class, 'destroy']);
         Route::post('oficinas/{id}/suspender',   [SaaSOficinaController::class, 'suspender']);
         Route::post('oficinas/{id}/reativar',    [SaaSOficinaController::class, 'reativar']);
+        Route::post('oficinas/{id}/voto-confianca', [SaaSOficinaController::class, 'votoConfianca']);
 
         // Planos
         Route::get('planos',         [SaaSPlanoController::class, 'index']);

@@ -45,6 +45,7 @@ class SaasConfigController extends Controller
                 'desconto_anual_pct'                => (float) $cfg->desconto_anual_pct,
                 'alerta_cobranca_vezes_dia'         => $cfg->alerta_cobranca_vezes_dia,
                 'alerta_cobranca_dias_exibicao'     => $cfg->alerta_cobranca_dias_exibicao,
+                'voto_confianca_dias' => $cfg->voto_confianca_dias,
             ],
         ]);
     }
@@ -218,6 +219,7 @@ class SaasConfigController extends Controller
             'desconto_anual_pct'                => ['required', 'numeric', 'min:0', 'max:90'],
             'alerta_cobranca_vezes_dia'         => ['required', 'integer', 'min:1', 'max:10'],
             'alerta_cobranca_dias_exibicao'     => ['required', 'integer', 'min:1', 'max:90'],
+            'voto_confianca_dias'               => ['required', 'integer', 'min:1', 'max:30'],
         ]);
 
         SaasConfig::get()->update($validated);
