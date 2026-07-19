@@ -22,6 +22,7 @@ use App\Http\Controllers\ServicoController;
 use App\Http\Controllers\VeiculoController;
 use App\Http\Controllers\AlertaConfigController;
 use App\Http\Controllers\AlertaLogController;
+use App\Http\Controllers\AssinaturaController;
 use App\Http\Controllers\WhatsAppConfigController;
 use App\Http\Controllers\SaaS\AuthController as SaaSAuthController;
 use App\Http\Controllers\SaaS\CobrancaController as SaaSCobrancaController;
@@ -168,6 +169,7 @@ Route::middleware(['tenant', 'auth:sanctum'])->group(function () {
     Route::get('dashboard',      [DashboardController::class, 'index']);
     Route::get('plano/limites',  [PlanController::class, 'limites']);
     Route::get('notificacoes/ativas', [\App\Http\Controllers\NotificacaoController::class, 'ativas']);
+    Route::get('assinatura/alerta', [AssinaturaController::class, 'alerta']);
     // Contratação de serviços avulsos (oficina solicita)
     Route::get('pacotes-disponiveis', [\App\Http\Controllers\SolicitacaoServicoController::class, 'pacotesDisponiveis']);
     Route::get('solicitacoes',        [\App\Http\Controllers\SolicitacaoServicoController::class, 'index']);
@@ -285,6 +287,11 @@ Route::middleware(['tenant', 'auth:sanctum', 'role:ADMIN'])->group(function () {
     Route::get('whatsapp/qrcode',          [WhatsAppConfigController::class, 'qrCode']);
     Route::post('whatsapp/desconectar',    [WhatsAppConfigController::class, 'desconectar']);
     Route::post('whatsapp/enviar-teste',   [WhatsAppConfigController::class, 'enviarTeste']);
+});
+
+// ─── Assinatura — somente ADMIN ──────────────────────────────────────────────
+Route::middleware(['tenant', 'auth:sanctum', 'role:ADMIN'])->group(function () {
+    Route::post('assinatura/mudar-ciclo', [AssinaturaController::class, 'mudarCiclo']);
 });
 
 // ─── Alertas WhatsApp — ADMIN e ATENDENTE ────────────────────────────────────
