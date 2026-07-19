@@ -27,7 +27,13 @@ class InitializeTenancyByHeader
             }
 
             if ($oficina->status === 'SUSPENSA') {
-                return response()->json(['message' => 'Esta oficina está suspensa. Entre em contato com o suporte.'], 403);
+                $rotasLiberadas = ['api/assinatura/status-bloqueio', 'api/assinatura/voto-confianca'];
+                if (!in_array($request->path(), $rotasLiberadas, true)) {
+                    return response()->json([
+                        'message' => 'Esta oficina está suspensa. Entre em contato com o suporte.',
+                        'code'    => 'OFICINA_SUSPENSA',
+                    ], 403);
+                }
             }
 
             TenancyContext::set($oficina->id, $oficina->slug);
