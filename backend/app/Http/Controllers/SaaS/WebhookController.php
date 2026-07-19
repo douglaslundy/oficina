@@ -25,9 +25,9 @@ class WebhookController extends Controller
         $payment = $request->input('payment', []);
 
         match ($event) {
-            'PAYMENT_CONFIRMED' => $this->reconciliarPagamento('asaas_payment_id', $payment['id'] ?? null),
-            'PAYMENT_OVERDUE'   => $this->handlePaymentOverdue($payment),
-            default             => null,
+            'PAYMENT_CONFIRMED', 'PAYMENT_RECEIVED' => $this->reconciliarPagamento('asaas_payment_id', $payment['id'] ?? null),
+            'PAYMENT_OVERDUE'                       => $this->handlePaymentOverdue($payment),
+            default                                  => null,
         };
 
         return response()->json(['received' => true]);
@@ -100,15 +100,24 @@ class WebhookController extends Controller
         return response()->json(['received' => true]);
     }
 
-    /** Marca a Cobranca (localizada pelo id de pagamento do gateway) como PAGA e avança o vencimento da oficina. */
+    /**
+     * Marca a Cobranca (localizada pelo id de pagamento do gateway) como PAGA.
+     * Ignora cobrancas ja PAGA ou CANCELADA (esta ultima pode ter sido cancelada
+     * localmente em mudarCiclo() mesmo com o boleto remoto ainda em aberto).
+     * So avanca o vencimento e reativa a oficina quando a cobranca for do tipo
+     * ASSINATURA — uma cobranca AVULSA nao deve conceder tempo de assinatura
+     * nem reativar uma oficina suspensa por outro motivo.
+     */
     private function reconciliarPagamento(string $campoPaymentId, ?string $paymentId): void
     {
         if (!$paymentId) return;
 
         $cobranca = Cobranca::where($campoPaymentId, $paymentId)->first();
-        if (!$cobranca || $cobranca->status === 'PAGA') return;
+        if (!$cobranca || in_array($cobranca->status, ['PAGA', 'CANCELADA'], true)) return;
 
         $cobranca->update(['status' => 'PAGA', 'pago_em' => now()]);
+
+        if ($cobranca->tipo !== 'ASSINATURA') return;
 
         $oficina = Oficina::find($cobranca->oficina_id);
         if (!$oficina) return;

@@ -14,19 +14,24 @@ class WebhookReconciliacaoTest extends TestCase
 {
     use RefreshDatabase;
 
-    private function criarOficinaComCobranca(string $gateway, string $paymentIdField, string $paymentId): array
-    {
+    private function criarOficinaComCobranca(
+        string $gateway,
+        string $paymentIdField,
+        string $paymentId,
+        array $oficinaOverrides = [],
+        array $cobrancaOverrides = []
+    ): array {
         $plano = Plano::create(['nome' => 'Padrão', 'preco_mensal' => 100]);
-        $oficina = Oficina::create([
+        $oficina = Oficina::create(array_merge([
             'nome' => 'Teste', 'cnpj' => '11222333000181', 'slug' => 'teste-' . uniqid(),
             'plano_id' => $plano->id, 'status' => 'INADIMPLENTE', 'gateway' => $gateway,
             'ciclo_cobranca' => 'MENSAL', 'proximo_vencimento' => '2026-08-01',
-        ]);
-        $cobranca = Cobranca::create([
+        ], $oficinaOverrides));
+        $cobranca = Cobranca::create(array_merge([
             'oficina_id' => $oficina->id, 'tipo' => 'ASSINATURA', 'valor' => 100,
             'status' => 'PENDENTE', 'vencimento' => '2026-08-01', 'gateway' => $gateway,
             $paymentIdField => $paymentId,
-        ]);
+        ], $cobrancaOverrides));
         return [$oficina, $cobranca];
     }
 
@@ -62,5 +67,72 @@ class WebhookReconciliacaoTest extends TestCase
         $response->assertStatus(200);
         $this->assertDatabaseHas('cobrancas', ['id' => $cobranca->id, 'status' => 'PAGA']);
         $this->assertDatabaseHas('oficinas', ['id' => $oficina->id, 'status' => 'ATIVA', 'proximo_vencimento' => '2026-09-01']);
+    }
+
+    public function test_asaas_payment_received_reconcilia_por_payment_id(): void
+    {
+        config(['services.asaas.webhook_token' => 'token-teste']);
+        [$oficina, $cobranca] = $this->criarOficinaComCobranca('ASAAS', 'asaas_payment_id', 'pay_asaas_2');
+
+        $response = $this->withHeaders(['asaas-access-token' => 'token-teste'])
+            ->postJson('/api/saas/webhooks/asaas', [
+                'event'   => 'PAYMENT_RECEIVED',
+                'payment' => ['id' => 'pay_asaas_2', 'value' => 100],
+            ]);
+
+        $response->assertStatus(200);
+        $this->assertDatabaseHas('cobrancas', ['id' => $cobranca->id, 'status' => 'PAGA']);
+        $this->assertDatabaseHas('oficinas', ['id' => $oficina->id, 'status' => 'ATIVA', 'proximo_vencimento' => '2026-09-01']);
+    }
+
+    public function test_pagamento_avulsa_nao_avanca_vencimento_nem_reativa_oficina(): void
+    {
+        config(['services.asaas.webhook_token' => 'token-teste']);
+        [$oficina, $cobranca] = $this->criarOficinaComCobranca(
+            'ASAAS',
+            'asaas_payment_id',
+            'pay_asaas_avulsa_1',
+            ['status' => 'INADIMPLENTE', 'proximo_vencimento' => '2026-08-01'],
+            ['tipo' => 'AVULSA', 'status' => 'PENDENTE']
+        );
+
+        $response = $this->withHeaders(['asaas-access-token' => 'token-teste'])
+            ->postJson('/api/saas/webhooks/asaas', [
+                'event'   => 'PAYMENT_CONFIRMED',
+                'payment' => ['id' => 'pay_asaas_avulsa_1', 'value' => 100],
+            ]);
+
+        $response->assertStatus(200);
+        $this->assertDatabaseHas('cobrancas', ['id' => $cobranca->id, 'status' => 'PAGA']);
+        $this->assertDatabaseHas('oficinas', [
+            'id' => $oficina->id,
+            'status' => 'INADIMPLENTE',
+            'proximo_vencimento' => '2026-08-01',
+        ]);
+    }
+
+    public function test_pagamento_de_cobranca_cancelada_nao_e_reconciliado(): void
+    {
+        config(['services.asaas.webhook_token' => 'token-teste']);
+        [$oficina, $cobranca] = $this->criarOficinaComCobranca(
+            'ASAAS',
+            'asaas_payment_id',
+            'pay_asaas_cancelada_1',
+            ['proximo_vencimento' => '2026-08-01'],
+            ['tipo' => 'ASSINATURA', 'status' => 'CANCELADA']
+        );
+
+        $response = $this->withHeaders(['asaas-access-token' => 'token-teste'])
+            ->postJson('/api/saas/webhooks/asaas', [
+                'event'   => 'PAYMENT_CONFIRMED',
+                'payment' => ['id' => 'pay_asaas_cancelada_1', 'value' => 100],
+            ]);
+
+        $response->assertStatus(200);
+        $this->assertDatabaseHas('cobrancas', ['id' => $cobranca->id, 'status' => 'CANCELADA']);
+        $this->assertDatabaseHas('oficinas', [
+            'id' => $oficina->id,
+            'proximo_vencimento' => '2026-08-01',
+        ]);
     }
 }
