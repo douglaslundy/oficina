@@ -116,6 +116,48 @@ class CobrancaRecorrenteService
         return $suspensas;
     }
 
+    /**
+     * Gera manualmente a cobrança de ASSINATURA do ciclo atual (mensalidade
+     * ou anuidade), ignorando a janela de antecedência usada pelo job
+     * automático. A checagem de duplicidade é a MESMA usada em
+     * gerarPendentes() (mesma oficina + mesmo vencimento + status ativo) —
+     * isso garante que, uma vez gerada manualmente, o job automático não
+     * gera outra para o mesmo ciclo; no próximo ciclo o vencimento muda e a
+     * geração volta a ocorrer normalmente. Não afeta cobranças AVULSA, que
+     * usam outro fluxo sem essa checagem.
+     */
+    public function gerarManual(Oficina $oficina): array
+    {
+        $cfg = SaasConfig::get();
+
+        if (!$oficina->plano || (float) $oficina->plano->preco_mensal <= 0) {
+            return ['ok' => false, 'message' => 'Oficina sem plano pago — não há cobrança de assinatura a gerar.'];
+        }
+
+        if (!$oficina->proximo_vencimento) {
+            return ['ok' => false, 'message' => 'Oficina sem próximo vencimento definido.'];
+        }
+
+        $jaExiste = Cobranca::where('oficina_id', $oficina->id)
+            ->where('tipo', 'ASSINATURA')
+            ->where('vencimento', $oficina->proximo_vencimento->toDateString())
+            ->where('status', '!=', 'CANCELADA')
+            ->exists();
+
+        if ($jaExiste) {
+            return [
+                'ok'      => false,
+                'message' => 'Já existe uma cobrança de assinatura gerada para o ciclo atual (vencimento ' . $oficina->proximo_vencimento->format('d/m/Y') . ').',
+            ];
+        }
+
+        if (!$this->criarCobranca($oficina, $cfg)) {
+            return ['ok' => false, 'message' => 'Falha ao gerar cobrança no gateway de pagamento. Verifique se a oficina possui customer configurado.'];
+        }
+
+        return ['ok' => true, 'message' => 'Cobrança do ciclo gerada manualmente com sucesso.'];
+    }
+
     private function criarCobranca(Oficina $oficina, SaasConfig $cfg): bool
     {
         $gateway    = $oficina->gateway ?: ($cfg->gateway_preferido ?? 'ASAAS');

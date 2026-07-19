@@ -36,9 +36,15 @@ interface Oficina {
   proximo_vencimento?: string | null
   dias_antecedencia_cobranca?: number | null
   dias_suspensao_vencido?: number | null
+  gateway?: 'ASAAS' | 'MERCADOPAGO'
+  mp_customer_id?: string | null
+  mp_subscription_id?: string | null
 }
 
 interface AsaasStatus {
+  gateway?: 'ASAAS' | 'MERCADOPAGO'
+  customer_id?: string | null
+  subscription_id?: string | null
   asaas_customer_id: string | null
   asaas_subscription_id: string | null
   customer: Record<string, unknown> | null
@@ -137,6 +143,12 @@ export default function OficinaDetailPage() {
   const [gerarValor, setGerarValor] = useState('')
   const [gerarVencimento, setGerarVencimento] = useState('')
   const [gerarLoading, setGerarLoading] = useState(false)
+  const [gerarError, setGerarError] = useState<string | null>(null)
+
+  const [creatingCustomer, setCreatingCustomer] = useState(false)
+  const [gerandoCiclo, setGerandoCiclo] = useState(false)
+
+  const [confirmDialog, setConfirmDialog] = useState<{ message: string; onConfirm: () => void; danger?: boolean } | null>(null)
 
   const [provFiscal, setProvFiscal] = useState<string>('')
   const [modoFiscal, setModoFiscal] = useState<string>('')
@@ -204,8 +216,11 @@ export default function OficinaDetailPage() {
       .catch(() => setPlanos([]))
   }, [fetchOficina, fetchAsaas, fetchCobrancas])
 
+  function askConfirm(message: string, onConfirm: () => void, danger = false) {
+    setConfirmDialog({ message, onConfirm, danger })
+  }
+
   async function handleAction(action: string, label: string) {
-    if (!confirm(`Confirmar: ${label}?`)) return
     setActionLoading(action)
     try {
       await saasApi.post(`/saas/oficinas/${id}/${action}`)
@@ -237,6 +252,7 @@ export default function OficinaDetailPage() {
   async function handleGerarCobranca(e: React.FormEvent) {
     e.preventDefault()
     setGerarLoading(true)
+    setGerarError(null)
     try {
       const res = await saasApi.post<{ message: string }>(`/saas/oficinas/${id}/gerar-cobranca`, {
         valor: gerarValor,
@@ -248,22 +264,55 @@ export default function OficinaDetailPage() {
       setGerarVencimento('')
       fetchCobrancas()
     } catch (e: unknown) {
-      const msg = (e as { response?: { data?: { message?: string } } })?.response?.data?.message ?? 'Erro ao gerar cobrança.'
+      const msg = (e as { response?: { data?: { message?: string } } })?.response?.data?.message
+        ?? 'Erro ao gerar cobrança. Verifique sua conexão e tente novamente — se o problema persistir, confira em "Cobranças Locais" se ela já não foi criada antes de tentar de novo.'
+      setGerarError(msg)
       showToast(msg, 'err')
     } finally {
       setGerarLoading(false)
     }
   }
 
-  async function handleCancelarCobranca(cId: string) {
-    if (!confirm('Cancelar esta cobrança?')) return
+  function handleCancelarCobranca(cId: string) {
+    askConfirm('Cancelar esta cobrança?', async () => {
+      try {
+        await saasApi.delete(`/saas/cobrancas/${cId}`)
+        showToast('Cobrança cancelada.')
+        fetchCobrancas()
+      } catch (e: unknown) {
+        const msg = (e as { response?: { data?: { message?: string } } })?.response?.data?.message ?? 'Erro ao cancelar.'
+        showToast(msg, 'err')
+      }
+    }, true)
+  }
+
+  async function handleCriarCustomer() {
+    setCreatingCustomer(true)
     try {
-      await saasApi.delete(`/saas/cobrancas/${cId}`)
-      showToast('Cobrança cancelada.')
-      fetchCobrancas()
+      const res = await saasApi.post<{ message: string }>(`/saas/oficinas/${id}/criar-customer-gateway`)
+      showToast(res.data.message)
+      fetchOficina()
+      fetchAsaas()
     } catch (e: unknown) {
-      const msg = (e as { response?: { data?: { message?: string } } })?.response?.data?.message ?? 'Erro ao cancelar.'
+      const msg = (e as { response?: { data?: { message?: string } } })?.response?.data?.message ?? 'Erro ao criar cliente no gateway.'
       showToast(msg, 'err')
+    } finally {
+      setCreatingCustomer(false)
+    }
+  }
+
+  async function handleGerarCicloManual() {
+    setGerandoCiclo(true)
+    try {
+      const res = await saasApi.post<{ message: string }>(`/saas/oficinas/${id}/gerar-cobranca-ciclo`)
+      showToast(res.data.message)
+      fetchCobrancas()
+      fetchOficina()
+    } catch (e: unknown) {
+      const msg = (e as { response?: { data?: { message?: string } } })?.response?.data?.message ?? 'Erro ao gerar cobrança do ciclo.'
+      showToast(msg, 'err')
+    } finally {
+      setGerandoCiclo(false)
     }
   }
 
@@ -302,36 +351,41 @@ export default function OficinaDetailPage() {
     }
   }
 
-  async function mudarCiclo(ciclo: 'MENSAL' | 'ANUAL') {
-    if (!confirm(`Mudar o ciclo de cobrança para ${ciclo === 'ANUAL' ? 'ANUAL' : 'MENSAL'}? Isso recalcula o próximo vencimento e cancela cobranças pendentes do ciclo atual.`)) return
-    setChangingCiclo(true)
-    try {
-      await saasApi.post(`/saas/oficinas/${id}/mudar-ciclo`, { ciclo })
-      showToast('Ciclo de cobrança atualizado.')
-      fetchOficina()
-      fetchCobrancas()
-    } catch (e: unknown) {
-      const msg = (e as { response?: { data?: { message?: string } } })?.response?.data?.message ?? 'Erro ao mudar ciclo.'
-      showToast(msg, 'err')
-    } finally {
-      setChangingCiclo(false)
-    }
+  function mudarCiclo(ciclo: 'MENSAL' | 'ANUAL') {
+    askConfirm(
+      `Mudar o ciclo de cobrança para ${ciclo === 'ANUAL' ? 'ANUAL' : 'MENSAL'}? Isso recalcula o próximo vencimento e cancela cobranças pendentes do ciclo atual.`,
+      async () => {
+        setChangingCiclo(true)
+        try {
+          await saasApi.post(`/saas/oficinas/${id}/mudar-ciclo`, { ciclo })
+          showToast('Ciclo de cobrança atualizado.')
+          fetchOficina()
+          fetchCobrancas()
+        } catch (e: unknown) {
+          const msg = (e as { response?: { data?: { message?: string } } })?.response?.data?.message ?? 'Erro ao mudar ciclo.'
+          showToast(msg, 'err')
+        } finally {
+          setChangingCiclo(false)
+        }
+      },
+    )
   }
 
-  async function handleCancelarAssinatura() {
-    if (!confirm('ATENÇÃO: Esta ação cancela a assinatura no gateway de pagamento e desativa a oficina. Continuar?')) return
-    setActionLoading('cancelar-assinatura')
-    try {
-      await saasApi.post(`/saas/oficinas/${id}/cancelar-assinatura`)
-      showToast('Assinatura cancelada.')
-      fetchOficina()
-      fetchAsaas()
-    } catch (e: unknown) {
-      const msg = (e as { response?: { data?: { message?: string } } })?.response?.data?.message ?? 'Erro ao cancelar assinatura.'
-      showToast(msg, 'err')
-    } finally {
-      setActionLoading(null)
-    }
+  function handleCancelarAssinatura() {
+    askConfirm('ATENÇÃO: Esta ação cancela a assinatura no gateway de pagamento e desativa a oficina. Continuar?', async () => {
+      setActionLoading('cancelar-assinatura')
+      try {
+        await saasApi.post(`/saas/oficinas/${id}/cancelar-assinatura`)
+        showToast('Assinatura cancelada.')
+        fetchOficina()
+        fetchAsaas()
+      } catch (e: unknown) {
+        const msg = (e as { response?: { data?: { message?: string } } })?.response?.data?.message ?? 'Erro ao cancelar assinatura.'
+        showToast(msg, 'err')
+      } finally {
+        setActionLoading(null)
+      }
+    }, true)
   }
 
   const sBtn = (label: string, onClick: () => void, variant: 'primary' | 'danger' | 'muted' = 'muted', disabled = false) => (
@@ -382,6 +436,11 @@ export default function OficinaDetailPage() {
             <h3 className="font-display" style={{ fontSize: 18, fontWeight: 800, color: 'var(--text)', marginBottom: 20 }}>
               Gerar Cobrança Avulsa
             </h3>
+            {gerarError && (
+              <div style={{ background: 'rgba(229,57,53,.1)', border: '1px solid var(--danger)', borderRadius: 8, padding: '10px 14px', color: 'var(--danger)', fontSize: 13, marginBottom: 16 }}>
+                {gerarError}
+              </div>
+            )}
             <form onSubmit={handleGerarCobranca}>
               <div style={{ marginBottom: 14 }}>
                 <label style={{ fontSize: 12, fontWeight: 600, color: 'var(--muted)', display: 'block', marginBottom: 6 }}>Valor (R$)</label>
@@ -398,12 +457,47 @@ export default function OficinaDetailPage() {
                   style={{ flex: 1, padding: '9px', background: 'var(--accent)', color: '#000', border: 'none', borderRadius: 8, fontWeight: 700, fontSize: 14, fontFamily: "'Barlow Condensed', sans-serif", cursor: 'pointer' }}>
                   {gerarLoading ? 'Gerando…' : 'Gerar Cobrança'}
                 </button>
-                <button type="button" onClick={() => setGerarModal(false)}
+                <button type="button" onClick={() => { setGerarModal(false); setGerarError(null) }}
                   style={{ padding: '9px 16px', background: 'none', border: '1px solid var(--border)', color: 'var(--muted)', borderRadius: 8, fontSize: 14, cursor: 'pointer' }}>
                   Cancelar
                 </button>
               </div>
             </form>
+          </div>
+        </div>
+      )}
+
+      {/* Modal de confirmação genérico (substitui window.confirm) */}
+      {confirmDialog && (
+        <div style={{
+          position: 'fixed', inset: 0, background: 'rgba(0,0,0,.6)',
+          display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000,
+        }}>
+          <div style={{ background: 'var(--card)', border: '1px solid var(--border)', borderRadius: 12, padding: 28, width: 380 }}>
+            <h3 className="font-display" style={{ fontSize: 18, fontWeight: 800, color: 'var(--text)', marginBottom: 16 }}>
+              Confirmar ação
+            </h3>
+            <p style={{ fontSize: 14, color: 'var(--text)', marginBottom: 24, lineHeight: 1.5 }}>
+              {confirmDialog.message}
+            </p>
+            <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end' }}>
+              <button onClick={() => setConfirmDialog(null)}
+                style={{ padding: '9px 16px', background: 'none', border: '1px solid var(--border)', color: 'var(--muted)', borderRadius: 8, fontSize: 14, cursor: 'pointer' }}>
+                Cancelar
+              </button>
+              <button
+                onClick={() => { const fn = confirmDialog.onConfirm; setConfirmDialog(null); fn() }}
+                style={{
+                  padding: '9px 20px',
+                  background: confirmDialog.danger ? 'rgba(229,57,53,.15)' : 'var(--accent)',
+                  color: confirmDialog.danger ? 'var(--danger)' : '#000',
+                  border: confirmDialog.danger ? '1px solid var(--danger)' : 'none',
+                  borderRadius: 8, fontWeight: 700, fontSize: 14, fontFamily: "'Barlow Condensed', sans-serif", cursor: 'pointer',
+                }}
+              >
+                Confirmar
+              </button>
+            </div>
           </div>
         </div>
       )}
@@ -460,8 +554,8 @@ export default function OficinaDetailPage() {
           {!loadingOficina && oficina && (
             <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
               {sBtn('Editar Dados', () => setShowEditModal(true), 'muted')}
-              {oficina.status === 'ATIVA' && sBtn('Suspender', () => handleAction('suspender', 'Suspender oficina'), 'danger', actionLoading === 'suspender')}
-              {(oficina.status === 'SUSPENSA' || oficina.status === 'INADIMPLENTE') && sBtn('Reativar', () => handleAction('reativar', 'Reativar oficina'), 'primary', actionLoading === 'reativar')}
+              {oficina.status === 'ATIVA' && sBtn('Suspender', () => askConfirm('Confirmar: Suspender oficina?', () => handleAction('suspender', 'Suspender oficina'), true), 'danger', actionLoading === 'suspender')}
+              {(oficina.status === 'SUSPENSA' || oficina.status === 'INADIMPLENTE') && sBtn('Reativar', () => askConfirm('Confirmar: Reativar oficina?', () => handleAction('reativar', 'Reativar oficina')), 'primary', actionLoading === 'reativar')}
               {oficina.status !== 'CANCELADA' && sBtn('Cancelar Assinatura', handleCancelarAssinatura, 'danger', actionLoading === 'cancelar-assinatura')}
             </div>
           )}
@@ -489,10 +583,12 @@ export default function OficinaDetailPage() {
             ) : null}
           </div>
 
-          {/* ── Asaas Status ── */}
+          {/* ── Gateway de Pagamento (Asaas/Mercado Pago) ── */}
           <div style={{ background: 'var(--card)', border: '1px solid var(--border)', borderRadius: 10, padding: 20 }}>
             <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 12 }}>
-              <h2 className="font-display" style={{ fontSize: 16, fontWeight: 700, color: 'var(--text)', margin: 0 }}>Asaas</h2>
+              <h2 className="font-display" style={{ fontSize: 16, fontWeight: 700, color: 'var(--text)', margin: 0 }}>
+                {oficina?.gateway === 'MERCADOPAGO' ? 'Mercado Pago' : 'Asaas'}
+              </h2>
               {!loadingAsaas && (
                 <button onClick={fetchAsaas} style={{ background: 'none', border: '1px solid var(--border)', color: 'var(--muted)', borderRadius: 6, padding: '4px 10px', fontSize: 12, cursor: 'pointer' }}>
                   Atualizar
@@ -509,19 +605,19 @@ export default function OficinaDetailPage() {
             ) : (
               <>
                 <InfoRow label="Customer ID" value={
-                  asaas?.asaas_customer_id
-                    ? <span style={{ fontFamily: "'JetBrains Mono', monospace", fontSize: 12 }}>{asaas.asaas_customer_id}</span>
+                  (asaas?.customer_id ?? asaas?.asaas_customer_id)
+                    ? <span style={{ fontFamily: "'JetBrains Mono', monospace", fontSize: 12 }}>{asaas?.customer_id ?? asaas?.asaas_customer_id}</span>
                     : <span style={{ color: 'var(--muted)' }}>Não vinculado</span>
                 } />
                 <InfoRow label="Subscription ID (legado)" value={
-                  asaas?.asaas_subscription_id
-                    ? <span style={{ fontFamily: "'JetBrains Mono', monospace", fontSize: 12 }}>{asaas.asaas_subscription_id}</span>
+                  (asaas?.subscription_id ?? asaas?.asaas_subscription_id)
+                    ? <span style={{ fontFamily: "'JetBrains Mono', monospace", fontSize: 12 }}>{asaas?.subscription_id ?? asaas?.asaas_subscription_id}</span>
                     : <span style={{ color: 'var(--muted)' }}>Não usado (motor de cobrança local)</span>
                 } />
                 {asaas?.subscription && (
                   <>
                     <InfoRow label="Status da assinatura" value={
-                      <span style={{ color: asaas.subscription['status'] === 'ACTIVE' ? 'var(--success)' : 'var(--danger)', fontWeight: 600 }}>
+                      <span style={{ color: asaas.subscription['status'] === 'ACTIVE' || asaas.subscription['status'] === 'authorized' ? 'var(--success)' : 'var(--danger)', fontWeight: 600 }}>
                         {String(asaas.subscription['status'] ?? '—')}
                       </span>
                     } />
@@ -534,7 +630,13 @@ export default function OficinaDetailPage() {
                   </>
                 )}
                 {asaas?.customer && (
-                  <InfoRow label="E-mail Asaas" value={String(asaas.customer['email'] ?? '—')} />
+                  <InfoRow label="E-mail no gateway" value={String(asaas.customer['email'] ?? '—')} />
+                )}
+                {!loadingAsaas && !(asaas?.customer_id ?? asaas?.asaas_customer_id) && (
+                  <button onClick={handleCriarCustomer} disabled={creatingCustomer}
+                    style={{ marginTop: 14, width: '100%', padding: '9px', background: creatingCustomer ? 'var(--border)' : 'var(--accent)', color: creatingCustomer ? 'var(--muted)' : '#000', border: 'none', borderRadius: 8, fontWeight: 700, fontSize: 13, fontFamily: "'Barlow Condensed', sans-serif", cursor: creatingCustomer ? 'not-allowed' : 'pointer' }}>
+                    {creatingCustomer ? 'Criando…' : `Criar cliente no ${oficina?.gateway === 'MERCADOPAGO' ? 'Mercado Pago' : 'Asaas'}`}
+                  </button>
                 )}
               </>
             )}
@@ -614,14 +716,25 @@ export default function OficinaDetailPage() {
                 style={{ width: '100%', background: 'var(--bg)', border: '1px solid var(--border)', borderRadius: 8, color: 'var(--text)', fontSize: 14, padding: '9px 12px', outline: 'none' }} />
             </div>
           </div>
-          <button onClick={salvarCobranca} disabled={savingCobranca}
-            style={{ marginTop: 16, padding: '8px 18px', background: savingCobranca ? 'var(--border)' : 'var(--accent)', color: savingCobranca ? 'var(--muted)' : '#000', border: 'none', borderRadius: 8, fontWeight: 700, fontSize: 13, fontFamily: "'Barlow Condensed', sans-serif", cursor: savingCobranca ? 'not-allowed' : 'pointer' }}>
-            {savingCobranca ? 'Salvando…' : 'Salvar Cobrança'}
-          </button>
+          <div style={{ display: 'flex', gap: 8, marginTop: 16 }}>
+            <button onClick={salvarCobranca} disabled={savingCobranca}
+              style={{ padding: '8px 18px', background: savingCobranca ? 'var(--border)' : 'var(--accent)', color: savingCobranca ? 'var(--muted)' : '#000', border: 'none', borderRadius: 8, fontWeight: 700, fontSize: 13, fontFamily: "'Barlow Condensed', sans-serif", cursor: savingCobranca ? 'not-allowed' : 'pointer' }}>
+              {savingCobranca ? 'Salvando…' : 'Salvar Cobrança'}
+            </button>
+            <button
+              onClick={() => askConfirm(
+                `Gerar agora a cobrança de ${oficina?.ciclo_cobranca === 'ANUAL' ? 'anuidade' : 'mensalidade'} do ciclo atual${oficina?.proximo_vencimento ? ` (vencimento ${formatarDataUTC(oficina.proximo_vencimento)})` : ''}? Se já existir uma cobrança de assinatura gerada para este ciclo, a geração automática mensal/anual não criará outra até o próximo ciclo. Cobranças avulsas não são afetadas.`,
+                handleGerarCicloManual,
+              )}
+              disabled={gerandoCiclo}
+              style={{ padding: '8px 18px', background: 'none', border: '1px solid var(--accent)', color: 'var(--accent)', borderRadius: 8, fontWeight: 700, fontSize: 13, fontFamily: "'Barlow Condensed', sans-serif", cursor: gerandoCiclo ? 'not-allowed' : 'pointer', opacity: gerandoCiclo ? 0.6 : 1 }}>
+              {gerandoCiclo ? 'Gerando…' : 'Gerar Cobrança do Ciclo Agora'}
+            </button>
+          </div>
         </div>
 
         {/* ── Últimos Pagamentos Asaas ── */}
-        {!loadingAsaas && asaas && !asaas.error && asaas.ultimos_pagamentos.length > 0 && (
+        {oficina?.gateway !== 'MERCADOPAGO' && !loadingAsaas && asaas && !asaas.error && asaas.ultimos_pagamentos.length > 0 && (
           <div style={{ background: 'var(--card)', border: '1px solid var(--border)', borderRadius: 10, padding: 20, marginTop: 20 }}>
             <h2 className="font-display" style={{ fontSize: 16, fontWeight: 700, color: 'var(--text)', margin: '0 0 14px' }}>
               Últimos Pagamentos no Asaas
@@ -680,11 +793,13 @@ export default function OficinaDetailPage() {
               Cobranças Locais
             </h2>
             <div style={{ display: 'flex', gap: 8 }}>
-              <button onClick={handleSincronizar} disabled={!!actionLoading}
-                style={{ padding: '7px 14px', background: 'none', border: '1px solid var(--border)', color: 'var(--muted)', borderRadius: 8, fontSize: 13, cursor: 'pointer', fontWeight: 600 }}>
-                {actionLoading === 'sync' ? '…' : '⟳ Sincronizar Asaas'}
-              </button>
-              <button onClick={() => setGerarModal(true)}
+              {oficina?.gateway !== 'MERCADOPAGO' && (
+                <button onClick={handleSincronizar} disabled={!!actionLoading}
+                  style={{ padding: '7px 14px', background: 'none', border: '1px solid var(--border)', color: 'var(--muted)', borderRadius: 8, fontSize: 13, cursor: 'pointer', fontWeight: 600 }}>
+                  {actionLoading === 'sync' ? '…' : '⟳ Sincronizar Asaas'}
+                </button>
+              )}
+              <button onClick={() => { setGerarModal(true); setGerarError(null) }}
                 style={{ padding: '7px 14px', background: 'var(--accent)', color: '#000', border: 'none', borderRadius: 8, fontSize: 13, fontWeight: 700, cursor: 'pointer', fontFamily: "'Barlow Condensed', sans-serif" }}>
                 + Cobrança Avulsa
               </button>

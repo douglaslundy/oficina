@@ -17,6 +17,7 @@ interface Oficina {
   admin_nome?: string | null
   admin_email: string
   admin_cpf?: string | null
+  gateway?: 'ASAAS' | 'MERCADOPAGO'
 }
 
 interface EditOficinaModalProps {
@@ -64,6 +65,7 @@ export function EditOficinaModal({ oficina, planos, onClose, onSuccess }: EditOf
   const [adminNome, setAdminNome] = useState(oficina.admin_nome ?? '')
   const [adminEmail, setAdminEmail] = useState(oficina.admin_email)
   const [adminSenha, setAdminSenha] = useState('')
+  const [gateway, setGateway] = useState<'ASAAS' | 'MERCADOPAGO'>(oficina.gateway ?? 'ASAAS')
   const [submitting, setSubmitting] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
@@ -86,6 +88,7 @@ export function EditOficinaModal({ oficina, planos, onClose, onSuccess }: EditOf
     const payload: Record<string, string> = {
       nome: nome.trim(),
       admin_email: adminEmail.trim(),
+      gateway,
     }
     if (planoId) payload.plano_id = planoId
     if (adminNome.trim()) payload.admin_nome = adminNome.trim()
@@ -164,6 +167,18 @@ export function EditOficinaModal({ oficina, planos, onClose, onSuccess }: EditOf
               {planos.map(p => (
                 <option key={p.id} value={p.id}>{p.nome}</option>
               ))}
+            </select>
+          </Field>
+
+          <Field label="Gateway de Pagamento" hint="Ao trocar, use o botão &quot;Criar cliente no gateway&quot; na tela da oficina para vincular o customer no novo gateway.">
+            <select
+              style={{ ...inputStyle, appearance: 'none' }}
+              value={gateway}
+              onChange={e => setGateway(e.target.value as 'ASAAS' | 'MERCADOPAGO')}
+              disabled={submitting}
+            >
+              <option value="ASAAS">Asaas</option>
+              <option value="MERCADOPAGO">Mercado Pago</option>
             </select>
           </Field>
 

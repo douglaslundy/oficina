@@ -42,6 +42,13 @@ class MercadoPagoService
         return $response->json();
     }
 
+    public function buscarCustomer(string $customerId): array
+    {
+        $response = $this->http()->get("/v1/customers/{$customerId}");
+        $this->throwIfFailed($response, 'buscar customer');
+        return $response->json();
+    }
+
     /**
      * Cria uma assinatura (preapproval) recorrente mensal.
      */

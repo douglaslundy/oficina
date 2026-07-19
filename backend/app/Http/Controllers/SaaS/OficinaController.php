@@ -11,6 +11,7 @@ use App\Models\Usuario;
 use App\Services\AsaasService;
 use App\Services\AssinaturaService;
 use App\Services\EntitlementService;
+use App\Services\CobrancaRecorrenteService;
 use App\Services\MercadoPagoService;
 use App\Services\TenantProvisionService;
 use App\Models\SaasConfig;
@@ -27,6 +28,7 @@ class OficinaController extends Controller
         private MercadoPagoService $mercadoPago,
         private EntitlementService $ent,
         private AssinaturaService $assinatura,
+        private CobrancaRecorrenteService $cobrancaRecorrente,
     ) {}
 
     /** Composição da mensalidade efetiva (plano + serviços avulsos ativos). */
@@ -124,11 +126,18 @@ class OficinaController extends Controller
         ]);
 
         $oficina = $this->provisionService->provisionar($validated);
+        $oficina->refresh();
 
         $inicioMes = Carbon::now()->startOfMonth();
 
+        $customerId = $oficina->gateway === 'MERCADOPAGO' ? $oficina->mp_customer_id : $oficina->asaas_customer_id;
+        $message = 'Oficina provisionada com sucesso.';
+        if ((float) ($oficina->plano?->preco_mensal ?? 0) > 0 && !$customerId) {
+            $message = "Oficina criada, mas houve falha ao configurar o cliente no gateway de pagamento ({$oficina->gateway}). Use o botão \"Criar cliente no gateway\" na tela da oficina para tentar novamente.";
+        }
+
         return response()->json([
-            'message' => 'Oficina provisionada com sucesso.',
+            'message' => $message,
             'data'    => $this->formatOficina($oficina, $inicioMes),
         ], 201);
     }
@@ -158,11 +167,13 @@ class OficinaController extends Controller
             'proximo_vencimento'         => 'sometimes|date',
             'dias_antecedencia_cobranca' => 'sometimes|nullable|integer|min:0',
             'dias_suspensao_vencido'     => 'sometimes|nullable|integer|min:0',
+            'gateway'                    => 'sometimes|in:ASAAS,MERCADOPAGO',
         ]);
 
         $oficinaFields = array_intersect_key($validated, array_flip([
             'nome', 'plano_id', 'status', 'admin_email',
             'proximo_vencimento', 'dias_antecedencia_cobranca', 'dias_suspensao_vencido',
+            'gateway',
         ]));
         if (!empty($oficinaFields)) {
             $oficina->update($oficinaFields);
@@ -268,32 +279,119 @@ class OficinaController extends Controller
     public function asaasStatus(string $id): JsonResponse
     {
         $oficina = Oficina::findOrFail($id);
+        $gateway = $oficina->gateway ?: (SaasConfig::get()->gateway_preferido ?? 'ASAAS');
 
         $subscription = null;
         $customer     = null;
         $pagamentos   = [];
+        $customerId     = $gateway === 'MERCADOPAGO' ? $oficina->mp_customer_id : $oficina->asaas_customer_id;
+        $subscriptionId = $gateway === 'MERCADOPAGO' ? $oficina->mp_subscription_id : $oficina->asaas_subscription_id;
 
         try {
-            if ($oficina->asaas_customer_id) {
-                $customer = $this->asaas->buscarCustomer($oficina->asaas_customer_id);
-            }
-            if ($oficina->asaas_subscription_id) {
-                $subscription = $this->asaas->buscarSubscription($oficina->asaas_subscription_id);
-                $pagamentos   = $this->asaas->buscarPagamentos($oficina->asaas_subscription_id, 5);
+            if ($gateway === 'MERCADOPAGO') {
+                if ($customerId) {
+                    $customer = $this->mercadoPago->buscarCustomer($customerId);
+                }
+                if ($subscriptionId) {
+                    $subscription = $this->mercadoPago->buscarSubscription($subscriptionId);
+                }
+                // Não há endpoint de "pagamentos por subscription" no MP equivalente ao
+                // Asaas — o histórico real fica na seção "Cobranças Locais" da tela, que
+                // é alimentada pela nossa própria tabela `cobrancas` independente do gateway.
+            } else {
+                if ($customerId) {
+                    $customer = $this->asaas->buscarCustomer($customerId);
+                }
+                if ($subscriptionId) {
+                    $subscription = $this->asaas->buscarSubscription($subscriptionId);
+                    $pagamentos   = $this->asaas->buscarPagamentos($subscriptionId, 5);
+                }
             }
         } catch (\Throwable $e) {
             return response()->json([
                 'error'   => true,
-                'message' => 'Falha ao consultar Asaas: ' . $e->getMessage(),
+                'message' => "Falha ao consultar {$gateway}: " . $e->getMessage(),
             ], 502);
         }
 
         return response()->json([
+            'gateway'                => $gateway,
+            'customer_id'            => $customerId,
+            'subscription_id'        => $subscriptionId,
             'asaas_customer_id'      => $oficina->asaas_customer_id,
             'asaas_subscription_id'  => $oficina->asaas_subscription_id,
             'customer'               => $customer,
             'subscription'           => $subscription,
             'ultimos_pagamentos'     => $pagamentos,
+        ]);
+    }
+
+    /**
+     * Recovery action: (re)cria o customer da oficina no gateway configurado.
+     * Usado quando o provisionamento inicial falhou silenciosamente e a
+     * oficina ficou sem customer_id em nenhum gateway.
+     */
+    public function criarCustomerGateway(string $id): JsonResponse
+    {
+        $oficina = Oficina::findOrFail($id);
+        $gateway = $oficina->gateway ?: (SaasConfig::get()->gateway_preferido ?? 'ASAAS');
+        $nomeGateway = $gateway === 'MERCADOPAGO' ? 'Mercado Pago' : 'Asaas';
+
+        $adminUser = Usuario::withoutGlobalScopes()
+            ->where('oficina_id', $id)
+            ->where('role', 'ADMIN')
+            ->first();
+        $nome = $adminUser?->nome ?? $oficina->nome;
+
+        if (!$oficina->admin_email || !$oficina->cnpj) {
+            return response()->json(['message' => 'Oficina sem e-mail do admin ou CNPJ cadastrado — não é possível criar o customer.'], 422);
+        }
+
+        try {
+            if ($gateway === 'MERCADOPAGO') {
+                $customer = $this->mercadoPago->criarCustomer($nome, $oficina->admin_email, $oficina->cnpj);
+                $oficina->update(['gateway' => 'MERCADOPAGO', 'mp_customer_id' => $customer['id']]);
+            } else {
+                $customer = $this->asaas->criarCustomer($nome, $oficina->cnpj, $oficina->admin_email);
+                $oficina->update(['gateway' => 'ASAAS', 'asaas_customer_id' => $customer['id']]);
+            }
+        } catch (\Throwable $e) {
+            return response()->json(['message' => "Falha ao criar cliente no {$nomeGateway}: " . $e->getMessage()], 502);
+        }
+
+        return response()->json([
+            'message' => "Cliente criado com sucesso no {$nomeGateway}.",
+            'data'    => [
+                'gateway'                => $oficina->gateway,
+                'asaas_customer_id'      => $oficina->asaas_customer_id,
+                'mp_customer_id'         => $oficina->mp_customer_id,
+            ],
+        ]);
+    }
+
+    /**
+     * Gera manualmente a cobrança de ASSINATURA do ciclo atual (mensal ou
+     * anual), sem esperar a janela de antecedência do job automático. Não se
+     * aplica a cobranças AVULSA (endpoint separado, sem essa restrição).
+     */
+    public function gerarCobrancaCiclo(string $id): JsonResponse
+    {
+        $oficina = Oficina::with('plano')->findOrFail($id);
+
+        $resultado = $this->cobrancaRecorrente->gerarManual($oficina);
+
+        if (!$resultado['ok']) {
+            return response()->json(['message' => $resultado['message']], 422);
+        }
+
+        $oficina->refresh();
+
+        return response()->json([
+            'message' => $resultado['message'],
+            'data'    => [
+                'ciclo_cobranca'     => $oficina->ciclo_cobranca,
+                'proximo_vencimento' => $oficina->proximo_vencimento?->toDateString(),
+            ],
         ]);
     }
 
@@ -487,6 +585,11 @@ class OficinaController extends Controller
             'proximo_vencimento'         => $oficina->proximo_vencimento?->toDateString(),
             'dias_antecedencia_cobranca' => $oficina->dias_antecedencia_cobranca,
             'dias_suspensao_vencido'     => $oficina->dias_suspensao_vencido,
+            'gateway'                => $oficina->gateway ?: (SaasConfig::get()->gateway_preferido ?? 'ASAAS'),
+            'asaas_customer_id'      => $oficina->asaas_customer_id,
+            'asaas_subscription_id'  => $oficina->asaas_subscription_id,
+            'mp_customer_id'         => $oficina->mp_customer_id,
+            'mp_subscription_id'     => $oficina->mp_subscription_id,
         ];
     }
 

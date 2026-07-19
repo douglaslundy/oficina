@@ -84,6 +84,8 @@ Route::prefix('saas')->group(function () {
         Route::post('oficinas/{id}/cancelar-assinatura',       [SaaSOficinaController::class, 'cancelarAssinatura']);
         Route::get('oficinas/{id}/mensalidade',                [SaaSOficinaController::class, 'mensalidade']);
         Route::post('oficinas/{id}/sincronizar-assinatura',    [SaaSOficinaController::class, 'sincronizarAssinatura']);
+        Route::post('oficinas/{id}/criar-customer-gateway',    [SaaSOficinaController::class, 'criarCustomerGateway']);
+        Route::post('oficinas/{id}/gerar-cobranca-ciclo',      [SaaSOficinaController::class, 'gerarCobrancaCiclo']);
 
         // Perfil do super admin
         Route::put('auth/profile',  [SaaSAuthController::class, 'updateProfile']);
