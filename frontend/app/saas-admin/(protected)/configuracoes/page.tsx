@@ -29,6 +29,12 @@ interface SaasConfigData {
   spedy_master_key_producao: string | null
   focus_master_token_homologacao: string | null
   focus_master_token_producao: string | null
+  cobranca_dias_antecedencia_padrao: number
+  cobranca_dias_suspensao_padrao: number
+  desconto_anual_pct: number
+  alerta_cobranca_vezes_dia: number
+  alerta_cobranca_dias_exibicao: number
+  voto_confianca_dias: number
 }
 
 type ToastType = 'success' | 'danger'
@@ -199,6 +205,15 @@ export default function SaasConfigPage() {
   const [focusProducao, setFocusProducao] = useState('')
   const [savingFocus, setSavingFocus] = useState(false)
 
+  // Cobrança
+  const [diasAntecedencia, setDiasAntecedencia] = useState('5')
+  const [diasSuspensao, setDiasSuspensao] = useState('10')
+  const [descontoAnual, setDescontoAnual] = useState('0')
+  const [savingCobranca, setSavingCobranca] = useState(false)
+  const [alertaVezesDia, setAlertaVezesDia] = useState('1')
+  const [alertaDiasExibicao, setAlertaDiasExibicao] = useState('30')
+  const [votoConfiancaDias, setVotoConfiancaDias] = useState('3')
+
   const showToast = useCallback((msg: string, type: ToastType) => setToast({ msg, type }), [])
 
   useEffect(() => {
@@ -228,6 +243,12 @@ export default function SaasConfigPage() {
         setSpedyProducao(d.spedy_master_key_producao ?? '')
         setFocusHomolog(d.focus_master_token_homologacao ?? '')
         setFocusProducao(d.focus_master_token_producao ?? '')
+        setDiasAntecedencia(String(d.cobranca_dias_antecedencia_padrao ?? 5))
+        setDiasSuspensao(String(d.cobranca_dias_suspensao_padrao ?? 10))
+        setDescontoAnual(String(d.desconto_anual_pct ?? 0))
+        setAlertaVezesDia(String(d.alerta_cobranca_vezes_dia ?? 1))
+        setAlertaDiasExibicao(String(d.alerta_cobranca_dias_exibicao ?? 30))
+        setVotoConfiancaDias(String(d.voto_confianca_dias ?? 3))
       })
       .catch(() => showToast('Erro ao carregar configurações.', 'danger'))
       .finally(() => setLoading(false))
@@ -380,6 +401,26 @@ export default function SaasConfigPage() {
       showToast(msg ?? 'Erro ao salvar credenciais Focus.', 'danger')
     } finally {
       setSavingFocus(false)
+    }
+  }
+
+  async function salvarCobranca() {
+    setSavingCobranca(true)
+    try {
+      await saasApi.put('/saas/config/cobranca', {
+        cobranca_dias_antecedencia_padrao: parseInt(diasAntecedencia, 10) || 5,
+        cobranca_dias_suspensao_padrao: parseInt(diasSuspensao, 10) || 10,
+        desconto_anual_pct: parseFloat(descontoAnual) || 0,
+        alerta_cobranca_vezes_dia: parseInt(alertaVezesDia, 10) || 1,
+        alerta_cobranca_dias_exibicao: parseInt(alertaDiasExibicao, 10) || 30,
+        voto_confianca_dias: parseInt(votoConfiancaDias, 10) || 3,
+      })
+      showToast('Configurações de cobrança salvas.', 'success')
+    } catch (e: unknown) {
+      const msg = (e as { response?: { data?: { message?: string } } })?.response?.data?.message
+      showToast(msg ?? 'Erro ao salvar configurações de cobrança.', 'danger')
+    } finally {
+      setSavingCobranca(false)
     }
   }
 
@@ -644,6 +685,60 @@ export default function SaasConfigPage() {
         <SecretInput label="Token Homologação" value={focusHomolog} onChange={setFocusHomolog} />
         <SecretInput label="Token Produção" value={focusProducao} onChange={setFocusProducao} />
         <SaveButton loading={savingFocus} onClick={salvarFocus} label="Salvar Credenciais Focus NFe" />
+      </SectionCard>
+
+      {/* ── Seção 5.5 — Cobrança Recorrente ─────────────────────────────── */}
+      <SectionCard
+        title="Cobrança Recorrente"
+        subtitle="Regras padrão de geração de cobrança, suspensão por atraso e desconto anual — cada oficina pode sobrescrever antecedência e suspensão individualmente"
+      >
+        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
+          <div style={{ marginBottom: 16 }}>
+            <label style={{ display: 'block', fontSize: 12, fontWeight: 600, color: 'var(--muted)', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: 6 }}>
+              Dias de antecedência p/ gerar cobrança
+            </label>
+            <input value={diasAntecedencia} onChange={e => setDiasAntecedencia(e.target.value)} type="number" min={1} max={60}
+              style={{ width: '100%', padding: '9px 12px', borderRadius: 7, border: '1px solid var(--border)', background: 'var(--card)', color: 'var(--text)', fontSize: 14, outline: 'none', boxSizing: 'border-box' }} />
+          </div>
+          <div style={{ marginBottom: 16 }}>
+            <label style={{ display: 'block', fontSize: 12, fontWeight: 600, color: 'var(--muted)', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: 6 }}>
+              Dias para suspensão após vencimento
+            </label>
+            <input value={diasSuspensao} onChange={e => setDiasSuspensao(e.target.value)} type="number" min={1} max={90}
+              style={{ width: '100%', padding: '9px 12px', borderRadius: 7, border: '1px solid var(--border)', background: 'var(--card)', color: 'var(--text)', fontSize: 14, outline: 'none', boxSizing: 'border-box' }} />
+          </div>
+        </div>
+        <div style={{ marginBottom: 16, maxWidth: 260 }}>
+          <label style={{ display: 'block', fontSize: 12, fontWeight: 600, color: 'var(--muted)', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: 6 }}>
+            Desconto pagamento anual (%)
+          </label>
+          <input value={descontoAnual} onChange={e => setDescontoAnual(e.target.value)} type="number" min={0} max={90} step="0.5"
+            style={{ width: '100%', padding: '9px 12px', borderRadius: 7, border: '1px solid var(--border)', background: 'var(--card)', color: 'var(--text)', fontSize: 14, outline: 'none', boxSizing: 'border-box' }} />
+        </div>
+        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
+          <div style={{ marginBottom: 16 }}>
+            <label style={{ display: 'block', fontSize: 12, fontWeight: 600, color: 'var(--muted)', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: 6 }}>
+              Alerta de cobrança: vezes/dia
+            </label>
+            <input value={alertaVezesDia} onChange={e => setAlertaVezesDia(e.target.value)} type="number" min={1} max={10}
+              style={{ width: '100%', padding: '9px 12px', borderRadius: 7, border: '1px solid var(--border)', background: 'var(--card)', color: 'var(--text)', fontSize: 14, outline: 'none', boxSizing: 'border-box' }} />
+          </div>
+          <div style={{ marginBottom: 16 }}>
+            <label style={{ display: 'block', fontSize: 12, fontWeight: 600, color: 'var(--muted)', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: 6 }}>
+              Dias de exibição (antes do vencimento)
+            </label>
+            <input value={alertaDiasExibicao} onChange={e => setAlertaDiasExibicao(e.target.value)} type="number" min={1} max={90}
+              style={{ width: '100%', padding: '9px 12px', borderRadius: 7, border: '1px solid var(--border)', background: 'var(--card)', color: 'var(--text)', fontSize: 14, outline: 'none', boxSizing: 'border-box' }} />
+          </div>
+        </div>
+        <div style={{ marginBottom: 16, maxWidth: 260 }}>
+          <label style={{ display: 'block', fontSize: 12, fontWeight: 600, color: 'var(--muted)', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: 6 }}>
+            Voto de confiança (dias de liberação)
+          </label>
+          <input value={votoConfiancaDias} onChange={e => setVotoConfiancaDias(e.target.value)} type="number" min={1} max={30}
+            style={{ width: '100%', padding: '9px 12px', borderRadius: 7, border: '1px solid var(--border)', background: 'var(--card)', color: 'var(--text)', fontSize: 14, outline: 'none', boxSizing: 'border-box' }} />
+        </div>
+        <SaveButton loading={savingCobranca} onClick={salvarCobranca} label="Salvar Cobrança" />
       </SectionCard>
 
       {/* ── Seção 6 — Evolution API (WhatsApp) ──────────────────────────── */}

@@ -31,11 +31,24 @@ class Oficina extends Model
         'admin_cpf',
         'provedor_fiscal',
         'emissao_fiscal_modo',
+        'ciclo_cobranca',
+        'proximo_vencimento',
+        'dias_antecedencia_cobranca',
+        'dias_suspensao_vencido',
+        'alerta_cobranca_exibicoes_hoje',
+        'alerta_cobranca_ultima_exibicao_em',
+        'voto_confianca_ate',
     ];
 
     protected $casts = [
-        'criado_em'     => 'datetime',
-        'atualizado_em' => 'datetime',
+        'criado_em'                          => 'datetime',
+        'atualizado_em'                      => 'datetime',
+        'proximo_vencimento'                 => 'date',
+        'dias_antecedencia_cobranca'         => 'integer',
+        'dias_suspensao_vencido'             => 'integer',
+        'alerta_cobranca_exibicoes_hoje'     => 'integer',
+        'alerta_cobranca_ultima_exibicao_em' => 'date',
+        'voto_confianca_ate'                 => 'date',
     ];
 
     protected static function boot(): void
@@ -56,5 +69,16 @@ class Oficina extends Model
     public function cobrancas(): HasMany
     {
         return $this->hasMany(Cobranca::class);
+    }
+
+    public function calcularProximoVencimento(): \Illuminate\Support\Carbon
+    {
+        $meses = $this->ciclo_cobranca === 'ANUAL' ? 12 : 1;
+        return $this->proximo_vencimento->copy()->addMonths($meses);
+    }
+
+    public function avancarVencimento(): void
+    {
+        $this->update(['proximo_vencimento' => $this->calcularProximoVencimento()]);
     }
 }

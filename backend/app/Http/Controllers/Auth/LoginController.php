@@ -35,10 +35,12 @@ class LoginController extends Controller
             return response()->json(['message' => 'Usuário inativo. Contate o administrador.'], 403);
         }
 
-        // Oficina suspensa/cancelada/inadimplente — bloqueia o acesso com mensagem clara.
+        // Oficina suspensa/cancelada — bloqueia o acesso com mensagem clara.
+        // INADIMPLENTE não bloqueia login: a oficina segue funcionando durante a
+        // carência, só recebe o alerta de cobrança (ver InitializeTenancyByHeader).
         if ($usuario->oficina_id) {
             $oficina = \App\Models\Oficina::find($usuario->oficina_id);
-            if ($oficina && in_array($oficina->status, ['SUSPENSA', 'CANCELADA', 'INADIMPLENTE'], true)) {
+            if ($oficina && in_array($oficina->status, ['SUSPENSA', 'CANCELADA'], true)) {
                 return response()->json(['message' => 'Serviços suspensos, contate seu administrador.'], 403);
             }
         }

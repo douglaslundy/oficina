@@ -10,3 +10,4 @@ Artisan::command('inspire', function () {
 
 Schedule::command('oficina:recalcular-status-clientes')->dailyAt('02:00');
 Schedule::command('alertas:verificar')->dailyAt('07:00');
+Schedule::command('cobrancas:gerar')->dailyAt('06:00');

@@ -9,6 +9,7 @@ use App\Models\Oficina;
 use App\Models\OrdemServico;
 use App\Models\Usuario;
 use App\Services\AsaasService;
+use App\Services\AssinaturaService;
 use App\Services\EntitlementService;
 use App\Services\MercadoPagoService;
 use App\Services\TenantProvisionService;
@@ -25,6 +26,7 @@ class OficinaController extends Controller
         private AsaasService $asaas,
         private MercadoPagoService $mercadoPago,
         private EntitlementService $ent,
+        private AssinaturaService $assinatura,
     ) {}
 
     /** Composição da mensalidade efetiva (plano + serviços avulsos ativos). */
@@ -71,6 +73,19 @@ class OficinaController extends Controller
         }
 
         return response()->json(['message' => 'Assinatura atualizada para R$ ' . number_format($total, 2, ',', '.') . '.']);
+    }
+
+    public function mudarCiclo(Request $request, string $id): JsonResponse
+    {
+        $validated = $request->validate(['ciclo' => 'required|in:MENSAL,ANUAL']);
+        $oficina   = Oficina::findOrFail($id);
+
+        $this->assinatura->mudarCiclo($oficina, $validated['ciclo']);
+
+        return response()->json(['message' => 'Ciclo de cobrança atualizado.', 'data' => [
+            'ciclo_cobranca'     => $oficina->ciclo_cobranca,
+            'proximo_vencimento' => $oficina->proximo_vencimento->toDateString(),
+        ]]);
     }
 
     public function index(Request $request): JsonResponse
@@ -140,9 +155,15 @@ class OficinaController extends Controller
             'admin_nome'   => 'sometimes|string|max:120',
             'admin_email'  => 'sometimes|email|max:120',
             'admin_senha'  => 'sometimes|nullable|string|min:8',
+            'proximo_vencimento'         => 'sometimes|date',
+            'dias_antecedencia_cobranca' => 'sometimes|nullable|integer|min:0',
+            'dias_suspensao_vencido'     => 'sometimes|nullable|integer|min:0',
         ]);
 
-        $oficinaFields = array_intersect_key($validated, array_flip(['nome', 'plano_id', 'status', 'admin_email']));
+        $oficinaFields = array_intersect_key($validated, array_flip([
+            'nome', 'plano_id', 'status', 'admin_email',
+            'proximo_vencimento', 'dias_antecedencia_cobranca', 'dias_suspensao_vencido',
+        ]));
         if (!empty($oficinaFields)) {
             $oficina->update($oficinaFields);
         }
@@ -212,11 +233,35 @@ class OficinaController extends Controller
     public function reativar(string $id): JsonResponse
     {
         $oficina = Oficina::findOrFail($id);
-        $oficina->update(['status' => 'ATIVA']);
+        $oficina->update(['status' => 'ATIVA', 'voto_confianca_ate' => null]);
 
         return response()->json([
             'message' => 'Oficina reativada com sucesso.',
             'data'    => ['id' => $oficina->id, 'status' => 'ATIVA'],
+        ]);
+    }
+
+    public function votoConfianca(string $id): JsonResponse
+    {
+        $oficina = Oficina::findOrFail($id);
+        $dias    = SaasConfig::get()->voto_confianca_dias;
+
+        $oficina->update([
+            'status'             => 'ATIVA',
+            'voto_confianca_ate' => now()->addDays($dias)->toDateString(),
+        ]);
+
+        $cobranca = Cobranca::where('oficina_id', $oficina->id)
+            ->where('tipo', 'ASSINATURA')
+            ->where('status', 'VENCIDA')
+            ->orderByDesc('vencimento')
+            ->first();
+
+        $cobranca?->update(['voto_confianca_usado_em' => now()]);
+
+        return response()->json([
+            'message' => "Voto de confiança concedido. Acesso liberado por {$dias} dias.",
+            'data'    => ['id' => $oficina->id, 'status' => 'ATIVA', 'voto_confianca_ate' => $oficina->voto_confianca_ate->toDateString()],
         ]);
     }
 
@@ -303,9 +348,12 @@ class OficinaController extends Controller
     public function gerarCobrancaAvulsa(Request $request, string $id): JsonResponse
     {
         $oficina = Oficina::findOrFail($id);
+        $gateway = $oficina->gateway ?: (SaasConfig::get()->gateway_preferido ?? 'ASAAS');
+        $nomeGateway = $gateway === 'MERCADOPAGO' ? 'Mercado Pago' : 'Asaas';
+        $customerId = $gateway === 'MERCADOPAGO' ? $oficina->mp_customer_id : $oficina->asaas_customer_id;
 
-        if (!$oficina->asaas_customer_id) {
-            return response()->json(['message' => 'Oficina não possui customer no Asaas.'], 422);
+        if (!$customerId) {
+            return response()->json(['message' => "Oficina não possui customer no {$nomeGateway}."], 422);
         }
 
         $validated = $request->validate([
@@ -313,30 +361,42 @@ class OficinaController extends Controller
             'vencimento' => 'required|date|after:yesterday',
         ]);
 
+        $cobrancaId = (string) \Illuminate\Support\Str::uuid();
+
         try {
-            $payment = $this->asaas->criarCobrancaAvulsa(
-                $oficina->asaas_customer_id,
-                (float) $validated['valor'],
-                $validated['vencimento'],
-            );
+            $payment = $gateway === 'MERCADOPAGO'
+                ? $this->mercadoPago->criarCobrancaAvulsa($customerId, (float) $validated['valor'], $validated['vencimento'], $cobrancaId)
+                : $this->asaas->criarCobrancaAvulsa($customerId, (float) $validated['valor'], $validated['vencimento'], $cobrancaId);
         } catch (\Throwable $e) {
-            return response()->json(['message' => 'Falha ao criar cobrança no Asaas: ' . $e->getMessage()], 502);
+            return response()->json(['message' => "Falha ao criar cobrança no {$nomeGateway}: " . $e->getMessage()], 502);
         }
 
+        $linkPagamento = $gateway === 'MERCADOPAGO'
+            ? ($payment['init_point'] ?? null)
+            : ($payment['invoiceUrl'] ?? null);
+
         $cobranca = Cobranca::create([
+            'id'               => $cobrancaId,
             'oficina_id'       => $oficina->id,
             'mes_referencia'   => Carbon::parse($validated['vencimento'])->startOfMonth(),
             'valor'            => $validated['valor'],
+            'tipo'             => 'AVULSA',
             'status'           => 'PENDENTE',
-            'asaas_payment_id' => $payment['id'],
+            'gateway'          => $gateway,
+            'asaas_payment_id' => $gateway === 'ASAAS' ? ($payment['id'] ?? null) : null,
+            'mp_payment_id'    => $gateway === 'MERCADOPAGO' ? ($payment['id'] ?? null) : null,
             'vencimento'       => $validated['vencimento'],
+            'link_pagamento'   => $linkPagamento,
         ]);
 
         return response()->json([
-            'message'  => 'Cobrança avulsa criada com sucesso.',
+            'message'  => 'Cobrança avulsa criada com sucesso.' . ($linkPagamento ? " Link de pagamento: {$linkPagamento}" : ''),
             'cobranca' => [
                 'id'               => $cobranca->id,
+                'gateway'          => $cobranca->gateway,
                 'asaas_payment_id' => $cobranca->asaas_payment_id,
+                'mp_payment_id'    => $cobranca->mp_payment_id,
+                'link_pagamento'   => $linkPagamento,
                 'valor'            => number_format($cobranca->valor, 2, '.', ''),
                 'vencimento'       => $cobranca->vencimento?->toDateString(),
                 'status'           => $cobranca->status,
@@ -347,21 +407,28 @@ class OficinaController extends Controller
     public function cancelarAssinatura(string $id): JsonResponse
     {
         $oficina = Oficina::findOrFail($id);
+        $gateway = $oficina->gateway ?: (SaasConfig::get()->gateway_preferido ?? 'ASAAS');
+        $nomeGateway = $gateway === 'MERCADOPAGO' ? 'Mercado Pago' : 'Asaas';
+        $subscriptionId = $gateway === 'MERCADOPAGO' ? $oficina->mp_subscription_id : $oficina->asaas_subscription_id;
 
-        if (!$oficina->asaas_subscription_id) {
-            return response()->json(['message' => 'Oficina não possui assinatura no Asaas.'], 422);
+        if (!$subscriptionId) {
+            return response()->json(['message' => "Oficina não possui assinatura no {$nomeGateway}."], 422);
         }
 
         try {
-            $this->asaas->cancelarSubscription($oficina->asaas_subscription_id);
+            if ($gateway === 'MERCADOPAGO') {
+                $this->mercadoPago->cancelarSubscription($subscriptionId);
+            } else {
+                $this->asaas->cancelarSubscription($subscriptionId);
+            }
         } catch (\Throwable $e) {
-            return response()->json(['message' => 'Falha ao cancelar no Asaas: ' . $e->getMessage()], 502);
+            return response()->json(['message' => "Falha ao cancelar no {$nomeGateway}: " . $e->getMessage()], 502);
         }
 
-        $oficina->update([
-            'status'                 => 'CANCELADA',
-            'asaas_subscription_id'  => null,
-        ]);
+        $oficina->update(array_merge(
+            ['status' => 'CANCELADA'],
+            $gateway === 'MERCADOPAGO' ? ['mp_subscription_id' => null] : ['asaas_subscription_id' => null],
+        ));
 
         return response()->json(['message' => 'Assinatura cancelada e oficina desativada.']);
     }
@@ -416,6 +483,10 @@ class OficinaController extends Controller
             'criado_em'           => $oficina->criado_em?->toIso8601String(),
             'provedor_fiscal'     => $oficina->provedor_fiscal,
             'emissao_fiscal_modo' => $oficina->emissao_fiscal_modo,
+            'ciclo_cobranca'             => $oficina->ciclo_cobranca,
+            'proximo_vencimento'         => $oficina->proximo_vencimento?->toDateString(),
+            'dias_antecedencia_cobranca' => $oficina->dias_antecedencia_cobranca,
+            'dias_suspensao_vencido'     => $oficina->dias_suspensao_vencido,
         ];
     }
 

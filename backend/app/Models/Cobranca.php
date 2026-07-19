@@ -16,6 +16,7 @@ class Cobranca extends Model
     public $timestamps = false;
 
     protected $fillable = [
+        'id',
         'oficina_id',
         'mes_referencia',
         'valor',
@@ -26,15 +27,18 @@ class Cobranca extends Model
         'asaas_payment_id',
         'mp_payment_id',
         'vencimento',
+        'link_pagamento',
+        'voto_confianca_usado_em',
         'pago_em',
     ];
 
     protected $casts = [
-        'valor'          => 'decimal:2',
-        'mes_referencia' => 'date',
-        'vencimento'     => 'date',
-        'pago_em'        => 'datetime',
-        'criado_em'      => 'datetime',
+        'valor'                    => 'decimal:2',
+        'mes_referencia'           => 'date',
+        'vencimento'               => 'date',
+        'pago_em'                  => 'datetime',
+        'voto_confianca_usado_em'  => 'datetime',
+        'criado_em'                => 'datetime',
     ];
 
     protected static function boot(): void

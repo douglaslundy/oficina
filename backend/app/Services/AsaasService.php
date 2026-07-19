@@ -89,16 +89,22 @@ class AsaasService
         return $response->json('data', []);
     }
 
-    public function criarCobrancaAvulsa(string $customerId, float $value, string $dueDate): array
+    public function criarCobrancaAvulsa(string $customerId, float $value, string $dueDate, ?string $externalReference = null): array
     {
+        $payload = [
+            'customer'    => $customerId,
+            'billingType' => 'BOLETO',
+            'value'       => $value,
+            'dueDate'     => $dueDate,
+            'description' => 'Cobrança avulsa — MecânicaPro',
+        ];
+
+        if ($externalReference !== null) {
+            $payload['externalReference'] = $externalReference;
+        }
+
         $response = Http::withHeaders(['access_token' => $this->apiKey])
-            ->post("{$this->baseUrl}/payments", [
-                'customer'    => $customerId,
-                'billingType' => 'BOLETO',
-                'value'       => $value,
-                'dueDate'     => $dueDate,
-                'description' => 'Cobrança avulsa — MecânicaPro',
-            ]);
+            ->post("{$this->baseUrl}/payments", $payload);
 
         $this->throwIfFailed($response, 'criar cobrança avulsa');
         return $response->json();

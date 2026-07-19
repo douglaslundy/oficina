@@ -35,11 +35,23 @@ class SaasConfig extends Model
         'spedy_master_key_producao',
         'focus_master_token_homologacao',
         'focus_master_token_producao',
+        'cobranca_dias_antecedencia_padrao',
+        'cobranca_dias_suspensao_padrao',
+        'desconto_anual_pct',
+        'alerta_cobranca_vezes_dia',
+        'alerta_cobranca_dias_exibicao',
+        'voto_confianca_dias',
     ];
 
     protected $casts = [
-        'smtp_port'  => 'integer',
-        'smtp_ativo' => 'boolean',
+        'smtp_port'                         => 'integer',
+        'smtp_ativo'                        => 'boolean',
+        'cobranca_dias_antecedencia_padrao' => 'integer',
+        'cobranca_dias_suspensao_padrao'    => 'integer',
+        'desconto_anual_pct'                => 'decimal:2',
+        'alerta_cobranca_vezes_dia'         => 'integer',
+        'alerta_cobranca_dias_exibicao'     => 'integer',
+        'voto_confianca_dias'               => 'integer',
     ];
 
     protected $hidden = [

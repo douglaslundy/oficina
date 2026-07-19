@@ -22,6 +22,7 @@ use App\Http\Controllers\ServicoController;
 use App\Http\Controllers\VeiculoController;
 use App\Http\Controllers\AlertaConfigController;
 use App\Http\Controllers\AlertaLogController;
+use App\Http\Controllers\AssinaturaController;
 use App\Http\Controllers\WhatsAppConfigController;
 use App\Http\Controllers\SaaS\AuthController as SaaSAuthController;
 use App\Http\Controllers\SaaS\CobrancaController as SaaSCobrancaController;
@@ -62,6 +63,7 @@ Route::prefix('saas')->group(function () {
         Route::delete('oficinas/{id}',           [SaaSOficinaController::class, 'destroy']);
         Route::post('oficinas/{id}/suspender',   [SaaSOficinaController::class, 'suspender']);
         Route::post('oficinas/{id}/reativar',    [SaaSOficinaController::class, 'reativar']);
+        Route::post('oficinas/{id}/voto-confianca', [SaaSOficinaController::class, 'votoConfianca']);
 
         // Planos
         Route::get('planos',         [SaaSPlanoController::class, 'index']);
@@ -78,6 +80,7 @@ Route::prefix('saas')->group(function () {
         Route::get('oficinas/{id}/asaas',                      [SaaSOficinaController::class, 'asaasStatus']);
         Route::post('oficinas/{id}/sincronizar-cobrancas',     [SaaSOficinaController::class, 'sincronizarCobrancas']);
         Route::post('oficinas/{id}/gerar-cobranca',            [SaaSOficinaController::class, 'gerarCobrancaAvulsa']);
+        Route::post('oficinas/{id}/mudar-ciclo',                [SaaSOficinaController::class, 'mudarCiclo']);
         Route::post('oficinas/{id}/cancelar-assinatura',       [SaaSOficinaController::class, 'cancelarAssinatura']);
         Route::get('oficinas/{id}/mensalidade',                [SaaSOficinaController::class, 'mensalidade']);
         Route::post('oficinas/{id}/sincronizar-assinatura',    [SaaSOficinaController::class, 'sincronizarAssinatura']);
@@ -104,6 +107,7 @@ Route::prefix('saas')->group(function () {
         Route::put('config/gateway',             [SaasConfigController::class, 'updateGateway']);
         Route::put('config/asaas',               [SaasConfigController::class, 'updateAsaas']);
         Route::put('config/mercadopago',         [SaasConfigController::class, 'updateMercadoPago']);
+        Route::put('config/cobranca',            [SaasConfigController::class, 'updateCobranca']);
         Route::put('config/smtp',                [SaasConfigController::class, 'updateSmtp']);
         Route::post('config/smtp/testar',        [SaasConfigController::class, 'testarSmtp']);
 
@@ -166,6 +170,8 @@ Route::middleware(['tenant', 'auth:sanctum'])->group(function () {
     Route::get('dashboard',      [DashboardController::class, 'index']);
     Route::get('plano/limites',  [PlanController::class, 'limites']);
     Route::get('notificacoes/ativas', [\App\Http\Controllers\NotificacaoController::class, 'ativas']);
+    Route::get('assinatura/alerta', [AssinaturaController::class, 'alerta']);
+    Route::get('assinatura/status-bloqueio', [AssinaturaController::class, 'statusBloqueio']);
     // Contratação de serviços avulsos (oficina solicita)
     Route::get('pacotes-disponiveis', [\App\Http\Controllers\SolicitacaoServicoController::class, 'pacotesDisponiveis']);
     Route::get('solicitacoes',        [\App\Http\Controllers\SolicitacaoServicoController::class, 'index']);
@@ -283,6 +289,12 @@ Route::middleware(['tenant', 'auth:sanctum', 'role:ADMIN'])->group(function () {
     Route::get('whatsapp/qrcode',          [WhatsAppConfigController::class, 'qrCode']);
     Route::post('whatsapp/desconectar',    [WhatsAppConfigController::class, 'desconectar']);
     Route::post('whatsapp/enviar-teste',   [WhatsAppConfigController::class, 'enviarTeste']);
+});
+
+// ─── Assinatura — somente ADMIN ──────────────────────────────────────────────
+Route::middleware(['tenant', 'auth:sanctum', 'role:ADMIN'])->group(function () {
+    Route::post('assinatura/mudar-ciclo', [AssinaturaController::class, 'mudarCiclo']);
+    Route::post('assinatura/voto-confianca', [AssinaturaController::class, 'votoConfianca']);
 });
 
 // ─── Alertas WhatsApp — ADMIN e ATENDENTE ────────────────────────────────────

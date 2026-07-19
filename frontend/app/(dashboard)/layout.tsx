@@ -5,6 +5,7 @@ import { Topbar } from '@/components/layout/Topbar'
 import { AlertBanner } from '@/components/layout/AlertBanner'
 import { ToastContainer } from '@/components/ui/Toast'
 import { NotificacaoModal } from '@/components/NotificacaoModal'
+import { AssinaturaAlertaModal } from '@/components/AssinaturaAlertaModal'
 import { useEstoqueAlerts } from '@/hooks/useEstoqueAlerts'
 import { useAlertBanner } from '@/hooks/useAlertBanner'
 
@@ -54,6 +55,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
       </div>
       <ToastContainer />
       <NotificacaoModal />
+      <AssinaturaAlertaModal />
     </div>
   )
 }

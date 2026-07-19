@@ -16,7 +16,6 @@ class WebhookController extends Controller
 {
     public function asaas(Request $request): JsonResponse
     {
-        // Validate webhook token
         $token = $request->header('asaas-access-token');
         if ($token !== config('services.asaas.webhook_token')) {
             return response()->json(['message' => 'Unauthorized'], 401);
@@ -26,41 +25,26 @@ class WebhookController extends Controller
         $payment = $request->input('payment', []);
 
         match ($event) {
-            'PAYMENT_CONFIRMED'                          => $this->handlePaymentConfirmed($payment),
-            'PAYMENT_OVERDUE'                            => $this->handlePaymentOverdue($payment),
-            'PAYMENT_DELETED', 'SUBSCRIPTION_DELETED'   => $this->handleCanceled($payment),
-            default                                      => null,
+            'PAYMENT_CONFIRMED', 'PAYMENT_RECEIVED' => $this->reconciliarPagamento('asaas_payment_id', $payment['id'] ?? null),
+            'PAYMENT_OVERDUE'                       => $this->handlePaymentOverdue($payment),
+            default                                  => null,
         };
 
         return response()->json(['received' => true]);
     }
 
-    private function handlePaymentConfirmed(array $payment): void
-    {
-        $oficina = $this->findOficinaBySubscription($payment['subscription'] ?? null);
-        if (!$oficina) return;
-
-        $oficina->update(['status' => 'ATIVA']);
-
-        Cobranca::create([
-            'oficina_id'       => $oficina->id,
-            'mes_referencia'   => now()->startOfMonth(),
-            'valor'            => $payment['value'] ?? 0,
-            'status'           => 'PAGA',
-            'asaas_payment_id' => $payment['id'] ?? null,
-            'vencimento'       => $payment['dueDate'] ?? null,
-            'pago_em'          => now(),
-        ]);
-    }
-
     private function handlePaymentOverdue(array $payment): void
     {
-        $oficina = $this->findOficinaBySubscription($payment['subscription'] ?? null);
+        $cobranca = Cobranca::where('asaas_payment_id', $payment['id'] ?? null)->first();
+        if (!$cobranca) return;
+
+        $cobranca->update(['status' => 'VENCIDA']);
+
+        $oficina = Oficina::find($cobranca->oficina_id);
         if (!$oficina) return;
 
         $oficina->update(['status' => 'INADIMPLENTE']);
 
-        // Alert email
         try {
             Mail::raw(
                 "A oficina {$oficina->nome} está inadimplente. Pagamento vencido.",
@@ -70,20 +54,6 @@ class WebhookController extends Controller
         } catch (\Throwable) {}
     }
 
-    private function handleCanceled(array $payment): void
-    {
-        $oficina = $this->findOficinaBySubscription($payment['subscription'] ?? null);
-        if ($oficina) {
-            $oficina->update(['status' => 'CANCELADA']);
-        }
-    }
-
-    private function findOficinaBySubscription(?string $subscriptionId): ?Oficina
-    {
-        if (!$subscriptionId) return null;
-        return Oficina::where('asaas_subscription_id', $subscriptionId)->first();
-    }
-
     // ─── Mercado Pago ─────────────────────────────────────────────────────────
 
     public function mercadopago(Request $request): JsonResponse
@@ -91,7 +61,6 @@ class WebhookController extends Controller
         $cfg    = SaasConfig::get();
         $secret = $cfg->getRawOriginal('mp_webhook_secret') ?? '';
 
-        // Validar assinatura HMAC-SHA256
         $xSignature = $request->header('x-signature', '');
         $xRequestId = $request->header('x-request-id', '');
         $dataId     = $request->query('data_id', '');
@@ -106,57 +75,71 @@ class WebhookController extends Controller
             }
         }
 
-        $type   = $request->input('type', '');
-        $action = $request->input('action', '');
-
-        if ($type !== 'subscription_preapproval') {
+        $type = $request->input('type', '');
+        if ($type !== 'payment') {
             return response()->json(['received' => true]);
         }
 
-        $subscriptionId = $request->input('data.id');
-        if (!$subscriptionId) return response()->json(['received' => true]);
+        $paymentId = $request->input('data.id');
+        if (!$paymentId) return response()->json(['received' => true]);
 
-        // Buscar dados atualizados no MP
-        $cfg = SaasConfig::get();
-        $mpToken = $cfg->getRawOriginal('mp_access_token') ?? '';
-        $mpData  = Http::withToken($mpToken)
-            ->get("https://api.mercadopago.com/preapproval/{$subscriptionId}")
-            ->json();
-
+        $mpToken  = $cfg->getRawOriginal('mp_access_token') ?? '';
+        $mpData   = Http::withToken($mpToken)->get("https://api.mercadopago.com/v1/payments/{$paymentId}")->json();
         $mpStatus = $mpData['status'] ?? null;
-        $oficina  = Oficina::where('mp_subscription_id', $subscriptionId)->first();
 
-        if (!$oficina || !$mpStatus) return response()->json(['received' => true]);
+        if ($mpStatus === 'approved') {
+            $cobrancaId = $mpData['external_reference'] ?? null;
+            $cobranca   = $cobrancaId ? Cobranca::find($cobrancaId) : null;
 
-        match ($mpStatus) {
-            'authorized' => $this->mpHandleAuthorized($oficina, $mpData),
-            'paused'     => $oficina->update(['status' => 'INADIMPLENTE']),
-            'cancelled'  => $oficina->update(['status' => 'CANCELADA']),
-            default      => null,
-        };
+            if ($cobranca) {
+                $cobranca->update(['mp_payment_id' => $paymentId]);
+                $this->reconciliarPagamento('mp_payment_id', $paymentId);
+            }
+        }
 
         return response()->json(['received' => true]);
     }
 
-    private function mpHandleAuthorized(Oficina $oficina, array $data): void
+    /**
+     * Marca a Cobranca (localizada pelo id de pagamento do gateway) como PAGA.
+     * Ignora cobrancas ja PAGA ou CANCELADA (esta ultima pode ter sido cancelada
+     * localmente em mudarCiclo() mesmo com o boleto remoto ainda em aberto).
+     * So avanca o vencimento e reativa a oficina quando a cobranca for do tipo
+     * ASSINATURA — uma cobranca AVULSA nao deve conceder tempo de assinatura
+     * nem reativar uma oficina suspensa por outro motivo.
+     */
+    private function reconciliarPagamento(string $campoPaymentId, ?string $paymentId): void
     {
-        $oficina->update(['status' => 'ATIVA']);
+        if (!$paymentId) return;
 
-        Cobranca::create([
-            'oficina_id'    => $oficina->id,
-            'mes_referencia'=> now()->startOfMonth(),
-            'valor'         => $data['auto_recurring']['transaction_amount'] ?? 0,
-            'status'        => 'PAGA',
-            'gateway'       => 'MERCADOPAGO',
-            'mp_payment_id' => $data['id'] ?? null,
-            'vencimento'    => now()->toDateString(),
-            'pago_em'       => now(),
-        ]);
+        $cobranca = Cobranca::where($campoPaymentId, $paymentId)->first();
+        if (!$cobranca || in_array($cobranca->status, ['PAGA', 'CANCELADA'], true)) return;
+
+        $cobranca->update(['status' => 'PAGA', 'pago_em' => now()]);
+
+        if ($cobranca->tipo !== 'ASSINATURA') return;
+
+        $oficina = Oficina::find($cobranca->oficina_id);
+        if (!$oficina) return;
+
+        if ($oficina->proximo_vencimento) {
+            $oficina->avancarVencimento();
+        }
+
+        $updates = [];
+        if ($oficina->status !== 'ATIVA') {
+            $updates['status'] = 'ATIVA';
+        }
+        if ($oficina->voto_confianca_ate !== null) {
+            $updates['voto_confianca_ate'] = null;
+        }
+        if (!empty($updates)) {
+            $oficina->update($updates);
+        }
     }
 
     private function extractTs(string $signature): string
     {
-        // Format: ts=<timestamp>,v1=<hash>
         preg_match('/ts=(\d+)/', $signature, $m);
         return $m[1] ?? '';
     }

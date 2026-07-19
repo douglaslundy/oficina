@@ -32,6 +32,10 @@ interface Oficina {
   asaas_subscription_id?: string | null
   provedor_fiscal?: 'SPEDY' | 'FOCUS' | null
   emissao_fiscal_modo?: 'MANUAL' | 'AUTOMATICO' | null
+  ciclo_cobranca?: 'MENSAL' | 'ANUAL'
+  proximo_vencimento?: string | null
+  dias_antecedencia_cobranca?: number | null
+  dias_suspensao_vencido?: number | null
 }
 
 interface AsaasStatus {
@@ -138,6 +142,12 @@ export default function OficinaDetailPage() {
   const [modoFiscal, setModoFiscal] = useState<string>('')
   const [savingFiscal, setSavingFiscal] = useState(false)
 
+  const [proximoVencimento, setProximoVencimento] = useState('')
+  const [diasAntecedenciaOverride, setDiasAntecedenciaOverride] = useState('')
+  const [diasSuspensaoOverride, setDiasSuspensaoOverride] = useState('')
+  const [savingCobranca, setSavingCobranca] = useState(false)
+  const [changingCiclo, setChangingCiclo] = useState(false)
+
   const [showEditModal, setShowEditModal] = useState(false)
   const [planos, setPlanos] = useState<Plano[]>([])
 
@@ -152,6 +162,9 @@ export default function OficinaDetailPage() {
       setOficina(res.data.data)
       setProvFiscal(res.data.data.provedor_fiscal ?? '')
       setModoFiscal(res.data.data.emissao_fiscal_modo ?? '')
+      setProximoVencimento(res.data.data.proximo_vencimento ?? '')
+      setDiasAntecedenciaOverride(res.data.data.dias_antecedencia_cobranca != null ? String(res.data.data.dias_antecedencia_cobranca) : '')
+      setDiasSuspensaoOverride(res.data.data.dias_suspensao_vencido != null ? String(res.data.data.dias_suspensao_vencido) : '')
     } catch {
       showToast('Erro ao carregar oficina.', 'err')
     } finally {
@@ -243,7 +256,7 @@ export default function OficinaDetailPage() {
   }
 
   async function handleCancelarCobranca(cId: string) {
-    if (!confirm('Cancelar esta cobrança no Asaas?')) return
+    if (!confirm('Cancelar esta cobrança?')) return
     try {
       await saasApi.delete(`/saas/cobrancas/${cId}`)
       showToast('Cobrança cancelada.')
@@ -270,8 +283,43 @@ export default function OficinaDetailPage() {
     }
   }
 
+  async function salvarCobranca() {
+    setSavingCobranca(true)
+    try {
+      const payload: Record<string, string | number | null> = {}
+      if (proximoVencimento) payload.proximo_vencimento = proximoVencimento
+      payload.dias_antecedencia_cobranca = diasAntecedenciaOverride ? parseInt(diasAntecedenciaOverride, 10) : null
+      payload.dias_suspensao_vencido = diasSuspensaoOverride ? parseInt(diasSuspensaoOverride, 10) : null
+
+      await saasApi.put(`/saas/oficinas/${id}`, payload)
+      showToast('Configurações de cobrança salvas.')
+      fetchOficina()
+    } catch (e: unknown) {
+      const msg = (e as { response?: { data?: { message?: string } } })?.response?.data?.message ?? 'Erro ao salvar.'
+      showToast(msg, 'err')
+    } finally {
+      setSavingCobranca(false)
+    }
+  }
+
+  async function mudarCiclo(ciclo: 'MENSAL' | 'ANUAL') {
+    if (!confirm(`Mudar o ciclo de cobrança para ${ciclo === 'ANUAL' ? 'ANUAL' : 'MENSAL'}? Isso recalcula o próximo vencimento e cancela cobranças pendentes do ciclo atual.`)) return
+    setChangingCiclo(true)
+    try {
+      await saasApi.post(`/saas/oficinas/${id}/mudar-ciclo`, { ciclo })
+      showToast('Ciclo de cobrança atualizado.')
+      fetchOficina()
+      fetchCobrancas()
+    } catch (e: unknown) {
+      const msg = (e as { response?: { data?: { message?: string } } })?.response?.data?.message ?? 'Erro ao mudar ciclo.'
+      showToast(msg, 'err')
+    } finally {
+      setChangingCiclo(false)
+    }
+  }
+
   async function handleCancelarAssinatura() {
-    if (!confirm('ATENÇÃO: Esta ação cancela a assinatura no Asaas e desativa a oficina. Continuar?')) return
+    if (!confirm('ATENÇÃO: Esta ação cancela a assinatura no gateway de pagamento e desativa a oficina. Continuar?')) return
     setActionLoading('cancelar-assinatura')
     try {
       await saasApi.post(`/saas/oficinas/${id}/cancelar-assinatura`)
@@ -465,10 +513,10 @@ export default function OficinaDetailPage() {
                     ? <span style={{ fontFamily: "'JetBrains Mono', monospace", fontSize: 12 }}>{asaas.asaas_customer_id}</span>
                     : <span style={{ color: 'var(--muted)' }}>Não vinculado</span>
                 } />
-                <InfoRow label="Subscription ID" value={
+                <InfoRow label="Subscription ID (legado)" value={
                   asaas?.asaas_subscription_id
                     ? <span style={{ fontFamily: "'JetBrains Mono', monospace", fontSize: 12 }}>{asaas.asaas_subscription_id}</span>
-                    : <span style={{ color: 'var(--muted)' }}>Sem assinatura</span>
+                    : <span style={{ color: 'var(--muted)' }}>Não usado (motor de cobrança local)</span>
                 } />
                 {asaas?.subscription && (
                   <>
@@ -522,6 +570,53 @@ export default function OficinaDetailPage() {
           <button onClick={salvarFiscal} disabled={savingFiscal}
             style={{ marginTop: 16, padding: '8px 18px', background: savingFiscal ? 'var(--border)' : 'var(--accent)', color: savingFiscal ? 'var(--muted)' : '#000', border: 'none', borderRadius: 8, fontWeight: 700, fontSize: 13, fontFamily: "'Barlow Condensed', sans-serif", cursor: savingFiscal ? 'not-allowed' : 'pointer' }}>
             {savingFiscal ? 'Salvando…' : 'Salvar Fiscal'}
+          </button>
+        </div>
+
+        {/* ── Cobrança Recorrente ── */}
+        <div style={{ background: 'var(--card)', border: '1px solid var(--border)', borderRadius: 10, padding: 20, marginTop: 20 }}>
+          <h2 className="font-display" style={{ fontSize: 16, fontWeight: 700, color: 'var(--text)', margin: '0 0 4px' }}>Cobrança Recorrente</h2>
+          <p style={{ fontSize: 13, color: 'var(--muted)', margin: '0 0 16px' }}>
+            Deixe os dias em branco para herdar o padrão global (Configurações).
+          </p>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 16 }}>
+            <span style={{ fontSize: 13, color: 'var(--muted)' }}>Ciclo atual:</span>
+            <span style={{ padding: '2px 10px', borderRadius: 999, fontSize: 11, fontWeight: 700, background: 'rgba(245,166,35,.15)', color: 'var(--accent)' }}>
+              {oficina?.ciclo_cobranca ?? 'MENSAL'}
+            </span>
+            {oficina?.ciclo_cobranca !== 'ANUAL' && (
+              <button onClick={() => mudarCiclo('ANUAL')} disabled={changingCiclo}
+                style={{ padding: '5px 12px', background: 'none', border: '1px solid var(--accent)', color: 'var(--accent)', borderRadius: 6, fontSize: 12, cursor: 'pointer' }}>
+                Mudar para Anual
+              </button>
+            )}
+            {oficina?.ciclo_cobranca === 'ANUAL' && (
+              <button onClick={() => mudarCiclo('MENSAL')} disabled={changingCiclo}
+                style={{ padding: '5px 12px', background: 'none', border: '1px solid var(--border)', color: 'var(--muted)', borderRadius: 6, fontSize: 12, cursor: 'pointer' }}>
+                Voltar para Mensal
+              </button>
+            )}
+          </div>
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 16, maxWidth: 700 }}>
+            <div>
+              <label style={{ fontSize: 12, fontWeight: 600, color: 'var(--muted)', display: 'block', marginBottom: 6 }}>Próximo vencimento</label>
+              <input type="date" value={proximoVencimento} onChange={e => setProximoVencimento(e.target.value)}
+                style={{ width: '100%', background: 'var(--bg)', border: '1px solid var(--border)', borderRadius: 8, color: 'var(--text)', fontSize: 14, padding: '9px 12px', outline: 'none', colorScheme: 'dark' }} />
+            </div>
+            <div>
+              <label style={{ fontSize: 12, fontWeight: 600, color: 'var(--muted)', display: 'block', marginBottom: 6 }}>Dias de antecedência (override)</label>
+              <input type="number" min={1} max={60} value={diasAntecedenciaOverride} onChange={e => setDiasAntecedenciaOverride(e.target.value)} placeholder="Padrão global"
+                style={{ width: '100%', background: 'var(--bg)', border: '1px solid var(--border)', borderRadius: 8, color: 'var(--text)', fontSize: 14, padding: '9px 12px', outline: 'none' }} />
+            </div>
+            <div>
+              <label style={{ fontSize: 12, fontWeight: 600, color: 'var(--muted)', display: 'block', marginBottom: 6 }}>Dias p/ suspensão (override)</label>
+              <input type="number" min={1} max={90} value={diasSuspensaoOverride} onChange={e => setDiasSuspensaoOverride(e.target.value)} placeholder="Padrão global"
+                style={{ width: '100%', background: 'var(--bg)', border: '1px solid var(--border)', borderRadius: 8, color: 'var(--text)', fontSize: 14, padding: '9px 12px', outline: 'none' }} />
+            </div>
+          </div>
+          <button onClick={salvarCobranca} disabled={savingCobranca}
+            style={{ marginTop: 16, padding: '8px 18px', background: savingCobranca ? 'var(--border)' : 'var(--accent)', color: savingCobranca ? 'var(--muted)' : '#000', border: 'none', borderRadius: 8, fontWeight: 700, fontSize: 13, fontFamily: "'Barlow Condensed', sans-serif", cursor: savingCobranca ? 'not-allowed' : 'pointer' }}>
+            {savingCobranca ? 'Salvando…' : 'Salvar Cobrança'}
           </button>
         </div>
 
