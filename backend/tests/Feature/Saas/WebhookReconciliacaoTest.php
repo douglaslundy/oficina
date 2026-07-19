@@ -135,4 +135,25 @@ class WebhookReconciliacaoTest extends TestCase
             'proximo_vencimento' => '2026-08-01',
         ]);
     }
+
+    public function test_pagamento_limpa_voto_confianca_ate_pendente(): void
+    {
+        config(['services.asaas.webhook_token' => 'token-teste']);
+        [$oficina, $cobranca] = $this->criarOficinaComCobranca(
+            'ASAAS',
+            'asaas_payment_id',
+            'pay_asaas_voto_1',
+            ['status' => 'ATIVA', 'voto_confianca_ate' => now()->addDays(3)->toDateString(), 'proximo_vencimento' => '2026-08-01'],
+        );
+
+        $response = $this->withHeaders(['asaas-access-token' => 'token-teste'])
+            ->postJson('/api/saas/webhooks/asaas', [
+                'event'   => 'PAYMENT_CONFIRMED',
+                'payment' => ['id' => 'pay_asaas_voto_1', 'value' => 100],
+            ]);
+
+        $response->assertStatus(200);
+        $oficina->refresh();
+        $this->assertNull($oficina->voto_confianca_ate);
+    }
 }

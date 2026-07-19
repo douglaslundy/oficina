@@ -233,7 +233,7 @@ class OficinaController extends Controller
     public function reativar(string $id): JsonResponse
     {
         $oficina = Oficina::findOrFail($id);
-        $oficina->update(['status' => 'ATIVA']);
+        $oficina->update(['status' => 'ATIVA', 'voto_confianca_ate' => null]);
 
         return response()->json([
             'message' => 'Oficina reativada com sucesso.',

@@ -125,8 +125,16 @@ class WebhookController extends Controller
         if ($oficina->proximo_vencimento) {
             $oficina->avancarVencimento();
         }
+
+        $updates = [];
         if ($oficina->status !== 'ATIVA') {
-            $oficina->update(['status' => 'ATIVA']);
+            $updates['status'] = 'ATIVA';
+        }
+        if ($oficina->voto_confianca_ate !== null) {
+            $updates['voto_confianca_ate'] = null;
+        }
+        if (!empty($updates)) {
+            $oficina->update($updates);
         }
     }
 

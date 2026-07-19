@@ -83,4 +83,18 @@ class AssinaturaAlertaServiceBloqueioTest extends TestCase
         $oficina->refresh();
         $this->assertSame(0, $oficina->alerta_cobranca_exibicoes_hoje);
     }
+
+    public function test_bloqueio_com_oficina_ja_suspensa_usa_mensagem_de_bloqueio(): void
+    {
+        $oficina = $this->criarOficina(); // helper already defaults status to SUSPENSA in this file
+        Cobranca::create([
+            'oficina_id' => $oficina->id, 'tipo' => 'ASSINATURA', 'valor' => 199.90,
+            'status' => 'VENCIDA', 'vencimento' => now()->subDays(30)->toDateString(),
+        ]);
+
+        $status = app(AssinaturaAlertaService::class)->statusBloqueio($oficina);
+
+        $this->assertStringContainsString('está suspensa', $status['mensagem']);
+        $this->assertStringNotContainsString('pode ser suspensa a qualquer momento', $status['mensagem']);
+    }
 }

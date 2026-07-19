@@ -67,6 +67,10 @@ class AssinaturaAlertaService
         $cfg = SaasConfig::get();
         ['fase' => $fase, 'mensagem' => $mensagem] = $this->resolverFaseEMensagem($oficina, $cobranca, $cfg);
 
+        if ($suspensa && $fase === 'VENCIDA') {
+            $mensagem = 'Sua oficina está suspensa por falta de pagamento. Pague sua fatura para reativar o acesso imediatamente.';
+        }
+
         return [
             'suspensa'                  => $suspensa,
             'fase'                      => $fase,
