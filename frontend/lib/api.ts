@@ -28,6 +28,12 @@ api.interceptors.response.use(
       localStorage.removeItem('auth_user')
       window.location.href = '/login'
     }
+
+    const isSuspensa = error.response?.status === 403 && error.response?.data?.code === 'OFICINA_SUSPENSA'
+    if (isSuspensa && typeof window !== 'undefined' && window.location.pathname !== '/bloqueado') {
+      window.location.href = '/bloqueado'
+    }
+
     return Promise.reject(error)
   }
 )
