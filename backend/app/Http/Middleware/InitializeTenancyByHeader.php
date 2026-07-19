@@ -30,10 +30,6 @@ class InitializeTenancyByHeader
                 return response()->json(['message' => 'Esta oficina está suspensa. Entre em contato com o suporte.'], 403);
             }
 
-            if ($oficina->status === 'INADIMPLENTE') {
-                return response()->json(['message' => 'Pagamento pendente. Regularize sua assinatura para continuar.'], 402);
-            }
-
             TenancyContext::set($oficina->id, $oficina->slug);
         }
 
