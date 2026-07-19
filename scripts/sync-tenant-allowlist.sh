@@ -12,7 +12,14 @@ docker exec mecanicapro-postgres-1 psql -U mecanicapro -d mecanicapro -tAc   "SE
 done > "$TMP_FILE"
 
 if ! cmp -s "$TMP_FILE" "$MAP_FILE" 2>/dev/null; then
-  mv "$TMP_FILE" "$MAP_FILE"
+  # Escreve no MESMO inode (nunca mv/rename) — o nginx recebe este arquivo via
+  # bind mount de arquivo único, que trava no inode montado no start do
+  # container. Um mv troca o inode e quebra o mount silenciosamente: o
+  # arquivo no host fica correto, mas o nginx nunca mais enxerga mudança
+  # nenhuma até o container ser recriado. `cat >` regrava o conteúdo do
+  # inode existente, então o bind mount continua válido.
+  cat "$TMP_FILE" > "$MAP_FILE"
+  rm -f "$TMP_FILE"
   docker exec mecanicapro-nginx-1 nginx -s reload
   echo "$(date -Iseconds) allowlist atualizada, nginx recarregado"
 else
