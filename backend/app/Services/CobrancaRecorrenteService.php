@@ -106,6 +106,10 @@ class CobrancaRecorrenteService
             return false;
         }
 
+        $linkPagamento = $gateway === 'MERCADOPAGO'
+            ? ($payment['init_point'] ?? null)
+            : ($payment['invoiceUrl'] ?? null);
+
         $descricao = $oficina->ciclo_cobranca === 'ANUAL'
             ? sprintf('Assinatura anual %d–%d', $oficina->proximo_vencimento->year, $oficina->proximo_vencimento->year + 1)
             : sprintf('Mensalidade %s/%d', self::MESES_PT[$oficina->proximo_vencimento->month], $oficina->proximo_vencimento->year);
@@ -122,6 +126,7 @@ class CobrancaRecorrenteService
             'asaas_payment_id' => $gateway === 'ASAAS' ? ($payment['id'] ?? null) : null,
             'mp_payment_id'    => $gateway === 'MERCADOPAGO' ? ($payment['id'] ?? null) : null,
             'vencimento'       => $vencimento,
+            'link_pagamento'   => $linkPagamento,
         ]);
 
         return true;

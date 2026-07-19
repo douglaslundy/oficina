@@ -38,6 +38,8 @@ class SaasConfig extends Model
         'cobranca_dias_antecedencia_padrao',
         'cobranca_dias_suspensao_padrao',
         'desconto_anual_pct',
+        'alerta_cobranca_vezes_dia',
+        'alerta_cobranca_dias_exibicao',
     ];
 
     protected $casts = [
@@ -46,6 +48,8 @@ class SaasConfig extends Model
         'cobranca_dias_antecedencia_padrao' => 'integer',
         'cobranca_dias_suspensao_padrao'    => 'integer',
         'desconto_anual_pct'                => 'decimal:2',
+        'alerta_cobranca_vezes_dia'         => 'integer',
+        'alerta_cobranca_dias_exibicao'     => 'integer',
     ];
 
     protected $hidden = [

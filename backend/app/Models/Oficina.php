@@ -35,14 +35,18 @@ class Oficina extends Model
         'proximo_vencimento',
         'dias_antecedencia_cobranca',
         'dias_suspensao_vencido',
+        'alerta_cobranca_exibicoes_hoje',
+        'alerta_cobranca_ultima_exibicao_em',
     ];
 
     protected $casts = [
-        'criado_em'                  => 'datetime',
-        'atualizado_em'              => 'datetime',
-        'proximo_vencimento'         => 'date',
-        'dias_antecedencia_cobranca' => 'integer',
-        'dias_suspensao_vencido'     => 'integer',
+        'criado_em'                          => 'datetime',
+        'atualizado_em'                      => 'datetime',
+        'proximo_vencimento'                 => 'date',
+        'dias_antecedencia_cobranca'         => 'integer',
+        'dias_suspensao_vencido'             => 'integer',
+        'alerta_cobranca_exibicoes_hoje'     => 'integer',
+        'alerta_cobranca_ultima_exibicao_em' => 'date',
     ];
 
     protected static function boot(): void

@@ -27,6 +27,7 @@ class Cobranca extends Model
         'asaas_payment_id',
         'mp_payment_id',
         'vencimento',
+        'link_pagamento',
         'pago_em',
     ];
 

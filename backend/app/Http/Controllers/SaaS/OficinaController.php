@@ -354,6 +354,10 @@ class OficinaController extends Controller
             return response()->json(['message' => "Falha ao criar cobrança no {$nomeGateway}: " . $e->getMessage()], 502);
         }
 
+        $linkPagamento = $gateway === 'MERCADOPAGO'
+            ? ($payment['init_point'] ?? null)
+            : ($payment['invoiceUrl'] ?? null);
+
         $cobranca = Cobranca::create([
             'id'               => $cobrancaId,
             'oficina_id'       => $oficina->id,
@@ -365,9 +369,8 @@ class OficinaController extends Controller
             'asaas_payment_id' => $gateway === 'ASAAS' ? ($payment['id'] ?? null) : null,
             'mp_payment_id'    => $gateway === 'MERCADOPAGO' ? ($payment['id'] ?? null) : null,
             'vencimento'       => $validated['vencimento'],
+            'link_pagamento'   => $linkPagamento,
         ]);
-
-        $linkPagamento = $gateway === 'MERCADOPAGO' ? ($payment['init_point'] ?? null) : null;
 
         return response()->json([
             'message'  => 'Cobrança avulsa criada com sucesso.' . ($linkPagamento ? " Link de pagamento: {$linkPagamento}" : ''),
