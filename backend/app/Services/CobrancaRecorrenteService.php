@@ -80,6 +80,42 @@ class CobrancaRecorrenteService
         return $vencidas->count();
     }
 
+    public function suspenderVencidas(): int
+    {
+        $cfg = SaasConfig::get();
+        $suspensas = 0;
+
+        $oficinas = Oficina::whereIn('status', ['ATIVA', 'INADIMPLENTE'])->get();
+
+        foreach ($oficinas as $oficina) {
+            $cobranca = Cobranca::where('oficina_id', $oficina->id)
+                ->where('tipo', 'ASSINATURA')
+                ->where('status', 'VENCIDA')
+                ->orderByDesc('vencimento')
+                ->first();
+
+            if (!$cobranca) {
+                continue;
+            }
+
+            $diasVencida   = (int) $cobranca->vencimento->diffInDays(now());
+            $diasSuspensao = $oficina->dias_suspensao_vencido ?? $cfg->cobranca_dias_suspensao_padrao;
+
+            if ($diasVencida < $diasSuspensao) {
+                continue;
+            }
+
+            if ($oficina->voto_confianca_ate && $oficina->voto_confianca_ate->isFuture()) {
+                continue;
+            }
+
+            $oficina->update(['status' => 'SUSPENSA']);
+            $suspensas++;
+        }
+
+        return $suspensas;
+    }
+
     private function criarCobranca(Oficina $oficina, SaasConfig $cfg): bool
     {
         $gateway    = $oficina->gateway ?: ($cfg->gateway_preferido ?? 'ASAAS');

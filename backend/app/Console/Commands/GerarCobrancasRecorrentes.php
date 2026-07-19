@@ -18,10 +18,11 @@ class GerarCobrancasRecorrentes extends Command
 
     public function handle(): int
     {
-        $geradas  = $this->service->gerarPendentes();
-        $vencidas = $this->service->marcarVencidas();
+        $geradas   = $this->service->gerarPendentes();
+        $vencidas  = $this->service->marcarVencidas();
+        $suspensas = $this->service->suspenderVencidas();
 
-        $this->info("Cobranças geradas: {$geradas}. Cobranças marcadas como vencidas: {$vencidas}.");
+        $this->info("Cobranças geradas: {$geradas}. Vencidas: {$vencidas}. Suspensas: {$suspensas}.");
         return self::SUCCESS;
     }
 }
