@@ -463,6 +463,10 @@ class OficinaController extends Controller
             'criado_em'           => $oficina->criado_em?->toIso8601String(),
             'provedor_fiscal'     => $oficina->provedor_fiscal,
             'emissao_fiscal_modo' => $oficina->emissao_fiscal_modo,
+            'ciclo_cobranca'             => $oficina->ciclo_cobranca,
+            'proximo_vencimento'         => $oficina->proximo_vencimento?->toDateString(),
+            'dias_antecedencia_cobranca' => $oficina->dias_antecedencia_cobranca,
+            'dias_suspensao_vencido'     => $oficina->dias_suspensao_vencido,
         ];
     }
 
