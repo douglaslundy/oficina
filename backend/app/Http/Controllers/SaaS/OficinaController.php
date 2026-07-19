@@ -359,6 +359,7 @@ class OficinaController extends Controller
             'oficina_id'       => $oficina->id,
             'mes_referencia'   => Carbon::parse($validated['vencimento'])->startOfMonth(),
             'valor'            => $validated['valor'],
+            'tipo'             => 'AVULSA',
             'status'           => 'PENDENTE',
             'gateway'          => $gateway,
             'asaas_payment_id' => $gateway === 'ASAAS' ? ($payment['id'] ?? null) : null,

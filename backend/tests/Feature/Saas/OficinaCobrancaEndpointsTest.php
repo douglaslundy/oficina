@@ -86,6 +86,6 @@ class OficinaCobrancaEndpointsTest extends TestCase
         $cobrancaId = $response->json('cobranca.id');
 
         Http::assertSent(fn($request) => $request['external_reference'] === $cobrancaId);
-        $this->assertDatabaseHas('cobrancas', ['id' => $cobrancaId, 'mp_payment_id' => 'pref_999']);
+        $this->assertDatabaseHas('cobrancas', ['id' => $cobrancaId, 'mp_payment_id' => 'pref_999', 'tipo' => 'AVULSA']);
     }
 }
