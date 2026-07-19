@@ -81,4 +81,32 @@ class AssinaturaControllerTest extends TestCase
 
         $response->assertStatus(403);
     }
+
+    public function test_mudar_ciclo_bloqueado_com_cobranca_pendente(): void
+    {
+        [$oficina, $usuario] = $this->criarOficinaComUsuario('ADMIN');
+        Cobranca::create([
+            'oficina_id' => $oficina->id, 'tipo' => 'ASSINATURA', 'valor' => 100,
+            'status' => 'PENDENTE', 'vencimento' => $oficina->proximo_vencimento,
+        ]);
+
+        $response = $this->comoTenant($oficina, $usuario)->postJson('/api/assinatura/mudar-ciclo', ['ciclo' => 'ANUAL']);
+
+        $response->assertStatus(422);
+        $oficina->refresh();
+        $this->assertSame('MENSAL', $oficina->ciclo_cobranca);
+    }
+
+    public function test_mudar_ciclo_bloqueado_com_cobranca_vencida(): void
+    {
+        [$oficina, $usuario] = $this->criarOficinaComUsuario('ADMIN');
+        Cobranca::create([
+            'oficina_id' => $oficina->id, 'tipo' => 'ASSINATURA', 'valor' => 100,
+            'status' => 'VENCIDA', 'vencimento' => now()->subDays(5)->toDateString(),
+        ]);
+
+        $response = $this->comoTenant($oficina, $usuario)->postJson('/api/assinatura/mudar-ciclo', ['ciclo' => 'ANUAL']);
+
+        $response->assertStatus(422);
+    }
 }

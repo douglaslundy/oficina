@@ -37,12 +37,16 @@ class SaasConfigCobrancaTest extends TestCase
             'cobranca_dias_antecedencia_padrao' => 7,
             'cobranca_dias_suspensao_padrao'    => 12,
             'desconto_anual_pct'                => 15,
+            'alerta_cobranca_vezes_dia'          => 2,
+            'alerta_cobranca_dias_exibicao'      => 20,
         ]);
 
         $response->assertStatus(200);
         $this->assertDatabaseHas('saas_config', [
             'cobranca_dias_antecedencia_padrao' => 7,
             'cobranca_dias_suspensao_padrao'    => 12,
+            'alerta_cobranca_vezes_dia'          => 2,
+            'alerta_cobranca_dias_exibicao'      => 20,
         ]);
     }
 }
