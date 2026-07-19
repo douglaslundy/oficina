@@ -40,6 +40,9 @@ class SaasConfigController extends Controller
                 'smtp_from_address'    => $cfg->smtp_from_address,
                 'smtp_from_name'       => $cfg->smtp_from_name,
                 'smtp_ativo'           => (bool) $cfg->smtp_ativo,
+                'cobranca_dias_antecedencia_padrao' => $cfg->cobranca_dias_antecedencia_padrao,
+                'cobranca_dias_suspensao_padrao'    => $cfg->cobranca_dias_suspensao_padrao,
+                'desconto_anual_pct'                => (float) $cfg->desconto_anual_pct,
             ],
         ]);
     }
@@ -203,5 +206,18 @@ class SaasConfigController extends Controller
         SaasConfig::get()->update($validated);
 
         return response()->json(['message' => 'Configurações Mercado Pago salvas.']);
+    }
+
+    public function updateCobranca(Request $request): JsonResponse
+    {
+        $validated = $request->validate([
+            'cobranca_dias_antecedencia_padrao' => ['required', 'integer', 'min:1', 'max:60'],
+            'cobranca_dias_suspensao_padrao'    => ['required', 'integer', 'min:1', 'max:90'],
+            'desconto_anual_pct'                => ['required', 'numeric', 'min:0', 'max:90'],
+        ]);
+
+        SaasConfig::get()->update($validated);
+
+        return response()->json(['message' => 'Configurações de cobrança salvas.', 'data' => $validated]);
     }
 }

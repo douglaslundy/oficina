@@ -105,6 +105,7 @@ Route::prefix('saas')->group(function () {
         Route::put('config/gateway',             [SaasConfigController::class, 'updateGateway']);
         Route::put('config/asaas',               [SaasConfigController::class, 'updateAsaas']);
         Route::put('config/mercadopago',         [SaasConfigController::class, 'updateMercadoPago']);
+        Route::put('config/cobranca',            [SaasConfigController::class, 'updateCobranca']);
         Route::put('config/smtp',                [SaasConfigController::class, 'updateSmtp']);
         Route::post('config/smtp/testar',        [SaasConfigController::class, 'testarSmtp']);
 
