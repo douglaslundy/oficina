@@ -34,6 +34,7 @@ interface SaasConfigData {
   desconto_anual_pct: number
   alerta_cobranca_vezes_dia: number
   alerta_cobranca_dias_exibicao: number
+  voto_confianca_dias: number
 }
 
 type ToastType = 'success' | 'danger'
@@ -211,6 +212,7 @@ export default function SaasConfigPage() {
   const [savingCobranca, setSavingCobranca] = useState(false)
   const [alertaVezesDia, setAlertaVezesDia] = useState('1')
   const [alertaDiasExibicao, setAlertaDiasExibicao] = useState('30')
+  const [votoConfiancaDias, setVotoConfiancaDias] = useState('3')
 
   const showToast = useCallback((msg: string, type: ToastType) => setToast({ msg, type }), [])
 
@@ -246,6 +248,7 @@ export default function SaasConfigPage() {
         setDescontoAnual(String(d.desconto_anual_pct ?? 0))
         setAlertaVezesDia(String(d.alerta_cobranca_vezes_dia ?? 1))
         setAlertaDiasExibicao(String(d.alerta_cobranca_dias_exibicao ?? 30))
+        setVotoConfiancaDias(String(d.voto_confianca_dias ?? 3))
       })
       .catch(() => showToast('Erro ao carregar configurações.', 'danger'))
       .finally(() => setLoading(false))
@@ -410,6 +413,7 @@ export default function SaasConfigPage() {
         desconto_anual_pct: parseFloat(descontoAnual) || 0,
         alerta_cobranca_vezes_dia: parseInt(alertaVezesDia, 10) || 1,
         alerta_cobranca_dias_exibicao: parseInt(alertaDiasExibicao, 10) || 30,
+        voto_confianca_dias: parseInt(votoConfiancaDias, 10) || 3,
       })
       showToast('Configurações de cobrança salvas.', 'success')
     } catch (e: unknown) {
@@ -726,6 +730,13 @@ export default function SaasConfigPage() {
             <input value={alertaDiasExibicao} onChange={e => setAlertaDiasExibicao(e.target.value)} type="number" min={1} max={90}
               style={{ width: '100%', padding: '9px 12px', borderRadius: 7, border: '1px solid var(--border)', background: 'var(--card)', color: 'var(--text)', fontSize: 14, outline: 'none', boxSizing: 'border-box' }} />
           </div>
+        </div>
+        <div style={{ marginBottom: 16, maxWidth: 260 }}>
+          <label style={{ display: 'block', fontSize: 12, fontWeight: 600, color: 'var(--muted)', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: 6 }}>
+            Voto de confiança (dias de liberação)
+          </label>
+          <input value={votoConfiancaDias} onChange={e => setVotoConfiancaDias(e.target.value)} type="number" min={1} max={30}
+            style={{ width: '100%', padding: '9px 12px', borderRadius: 7, border: '1px solid var(--border)', background: 'var(--card)', color: 'var(--text)', fontSize: 14, outline: 'none', boxSizing: 'border-box' }} />
         </div>
         <SaveButton loading={savingCobranca} onClick={salvarCobranca} label="Salvar Cobrança" />
       </SectionCard>

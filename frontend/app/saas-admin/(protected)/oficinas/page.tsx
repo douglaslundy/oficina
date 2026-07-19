@@ -494,8 +494,8 @@ export default function OficinasPage() {
   const [error, setError] = useState<string | null>(null)
   const [showModal, setShowModal] = useState(false)
   const [successMsg, setSuccessMsg] = useState<string | null>(null)
-  // confirmação inline: key = oficina id, value = 'suspender' | 'reativar' | null
-  const [confirmMap, setConfirmMap] = useState<Record<string, 'suspender' | 'reativar'>>({})
+  // confirmação inline: key = oficina id, value = 'suspender' | 'reativar' | 'voto-confianca' | null
+  const [confirmMap, setConfirmMap] = useState<Record<string, 'suspender' | 'reativar' | 'voto-confianca'>>({})
   const [actionLoading, setActionLoading] = useState<string | null>(null)
   const [editingOficina, setEditingOficina] = useState<Oficina | null>(null)
   const [deleteConfirmId, setDeleteConfirmId] = useState<string | null>(null)
@@ -539,7 +539,7 @@ export default function OficinasPage() {
     fetchOficinas(1)
   }
 
-  function requestAction(oficina: Oficina, action: 'suspender' | 'reativar') {
+  function requestAction(oficina: Oficina, action: 'suspender' | 'reativar' | 'voto-confianca') {
     setConfirmMap((prev) => ({ ...prev, [oficina.id]: action }))
   }
 
@@ -559,9 +559,9 @@ export default function OficinasPage() {
       await saasApi.post(`/saas/oficinas/${oficina.id}/${action}`)
       cancelAction(oficina.id)
       showSuccess(
-        action === 'suspender'
-          ? `Oficina "${oficina.nome}" suspensa.`
-          : `Oficina "${oficina.nome}" reativada.`
+        action === 'suspender' ? `Oficina "${oficina.nome}" suspensa.`
+        : action === 'reativar' ? `Oficina "${oficina.nome}" reativada.`
+        : `Voto de confiança concedido para "${oficina.nome}".`
       )
       fetchOficinas(meta.current_page)
     } catch {
@@ -958,30 +958,20 @@ export default function OficinasPage() {
                               Suspender
                             </button>
                           ) : oficina.status === 'SUSPENSA' ? (
-                            <button
-                              onClick={() => requestAction(oficina, 'reativar')}
-                              style={{
-                                background: 'rgba(67,160,71,.1)',
-                                border: '1px solid rgba(67,160,71,.3)',
-                                color: 'var(--success)',
-                                borderRadius: 6,
-                                padding: '5px 14px',
-                                fontSize: 13,
-                                fontWeight: 600,
-                                cursor: 'pointer',
-                                transition: 'background 0.15s',
-                              }}
-                              onMouseEnter={(e) => {
-                                ;(e.currentTarget as HTMLButtonElement).style.background =
-                                  'rgba(67,160,71,.2)'
-                              }}
-                              onMouseLeave={(e) => {
-                                ;(e.currentTarget as HTMLButtonElement).style.background =
-                                  'rgba(67,160,71,.1)'
-                              }}
-                            >
-                              Reativar
-                            </button>
+                            <div style={{ display: 'flex', gap: 6 }}>
+                              <button
+                                onClick={() => requestAction(oficina, 'reativar')}
+                                style={{ background: 'rgba(67,160,71,.1)', border: '1px solid rgba(67,160,71,.3)', color: 'var(--success)', borderRadius: 6, padding: '5px 14px', fontSize: 13, fontWeight: 600, cursor: 'pointer' }}
+                              >
+                                Reativar
+                              </button>
+                              <button
+                                onClick={() => requestAction(oficina, 'voto-confianca')}
+                                style={{ background: 'rgba(245,166,35,.1)', border: '1px solid rgba(245,166,35,.3)', color: 'var(--accent)', borderRadius: 6, padding: '5px 14px', fontSize: 13, fontWeight: 600, cursor: 'pointer' }}
+                              >
+                                Voto de Confiança
+                              </button>
+                            </div>
                           ) : (
                             <span style={{ color: 'var(--muted)', fontSize: 13 }}>—</span>
                           )}
