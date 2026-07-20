@@ -128,6 +128,35 @@ class MercadoPagoService
         ];
     }
 
+    /**
+     * Checkout transparente — cria o pagamento diretamente via API (sem
+     * redirecionar para uma página do Mercado Pago), a partir do formData
+     * devolvido pelo Payment Brick no frontend. $valor, $descricao e
+     * $externalReference são sempre definidos pelo servidor (nunca confiar
+     * no valor que o cliente manda). $formData só pode conter os campos
+     * esperados do Brick (token, issuer_id, payment_method_id, installments,
+     * payer) — outros campos são ignorados.
+     */
+    public function criarPagamento(array $formData, float $valor, string $descricao, string $externalReference): array
+    {
+        $campos = array_intersect_key($formData, array_flip([
+            'token', 'issuer_id', 'payment_method_id', 'installments', 'payer',
+        ]));
+
+        $payload = array_merge($campos, [
+            'transaction_amount' => $valor,
+            'description'        => $descricao,
+            'external_reference' => $externalReference,
+        ]);
+
+        $response = $this->http()
+            ->withHeaders(['X-Idempotency-Key' => $externalReference])
+            ->post('/v1/payments', $payload);
+
+        $this->throwIfFailed($response, 'processar pagamento');
+        return $response->json();
+    }
+
     private function http()
     {
         return Http::withToken($this->accessToken())

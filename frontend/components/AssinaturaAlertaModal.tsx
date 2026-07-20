@@ -2,11 +2,14 @@
 import { useEffect, useState } from 'react'
 import api from '@/lib/api'
 import { useAuth } from '@/hooks/useAuth'
+import { PagamentoTransparenteModal } from './PagamentoTransparenteModal'
 
 interface AlertaAssinatura {
   show: boolean
   fase?: 'DISPONIVEL' | 'VENCIDA'
   mensagem?: string
+  cobranca_id?: string
+  gateway?: 'ASAAS' | 'MERCADOPAGO'
   valor?: string
   vencimento?: string
   link_pagamento?: string | null
@@ -23,6 +26,7 @@ export function AssinaturaAlertaModal() {
   const [alerta, setAlerta] = useState<AlertaAssinatura | null>(null)
   const [visible, setVisible] = useState(false)
   const [mudandoCiclo, setMudandoCiclo] = useState(false)
+  const [showPagamento, setShowPagamento] = useState(false)
 
   useEffect(() => {
     api.get<AlertaAssinatura>('/assinatura/alerta')
@@ -54,6 +58,18 @@ export function AssinaturaAlertaModal() {
   const isAdmin = getUser()?.role === 'ADMIN'
   const mostrarUpsell = isAdmin && alerta.ciclo_atual === 'MENSAL' && !!alerta.desconto_anual_pct
 
+  if (showPagamento && alerta.cobranca_id) {
+    return (
+      <PagamentoTransparenteModal
+        cobrancaId={alerta.cobranca_id}
+        valor={Number(alerta.valor)}
+        descricao={vencida ? 'Fatura vencida — MecânicaPro' : 'Mensalidade/Anuidade — MecânicaPro'}
+        onClose={() => setShowPagamento(false)}
+        onSuccess={() => setVisible(false)}
+      />
+    )
+  }
+
   return (
     <div style={{
       position: 'fixed', inset: 0, background: 'rgba(0,0,0,.7)', zIndex: 2000,
@@ -84,48 +100,81 @@ export function AssinaturaAlertaModal() {
         )}
 
         <div style={{ display: 'flex', gap: 10, marginBottom: mostrarUpsell ? 24 : 0 }}>
-          <a
-            href={alerta.link_pagamento ?? '#'}
-            target="_blank"
-            rel="noopener noreferrer"
-            style={{
-              flex: 1, textAlign: 'center', padding: '11px', background: 'var(--accent)', color: '#000',
-              borderRadius: 8, fontWeight: 700, fontSize: 14, fontFamily: "'Barlow Condensed', sans-serif",
-              textDecoration: 'none', opacity: alerta.link_pagamento ? 1 : 0.5,
-              pointerEvents: alerta.link_pagamento ? 'auto' : 'none',
-            }}
-          >
-            Pagar com PIX
-          </a>
-          <a
-            href={alerta.link_pagamento ?? '#'}
-            target="_blank"
-            rel="noopener noreferrer"
-            style={{
-              flex: 1, textAlign: 'center', padding: '11px', background: 'transparent', border: '1px solid var(--accent)',
-              color: 'var(--accent)', borderRadius: 8, fontWeight: 700, fontSize: 14, fontFamily: "'Barlow Condensed', sans-serif",
-              textDecoration: 'none', opacity: alerta.link_pagamento ? 1 : 0.5,
-              pointerEvents: alerta.link_pagamento ? 'auto' : 'none',
-            }}
-          >
-            Pagar com Cartão
-          </a>
+          {alerta.gateway === 'MERCADOPAGO' && alerta.cobranca_id ? (
+            <button
+              onClick={() => setShowPagamento(true)}
+              style={{
+                flex: 1, textAlign: 'center', padding: '11px', background: 'var(--accent)', color: '#000',
+                borderRadius: 8, fontWeight: 700, fontSize: 14, fontFamily: "'Barlow Condensed', sans-serif",
+                border: 'none', cursor: 'pointer',
+              }}
+            >
+              Pagar agora
+            </button>
+          ) : (
+            <>
+              <a
+                href={alerta.link_pagamento ?? '#'}
+                target="_blank"
+                rel="noopener noreferrer"
+                style={{
+                  flex: 1, textAlign: 'center', padding: '11px', background: 'var(--accent)', color: '#000',
+                  borderRadius: 8, fontWeight: 700, fontSize: 14, fontFamily: "'Barlow Condensed', sans-serif",
+                  textDecoration: 'none', opacity: alerta.link_pagamento ? 1 : 0.5,
+                  pointerEvents: alerta.link_pagamento ? 'auto' : 'none',
+                }}
+              >
+                Pagar com PIX
+              </a>
+              <a
+                href={alerta.link_pagamento ?? '#'}
+                target="_blank"
+                rel="noopener noreferrer"
+                style={{
+                  flex: 1, textAlign: 'center', padding: '11px', background: 'transparent', border: '1px solid var(--accent)',
+                  color: 'var(--accent)', borderRadius: 8, fontWeight: 700, fontSize: 14, fontFamily: "'Barlow Condensed', sans-serif",
+                  textDecoration: 'none', opacity: alerta.link_pagamento ? 1 : 0.5,
+                  pointerEvents: alerta.link_pagamento ? 'auto' : 'none',
+                }}
+              >
+                Pagar com Cartão
+              </a>
+            </>
+          )}
         </div>
 
-        {mostrarUpsell && (
+        {mostrarUpsell && (() => {
+          const valorMensal = Number(alerta.valor)
+          const pct = alerta.desconto_anual_pct ?? 0
+          const valorAnualTotal = valorMensal * 12
+          const valorAnualComDesconto = valorAnualTotal * (1 - pct / 100)
+          const equivalenteMensalAnual = valorAnualComDesconto / 12
+          const economia = valorAnualTotal - valorAnualComDesconto
+          return (
           <div style={{ borderTop: '1px solid var(--border)', paddingTop: 20 }}>
             <div style={{ fontSize: 12, fontWeight: 700, color: 'var(--muted)', textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: 12 }}>
               Economize trocando para o plano anual
             </div>
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10, marginBottom: 14 }}>
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10, marginBottom: 8 }}>
               <div style={{ border: '1px solid var(--border)', borderRadius: 10, padding: 14, textAlign: 'center' }}>
-                <div style={{ fontSize: 12, color: 'var(--muted)', marginBottom: 4 }}>Mensal</div>
-                <div style={{ fontSize: 13, color: 'var(--text)', fontWeight: 600 }}>Plano atual</div>
+                <div style={{ fontSize: 12, color: 'var(--muted)', marginBottom: 6 }}>Mensal (plano atual)</div>
+                <div style={{ fontSize: 20, color: 'var(--text)', fontWeight: 800, fontFamily: "'JetBrains Mono', monospace" }}>{fmtBRL(String(valorMensal))}</div>
+                <div style={{ fontSize: 11, color: 'var(--muted)', marginTop: 2 }}>por mês</div>
+                <div style={{ fontSize: 11, color: 'var(--muted)', marginTop: 6, borderTop: '1px solid var(--border)', paddingTop: 6 }}>
+                  {fmtBRL(String(valorAnualTotal))}/ano
+                </div>
               </div>
               <div style={{ border: '1px solid var(--accent)', background: 'rgba(245,166,35,.08)', borderRadius: 10, padding: 14, textAlign: 'center' }}>
-                <div style={{ fontSize: 12, color: 'var(--accent)', marginBottom: 4, fontWeight: 700 }}>Anual</div>
-                <div style={{ fontSize: 13, color: 'var(--text)', fontWeight: 600 }}>-{alerta.desconto_anual_pct}%</div>
+                <div style={{ fontSize: 12, color: 'var(--accent)', marginBottom: 6, fontWeight: 700 }}>Anual (-{pct}%)</div>
+                <div style={{ fontSize: 20, color: 'var(--accent)', fontWeight: 800, fontFamily: "'JetBrains Mono', monospace" }}>{fmtBRL(String(valorAnualComDesconto))}</div>
+                <div style={{ fontSize: 11, color: 'var(--muted)', marginTop: 2 }}>por ano</div>
+                <div style={{ fontSize: 11, color: 'var(--accent)', marginTop: 6, borderTop: '1px solid rgba(245,166,35,.3)', paddingTop: 6 }}>
+                  equivale a {fmtBRL(String(equivalenteMensalAnual))}/mês
+                </div>
               </div>
+            </div>
+            <div style={{ textAlign: 'center', fontSize: 12, color: 'var(--success)', fontWeight: 700, marginBottom: 14 }}>
+              Você economiza {fmtBRL(String(economia))} por ano
             </div>
             <button
               onClick={trocarParaAnual}
@@ -139,7 +188,8 @@ export function AssinaturaAlertaModal() {
               {mudandoCiclo ? 'Trocando…' : `Trocar para anual e economizar ${alerta.desconto_anual_pct}%`}
             </button>
           </div>
-        )}
+          )
+        })()}
       </div>
     </div>
   )

@@ -7,17 +7,15 @@ use App\Http\Controllers\Controller;
 use App\Models\Cobranca;
 use App\Models\Oficina;
 use App\Models\SaasConfig;
-use App\Models\SuperAdmin;
-use App\Services\EmailService;
+use App\Services\PagamentoReconciliacaoService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Http;
-use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Mail;
 
 class WebhookController extends Controller
 {
-    public function __construct(private readonly EmailService $emailService) {}
+    public function __construct(private readonly PagamentoReconciliacaoService $reconciliacao) {}
 
     public function asaas(Request $request): JsonResponse
     {
@@ -118,61 +116,9 @@ class WebhookController extends Controller
         if (!$paymentId) return;
 
         $cobranca = Cobranca::where($campoPaymentId, $paymentId)->first();
-        if (!$cobranca || in_array($cobranca->status, ['PAGA', 'CANCELADA'], true)) return;
+        if (!$cobranca) return;
 
-        $cobranca->update(['status' => 'PAGA', 'pago_em' => now()]);
-
-        $oficina = Oficina::find($cobranca->oficina_id);
-        if ($oficina) {
-            $this->notificarAdminPagamento($cobranca, $oficina);
-        }
-
-        if ($cobranca->tipo !== 'ASSINATURA') return;
-        if (!$oficina) return;
-
-        if ($oficina->proximo_vencimento) {
-            $oficina->avancarVencimento();
-        }
-
-        $updates = [];
-        if ($oficina->status !== 'ATIVA') {
-            $updates['status'] = 'ATIVA';
-        }
-        if ($oficina->voto_confianca_ate !== null) {
-            $updates['voto_confianca_ate'] = null;
-        }
-        if (!empty($updates)) {
-            $oficina->update($updates);
-        }
-    }
-
-    /**
-     * Notifica por e-mail todos os super_admins quando uma cobrança (assinatura
-     * ou avulsa) é confirmada como paga. Silencioso se SMTP não estiver
-     * configurado ou se o envio falhar — nunca deve derrubar o webhook.
-     */
-    private function notificarAdminPagamento(Cobranca $cobranca, Oficina $oficina): void
-    {
-        try {
-            if (!$this->emailService->configurado()) return;
-
-            $emails = SuperAdmin::query()->pluck('email')->filter()->values()->all();
-            if (empty($emails)) return;
-
-            $tipoLabel = $cobranca->tipo === 'ASSINATURA' ? 'Mensalidade/Anuidade' : 'Cobrança avulsa';
-            $gatewayLabel = $cobranca->gateway === 'MERCADOPAGO' ? 'Mercado Pago' : 'Asaas';
-
-            $corpo = "A oficina {$oficina->nome} pagou uma fatura.\n\n"
-                . "Tipo: {$tipoLabel}\n"
-                . "Valor: R$ " . number_format((float) $cobranca->valor, 2, ',', '.') . "\n"
-                . "Vencimento: " . ($cobranca->vencimento?->format('d/m/Y') ?? '-') . "\n"
-                . 'Pago em: ' . now()->format('d/m/Y H:i') . "\n"
-                . "Gateway: {$gatewayLabel}";
-
-            $this->emailService->enviar($emails, "MecânicaPro — Pagamento recebido: {$oficina->nome}", $corpo);
-        } catch (\Throwable $e) {
-            Log::warning('Falha ao notificar admin sobre pagamento: ' . $e->getMessage());
-        }
+        $this->reconciliacao->confirmarPagamento($cobranca);
     }
 
     private function extractTs(string $signature): string

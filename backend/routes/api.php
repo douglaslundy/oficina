@@ -174,6 +174,10 @@ Route::middleware(['tenant', 'auth:sanctum'])->group(function () {
     Route::get('notificacoes/ativas', [\App\Http\Controllers\NotificacaoController::class, 'ativas']);
     Route::get('assinatura/alerta', [AssinaturaController::class, 'alerta']);
     Route::get('assinatura/status-bloqueio', [AssinaturaController::class, 'statusBloqueio']);
+    // Checkout transparente (Mercado Pago) — mesmo acesso do link externo que substitui, todos os roles
+    Route::get('pagamento/mercadopago/chave-publica', [\App\Http\Controllers\PagamentoController::class, 'chavePublicaMercadoPago']);
+    Route::post('pagamento/mercadopago',               [\App\Http\Controllers\PagamentoController::class, 'pagarMercadoPago']);
+    Route::get('pagamento/faturas/{id}/status',         [\App\Http\Controllers\PagamentoController::class, 'statusFatura']);
     // Contratação de serviços avulsos (oficina solicita)
     Route::get('pacotes-disponiveis', [\App\Http\Controllers\SolicitacaoServicoController::class, 'pacotesDisponiveis']);
     Route::get('solicitacoes',        [\App\Http\Controllers\SolicitacaoServicoController::class, 'index']);

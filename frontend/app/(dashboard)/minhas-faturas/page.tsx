@@ -4,10 +4,12 @@ import { useState, useEffect, useCallback } from 'react'
 import api from '@/lib/api'
 import { formatarMoeda, formatarDataUTC, formatarDataHora } from '@/lib/formatters'
 import { StatusPill } from '@/components/ui/StatusPill'
+import { PagamentoTransparenteModal } from '@/components/PagamentoTransparenteModal'
 
 interface Fatura {
   id: string
   tipo: 'ASSINATURA' | 'AVULSA'
+  tipo_label: string
   descricao: string
   valor: string
   status: 'PENDENTE' | 'VENCIDA' | 'PAGA' | 'CANCELADA'
@@ -33,6 +35,7 @@ export default function MinhasFaturasPage() {
   const [semPermissao, setSemPermissao] = useState(false)
   const [erro, setErro] = useState<string | null>(null)
   const [detalhe, setDetalhe] = useState<Fatura | null>(null)
+  const [pagamento, setPagamento] = useState<Fatura | null>(null)
 
   const fetchFaturas = useCallback(async () => {
     setLoading(true)
@@ -161,7 +164,7 @@ export default function MinhasFaturasPage() {
                               background: f.tipo === 'ASSINATURA' ? 'rgba(245,166,35,.15)' : 'rgba(30,136,229,.15)',
                               color: f.tipo === 'ASSINATURA' ? 'var(--accent)' : 'var(--info)',
                             }}>
-                              {f.tipo === 'ASSINATURA' ? 'Mensalidade/Anuidade' : 'Avulsa'}
+                              {f.tipo_label}
                             </span>
                           </td>
                           <td style={{ padding: '11px 14px', fontFamily: "'JetBrains Mono', monospace", fontSize: 12, color: 'var(--text)' }}>
@@ -172,7 +175,19 @@ export default function MinhasFaturasPage() {
                           </td>
                           <td style={{ padding: '11px 14px' }}><StatusPill status={f.status} /></td>
                           <td style={{ padding: '11px 14px' }}>
-                            {(f.status === 'PENDENTE' || f.status === 'VENCIDA') && (
+                            {(f.status === 'PENDENTE' || f.status === 'VENCIDA') && f.gateway === 'MERCADOPAGO' && (
+                              <button
+                                onClick={() => setPagamento(f)}
+                                style={{
+                                  padding: '5px 14px', borderRadius: 6, fontSize: 12, fontWeight: 700,
+                                  background: 'var(--accent)', color: '#000', border: 'none', cursor: 'pointer',
+                                  fontFamily: "'Barlow Condensed', sans-serif",
+                                }}
+                              >
+                                Pagar
+                              </button>
+                            )}
+                            {(f.status === 'PENDENTE' || f.status === 'VENCIDA') && f.gateway !== 'MERCADOPAGO' && (
                               <a
                                 href={f.link_pagamento ?? '#'}
                                 target="_blank"
@@ -231,7 +246,7 @@ export default function MinhasFaturasPage() {
             <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
               {[
                 ['Descrição', detalhe.descricao],
-                ['Tipo', detalhe.tipo === 'ASSINATURA' ? 'Mensalidade/Anuidade' : 'Cobrança avulsa'],
+                ['Tipo', detalhe.tipo_label],
                 ['Valor', formatarMoeda(Number(detalhe.valor))],
                 ['Vencimento', formatarDataUTC(detalhe.vencimento)],
                 ['Pago em', formatarDataHora(detalhe.pago_em)],
@@ -255,6 +270,16 @@ export default function MinhasFaturasPage() {
             </button>
           </div>
         </div>
+      )}
+
+      {pagamento && (
+        <PagamentoTransparenteModal
+          cobrancaId={pagamento.id}
+          valor={Number(pagamento.valor)}
+          descricao={pagamento.descricao}
+          onClose={() => setPagamento(null)}
+          onSuccess={() => { fetchFaturas() }}
+        />
       )}
     </>
   )

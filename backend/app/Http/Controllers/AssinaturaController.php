@@ -69,6 +69,7 @@ class AssinaturaController extends Controller
             'data' => $cobrancas->map(fn (Cobranca $c) => [
                 'id'             => $c->id,
                 'tipo'           => $c->tipo,
+                'tipo_label'     => $this->tipoLabel($c),
                 'descricao'      => $c->descricao ?: ($c->tipo === 'ASSINATURA' ? 'Mensalidade/Anuidade' : 'Cobrança avulsa'),
                 'valor'          => number_format((float) $c->valor, 2, '.', ''),
                 'status'         => $c->status,
@@ -79,6 +80,22 @@ class AssinaturaController extends Controller
                 'id_pagamento'   => $c->asaas_payment_id ?? $c->mp_payment_id,
             ])->values(),
         ]);
+    }
+
+    /**
+     * Rótulo do tipo de cobrança para exibição — nunca "Mensalidade/Anuidade"
+     * junto, sempre um ou outro. Para ASSINATURA, deriva do texto de
+     * `descricao` gravado na criação (CobrancaRecorrenteService), que já
+     * reflete o ciclo real daquela cobrança específica — não o ciclo atual
+     * da oficina, que pode ter mudado depois.
+     */
+    private function tipoLabel(Cobranca $c): string
+    {
+        if ($c->tipo !== 'ASSINATURA') {
+            return 'Avulsa';
+        }
+
+        return str_contains(mb_strtolower((string) $c->descricao), 'anual') ? 'Anuidade' : 'Mensalidade';
     }
 
     public function statusBloqueio(): JsonResponse

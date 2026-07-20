@@ -134,9 +134,55 @@ Rodada 2 deployada e validada (commit `f0f5532`, domínios OK).
   — instância Evolution dedicada à plataforma, não a uma oficina; hoje
   `whatsapp_configs.oficina_id` é NOT NULL). Retomar se o usuário pedir.
 
+Rodada 3 deployada e validada.
+
+## Rodada 4 (mesma sessão) — 3 correções: cards de valor, checkout transparente, rótulo de tipo
+1. **Cards de comparação mensal/anual** (`AssinaturaAlertaModal.tsx`, upsell
+   de troca pra anual): agora mostram valores reais em R$ (mensal, anual
+   total sem desconto, anual com desconto, equivalente mensal e economia),
+   calculados no frontend a partir de `alerta.valor` +
+   `alerta.desconto_anual_pct` (mesma fórmula do backend). Antes só tinha
+   "Plano atual" e "-X%" sem números.
+2. **Checkout transparente (Mercado Pago)** — antes o pagamento sempre
+   abria `link_pagamento` (Checkout Pro) numa aba externa. Agora, pra
+   cobranças com `gateway === 'MERCADOPAGO'`, o pagamento acontece dentro
+   do próprio sistema via Payment Brick (`@mercadopago/sdk-react`,
+   cartão + PIX com QR code inline). Asaas **não foi alterado** — continua
+   abrindo o link externo (fora do escopo do pedido).
+   - Backend: `MercadoPagoService::criarPagamento()` chama `/v1/payments`
+     direto (não mais `/checkout/preferences` pro pagamento em si — essa
+     preference continua sendo criada na hora da cobrança só como
+     fallback/registro, mas não é mais usada pela UI de oficinas MP).
+     Novo `PagamentoController` (`GET /pagamento/mercadopago/chave-publica`,
+     `POST /pagamento/mercadopago`, `GET /pagamento/faturas/{id}/status`).
+     Lógica de "marcar paga + avançar vencimento + reativar + notificar
+     admin" extraída do `WebhookController` pra
+     `PagamentoReconciliacaoService`, reusada pelos dois fluxos (webhook
+     assíncrono E confirmação síncrona no checkout transparente).
+   - `AssinaturaAlertaService` (alerta + status-bloqueio) passou a incluir
+     `cobranca_id` e `gateway` na resposta — antes só tinha `link_pagamento`.
+   - Frontend: novo componente `PagamentoTransparenteModal.tsx`
+     (formulário → aprovado/PIX pendente com polling a cada 5s/rejeitado),
+     usado em `minhas-faturas`, `AssinaturaAlertaModal` e `bloqueado`
+     — nos 3 lugares, só troca de comportamento quando `gateway ===
+     'MERCADOPAGO'`; Asaas mantém o `<a href>` externo de antes.
+   - Instalado `@mercadopago/sdk-react` (compatível com React 19).
+3. **Rótulo "Mensalidade/Anuidade" errado** — a coluna Tipo em Minhas
+   Faturas sempre mostrava as duas palavras juntas pra qualquer cobrança de
+   assinatura. Corrigido: backend deriva `tipo_label` ("Mensalidade" ou
+   "Anuidade", nunca as duas) a partir do texto de `descricao` gravado na
+   criação da cobrança (que já reflete o ciclo real daquele charge
+   específico, não o ciclo atual da oficina).
+- Lint/build: `php -l` limpo em todos os arquivos, `npx tsc --noEmit` e
+  `npm run build` limpos. **Ainda não deployado nem testado com
+  credenciais reais de Mercado Pago** — recomendo testar em homologação
+  antes de assumir que o fluxo de pagamento ponta a ponta funciona (a
+  lógica está implementada e compila, mas nunca rodou contra a API real do
+  MP nesta sessão).
+
 ## Próxima tarefa
-1. Verificar deploy da rodada 3 + domínio público.
-2. Pedir pro usuário testar: pagar uma cobrança de teste e confirmar que o
-   e-mail chega pros admins cadastrados em `super_admins` (SMTP precisa
-   estar configurado em Configurações do SaaS Admin).
-3. Perguntar se quer avançar com o WhatsApp do admin depois.
+1. Commitar + deploy da rodada 4.
+2. **Testar de verdade um pagamento MP na tela (cartão e PIX)** antes de
+   confiar no fluxo — é código novo que nunca rodou contra a API real.
+3. Confirmar que Asaas continua funcionando como antes (não deveria ter
+   mudado nada pra essas oficinas).

@@ -3,11 +3,14 @@ import { useEffect, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import api from '@/lib/api'
 import { useAuth } from '@/hooks/useAuth'
+import { PagamentoTransparenteModal } from '@/components/PagamentoTransparenteModal'
 
 interface StatusBloqueio {
   suspensa: boolean
   fase?: 'DISPONIVEL' | 'VENCIDA'
   mensagem?: string
+  cobranca_id?: string
+  gateway?: 'ASAAS' | 'MERCADOPAGO'
   valor?: string
   vencimento?: string
   link_pagamento?: string | null
@@ -26,6 +29,7 @@ export default function BloqueadoPage() {
   const [liberando, setLiberando] = useState(false)
   const [liberado, setLiberado] = useState<string | null>(null)
   const [erro, setErro] = useState<string | null>(null)
+  const [showPagamento, setShowPagamento] = useState(false)
 
   useEffect(() => {
     api.get<StatusBloqueio>('/assinatura/status-bloqueio')
@@ -66,6 +70,7 @@ export default function BloqueadoPage() {
   const isAdmin = getUser()?.role === 'ADMIN'
 
   return (
+    <>
     <div style={{ minHeight: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'var(--bg)', padding: 20 }}>
       <div style={{ background: 'var(--card)', border: '1px solid var(--danger)', borderRadius: 14, width: '100%', maxWidth: 480, padding: 36, textAlign: 'center' }}>
         <div style={{ fontSize: 40, marginBottom: 16 }}>🔒</div>
@@ -81,7 +86,15 @@ export default function BloqueadoPage() {
           </p>
         )}
 
-        {!liberado && (
+        {!liberado && status.gateway === 'MERCADOPAGO' && status.cobranca_id && (
+          <div style={{ marginBottom: 24 }}>
+            <button onClick={() => setShowPagamento(true)}
+              style={{ width: '100%', padding: '12px', background: 'var(--accent)', color: '#000', border: 'none', borderRadius: 8, fontWeight: 700, fontSize: 14, fontFamily: "'Barlow Condensed', sans-serif", cursor: 'pointer' }}>
+              Pagar agora
+            </button>
+          </div>
+        )}
+        {!liberado && status.gateway !== 'MERCADOPAGO' && (
           <div style={{ display: 'flex', gap: 10, marginBottom: 24 }}>
             <a href={status.link_pagamento ?? '#'} target="_blank" rel="noopener noreferrer"
               style={{ flex: 1, textAlign: 'center', padding: '12px', background: 'var(--accent)', color: '#000', borderRadius: 8, fontWeight: 700, fontSize: 14, fontFamily: "'Barlow Condensed', sans-serif", textDecoration: 'none', opacity: status.link_pagamento ? 1 : 0.5, pointerEvents: status.link_pagamento ? 'auto' : 'none' }}>
@@ -123,5 +136,16 @@ export default function BloqueadoPage() {
         ) : null}
       </div>
     </div>
+
+    {showPagamento && status.cobranca_id && (
+      <PagamentoTransparenteModal
+        cobrancaId={status.cobranca_id}
+        valor={Number(status.valor)}
+        descricao="Regularização de fatura — MecânicaPro"
+        onClose={() => setShowPagamento(false)}
+        onSuccess={() => router.push('/')}
+      />
+    )}
+    </>
   )
 }
