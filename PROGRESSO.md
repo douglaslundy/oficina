@@ -211,10 +211,56 @@ homologação).
   `payer`) já era exatamente esse.
 - Lint/build limpos (`npx tsc --noEmit` + `npm run build`).
 
+Rodada 5 deployada e validada (commit `1224f55`).
+
+## Rodada 6 (mesma sessão) — CPF pré-preenchido + campos de cartão espremidos
+- Usuário testou: pediu CPF digitado (deveria vir de `oficinas.admin_cpf`) e
+  os campos de cartão não deixavam digitar. Causa do segundo: o wrapper dos
+  secure fields tinha `height: 20` com `padding: '9px 12px'` no PRÓPRIO
+  wrapper — como o iframe da MP preenche 100% do wrapper, sobrava ~2px de
+  área útil. Corrigido: padding movido pro `style` do field (renderiza
+  dentro do iframe), wrapper com 40px fixos. CPF: endpoint da chave pública
+  agora retorna `cpf_titular` (via `TenancyContext` → `Oficina.admin_cpf`),
+  frontend pré-preenche. Commit `3c05882`, deployado e validado.
+
+## Rodada 7 (mesma sessão) — PIX travado + estorno + conciliação manual
+- Usuário pagou via PIX, tela ficou "aguardando pagamento" mesmo após F5.
+  **Causa**: o sistema dependia 100% do webhook da MP chegar pra marcar a
+  cobrança como PAGA — se o webhook atrasar, falhar, ou nunca tiver sido
+  registrado corretamente no painel do Mercado Pago, o status local nunca
+  atualiza sozinho.
+- **Fix de raiz**: `PagamentoController::statusFatura()` (chamado pelo
+  polling do frontend a cada 5s) agora, se a cobrança ainda não está PAGA
+  localmente e tem `mp_payment_id`, consulta a API da MP direto
+  (`MercadoPagoService::buscarPagamento()`) e concilia na hora — não
+  depende mais só do webhook. Isso já corrige o caso relatado assim que o
+  usuário reabrir a tela/pagar de novo.
+- **Novo: botão "Estornar"** (SaaS admin) — em `saas-admin/cobrancas`
+  (lista global) e na tela de detalhe da oficina ("Cobranças Locais"), com
+  modal de confirmação antes de agir (não é `confirm()` nativo). Chama
+  `MercadoPagoService::estornarPagamento()` / `AsaasService::
+  estornarPagamento()` (novos métodos) e marca a cobrança como novo status
+  `ESTORNADA` (não reaproveitei `CANCELADA` — são coisas diferentes: uma é
+  "nunca foi cobrada", outra é "foi paga e devolvida"). **Não desfaz**
+  efeitos locais automáticos (avanço de vencimento, reativação da oficina)
+  — mensagem de sucesso avisa o admin pra revisar manualmente se precisar.
+- **Novo: botão "Conciliar"** (mesmos dois lugares) — endpoint
+  `POST /saas/cobrancas/conciliar` (aceita `oficina_id` opcional) varre
+  cobranças PENDENTE/VENCIDA com payment_id e verifica o status real no
+  gateway, reconciliando as que já foram pagas. É a versão manual/global do
+  mesmo fix de raiz do polling — útil pra oficinas travadas que não estão
+  com a tela de pagamento aberta esperando.
+- Corrigido de passagem: mesmo bug de nomenclatura de status
+  (`PAGO`/`PENDENTE`/`VENCIDO`) na página global `saas-admin/cobrancas`
+  — os pills nunca batiam com os valores reais (`PAGA`/`VENCIDA`).
+- Lint/build limpos.
+
 ## Próxima tarefa
-1. Deploy da rodada 5.
-2. **Testar de verdade** (ambiente é `producao`, dinheiro real): cartão
-   (conferir se detecta bandeira/parcelas) e PIX (QR code + confirmação
-   automática via polling/webhook). Usar valor baixo numa cobrança avulsa.
-3. Confirmar visualmente que os campos de cartão agora parecem parte do
-   sistema (fundo escuro, sem "janela" da MP aparecendo).
+1. Deploy da rodada 7.
+2. Testar: reabrir a fatura PIX que ficou travada (deve resolver sozinha
+   via polling agora) ou usar o botão "Conciliar" pra forçar. Testar
+   "Estornar" numa cobrança paga de teste.
+3. **Investigar por que o webhook da MP não chegou** — o fix de polling é
+   uma rede de segurança, mas o webhook deveria funcionar. Verificar se a
+   URL do webhook está registrada corretamente no painel do Mercado Pago
+   pra essa aplicação/access token.

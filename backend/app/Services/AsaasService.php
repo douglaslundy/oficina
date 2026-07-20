@@ -118,6 +118,26 @@ class AsaasService
         return $response->successful();
     }
 
+    /** Consulta o status atual de um pagamento direto na API — usado pra conciliação manual/ativa (não depende do webhook ter chegado). */
+    public function buscarPagamento(string $paymentId): array
+    {
+        $response = Http::withHeaders(['access_token' => $this->apiKey])
+            ->get("{$this->baseUrl}/payments/{$paymentId}");
+
+        $this->throwIfFailed($response, 'buscar pagamento');
+        return $response->json();
+    }
+
+    /** Estorna (total) um pagamento já confirmado/recebido. */
+    public function estornarPagamento(string $paymentId): array
+    {
+        $response = Http::withHeaders(['access_token' => $this->apiKey])
+            ->post("{$this->baseUrl}/payments/{$paymentId}/refund");
+
+        $this->throwIfFailed($response, 'estornar pagamento');
+        return $response->json();
+    }
+
     public function buscarCustomer(string $customerId): array
     {
         $response = Http::withHeaders(['access_token' => $this->apiKey])

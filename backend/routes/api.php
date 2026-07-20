@@ -75,6 +75,8 @@ Route::prefix('saas')->group(function () {
         Route::get('cobrancas',                [SaaSCobrancaController::class, 'index']);
         Route::get('cobrancas/por/{oficina_id}', [SaaSCobrancaController::class, 'byOficina']);
         Route::delete('cobrancas/{id}',        [SaaSCobrancaController::class, 'cancelar']);
+        Route::post('cobrancas/conciliar',     [SaaSCobrancaController::class, 'conciliar']);
+        Route::post('cobrancas/{id}/estornar', [SaaSCobrancaController::class, 'estornar']);
 
         // Oficinas — Asaas
         Route::get('oficinas/{id}/asaas',                      [SaaSOficinaController::class, 'asaasStatus']);

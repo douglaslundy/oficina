@@ -11,9 +11,12 @@ interface Cobranca {
   oficina: { id: string; nome: string } | null
   mes_referencia: string // ISO date: "2025-11-01"
   valor: string // e.g. "199.90"
-  status: 'PAGO' | 'PENDENTE' | 'VENCIDO'
+  status: 'PAGA' | 'PENDENTE' | 'VENCIDA' | 'CANCELADA' | 'ESTORNADA'
   vencimento: string // ISO date: "2025-11-30"
   pago_em: string | null // ISO8601 datetime or null
+  gateway: 'ASAAS' | 'MERCADOPAGO' | null
+  asaas_payment_id: string | null
+  mp_payment_id: string | null
 }
 
 interface Oficina {
@@ -63,8 +66,8 @@ const STATUS_CONFIG: Record<
   Cobranca['status'],
   { label: string; bg: string; color: string }
 > = {
-  PAGO: {
-    label: 'Pago',
+  PAGA: {
+    label: 'Paga',
     bg: 'rgba(67,160,71,.15)',
     color: 'var(--success)',
   },
@@ -73,10 +76,20 @@ const STATUS_CONFIG: Record<
     bg: 'rgba(245,166,35,.15)',
     color: 'var(--accent)',
   },
-  VENCIDO: {
-    label: 'Vencido',
+  VENCIDA: {
+    label: 'Vencida',
     bg: 'rgba(229,57,53,.15)',
     color: 'var(--danger)',
+  },
+  CANCELADA: {
+    label: 'Cancelada',
+    bg: 'rgba(122,128,144,.15)',
+    color: 'var(--muted)',
+  },
+  ESTORNADA: {
+    label: 'Estornada',
+    bg: 'rgba(30,136,229,.15)',
+    color: 'var(--info)',
   },
 }
 
@@ -98,13 +111,17 @@ function Skeleton({ width, height }: { width?: string | number; height?: string 
 
 // ─── Page ─────────────────────────────────────────────────────────────────────
 
-const TABLE_COLS = ['Oficina', 'Mês Referência', 'Valor (R$)', 'Vencimento', 'Status', 'Data Pagamento']
+const TABLE_COLS = ['Oficina', 'Mês Referência', 'Valor (R$)', 'Vencimento', 'Status', 'Data Pagamento', 'Ação']
 
 export default function CobrancasPage() {
   const [cobrancas, setCobrancas] = useState<Cobranca[]>([])
   const [meta, setMeta] = useState<PaginationMeta | null>(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
+  const [toast, setToast] = useState<{ msg: string; type: 'ok' | 'err' } | null>(null)
+  const [confirmDialog, setConfirmDialog] = useState<{ message: string; onConfirm: () => void } | null>(null)
+  const [conciliando, setConciliando] = useState(false)
+  const [estornandoId, setEstornandoId] = useState<string | null>(null)
 
   // Oficinas for filter select
   const [oficinas, setOficinas] = useState<Oficina[]>([])
@@ -120,6 +137,11 @@ export default function CobrancasPage() {
 
   // Pagination
   const [page, setPage] = useState(1)
+
+  function showToast(msg: string, type: 'ok' | 'err' = 'ok') {
+    setToast({ msg, type })
+    setTimeout(() => setToast(null), 4000)
+  }
 
   // ─── Fetch oficinas (once) ─────────────────────────────────────────────────
 
@@ -169,6 +191,41 @@ export default function CobrancasPage() {
     fetchCobrancas(page, activeMes, activeOficinaId)
   }, [fetchCobrancas, page, activeMes, activeOficinaId])
 
+  async function handleConciliar() {
+    setConciliando(true)
+    try {
+      const params: Record<string, string> = {}
+      if (activeOficinaId) params.oficina_id = activeOficinaId
+      const res = await saasApi.post<{ message: string }>('/saas/cobrancas/conciliar', null, { params })
+      showToast(res.data.message)
+      fetchCobrancas(page, activeMes, activeOficinaId)
+    } catch (e: unknown) {
+      const msg = (e as { response?: { data?: { message?: string } } })?.response?.data?.message ?? 'Erro ao conciliar pagamentos.'
+      showToast(msg, 'err')
+    } finally {
+      setConciliando(false)
+    }
+  }
+
+  function handleEstornar(cobranca: Cobranca) {
+    setConfirmDialog({
+      message: `Estornar o pagamento de ${cobranca.oficina?.nome ?? 'oficina'} (${formatarValor(cobranca.valor)})? Essa ação devolve o dinheiro no gateway e não pode ser desfeita.`,
+      onConfirm: async () => {
+        setEstornandoId(cobranca.id)
+        try {
+          const res = await saasApi.post<{ message: string }>(`/saas/cobrancas/${cobranca.id}/estornar`)
+          showToast(res.data.message)
+          fetchCobrancas(page, activeMes, activeOficinaId)
+        } catch (e: unknown) {
+          const msg = (e as { response?: { data?: { message?: string } } })?.response?.data?.message ?? 'Erro ao estornar pagamento.'
+          showToast(msg, 'err')
+        } finally {
+          setEstornandoId(null)
+        }
+      },
+    })
+  }
+
   // ─── Filter actions ────────────────────────────────────────────────────────
 
   function handleFiltrar() {
@@ -202,7 +259,50 @@ export default function CobrancasPage() {
           from { opacity: 0; transform: translateY(-6px); }
           to   { opacity: 1; transform: translateY(0); }
         }
+        @keyframes slideIn {
+          from { transform: translateX(100%); opacity: 0; }
+          to   { transform: none; opacity: 1; }
+        }
       `}</style>
+
+      {toast && (
+        <div style={{
+          position: 'fixed', bottom: 24, right: 24, zIndex: 9999,
+          padding: '12px 20px', borderRadius: 8, fontSize: 14, fontWeight: 500,
+          background: toast.type === 'ok' ? 'var(--success)' : 'var(--danger)', color: '#fff',
+          animation: 'slideIn 0.2s ease',
+        }}>
+          {toast.msg}
+        </div>
+      )}
+
+      {confirmDialog && (
+        <div style={{
+          position: 'fixed', inset: 0, background: 'rgba(0,0,0,.6)',
+          display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000,
+        }}>
+          <div style={{ background: 'var(--card)', border: '1px solid var(--border)', borderRadius: 12, padding: 28, width: 400 }}>
+            <h3 className="font-display" style={{ fontSize: 18, fontWeight: 800, color: 'var(--text)', marginBottom: 16 }}>
+              Confirmar ação
+            </h3>
+            <p style={{ fontSize: 14, color: 'var(--text)', marginBottom: 24, lineHeight: 1.5 }}>
+              {confirmDialog.message}
+            </p>
+            <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end' }}>
+              <button onClick={() => setConfirmDialog(null)}
+                style={{ padding: '9px 16px', background: 'none', border: '1px solid var(--border)', color: 'var(--muted)', borderRadius: 8, fontSize: 14, cursor: 'pointer' }}>
+                Cancelar
+              </button>
+              <button
+                onClick={() => { const fn = confirmDialog.onConfirm; setConfirmDialog(null); fn() }}
+                style={{ padding: '9px 20px', background: 'rgba(229,57,53,.15)', color: 'var(--danger)', border: '1px solid var(--danger)', borderRadius: 8, fontWeight: 700, fontSize: 14, fontFamily: "'Barlow Condensed', sans-serif", cursor: 'pointer' }}
+              >
+                Confirmar
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       <div style={{ padding: '32px 32px 40px', color: 'var(--text)', maxWidth: 1200, margin: '0 auto' }}>
         {/* Page header */}
@@ -335,6 +435,24 @@ export default function CobrancasPage() {
             >
               Limpar
             </button>
+            <button
+              onClick={handleConciliar}
+              disabled={conciliando}
+              title="Verifica no gateway o status real das cobranças pendentes/vencidas — não depende do webhook ter chegado"
+              style={{
+                background: 'none',
+                border: '1px solid var(--info)',
+                color: 'var(--info)',
+                borderRadius: 8,
+                padding: '9px 18px',
+                fontSize: 14,
+                fontWeight: 600,
+                cursor: conciliando ? 'not-allowed' : 'pointer',
+                opacity: conciliando ? 0.6 : 1,
+              }}
+            >
+              {conciliando ? 'Conciliando…' : '⟳ Conciliar Pagamentos'}
+            </button>
           </div>
         </div>
 
@@ -413,12 +531,15 @@ export default function CobrancasPage() {
                       <td style={{ padding: '13px 16px' }}>
                         <Skeleton width="50%" height={14} />
                       </td>
+                      <td style={{ padding: '13px 16px' }}>
+                        <Skeleton width={70} height={22} />
+                      </td>
                     </tr>
                   ))
                 ) : cobrancas.length === 0 ? (
                   <tr>
                     <td
-                      colSpan={6}
+                      colSpan={7}
                       style={{
                         padding: '48px 16px',
                         textAlign: 'center',
@@ -533,6 +654,26 @@ export default function CobrancasPage() {
                             </span>
                           ) : (
                             <span style={{ color: 'var(--muted)', fontSize: 14 }}>—</span>
+                          )}
+                        </td>
+
+                        {/* Ação */}
+                        <td style={{ padding: '12px 16px', whiteSpace: 'nowrap' }}>
+                          {cobranca.status === 'PAGA' && (cobranca.mp_payment_id || cobranca.asaas_payment_id) ? (
+                            <button
+                              onClick={() => handleEstornar(cobranca)}
+                              disabled={estornandoId === cobranca.id}
+                              style={{
+                                background: 'none', border: '1px solid var(--danger)', color: 'var(--danger)',
+                                borderRadius: 6, padding: '4px 10px', fontSize: 12, fontWeight: 600,
+                                cursor: estornandoId === cobranca.id ? 'not-allowed' : 'pointer',
+                                opacity: estornandoId === cobranca.id ? 0.6 : 1,
+                              }}
+                            >
+                              {estornandoId === cobranca.id ? 'Estornando…' : 'Estornar'}
+                            </button>
+                          ) : (
+                            <span style={{ color: 'var(--muted)', fontSize: 13 }}>—</span>
                           )}
                         </td>
                       </tr>

@@ -7,12 +7,20 @@ use App\Http\Controllers\Controller;
 use App\Models\Cobranca;
 use App\Models\Oficina;
 use App\Services\AsaasService;
+use App\Services\MercadoPagoService;
+use App\Services\PagamentoReconciliacaoService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Log;
 
 class CobrancaController extends Controller
 {
-    public function __construct(private AsaasService $asaas) {}
+    public function __construct(
+        private readonly AsaasService $asaas,
+        private readonly MercadoPagoService $mercadoPago,
+        private readonly PagamentoReconciliacaoService $reconciliacao,
+    ) {}
+
     public function index(Request $request): JsonResponse
     {
         $query = Cobranca::with('oficina')
@@ -66,7 +74,7 @@ class CobrancaController extends Controller
         $cobranca = Cobranca::findOrFail($id);
 
         if ($cobranca->status === 'PAGA') {
-            return response()->json(['message' => 'Não é possível cancelar uma cobrança já paga.'], 422);
+            return response()->json(['message' => 'Não é possível cancelar uma cobrança já paga. Use "Estornar" se o pagamento precisa ser desfeito.'], 422);
         }
 
         if ($cobranca->gateway === 'MERCADOPAGO') {
@@ -85,6 +93,93 @@ class CobrancaController extends Controller
         return response()->json(['message' => 'Cobrança cancelada com sucesso.']);
     }
 
+    /**
+     * Estorna uma cobrança já paga direto no gateway. Não desfaz efeitos
+     * locais automáticos (avanço de vencimento, reativação da oficina) —
+     * são raros e o admin deve revisar manualmente o estado da assinatura
+     * se necessário, já que desfazer com segurança exigiria saber se houve
+     * pagamentos posteriores etc.
+     */
+    public function estornar(string $id): JsonResponse
+    {
+        $cobranca = Cobranca::findOrFail($id);
+
+        if ($cobranca->status !== 'PAGA') {
+            return response()->json(['message' => 'Só é possível estornar uma cobrança que já foi paga.'], 422);
+        }
+
+        $paymentId = $cobranca->gateway === 'MERCADOPAGO' ? $cobranca->mp_payment_id : $cobranca->asaas_payment_id;
+        if (!$paymentId) {
+            return response()->json(['message' => 'Cobrança sem ID de pagamento no gateway — não é possível estornar automaticamente.'], 422);
+        }
+
+        try {
+            if ($cobranca->gateway === 'MERCADOPAGO') {
+                $this->mercadoPago->estornarPagamento($paymentId);
+            } else {
+                $this->asaas->estornarPagamento($paymentId);
+            }
+        } catch (\Throwable $e) {
+            return response()->json(['message' => 'Falha ao estornar no gateway: ' . $e->getMessage()], 502);
+        }
+
+        $cobranca->update(['status' => 'ESTORNADA']);
+
+        return response()->json([
+            'message' => 'Pagamento estornado com sucesso. Se essa cobrança tinha avançado o vencimento ou reativado a oficina, revise manualmente em "Cobrança Recorrente" na tela da oficina.',
+        ]);
+    }
+
+    /**
+     * Concilia cobranças PENDENTE/VENCIDA que já têm um payment_id contra o
+     * status real no gateway — não depende do webhook ter chegado (pode
+     * atrasar, falhar, ou nunca ter sido configurado). Filtra por oficina se
+     * `oficina_id` vier na query.
+     */
+    public function conciliar(Request $request): JsonResponse
+    {
+        $query = Cobranca::whereIn('status', ['PENDENTE', 'VENCIDA'])
+            ->where(function ($q) {
+                $q->whereNotNull('mp_payment_id')->orWhereNotNull('asaas_payment_id');
+            });
+
+        if ($request->filled('oficina_id')) {
+            $query->where('oficina_id', $request->query('oficina_id'));
+        }
+
+        $cobrancas = $query->get();
+
+        $verificadas = 0;
+        $conciliadas = 0;
+
+        foreach ($cobrancas as $cobranca) {
+            $verificadas++;
+            try {
+                if ($cobranca->gateway === 'MERCADOPAGO' && $cobranca->mp_payment_id) {
+                    $pagamento = $this->mercadoPago->buscarPagamento($cobranca->mp_payment_id);
+                    if (($pagamento['status'] ?? null) === 'approved') {
+                        $this->reconciliacao->confirmarPagamento($cobranca);
+                        $conciliadas++;
+                    }
+                } elseif ($cobranca->gateway === 'ASAAS' && $cobranca->asaas_payment_id) {
+                    $pagamento = $this->asaas->buscarPagamento($cobranca->asaas_payment_id);
+                    if (in_array($pagamento['status'] ?? null, ['RECEIVED', 'CONFIRMED'], true)) {
+                        $this->reconciliacao->confirmarPagamento($cobranca);
+                        $conciliadas++;
+                    }
+                }
+            } catch (\Throwable $e) {
+                Log::warning("Conciliação: falha ao verificar cobrança {$cobranca->id}: " . $e->getMessage());
+            }
+        }
+
+        return response()->json([
+            'message'     => "Conciliação concluída: {$conciliadas} de {$verificadas} cobrança(s) pendente(s) confirmada(s) como paga(s).",
+            'verificadas' => $verificadas,
+            'conciliadas' => $conciliadas,
+        ]);
+    }
+
     private function formatCobranca(Cobranca $cobranca): array
     {
         return [
@@ -98,7 +193,9 @@ class CobrancaController extends Controller
             'status'           => $cobranca->status,
             'vencimento'       => $cobranca->vencimento?->toDateString(),
             'pago_em'          => $cobranca->pago_em?->toIso8601String(),
+            'gateway'          => $cobranca->gateway,
             'asaas_payment_id' => $cobranca->asaas_payment_id,
+            'mp_payment_id'    => $cobranca->mp_payment_id,
         ];
     }
 }

@@ -101,6 +101,22 @@ class MercadoPagoService
         return $response->json();
     }
 
+    /** Consulta o status atual de um pagamento direto na API — usado pra conciliação manual/ativa (não depende do webhook ter chegado). */
+    public function buscarPagamento(string $paymentId): array
+    {
+        $response = $this->http()->get("/v1/payments/{$paymentId}");
+        $this->throwIfFailed($response, 'buscar pagamento');
+        return $response->json();
+    }
+
+    /** Estorna (total) um pagamento já aprovado. */
+    public function estornarPagamento(string $paymentId): array
+    {
+        $response = $this->http()->post("/v1/payments/{$paymentId}/refunds");
+        $this->throwIfFailed($response, 'estornar pagamento');
+        return $response->json();
+    }
+
     /**
      * Cria uma cobrança avulsa via Checkout Pro — gera um link de pagamento
      * (PIX, cartão ou boleto) com vencimento definido pela data de expiração.

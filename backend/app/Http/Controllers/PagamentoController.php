@@ -114,7 +114,15 @@ class PagamentoController extends Controller
         return response()->json($resposta);
     }
 
-    /** Consulta o status atual da fatura — usado pelo frontend pra checar se um PIX pendente já foi confirmado (webhook). */
+    /**
+     * Consulta o status atual da fatura — usado pelo frontend (polling) pra
+     * checar se um PIX pendente já foi pago. Não depende só do webhook ter
+     * chegado: se ainda não está PAGA localmente e há um payment_id, consulta
+     * a API do gateway direto e concilia na hora — o webhook pode atrasar,
+     * falhar ou nunca ter sido configurado corretamente, mas essa checagem
+     * ativa garante que o status não fique preso em PENDENTE indefinidamente
+     * enquanto o usuário está com a tela aberta esperando.
+     */
     public function statusFatura(string $id): JsonResponse
     {
         $oficinaId = TenancyContext::get();
@@ -122,6 +130,18 @@ class PagamentoController extends Controller
 
         if (!$cobranca) {
             return response()->json(['message' => 'Fatura não encontrada.'], 404);
+        }
+
+        if ($cobranca->status !== 'PAGA' && $cobranca->mp_payment_id) {
+            try {
+                $pagamento = $this->mercadoPago->buscarPagamento($cobranca->mp_payment_id);
+                if (($pagamento['status'] ?? null) === 'approved') {
+                    $this->reconciliacao->confirmarPagamento($cobranca);
+                    $cobranca->refresh();
+                }
+            } catch (\Throwable) {
+                // Silencioso — o polling tenta de novo no próximo tick.
+            }
         }
 
         return response()->json([

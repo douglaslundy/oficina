@@ -66,10 +66,12 @@ interface Cobranca {
   id: string
   mes_referencia: string
   valor: string
-  status: 'PAGA' | 'PENDENTE' | 'VENCIDA' | 'CANCELADA'
+  status: 'PAGA' | 'PENDENTE' | 'VENCIDA' | 'CANCELADA' | 'ESTORNADA'
   vencimento: string
   pago_em: string | null
+  gateway?: 'ASAAS' | 'MERCADOPAGO' | null
   asaas_payment_id?: string | null
+  mp_payment_id?: string | null
 }
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
@@ -93,6 +95,8 @@ function statusBg(s: string): string {
 function cobrancaColor(s: string) {
   return s === 'PAGA' ? { bg: 'rgba(67,160,71,.15)', color: 'var(--success)' }
     : s === 'VENCIDA' ? { bg: 'rgba(229,57,53,.15)', color: 'var(--danger)' }
+    : s === 'ESTORNADA' ? { bg: 'rgba(30,136,229,.15)', color: 'var(--info)' }
+    : s === 'CANCELADA' ? { bg: 'rgba(122,128,144,.15)', color: 'var(--muted)' }
     : { bg: 'rgba(245,166,35,.15)', color: 'var(--accent)' }
 }
 
@@ -147,6 +151,8 @@ export default function OficinaDetailPage() {
 
   const [creatingCustomer, setCreatingCustomer] = useState(false)
   const [gerandoCiclo, setGerandoCiclo] = useState(false)
+  const [conciliando, setConciliando] = useState(false)
+  const [estornandoId, setEstornandoId] = useState<string | null>(null)
 
   const [confirmDialog, setConfirmDialog] = useState<{ message: string; onConfirm: () => void; danger?: boolean } | null>(null)
 
@@ -284,6 +290,36 @@ export default function OficinaDetailPage() {
         showToast(msg, 'err')
       }
     }, true)
+  }
+
+  function handleEstornarCobranca(c: Cobranca) {
+    askConfirm(`Estornar o pagamento de ${fmtBRL(c.valor)}? Essa ação devolve o dinheiro no gateway e não pode ser desfeita.`, async () => {
+      setEstornandoId(c.id)
+      try {
+        const res = await saasApi.post<{ message: string }>(`/saas/cobrancas/${c.id}/estornar`)
+        showToast(res.data.message)
+        fetchCobrancas()
+      } catch (e: unknown) {
+        const msg = (e as { response?: { data?: { message?: string } } })?.response?.data?.message ?? 'Erro ao estornar pagamento.'
+        showToast(msg, 'err')
+      } finally {
+        setEstornandoId(null)
+      }
+    }, true)
+  }
+
+  async function handleConciliar() {
+    setConciliando(true)
+    try {
+      const res = await saasApi.post<{ message: string }>('/saas/cobrancas/conciliar', null, { params: { oficina_id: id } })
+      showToast(res.data.message)
+      fetchCobrancas()
+    } catch (e: unknown) {
+      const msg = (e as { response?: { data?: { message?: string } } })?.response?.data?.message ?? 'Erro ao conciliar pagamentos.'
+      showToast(msg, 'err')
+    } finally {
+      setConciliando(false)
+    }
   }
 
   async function handleCriarCustomer() {
@@ -799,6 +835,11 @@ export default function OficinaDetailPage() {
                   {actionLoading === 'sync' ? '…' : '⟳ Sincronizar Asaas'}
                 </button>
               )}
+              <button onClick={handleConciliar} disabled={conciliando}
+                title="Verifica no gateway o status real das cobranças pendentes/vencidas — não depende do webhook ter chegado"
+                style={{ padding: '7px 14px', background: 'none', border: '1px solid var(--info)', color: 'var(--info)', borderRadius: 8, fontSize: 13, cursor: conciliando ? 'not-allowed' : 'pointer', fontWeight: 600, opacity: conciliando ? 0.6 : 1 }}>
+                {conciliando ? 'Conciliando…' : '⟳ Conciliar'}
+              </button>
               <button onClick={() => { setGerarModal(true); setGerarError(null) }}
                 style={{ padding: '7px 14px', background: 'var(--accent)', color: '#000', border: 'none', borderRadius: 8, fontSize: 13, fontWeight: 700, cursor: 'pointer', fontFamily: "'Barlow Condensed', sans-serif" }}>
                 + Cobrança Avulsa
@@ -850,6 +891,12 @@ export default function OficinaDetailPage() {
                             <button onClick={() => handleCancelarCobranca(c.id)}
                               style={{ background: 'none', border: '1px solid var(--danger)', color: 'var(--danger)', borderRadius: 6, padding: '3px 10px', fontSize: 12, cursor: 'pointer' }}>
                               Cancelar
+                            </button>
+                          )}
+                          {c.status === 'PAGA' && (c.mp_payment_id || c.asaas_payment_id) && (
+                            <button onClick={() => handleEstornarCobranca(c)} disabled={estornandoId === c.id}
+                              style={{ background: 'none', border: '1px solid var(--danger)', color: 'var(--danger)', borderRadius: 6, padding: '3px 10px', fontSize: 12, cursor: estornandoId === c.id ? 'not-allowed' : 'pointer', opacity: estornandoId === c.id ? 0.6 : 1 }}>
+                              {estornandoId === c.id ? 'Estornando…' : 'Estornar'}
                             </button>
                           )}
                         </td>
