@@ -180,9 +180,41 @@ Rodada 3 deployada e validada.
   lógica está implementada e compila, mas nunca rodou contra a API real do
   MP nesta sessão).
 
+Rodada 4 deployada e validada (commit `7f2913e`, domínios OK, `mp_public_key`/
+`mp_access_token` configurados em produção — ambiente `producao`, não
+homologação).
+
+## Rodada 5 (mesma sessão) — Payment Brick não era "transparente" de verdade
+- Usuário testou e reclamou: o Payment Brick da rodada 4, mesmo embutido
+  (sem redirecionar pra fora), renderiza o **layout visual próprio do
+  Mercado Pago** (cores, fontes, campos deles) dentro do modal — não o
+  design system do MecânicaPro. "Checkout transparente" de verdade
+  (terminologia oficial da MP) significa usar os **Secure Fields**
+  (`CardNumber`, `ExpirationDate`, `SecurityCode` — iframes só pros dados
+  sensíveis, por exigência de PCI-DSS, mas 100% estilizáveis via prop
+  `style`) + layout/inputs próprios (nome, CPF, parcelas, botão) — não o
+  Brick pré-pronto.
+- Requisito extra do usuário: campos de cartão **nunca podem ser
+  cacheados/sugeridos pelo autocomplete do navegador**. Como os Secure
+  Fields são iframes de outra origem (domínio da MP), o autofill do
+  Chrome/navegador pro NOSSO site não tem acesso a eles de forma alguma —
+  resolvido estruturalmente, não por configuração. Nos campos que são
+  nossos (nome do titular, CPF), usei `autoComplete="off"` +
+  `autoCorrect="off"` + `spellCheck={false}` + `name` não-convencional.
+- Reescrito `PagamentoTransparenteModal.tsx` do zero: abas Cartão/PIX
+  estilizadas nossas, `CardNumber`/`ExpirationDate`/`SecurityCode` com
+  `style` batendo no tema escuro, detecção de bandeira via `onBinChange` →
+  `getPaymentMethods()` → `getInstallments()` (parcelas), `createCardToken()`
+  gera o token no cliente, e só então envia pro MESMO backend de antes
+  (`POST /pagamento/mercadopago`) — **zero mudança no backend**, o contrato
+  de campos (`token`, `payment_method_id`, `issuer_id`, `installments`,
+  `payer`) já era exatamente esse.
+- Lint/build limpos (`npx tsc --noEmit` + `npm run build`).
+
 ## Próxima tarefa
-1. Commitar + deploy da rodada 4.
-2. **Testar de verdade um pagamento MP na tela (cartão e PIX)** antes de
-   confiar no fluxo — é código novo que nunca rodou contra a API real.
-3. Confirmar que Asaas continua funcionando como antes (não deveria ter
-   mudado nada pra essas oficinas).
+1. Deploy da rodada 5.
+2. **Testar de verdade** (ambiente é `producao`, dinheiro real): cartão
+   (conferir se detecta bandeira/parcelas) e PIX (QR code + confirmação
+   automática via polling/webhook). Usar valor baixo numa cobrança avulsa.
+3. Confirmar visualmente que os campos de cartão agora parecem parte do
+   sistema (fundo escuro, sem "janela" da MP aparecendo).
