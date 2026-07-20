@@ -121,6 +121,14 @@ Route::prefix('saas')->group(function () {
         Route::put('config/evolution',           [SaasConfigController::class, 'updateEvolution']);
         Route::post('config/evolution/testar',   [SaasConfigController::class, 'testarEvolution']);
 
+        // WhatsApp do admin da plataforma (instância própria, não de oficina)
+        Route::get('config/whatsapp-admin',              [\App\Http\Controllers\SaaS\AdminWhatsAppController::class, 'show']);
+        Route::put('config/whatsapp-admin',              [\App\Http\Controllers\SaaS\AdminWhatsAppController::class, 'update']);
+        Route::get('config/whatsapp-admin/status',       [\App\Http\Controllers\SaaS\AdminWhatsAppController::class, 'statusInstancia']);
+        Route::get('config/whatsapp-admin/qrcode',       [\App\Http\Controllers\SaaS\AdminWhatsAppController::class, 'qrCode']);
+        Route::post('config/whatsapp-admin/desconectar', [\App\Http\Controllers\SaaS\AdminWhatsAppController::class, 'desconectar']);
+        Route::post('config/whatsapp-admin/enviar-teste', [\App\Http\Controllers\SaaS\AdminWhatsAppController::class, 'enviarTeste']);
+
         // Configurações fiscais (SaaS Admin)
         Route::put('config/fiscal',        [SaasConfigController::class, 'updateProvedorFiscal']);
         Route::put('config/fiscal/spedy',  [SaasConfigController::class, 'updateSpedy']);

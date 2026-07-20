@@ -336,17 +336,52 @@ depois aprovou ("ok prossiga") todas as correções listadas. Achados e fixes:
   nenhuma mudança (já mandava exatamente o formato agora validado; `null`
   em `cpf_titular` já era tratado como "campo vazio, usuário digita").
 
+Rodada 9 deployada e validada (commit `053a219`, domínios OK, headers de
+segurança confirmados na resposta real).
+
+## Rodada 10 (mesma sessão) — causa raiz do webhook MP + WhatsApp do admin
+Usuário pediu: resolver a investigação do webhook MP (item 3 da lista de
+pendências) e implementar o WhatsApp do admin (item 4, que tinha ficado pra
+depois na rodada 3).
+
+- **Causa raiz do webhook MP identificada**: conferi o log do backend dos
+  últimos 7 dias — **zero requisições chegaram** em
+  `saas/webhooks/mercadopago`. Testei o endpoint de fora (simulando uma
+  chamada real) e ele responde corretamente (401 sem assinatura, conforme
+  o fix de segurança da rodada 9) — não é problema de alcance/firewall/bug
+  nosso. Conclusão: a Mercado Pago nunca teve esse webhook registrado no
+  painel de desenvolvedores pra essa aplicação (ambiente produção). **Não é
+  algo que dá pra corrigir por código** — só o usuário consegue, logando no
+  painel da MP e cadastrando `https://saas.dlsistemas.com.br/api/saas/webhooks/mercadopago`
+  no evento "Pagamentos". Instruções passadas pro usuário; a conciliação
+  ativa das rodadas 7/8 já cobre o sintoma enquanto isso não for feito.
+- **WhatsApp do admin implementado**: nova instância própria da Evolution
+  API pra plataforma (independente das instâncias por oficina, que são
+  tenant-scoped e não serviam pro admin). Novos campos em `saas_config`
+  (`whatsapp_admin_instance`, `whatsapp_admin_instance_token`,
+  `whatsapp_admin_numero`, `whatsapp_admin_ativo` — migration
+  `2026_07_20_000001`), novo `AdminWhatsAppService` (mesmo padrão do
+  `WhatsAppService` de oficina, mas sem `TenancyContext`), novo
+  `SaaS\AdminWhatsAppController` + rotas em `saas/config/whatsapp-admin*`.
+  Nova tela `saas-admin/configuracoes/whatsapp` (QR code, status, testar,
+  número de destino) — mesmo padrão visual da tela de WhatsApp da oficina,
+  linkada a partir da seção Evolution API em Configurações.
+  `PagamentoReconciliacaoService::notificarAdminPagamento()` agora manda
+  e-mail E WhatsApp (cada canal independente e silencioso — falha de um
+  não afeta o outro nem a confirmação do pagamento).
+- Lint/build limpos (`php -l` em tudo, `npx tsc --noEmit` + `npm run
+  build`). **Migration ainda não rodou em produção** — vai rodar sozinha no
+  próximo deploy (`docker-entrypoint.sh` já faz `migrate --force`
+  automaticamente).
+
 ## Próxima tarefa
-1. Deploy da rodada 9.
-2. Testar: pagamento de cartão/PIX continua funcionando normalmente após
-   as validações mais estritas (deve, já que o frontend já mandava esse
-   formato). Confirmar que MECANICO/ATENDENTE não veem mais o CPF
-   pré-preenchido.
-3. **Se quiserem reativar o gateway Asaas no futuro**: configurar
-   `ASAAS_WEBHOOK_TOKEN` no `.env` de produção com um valor aleatório forte
-   E cadastrar o MESMO valor no painel de webhooks da Asaas — sem isso, o
-   webhook desse gateway vai simplesmente rejeitar tudo agora (fail closed
-   correto, mas precisa da configuração pra funcionar de novo).
-4. Segue em aberto: investigar por que o webhook da MP não chegou no
-   incidente do PIX travado (rede de segurança da rodada 8 já cobre isso,
-   mas vale entender a causa raiz).
+1. Deploy da rodada 10 (roda a migration automaticamente).
+2. Usuário precisa: cadastrar o webhook da MP no painel deles (instruções
+   já passadas) e conectar o WhatsApp do admin em
+   `/saas-admin/configuracoes/whatsapp` (escanear QR code + salvar número
+   de destino + ativar).
+3. Testar: pagamento de cartão/PIX continua funcionando normalmente após
+   as validações mais estritas da rodada 9. Confirmar que MECANICO/
+   ATENDENTE não veem mais o CPF pré-preenchido.
+4. Se quiserem reativar o gateway Asaas no futuro: configurar
+   `ASAAS_WEBHOOK_TOKEN` no `.env` de produção (já documentado antes).

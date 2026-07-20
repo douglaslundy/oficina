@@ -29,6 +29,10 @@ class SaasConfig extends Model
         'smtp_ativo',
         'evolution_url',
         'evolution_api_key',
+        'whatsapp_admin_instance',
+        'whatsapp_admin_instance_token',
+        'whatsapp_admin_numero',
+        'whatsapp_admin_ativo',
         'provedor_fiscal_padrao',
         'emissao_fiscal_modo_padrao',
         'spedy_master_key_sandbox',
@@ -52,6 +56,7 @@ class SaasConfig extends Model
         'alerta_cobranca_vezes_dia'         => 'integer',
         'alerta_cobranca_dias_exibicao'     => 'integer',
         'voto_confianca_dias'               => 'integer',
+        'whatsapp_admin_ativo'              => 'boolean',
     ];
 
     protected $hidden = [
@@ -62,6 +67,7 @@ class SaasConfig extends Model
         'mp_webhook_secret',
         'smtp_password',
         'evolution_api_key',
+        'whatsapp_admin_instance_token',
         'spedy_master_key_sandbox',
         'spedy_master_key_producao',
         'focus_master_token_homologacao',

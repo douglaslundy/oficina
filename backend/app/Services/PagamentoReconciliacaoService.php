@@ -19,6 +19,7 @@ class PagamentoReconciliacaoService
 {
     public function __construct(
         private readonly EmailService $emailService,
+        private readonly AdminWhatsAppService $adminWhatsApp,
         private readonly MercadoPagoService $mercadoPago,
         private readonly AsaasService $asaas,
     ) {}
@@ -115,31 +116,49 @@ class PagamentoReconciliacaoService
     }
 
     /**
-     * Notifica por e-mail todos os super_admins quando uma cobrança
-     * (assinatura ou avulsa) é confirmada como paga. Silencioso se SMTP não
-     * estiver configurado ou se o envio falhar.
+     * Notifica por e-mail e WhatsApp todos os canais configurados quando uma
+     * cobrança (assinatura ou avulsa) é confirmada como paga. Cada canal é
+     * silencioso e independente — se um não estiver configurado ou falhar,
+     * não afeta o outro nem a confirmação do pagamento em si.
      */
     private function notificarAdminPagamento(Cobranca $cobranca, Oficina $oficina): void
     {
+        $tipoLabel    = $cobranca->tipo === 'ASSINATURA' ? 'Mensalidade/Anuidade' : 'Cobrança avulsa';
+        $gatewayLabel = $cobranca->gateway === 'MERCADOPAGO' ? 'Mercado Pago' : 'Asaas';
+        $valorFmt     = number_format((float) $cobranca->valor, 2, ',', '.');
+        $vencimento   = $cobranca->vencimento?->format('d/m/Y') ?? '-';
+
         try {
-            if (!$this->emailService->configurado()) return;
+            if ($this->emailService->configurado()) {
+                $emails = SuperAdmin::query()->pluck('email')->filter()->values()->all();
+                if (!empty($emails)) {
+                    $corpo = "A oficina {$oficina->nome} pagou uma fatura.\n\n"
+                        . "Tipo: {$tipoLabel}\n"
+                        . "Valor: R$ {$valorFmt}\n"
+                        . "Vencimento: {$vencimento}\n"
+                        . 'Pago em: ' . now()->format('d/m/Y H:i') . "\n"
+                        . "Gateway: {$gatewayLabel}";
 
-            $emails = SuperAdmin::query()->pluck('email')->filter()->values()->all();
-            if (empty($emails)) return;
-
-            $tipoLabel = $cobranca->tipo === 'ASSINATURA' ? 'Mensalidade/Anuidade' : 'Cobrança avulsa';
-            $gatewayLabel = $cobranca->gateway === 'MERCADOPAGO' ? 'Mercado Pago' : 'Asaas';
-
-            $corpo = "A oficina {$oficina->nome} pagou uma fatura.\n\n"
-                . "Tipo: {$tipoLabel}\n"
-                . "Valor: R$ " . number_format((float) $cobranca->valor, 2, ',', '.') . "\n"
-                . "Vencimento: " . ($cobranca->vencimento?->format('d/m/Y') ?? '-') . "\n"
-                . 'Pago em: ' . now()->format('d/m/Y H:i') . "\n"
-                . "Gateway: {$gatewayLabel}";
-
-            $this->emailService->enviar($emails, "MecânicaPro — Pagamento recebido: {$oficina->nome}", $corpo);
+                    $this->emailService->enviar($emails, "MecânicaPro — Pagamento recebido: {$oficina->nome}", $corpo);
+                }
+            }
         } catch (\Throwable $e) {
-            Log::warning('Falha ao notificar admin sobre pagamento: ' . $e->getMessage());
+            Log::warning('Falha ao notificar admin por e-mail sobre pagamento: ' . $e->getMessage());
+        }
+
+        try {
+            if ($this->adminWhatsApp->estaAtivo()) {
+                $mensagem = "💰 *Pagamento recebido*\n\n"
+                    . "Oficina: {$oficina->nome}\n"
+                    . "Tipo: {$tipoLabel}\n"
+                    . "Valor: R$ {$valorFmt}\n"
+                    . "Vencimento: {$vencimento}\n"
+                    . "Gateway: {$gatewayLabel}";
+
+                $this->adminWhatsApp->enviarMensagem($mensagem);
+            }
+        } catch (\Throwable $e) {
+            Log::warning('Falha ao notificar admin por WhatsApp sobre pagamento: ' . $e->getMessage());
         }
     }
 }

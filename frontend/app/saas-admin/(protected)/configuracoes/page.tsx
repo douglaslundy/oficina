@@ -1,6 +1,7 @@
 'use client'
 
 import { useState, useEffect, useCallback } from 'react'
+import Link from 'next/link'
 import saasApi from '@/lib/saas-api'
 
 // ─── Types ────────────────────────────────────────────────────────────────────
@@ -783,6 +784,19 @@ export default function SaasConfigPage() {
 
         <div style={{ marginTop: 16, padding: '10px 14px', background: 'rgba(30,136,229,.06)', border: '1px solid rgba(30,136,229,.2)', borderRadius: 7, fontSize: 12, color: 'var(--info)' }}>
           ℹ️ Após salvar, cada oficina poderá conectar seu próprio WhatsApp em <strong>Config WhatsApp</strong> clicando em "Escanear QR Code". A instância é criada automaticamente na primeira vez.
+        </div>
+
+        <div style={{ marginTop: 16, paddingTop: 16, borderTop: '1px solid var(--border)', display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 10 }}>
+          <div>
+            <div style={{ fontSize: 14, fontWeight: 700, color: 'var(--text)' }}>WhatsApp do Admin</div>
+            <div style={{ fontSize: 12, color: 'var(--muted)', marginTop: 2 }}>
+              Instância própria da plataforma pra você receber notificações (ex: pagamento recebido) — não é de nenhuma oficina.
+            </div>
+          </div>
+          <Link href="/saas-admin/configuracoes/whatsapp"
+            style={{ padding: '8px 16px', borderRadius: 7, background: 'var(--accent)', color: '#000', fontSize: 13, fontWeight: 700, textDecoration: 'none', whiteSpace: 'nowrap' }}>
+            Configurar →
+          </Link>
         </div>
       </SectionCard>
     </div>
