@@ -37,9 +37,10 @@ use App\Http\Controllers\SaaS\VpsController as SaaSVpsController;
 // Health check — para docker-compose healthcheck e monitoramento
 Route::get('/health', fn() => response()->json(['status' => 'ok']));
 
-// Webhooks SaaS — públicos, validados internamente
-Route::post('saas/webhooks/asaas',        [SaaSWebhookController::class, 'asaas']);
-Route::post('saas/webhooks/mercadopago',  [SaaSWebhookController::class, 'mercadopago']);
+// Webhooks SaaS — públicos, validados internamente (throttle: proteção
+// contra flood, não contra autenticação — isso é feito no controller)
+Route::post('saas/webhooks/asaas',        [SaaSWebhookController::class, 'asaas'])->middleware('throttle:60,1');
+Route::post('saas/webhooks/mercadopago',  [SaaSWebhookController::class, 'mercadopago'])->middleware('throttle:60,1');
 
 // Orçamento público — sem auth/tenant; o tenant é resolvido pelo token do orçamento
 Route::get('orcamento/{token}',            [OrcamentoController::class, 'showPublico']);
@@ -75,8 +76,8 @@ Route::prefix('saas')->group(function () {
         Route::get('cobrancas',                [SaaSCobrancaController::class, 'index']);
         Route::get('cobrancas/por/{oficina_id}', [SaaSCobrancaController::class, 'byOficina']);
         Route::delete('cobrancas/{id}',        [SaaSCobrancaController::class, 'cancelar']);
-        Route::post('cobrancas/conciliar',     [SaaSCobrancaController::class, 'conciliar']);
-        Route::post('cobrancas/{id}/estornar', [SaaSCobrancaController::class, 'estornar']);
+        Route::post('cobrancas/conciliar',     [SaaSCobrancaController::class, 'conciliar'])->middleware('throttle:20,1');
+        Route::post('cobrancas/{id}/estornar', [SaaSCobrancaController::class, 'estornar'])->middleware('throttle:20,1');
 
         // Oficinas — Asaas
         Route::get('oficinas/{id}/asaas',                      [SaaSOficinaController::class, 'asaasStatus']);
@@ -177,9 +178,13 @@ Route::middleware(['tenant', 'auth:sanctum'])->group(function () {
     Route::get('assinatura/alerta', [AssinaturaController::class, 'alerta']);
     Route::get('assinatura/status-bloqueio', [AssinaturaController::class, 'statusBloqueio']);
     // Checkout transparente (Mercado Pago) — mesmo acesso do link externo que substitui, todos os roles
-    Route::get('pagamento/mercadopago/chave-publica', [\App\Http\Controllers\PagamentoController::class, 'chavePublicaMercadoPago']);
-    Route::post('pagamento/mercadopago',               [\App\Http\Controllers\PagamentoController::class, 'pagarMercadoPago']);
-    Route::get('pagamento/faturas/{id}/status',         [\App\Http\Controllers\PagamentoController::class, 'statusFatura']);
+    Route::get('pagamento/mercadopago/chave-publica', [\App\Http\Controllers\PagamentoController::class, 'chavePublicaMercadoPago'])->middleware('throttle:30,1');
+    // Limite mais estrito: cada chamada tenta processar um pagamento de
+    // verdade (tokeniza cartão/gera PIX) — sem isso, nada impede um script
+    // testar vários cartões roubados em sequência contra a mesma fatura.
+    Route::post('pagamento/mercadopago',               [\App\Http\Controllers\PagamentoController::class, 'pagarMercadoPago'])->middleware('throttle:10,1');
+    // Frontend faz polling a cada 5s (12/min) enquanto aguarda confirmação do PIX — 30/min dá folga.
+    Route::get('pagamento/faturas/{id}/status',         [\App\Http\Controllers\PagamentoController::class, 'statusFatura'])->middleware('throttle:30,1');
     // Contratação de serviços avulsos (oficina solicita)
     Route::get('pacotes-disponiveis', [\App\Http\Controllers\SolicitacaoServicoController::class, 'pacotesDisponiveis']);
     Route::get('solicitacoes',        [\App\Http\Controllers\SolicitacaoServicoController::class, 'index']);

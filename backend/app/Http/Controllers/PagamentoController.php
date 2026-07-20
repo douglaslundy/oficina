@@ -23,7 +23,9 @@ class PagamentoController extends Controller
      * Chave pública do Mercado Pago — segura para expor ao frontend (usada
      * para tokenizar o pagamento no navegador) — e o CPF já cadastrado do
      * admin da oficina, pra pré-preencher o formulário em vez de pedir
-     * digitado de novo.
+     * digitado de novo. O CPF só é incluído pra ADMIN/FINANCEIRO — é dado
+     * pessoal do administrador da oficina, não precisa vazar pra qualquer
+     * funcionário (mecânico, atendente) que abrir a tela de pagamento.
      */
     public function chavePublicaMercadoPago(): JsonResponse
     {
@@ -34,10 +36,12 @@ class PagamentoController extends Controller
         }
 
         $oficina = Oficina::find(TenancyContext::get());
+        $role    = auth()->user()?->role;
+        $podeVerCpf = in_array($role, ['ADMIN', 'FINANCEIRO'], true);
 
         return response()->json([
             'public_key'  => $chave,
-            'cpf_titular' => $oficina?->admin_cpf,
+            'cpf_titular' => $podeVerCpf ? $oficina?->admin_cpf : null,
         ]);
     }
 
@@ -50,13 +54,16 @@ class PagamentoController extends Controller
     public function pagarMercadoPago(Request $request): JsonResponse
     {
         $validated = $request->validate([
-            'cobranca_id'          => 'required|uuid',
-            'token'                => 'nullable|string',
-            'issuer_id'            => 'nullable|string',
-            'payment_method_id'    => 'required|string',
-            'installments'         => 'nullable|integer|min:1',
-            'payer'                => 'required|array',
-            'payer.email'          => 'required|email',
+            'cobranca_id'                  => 'required|uuid',
+            'token'                        => 'nullable|string',
+            'issuer_id'                    => 'nullable|string',
+            'payment_method_id'            => ['required', 'string', 'regex:/^[a-z0-9_]+$/i'],
+            'installments'                 => 'nullable|integer|min:1|max:24',
+            'payer'                        => 'required|array',
+            'payer.email'                  => 'required|email',
+            'payer.identification'         => 'required|array',
+            'payer.identification.type'    => 'required|in:CPF',
+            'payer.identification.number'  => ['required', 'string', new \App\Rules\Cpf],
         ]);
 
         $oficinaId = TenancyContext::get();

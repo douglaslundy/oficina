@@ -6,6 +6,7 @@ namespace App\Services;
 use App\Models\Cobranca;
 use App\Models\Oficina;
 use App\Models\SuperAdmin;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
 
 /**
@@ -59,33 +60,57 @@ class PagamentoReconciliacaoService
         return false;
     }
 
+    /**
+     * Lê e escreve o status dentro de uma transação com lockForUpdate() —
+     * sem isso, duas chamadas concorrentes (webhook + polling da tela, ou
+     * duas abas abertas) podiam ambas ler PENDENTE antes de qualquer uma
+     * escrever PAGA, executando avancarVencimento() duas vezes (pulando um
+     * ciclo de cobrança inteiro). O e-mail de notificação fica FORA da
+     * transação de propósito — não vale a pena segurar o lock da linha
+     * durante uma chamada SMTP.
+     */
     public function confirmarPagamento(Cobranca $cobranca): void
     {
-        if (in_array($cobranca->status, ['PAGA', 'CANCELADA'], true)) return;
+        $locked = DB::transaction(function () use ($cobranca) {
+            $row = Cobranca::whereKey($cobranca->getKey())->lockForUpdate()->first();
+            if (!$row || in_array($row->status, ['PAGA', 'CANCELADA', 'ESTORNADA'], true)) {
+                return null;
+            }
 
-        $cobranca->update(['status' => 'PAGA', 'pago_em' => now()]);
+            $row->update(['status' => 'PAGA', 'pago_em' => now()]);
 
-        $oficina = Oficina::find($cobranca->oficina_id);
+            if ($row->tipo === 'ASSINATURA') {
+                $oficina = Oficina::find($row->oficina_id);
+                if ($oficina) {
+                    if ($oficina->proximo_vencimento) {
+                        $oficina->avancarVencimento();
+                    }
+
+                    $updates = [];
+                    if ($oficina->status !== 'ATIVA') {
+                        $updates['status'] = 'ATIVA';
+                    }
+                    if ($oficina->voto_confianca_ate !== null) {
+                        $updates['voto_confianca_ate'] = null;
+                    }
+                    if (!empty($updates)) {
+                        $oficina->update($updates);
+                    }
+                }
+            }
+
+            return $row;
+        });
+
+        if (!$locked) return;
+
+        // Mantém a instância que o chamador tem em mãos sincronizada.
+        $cobranca->status  = $locked->status;
+        $cobranca->pago_em = $locked->pago_em;
+
+        $oficina = Oficina::find($locked->oficina_id);
         if ($oficina) {
-            $this->notificarAdminPagamento($cobranca, $oficina);
-        }
-
-        if ($cobranca->tipo !== 'ASSINATURA') return;
-        if (!$oficina) return;
-
-        if ($oficina->proximo_vencimento) {
-            $oficina->avancarVencimento();
-        }
-
-        $updates = [];
-        if ($oficina->status !== 'ATIVA') {
-            $updates['status'] = 'ATIVA';
-        }
-        if ($oficina->voto_confianca_ate !== null) {
-            $updates['voto_confianca_ate'] = null;
-        }
-        if (!empty($updates)) {
-            $oficina->update($updates);
+            $this->notificarAdminPagamento($locked, $oficina);
         }
     }
 

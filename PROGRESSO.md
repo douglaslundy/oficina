@@ -277,14 +277,76 @@ Rodada 7 com deploy em andamento.
   depender do webhook.
 - Lint limpo em todos os arquivos tocados.
 
+Rodada 7 e 8 deployadas e validadas (commit `ab5d578`, domínios OK).
+
+## Rodada 9 (mesma sessão) — auditoria de segurança do fluxo de pagamento + correções
+Usuário pediu análise de segurança do checkout (sem aplicar fix ainda),
+depois aprovou ("ok prossiga") todas as correções listadas. Achados e fixes:
+
+- **🔴 Crítica — bypass de autenticação do webhook Asaas, explorável em
+  produção**: `ASAAS_WEBHOOK_TOKEN` não configurado → `'' !== ''` (config
+  vazio == header vazio) deixava passar sem autenticação, e o handler
+  confiava direto no `payment.id`/`event` do corpo da requisição (sem
+  reconsultar a API da Asaas) pra marcar cobrança como paga. `asaas_payment_id`
+  é visível pro próprio usuário da oficina em Minhas Faturas — dava pra
+  forjar "paguei" sem pagar. **Corrigido**: falha fechado quando o token
+  não está configurado, `hash_equals()` no lugar de `!==`.
+- **🟠 Alta — zero rate limiting** em toda a superfície de pagamento
+  (`bootstrap/app.php` só tinha `HandleCors`, nenhum throttle). **Corrigido**:
+  `throttle:10,1` em `pagamento/mercadopago` (processa cartão/PIX de
+  verdade — sem isso nada impede "card testing"), `throttle:30,1` em
+  chave-pública/status (polling), `throttle:60,1` nos dois webhooks,
+  `throttle:20,1` em conciliar/estornar do saas-admin.
+- **🟡 Média — webhook MP falhava aberto**: `if ($secret && $xSignature)`
+  só verificava se AMBOS estivessem presentes — omitir o header
+  `x-signature` pulava a verificação inteira mesmo com o segredo
+  configurado (confirmado configurado em produção). Impacto real era menor
+  que o caso Asaas (esse fluxo sempre reconsulta o pagamento real na API da
+  MP antes de conciliar), mas o padrão estava errado. **Corrigido**: falha
+  fechado se faltar segredo OU assinatura.
+- **🟡 Média — sem lock de banco nas transições de status**: com a
+  conciliação ativa das rodadas 7/8 rodando em vários pontos concorrentes
+  (webhook, polling, botão manual, quase toda página do tenant),
+  havia janela de corrida pra `avancarVencimento()` rodar duas vezes.
+  **Corrigido**: `PagamentoReconciliacaoService::confirmarPagamento()` e
+  `CobrancaController::estornar()` agora rodam dentro de
+  `DB::transaction()` com `lockForUpdate()` na linha da cobrança
+  (e-mail de notificação fica fora da transação, não segura o lock durante
+  a chamada SMTP). Também passou a excluir `ESTORNADA` da checagem de
+  "já processada" (fix de correção junto).
+- **🟢 Baixa — sem headers de segurança**: `X-Frame-Options`/
+  `X-Content-Type-Options` eram exigência do CLAUDE.md original e nunca
+  foram implementados. **Corrigido**: novo middleware `SecurityHeaders`
+  (+ `Referrer-Policy`), aplicado a todo o grupo `api`.
+- **🟢 Baixa — CPF do admin exposto pra qualquer role**: `GET
+  /pagamento/mercadopago/chave-publica` devolvia `cpf_titular`
+  incondicionalmente. **Corrigido**: só ADMIN/FINANCEIRO recebem o CPF
+  pré-preenchido agora; outras roles digitam manualmente.
+- **🟢 Baixa — sem validação de CPF/payment_method_id no servidor**:
+  confiava inteiramente na validação da Mercado Pago. **Corrigido**:
+  `payer.identification.number` agora usa a `App\Rules\Cpf` já existente no
+  projeto (valida dígito verificador), `payment_method_id` restrito a
+  `[a-z0-9_]+`, `installments` com teto de 24.
+- Confirmado pré-existente e **correto**: o formulário de cartão (número/
+  validade/CVV) usa Secure Fields da MP — iframes de outra origem, dados
+  nunca entram no DOM da nossa página, então autofill/cache do navegador
+  não tem acesso a eles. Nome/CPF (inputs nossos) já tinham
+  `autoComplete="off"`.
+- Lint limpo em todos os arquivos tocados. Frontend não precisou de
+  nenhuma mudança (já mandava exatamente o formato agora validado; `null`
+  em `cpf_titular` já era tratado como "campo vazio, usuário digita").
+
 ## Próxima tarefa
-1. Aguardar rodada 7 terminar de deployar, então deployar rodada 8 em cima
-   (não sobrepor dois `deploy-vps.sh` ao mesmo tempo).
-2. Testar: reabrir a fatura PIX que ficou travada (deve resolver sozinha
-   agora, seja via polling da tela de pagamento OU ao simplesmente abrir
-   "Minhas Faturas"/o dashboard). Testar "Estornar" numa cobrança paga de
-   teste.
-3. **Investigar por que o webhook da MP não chegou** — os fixes de
-   conciliação ativa são uma rede de segurança, mas o webhook deveria
-   funcionar sozinho. Verificar se a URL está registrada corretamente no
-   painel do Mercado Pago pra essa aplicação/access token.
+1. Deploy da rodada 9.
+2. Testar: pagamento de cartão/PIX continua funcionando normalmente após
+   as validações mais estritas (deve, já que o frontend já mandava esse
+   formato). Confirmar que MECANICO/ATENDENTE não veem mais o CPF
+   pré-preenchido.
+3. **Se quiserem reativar o gateway Asaas no futuro**: configurar
+   `ASAAS_WEBHOOK_TOKEN` no `.env` de produção com um valor aleatório forte
+   E cadastrar o MESMO valor no painel de webhooks da Asaas — sem isso, o
+   webhook desse gateway vai simplesmente rejeitar tudo agora (fail closed
+   correto, mas precisa da configuração pra funcionar de novo).
+4. Segue em aberto: investigar por que o webhook da MP não chegou no
+   incidente do PIX travado (rede de segurança da rodada 8 já cobre isso,
+   mas vale entender a causa raiz).

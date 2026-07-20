@@ -11,6 +11,7 @@ use App\Services\MercadoPagoService;
 use App\Services\PagamentoReconciliacaoService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\DB;
 
 class CobrancaController extends Controller
 {
@@ -98,35 +99,47 @@ class CobrancaController extends Controller
      * são raros e o admin deve revisar manualmente o estado da assinatura
      * se necessário, já que desfazer com segurança exigiria saber se houve
      * pagamentos posteriores etc.
+     *
+     * Roda dentro de uma transação com lockForUpdate() na cobrança — sem
+     * isso, dois cliques rápidos no botão "Estornar" podiam ambos passar
+     * pela checagem de status === PAGA antes de qualquer um escrever
+     * ESTORNADA, disparando dois pedidos de estorno pro mesmo pagamento no
+     * gateway.
      */
     public function estornar(string $id): JsonResponse
     {
-        $cobranca = Cobranca::findOrFail($id);
+        return DB::transaction(function () use ($id) {
+            $cobranca = Cobranca::whereKey($id)->lockForUpdate()->first();
 
-        if ($cobranca->status !== 'PAGA') {
-            return response()->json(['message' => 'Só é possível estornar uma cobrança que já foi paga.'], 422);
-        }
-
-        $paymentId = $cobranca->gateway === 'MERCADOPAGO' ? $cobranca->mp_payment_id : $cobranca->asaas_payment_id;
-        if (!$paymentId) {
-            return response()->json(['message' => 'Cobrança sem ID de pagamento no gateway — não é possível estornar automaticamente.'], 422);
-        }
-
-        try {
-            if ($cobranca->gateway === 'MERCADOPAGO') {
-                $this->mercadoPago->estornarPagamento($paymentId);
-            } else {
-                $this->asaas->estornarPagamento($paymentId);
+            if (!$cobranca) {
+                return response()->json(['message' => 'Cobrança não encontrada.'], 404);
             }
-        } catch (\Throwable $e) {
-            return response()->json(['message' => 'Falha ao estornar no gateway: ' . $e->getMessage()], 502);
-        }
 
-        $cobranca->update(['status' => 'ESTORNADA']);
+            if ($cobranca->status !== 'PAGA') {
+                return response()->json(['message' => 'Só é possível estornar uma cobrança que já foi paga.'], 422);
+            }
 
-        return response()->json([
-            'message' => 'Pagamento estornado com sucesso. Se essa cobrança tinha avançado o vencimento ou reativado a oficina, revise manualmente em "Cobrança Recorrente" na tela da oficina.',
-        ]);
+            $paymentId = $cobranca->gateway === 'MERCADOPAGO' ? $cobranca->mp_payment_id : $cobranca->asaas_payment_id;
+            if (!$paymentId) {
+                return response()->json(['message' => 'Cobrança sem ID de pagamento no gateway — não é possível estornar automaticamente.'], 422);
+            }
+
+            try {
+                if ($cobranca->gateway === 'MERCADOPAGO') {
+                    $this->mercadoPago->estornarPagamento($paymentId);
+                } else {
+                    $this->asaas->estornarPagamento($paymentId);
+                }
+            } catch (\Throwable $e) {
+                return response()->json(['message' => 'Falha ao estornar no gateway: ' . $e->getMessage()], 502);
+            }
+
+            $cobranca->update(['status' => 'ESTORNADA']);
+
+            return response()->json([
+                'message' => 'Pagamento estornado com sucesso. Se essa cobrança tinha avançado o vencimento ou reativado a oficina, revise manualmente em "Cobrança Recorrente" na tela da oficina.',
+            ]);
+        });
     }
 
     /**

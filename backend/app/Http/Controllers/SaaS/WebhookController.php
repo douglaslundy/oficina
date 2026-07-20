@@ -19,8 +19,15 @@ class WebhookController extends Controller
 
     public function asaas(Request $request): JsonResponse
     {
-        $token = $request->header('asaas-access-token');
-        if ($token !== config('services.asaas.webhook_token')) {
+        // Falha fechado: se o token não estiver configurado, NUNCA autentica —
+        // antes, token vazio no .env + header vazio/ausente resultavam em
+        // string vazia === string vazia, aceitando qualquer requisição sem
+        // autenticação nenhuma. hash_equals() evita também comparação
+        // vulnerável a timing attack.
+        $configurado = (string) config('services.asaas.webhook_token', '');
+        $recebido    = (string) $request->header('asaas-access-token', '');
+
+        if ($configurado === '' || !hash_equals($configurado, $recebido)) {
             return response()->json(['message' => 'Unauthorized'], 401);
         }
 
@@ -68,14 +75,20 @@ class WebhookController extends Controller
         $xRequestId = $request->header('x-request-id', '');
         $dataId     = $request->query('data_id', '');
 
-        if ($secret && $xSignature) {
-            $manifest = "id:{$dataId};request-id:{$xRequestId};ts:" . $this->extractTs($xSignature) . ';';
-            $expected = hash_hmac('sha256', $manifest, $secret);
-            $received = $this->extractV1($xSignature);
+        // Falha fechado: sem segredo configurado OU sem header de assinatura,
+        // rejeita — antes, a checagem só rodava se AMBOS estivessem presentes,
+        // então bastava omitir o header x-signature pra pular a verificação
+        // inteira mesmo com o segredo configurado.
+        if ($secret === '' || $xSignature === '') {
+            return response()->json(['message' => 'Unauthorized'], 401);
+        }
 
-            if (!hash_equals($expected, $received)) {
-                return response()->json(['message' => 'Invalid signature'], 401);
-            }
+        $manifest = "id:{$dataId};request-id:{$xRequestId};ts:" . $this->extractTs($xSignature) . ';';
+        $expected = hash_hmac('sha256', $manifest, $secret);
+        $received = $this->extractV1($xSignature);
+
+        if (!hash_equals($expected, $received)) {
+            return response()->json(['message' => 'Invalid signature'], 401);
         }
 
         $type = $request->input('type', '');
