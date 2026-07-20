@@ -23,6 +23,10 @@ interface Entitlements {
   orcamento: boolean
 }
 
+interface Fatura {
+  status: 'PENDENTE' | 'VENCIDA' | 'PAGA' | 'CANCELADA'
+}
+
 const NAV_ITEMS: NavItem[] = [
   { href: '/',                 label: 'Dashboard',         icon: '📊' },
   { href: '/clientes',         label: 'Clientes',          icon: '👥' },
@@ -36,6 +40,7 @@ const NAV_ITEMS: NavItem[] = [
   { href: '/fiscal/emitir',    label: 'Emitir NF',         icon: '🧾' },
   { href: '/fiscal/historico', label: 'Histórico NF',      icon: '📋' },
   { href: '/relatorios',            label: 'Relatórios',        icon: '📈' },
+  { href: '/minhas-faturas',        label: 'Minhas Faturas',    icon: '💳' },
   { href: '/alertas',               label: 'Alertas',           icon: '💬', gate: 'alertas' },
   { href: '/alertas/logs',          label: 'Histórico Alertas', icon: '📜', gate: 'alertas' },
   { href: '/contratar',             label: 'Contratar Serviços',icon: '🛍️' },
@@ -65,6 +70,7 @@ export function Sidebar({ clientesDevedores = 0, produtosAlerta = 0, isMobile = 
   const { logout, getUser } = useAuth()
   const [user, setUser] = useState<AuthUser | null>(null)
   const [ent, setEnt] = useState<Entitlements | null>(null)
+  const [faturasPendentes, setFaturasPendentes] = useState(0)
 
   useEffect(() => {
     setUser(getUser())
@@ -75,6 +81,10 @@ export function Sidebar({ clientesDevedores = 0, produtosAlerta = 0, isMobile = 
         orcamento:       !!r.data.plano?.orcamento,
       }))
       .catch(() => setEnt({ alerta_whatsapp: false, alerta_email: false, orcamento: false }))
+    // Best-effort: MECANICO/ATENDENTE não têm permissão (403) e simplesmente não veem o badge.
+    api.get<{ data: Fatura[] }>('/assinatura/faturas')
+      .then(r => setFaturasPendentes((r.data.data ?? []).filter(f => f.status === 'PENDENTE' || f.status === 'VENCIDA').length))
+      .catch(() => setFaturasPendentes(0))
   }, [])
 
   const itemsWithBadges = NAV_ITEMS
@@ -85,6 +95,8 @@ export function Sidebar({ clientesDevedores = 0, produtosAlerta = 0, isMobile = 
         return { ...item, badge: clientesDevedores }
       if (item.href === '/produtos' && produtosAlerta > 0)
         return { ...item, badge: produtosAlerta }
+      if (item.href === '/minhas-faturas' && faturasPendentes > 0)
+        return { ...item, badge: faturasPendentes }
       return item
     })
 

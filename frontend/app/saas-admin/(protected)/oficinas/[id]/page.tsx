@@ -66,7 +66,7 @@ interface Cobranca {
   id: string
   mes_referencia: string
   valor: string
-  status: 'PAGO' | 'PENDENTE' | 'VENCIDO'
+  status: 'PAGA' | 'PENDENTE' | 'VENCIDA' | 'CANCELADA'
   vencimento: string
   pago_em: string | null
   asaas_payment_id?: string | null
@@ -91,8 +91,8 @@ function statusBg(s: string): string {
 }
 
 function cobrancaColor(s: string) {
-  return s === 'PAGO' ? { bg: 'rgba(67,160,71,.15)', color: 'var(--success)' }
-    : s === 'VENCIDO' ? { bg: 'rgba(229,57,53,.15)', color: 'var(--danger)' }
+  return s === 'PAGA' ? { bg: 'rgba(67,160,71,.15)', color: 'var(--success)' }
+    : s === 'VENCIDA' ? { bg: 'rgba(229,57,53,.15)', color: 'var(--danger)' }
     : { bg: 'rgba(245,166,35,.15)', color: 'var(--accent)' }
 }
 
@@ -846,7 +846,7 @@ export default function OficinaDetailPage() {
                           {c.asaas_payment_id ?? '—'}
                         </td>
                         <td style={{ padding: '10px 12px' }}>
-                          {c.status !== 'PAGO' && (
+                          {c.status !== 'PAGA' && (
                             <button onClick={() => handleCancelarCobranca(c.id)}
                               style={{ background: 'none', border: '1px solid var(--danger)', color: 'var(--danger)', borderRadius: 6, padding: '3px 10px', fontSize: 12, cursor: 'pointer' }}>
                               Cancelar

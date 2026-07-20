@@ -22,6 +22,9 @@ const STATUS_MAP: Record<string, { label: string; cls: string }> = {
   PROCESSANDO:      { label: 'Processando',    cls: 'pill-accent'  },
   AUTORIZADA:       { label: 'Autorizada',     cls: 'pill-success' },
   REJEITADA:        { label: 'Rejeitada',      cls: 'pill-danger'  },
+  PENDENTE:         { label: 'Pendente',       cls: 'pill-accent'  },
+  PAGA:             { label: 'Paga',           cls: 'pill-success' },
+  VENCIDA:          { label: 'Vencida',        cls: 'pill-danger'  },
 }
 
 export function StatusPill({ status }: { status: string }) {

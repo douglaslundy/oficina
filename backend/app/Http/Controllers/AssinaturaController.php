@@ -53,6 +53,34 @@ class AssinaturaController extends Controller
         ]]);
     }
 
+    /** Lista todas as faturas (assinatura + avulsas) da oficina logada, mais recente primeiro. */
+    public function faturas(): JsonResponse
+    {
+        $oficina = Oficina::find(TenancyContext::get());
+        if (!$oficina) {
+            return response()->json(['data' => []]);
+        }
+
+        $cobrancas = Cobranca::where('oficina_id', $oficina->id)
+            ->orderByDesc('vencimento')
+            ->get();
+
+        return response()->json([
+            'data' => $cobrancas->map(fn (Cobranca $c) => [
+                'id'             => $c->id,
+                'tipo'           => $c->tipo,
+                'descricao'      => $c->descricao ?: ($c->tipo === 'ASSINATURA' ? 'Mensalidade/Anuidade' : 'Cobrança avulsa'),
+                'valor'          => number_format((float) $c->valor, 2, '.', ''),
+                'status'         => $c->status,
+                'vencimento'     => $c->vencimento?->toDateString(),
+                'pago_em'        => $c->pago_em?->toIso8601String(),
+                'link_pagamento' => $c->link_pagamento,
+                'gateway'        => $c->gateway,
+                'id_pagamento'   => $c->asaas_payment_id ?? $c->mp_payment_id,
+            ])->values(),
+        ]);
+    }
+
     public function statusBloqueio(): JsonResponse
     {
         $oficina = Oficina::find(TenancyContext::get());

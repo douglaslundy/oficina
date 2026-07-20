@@ -5,7 +5,9 @@
 
 ## Tarefa em andamento
 Correções pós-deploy reportadas pelo usuário em produção — código pronto,
-lint/build OK, **falta commitar, deployar na VPS e o usuário validar**.
+commitado (`45019f0`), **deployado na VPS e verificado** (domínios
+`stuntmotos` e `oficina-do-lundy` respondendo 200, containers saudáveis).
+Falta o usuário validar manualmente na tela da oficina.
 
 ## Contexto necessário
 - Itens reportados pelo usuário (todos em `oficinas/[id]` do saas-admin):
@@ -80,11 +82,45 @@ lint/build OK, **falta commitar, deployar na VPS e o usuário validar**.
 - [x] Dados de gateway das oficinas existentes corrigidos em produção
 - [x] Código dos 5 itens acima pronto, lint/build OK
 
+## Rodada 2 (mesma sessão) — bug real da cobrança avulsa + página Minhas Faturas
+- **Causa raiz real do "erro no navegador mas cobrança foi criada"**:
+  `OficinaController::gerarCobrancaAvulsa()` linha 498 chamava
+  `number_format($cobranca->valor, ...)` sem cast — `valor` vem como
+  STRING do cast Eloquent `decimal:2`, e o arquivo tem
+  `declare(strict_types=1)`, então PHP 8 lança `TypeError` ao montar a
+  resposta JSON DEPOIS que o `Cobranca::create()` já tinha sido commitado.
+  Confirmado direto no log de produção (`docker logs mecanicapro-backend-1`)
+  com stacktrace exato. **Corrigido**: `(float) $cobranca->valor`. Não era
+  falha de rede como eu supus antes — é 100% reproduzível, sempre que
+  alguém cria uma cobrança avulsa.
+- **Nova página `/minhas-faturas`** (tenant-side, `(dashboard)`): lista
+  TODAS as cobranças da oficina (ASSINATURA + AVULSA) em ordem cronológica
+  por vencimento. Pendente/Vencida → botão "Pagar" (abre `link_pagamento`
+  em nova aba). Paga → botão "Ver Detalhes" (modal com valor, vencimento,
+  pago em, gateway, id do pagamento). KPIs de topo (em aberto/vencidas/pago).
+  Acesso restrito a `role:ADMIN,FINANCEIRO` (mesmo padrão de
+  Notas Fiscais/Relatórios) — endpoint novo `GET /assinatura/faturas`.
+  Item novo no Sidebar com badge de contagem de pendentes (mesmo padrão de
+  Clientes devedores/Produtos em alerta).
+- **Por que o alerta de pagamento não apareceu para a cobrança avulsa**:
+  `AssinaturaAlertaModal`/`AssinaturaAlertaService::status()` só considera
+  `Cobranca.tipo === 'ASSINATURA'` — é por design (esse modal fala
+  especificamente de mensalidade/anuidade e ameaça suspensão, o que não se
+  aplica a cobrança avulsa). A página Minhas Faturas + badge no menu é a
+  solução de visibilidade para avulsas. Não estendi o modal bloqueante
+  para avulsas — avaliar com o usuário se ele quer isso também.
+- Também corrigido de passagem: mesmo bug de nomenclatura de status
+  (`PAGO`/`VENCIDO` vs os valores reais `PAGA`/`VENCIDA`) na tabela de
+  Cobranças Locais do saas-admin — os pills nunca pintavam certo.
+- Lint/build: `php -l` limpo, `npx tsc --noEmit` limpo. Ainda não deployado
+  nem testado pelo usuário nesta rodada.
+
 ## Próxima tarefa
-1. Commitar as mudanças acima (mensagem cobrindo os 5 itens).
-2. Deploy na VPS (`git pull` + `bash deploy-vps.sh`, rodar em background).
-3. Verificar domínio público real pós-deploy (não só saúde interna).
-4. Avisar o usuário para validar em produção: painel de gateway, criar
-   cliente no gateway (se necessário), gerar cobrança avulsa (ver se some o
-   bug do "nada acontece"), mudar ciclo (ver modal em vez de alert),
-   gerar cobrança do ciclo manualmente.
+1. Commitar + deploy desta rodada 2.
+2. Verificar domínio público pós-deploy.
+3. Pedir pro usuário: testar de novo a cobrança avulsa (deve funcionar sem
+   erro agora), abrir `/minhas-faturas` como usuário da oficina, conferir o
+   badge no menu.
+4. Perguntar se ele quer que cobranças avulsas TAMBÉM disparem algum tipo
+   de alerta mais proativo (não só o badge), já que hoje só assinatura
+   dispara o modal bloqueante.

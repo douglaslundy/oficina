@@ -495,7 +495,7 @@ class OficinaController extends Controller
                 'asaas_payment_id' => $cobranca->asaas_payment_id,
                 'mp_payment_id'    => $cobranca->mp_payment_id,
                 'link_pagamento'   => $linkPagamento,
-                'valor'            => number_format($cobranca->valor, 2, '.', ''),
+                'valor'            => number_format((float) $cobranca->valor, 2, '.', ''),
                 'vencimento'       => $cobranca->vencimento?->toDateString(),
                 'status'           => $cobranca->status,
             ],

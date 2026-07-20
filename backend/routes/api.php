@@ -299,6 +299,11 @@ Route::middleware(['tenant', 'auth:sanctum', 'role:ADMIN'])->group(function () {
     Route::post('assinatura/voto-confianca', [AssinaturaController::class, 'votoConfianca']);
 });
 
+// ─── Minhas Faturas — ADMIN e FINANCEIRO ─────────────────────────────────────
+Route::middleware(['tenant', 'auth:sanctum', 'role:ADMIN,FINANCEIRO'])->group(function () {
+    Route::get('assinatura/faturas', [AssinaturaController::class, 'faturas']);
+});
+
 // ─── Alertas WhatsApp — ADMIN e ATENDENTE ────────────────────────────────────
 Route::middleware(['tenant', 'auth:sanctum', 'role:ADMIN,ATENDENTE'])->group(function () {
     Route::get('alertas',               [AlertaConfigController::class, 'index']);
