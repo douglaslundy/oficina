@@ -115,12 +115,28 @@ Falta o usuário validar manualmente na tela da oficina.
 - Lint/build: `php -l` limpo, `npx tsc --noEmit` limpo. Ainda não deployado
   nem testado pelo usuário nesta rodada.
 
+Rodada 2 deployada e validada (commit `f0f5532`, domínios OK).
+
+## Rodada 3 (mesma sessão) — notificação de pagamento pro admin do SaaS
+- Pedido: quando uma oficina paga uma fatura (via webhook Asaas/Mercado
+  Pago), o admin do SaaS deve receber e-mail (e WhatsApp, se configurado).
+- Perguntei ao usuário sobre o WhatsApp do admin (não existe hoje nenhuma
+  instância/número dedicado à plataforma, só por oficina) — decidiu **só
+  e-mail por enquanto**, WhatsApp fica pra depois. E-mail vai pra **todos os
+  `super_admins`** cadastrados.
+- Implementado em `WebhookController::reconciliarPagamento()` — dispara
+  `notificarAdminPagamento()` logo após marcar a Cobranca como PAGA (antes
+  do early-return de tipo ASSINATURA, então cobre avulsa também). Usa
+  `EmailService` (SMTP configurado em SaaS Admin → Configurações); se não
+  configurado ou o envio falhar, é silencioso — nunca derruba o webhook.
+- Commit `be59206`, deploy em andamento nesta rodada.
+- **Não implementado**: WhatsApp pro admin (precisa de infraestrutura nova
+  — instância Evolution dedicada à plataforma, não a uma oficina; hoje
+  `whatsapp_configs.oficina_id` é NOT NULL). Retomar se o usuário pedir.
+
 ## Próxima tarefa
-1. Commitar + deploy desta rodada 2.
-2. Verificar domínio público pós-deploy.
-3. Pedir pro usuário: testar de novo a cobrança avulsa (deve funcionar sem
-   erro agora), abrir `/minhas-faturas` como usuário da oficina, conferir o
-   badge no menu.
-4. Perguntar se ele quer que cobranças avulsas TAMBÉM disparem algum tipo
-   de alerta mais proativo (não só o badge), já que hoje só assinatura
-   dispara o modal bloqueante.
+1. Verificar deploy da rodada 3 + domínio público.
+2. Pedir pro usuário testar: pagar uma cobrança de teste e confirmar que o
+   e-mail chega pros admins cadastrados em `super_admins` (SMTP precisa
+   estar configurado em Configurações do SaaS Admin).
+3. Perguntar se quer avançar com o WhatsApp do admin depois.
