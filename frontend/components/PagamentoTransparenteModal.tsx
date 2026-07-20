@@ -12,7 +12,7 @@ import {
 } from '@mercadopago/sdk-react'
 import api from '@/lib/api'
 import { useAuth } from '@/hooks/useAuth'
-import { formatarMoeda } from '@/lib/formatters'
+import { formatarMoeda, formatarCPF } from '@/lib/formatters'
 
 interface Props {
   cobrancaId: string
@@ -45,15 +45,20 @@ type Metodo = 'cartao' | 'pix'
 // porque eles nunca entram no DOM da nossa página. Nome e CPF são inputs
 // nossos; autoComplete="off" + nomes não-convencionais evitam sugestão do
 // navegador nesses.
+// O padding vai no style do próprio field (renderizado dentro do iframe da
+// MP) — não no wrapper. O wrapper só define largura/altura/fundo; se ele
+// tiver padding e uma altura pequena, o iframe (que preenche 100% do
+// wrapper) fica espremido e praticamente impossível de clicar/digitar.
 const fieldStyle = {
   color: '#e8eaf0',
   fontSize: '14px',
   'placeholder-color': '#5a6070',
+  padding: '10px 12px',
 } as const
 
 const secureFieldWrapStyle: React.CSSProperties = {
   background: 'var(--bg)', border: '1px solid var(--border)', borderRadius: 8,
-  padding: '9px 12px', height: 20,
+  height: 40, boxSizing: 'border-box', overflow: 'hidden',
 }
 
 const inputStyle: React.CSSProperties = {
@@ -82,11 +87,14 @@ export function PagamentoTransparenteModal({ cobrancaId, valor, descricao, onClo
   const [parcelaEscolhida, setParcelaEscolhida] = useState<number>(1)
 
   useEffect(() => {
-    api.get<{ public_key: string }>('/pagamento/mercadopago/chave-publica')
+    api.get<{ public_key: string; cpf_titular?: string | null }>('/pagamento/mercadopago/chave-publica')
       .then(res => {
         if (!mpInicializado) {
           initMercadoPago(res.data.public_key, { locale: 'pt-BR' })
           mpInicializado = true
+        }
+        if (res.data.cpf_titular) {
+          setCpf(formatarCPF(res.data.cpf_titular))
         }
         setTela('form')
       })

@@ -4,6 +4,7 @@ declare(strict_types=1);
 namespace App\Http\Controllers;
 
 use App\Models\Cobranca;
+use App\Models\Oficina;
 use App\Models\SaasConfig;
 use App\Services\MercadoPagoService;
 use App\Services\PagamentoReconciliacaoService;
@@ -18,7 +19,12 @@ class PagamentoController extends Controller
         private readonly PagamentoReconciliacaoService $reconciliacao,
     ) {}
 
-    /** Chave pública do Mercado Pago — segura para expor ao frontend (usada para tokenizar o pagamento no navegador). */
+    /**
+     * Chave pública do Mercado Pago — segura para expor ao frontend (usada
+     * para tokenizar o pagamento no navegador) — e o CPF já cadastrado do
+     * admin da oficina, pra pré-preencher o formulário em vez de pedir
+     * digitado de novo.
+     */
     public function chavePublicaMercadoPago(): JsonResponse
     {
         $chave = SaasConfig::get()->getRawOriginal('mp_public_key');
@@ -27,7 +33,12 @@ class PagamentoController extends Controller
             return response()->json(['message' => 'Mercado Pago não está configurado nesta plataforma.'], 422);
         }
 
-        return response()->json(['public_key' => $chave]);
+        $oficina = Oficina::find(TenancyContext::get());
+
+        return response()->json([
+            'public_key'  => $chave,
+            'cpf_titular' => $oficina?->admin_cpf,
+        ]);
     }
 
     /**
