@@ -8,6 +8,7 @@ use App\Models\Oficina;
 use App\Models\SaasConfig;
 use App\Services\AssinaturaAlertaService;
 use App\Services\AssinaturaService;
+use App\Services\PagamentoReconciliacaoService;
 use App\Tenancy\TenancyContext;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
@@ -17,7 +18,27 @@ class AssinaturaController extends Controller
     public function __construct(
         private readonly AssinaturaAlertaService $alertaService,
         private readonly AssinaturaService $assinaturaService,
+        private readonly PagamentoReconciliacaoService $reconciliacao,
     ) {}
+
+    /**
+     * Concilia ativamente as cobranças em aberto da oficina contra o
+     * gateway antes de responder — não depende só do webhook ter chegado.
+     * Sem isso, um pagamento feito fora da tela de checkout transparente
+     * (ex.: PIX pago pelo app do banco depois de fechar a aba) só
+     * atualizaria quando o webhook chegasse, o que pode nunca acontecer se
+     * ele não estiver configurado corretamente.
+     */
+    private function conciliarEmAberto(Oficina $oficina): void
+    {
+        Cobranca::where('oficina_id', $oficina->id)
+            ->whereIn('status', ['PENDENTE', 'VENCIDA'])
+            ->where(function ($q) {
+                $q->whereNotNull('mp_payment_id')->orWhereNotNull('asaas_payment_id');
+            })
+            ->get()
+            ->each(fn (Cobranca $c) => $this->reconciliacao->verificarEConciliar($c));
+    }
 
     public function alerta(): JsonResponse
     {
@@ -25,6 +46,9 @@ class AssinaturaController extends Controller
         if (!$oficina) {
             return response()->json(['show' => false]);
         }
+
+        $this->conciliarEmAberto($oficina);
+        $oficina->refresh();
 
         return response()->json($this->alertaService->status($oficina));
     }
@@ -60,6 +84,8 @@ class AssinaturaController extends Controller
         if (!$oficina) {
             return response()->json(['data' => []]);
         }
+
+        $this->conciliarEmAberto($oficina);
 
         $cobrancas = Cobranca::where('oficina_id', $oficina->id)
             ->orderByDesc('vencimento')
@@ -104,6 +130,9 @@ class AssinaturaController extends Controller
         if (!$oficina) {
             return response()->json(['suspensa' => false, 'voto_confianca_disponivel' => false]);
         }
+
+        $this->conciliarEmAberto($oficina);
+        $oficina->refresh();
 
         return response()->json($this->alertaService->statusBloqueio($oficina));
     }

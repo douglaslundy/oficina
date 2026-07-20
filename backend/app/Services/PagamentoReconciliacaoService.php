@@ -16,7 +16,48 @@ use Illuminate\Support\Facades\Log;
  */
 class PagamentoReconciliacaoService
 {
-    public function __construct(private readonly EmailService $emailService) {}
+    public function __construct(
+        private readonly EmailService $emailService,
+        private readonly MercadoPagoService $mercadoPago,
+        private readonly AsaasService $asaas,
+    ) {}
+
+    /**
+     * Consulta o gateway pra ver se uma cobrança PENDENTE/VENCIDA com
+     * payment_id já foi paga de verdade, e concilia na hora se sim. Não
+     * depende do webhook ter chegado — usado tanto no polling da tela de
+     * pagamento quanto em qualquer lugar que precise garantir que o status
+     * exibido reflete a realidade, mesmo que o webhook tenha atrasado,
+     * falhado ou nunca tenha sido configurado corretamente.
+     *
+     * @return bool true se conciliou (estava pendente e na verdade já foi paga)
+     */
+    public function verificarEConciliar(Cobranca $cobranca): bool
+    {
+        if (in_array($cobranca->status, ['PAGA', 'CANCELADA', 'ESTORNADA'], true)) {
+            return false;
+        }
+
+        try {
+            if ($cobranca->gateway === 'MERCADOPAGO' && $cobranca->mp_payment_id) {
+                $pagamento = $this->mercadoPago->buscarPagamento($cobranca->mp_payment_id);
+                if (($pagamento['status'] ?? null) === 'approved') {
+                    $this->confirmarPagamento($cobranca);
+                    return true;
+                }
+            } elseif ($cobranca->gateway === 'ASAAS' && $cobranca->asaas_payment_id) {
+                $pagamento = $this->asaas->buscarPagamento($cobranca->asaas_payment_id);
+                if (in_array($pagamento['status'] ?? null, ['RECEIVED', 'CONFIRMED'], true)) {
+                    $this->confirmarPagamento($cobranca);
+                    return true;
+                }
+            }
+        } catch (\Throwable) {
+            // Silencioso — quem chamou tenta de novo na próxima oportunidade.
+        }
+
+        return false;
+    }
 
     public function confirmarPagamento(Cobranca $cobranca): void
     {

@@ -11,7 +11,6 @@ use App\Services\MercadoPagoService;
 use App\Services\PagamentoReconciliacaoService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
-use Illuminate\Support\Facades\Log;
 
 class CobrancaController extends Controller
 {
@@ -154,22 +153,8 @@ class CobrancaController extends Controller
 
         foreach ($cobrancas as $cobranca) {
             $verificadas++;
-            try {
-                if ($cobranca->gateway === 'MERCADOPAGO' && $cobranca->mp_payment_id) {
-                    $pagamento = $this->mercadoPago->buscarPagamento($cobranca->mp_payment_id);
-                    if (($pagamento['status'] ?? null) === 'approved') {
-                        $this->reconciliacao->confirmarPagamento($cobranca);
-                        $conciliadas++;
-                    }
-                } elseif ($cobranca->gateway === 'ASAAS' && $cobranca->asaas_payment_id) {
-                    $pagamento = $this->asaas->buscarPagamento($cobranca->asaas_payment_id);
-                    if (in_array($pagamento['status'] ?? null, ['RECEIVED', 'CONFIRMED'], true)) {
-                        $this->reconciliacao->confirmarPagamento($cobranca);
-                        $conciliadas++;
-                    }
-                }
-            } catch (\Throwable $e) {
-                Log::warning("Conciliação: falha ao verificar cobrança {$cobranca->id}: " . $e->getMessage());
+            if ($this->reconciliacao->verificarEConciliar($cobranca)) {
+                $conciliadas++;
             }
         }
 

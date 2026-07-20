@@ -255,12 +255,36 @@ Rodada 5 deployada e validada (commit `1224f55`).
   — os pills nunca batiam com os valores reais (`PAGA`/`VENCIDA`).
 - Lint/build limpos.
 
+Rodada 7 com deploy em andamento.
+
+## Rodada 8 (mesma sessão) — conciliação ativa também sem a tela de pagamento aberta
+- Usuário perguntou explicitamente: "vai atualizar automaticamente no
+  momento do pagamento do pix?" Resposta honesta que dei: só enquanto a
+  tela de pagamento está aberta (polling a cada 5s) — se a pessoa fechar
+  antes de pagar e pagar depois, dependia só do webhook (não confirmado
+  que está registrado certo na MP).
+- Fechei essa lacuna: extraí a lógica de "consultar gateway e conciliar se
+  já foi pago" pra um método público reutilizável,
+  `PagamentoReconciliacaoService::verificarEConciliar()`. Usado agora em:
+  `PagamentoController::statusFatura()` (polling da tela de pagamento,
+  já existia), `CobrancaController::conciliar()` (botão manual do admin,
+  já existia), e AGORA TAMBÉM em `AssinaturaController::alerta()`,
+  `::statusBloqueio()` e `::faturas()` — ou seja, toda vez que a oficina
+  abre o dashboard (alerta), a tela de bloqueio, ou "Minhas Faturas", as
+  cobranças em aberto com payment_id são checadas contra o gateway de
+  verdade antes de responder. Isso cobre o caso de pagar fora da tela de
+  checkout (ex.: PIX pelo app do banco depois de fechar a aba) sem
+  depender do webhook.
+- Lint limpo em todos os arquivos tocados.
+
 ## Próxima tarefa
-1. Deploy da rodada 7.
+1. Aguardar rodada 7 terminar de deployar, então deployar rodada 8 em cima
+   (não sobrepor dois `deploy-vps.sh` ao mesmo tempo).
 2. Testar: reabrir a fatura PIX que ficou travada (deve resolver sozinha
-   via polling agora) ou usar o botão "Conciliar" pra forçar. Testar
-   "Estornar" numa cobrança paga de teste.
-3. **Investigar por que o webhook da MP não chegou** — o fix de polling é
-   uma rede de segurança, mas o webhook deveria funcionar. Verificar se a
-   URL do webhook está registrada corretamente no painel do Mercado Pago
-   pra essa aplicação/access token.
+   agora, seja via polling da tela de pagamento OU ao simplesmente abrir
+   "Minhas Faturas"/o dashboard). Testar "Estornar" numa cobrança paga de
+   teste.
+3. **Investigar por que o webhook da MP não chegou** — os fixes de
+   conciliação ativa são uma rede de segurança, mas o webhook deveria
+   funcionar sozinho. Verificar se a URL está registrada corretamente no
+   painel do Mercado Pago pra essa aplicação/access token.

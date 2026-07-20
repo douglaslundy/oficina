@@ -132,16 +132,8 @@ class PagamentoController extends Controller
             return response()->json(['message' => 'Fatura não encontrada.'], 404);
         }
 
-        if ($cobranca->status !== 'PAGA' && $cobranca->mp_payment_id) {
-            try {
-                $pagamento = $this->mercadoPago->buscarPagamento($cobranca->mp_payment_id);
-                if (($pagamento['status'] ?? null) === 'approved') {
-                    $this->reconciliacao->confirmarPagamento($cobranca);
-                    $cobranca->refresh();
-                }
-            } catch (\Throwable) {
-                // Silencioso — o polling tenta de novo no próximo tick.
-            }
+        if ($this->reconciliacao->verificarEConciliar($cobranca)) {
+            $cobranca->refresh();
         }
 
         return response()->json([
