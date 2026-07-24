@@ -429,22 +429,85 @@ depois na rodada 3).
   Falta o usuário validar manualmente que o download de PDF/recibo/NF/
   relatório/backup abre de fato numa oficina que não seja o domínio base.
 
+## Rodada 12 (nova sessão) — Log de notificações visualizadas (oficina/usuário/IP)
+Pedido do usuário: página mostrando todas as notificações abertas/lidas
+pelas oficinas, quem leu, quantas vezes (pra notificações repetidas) e um
+toggle com log detalhado (usuário, data, IP) — cobrindo tanto as
+notificações manuais do admin quanto o alerta do motor de cobrança.
+
+- Spec: `docs/superpowers/specs/2026-07-23-log-notificacoes-visualizadas-design.md`.
+- Plano: `docs/superpowers/plans/2026-07-23-log-notificacoes-visualizadas.md`
+  (9 tasks, executadas via subagent-driven-development — implementador +
+  revisor por task, direto na main).
+- **Gap descoberto na investigação**: nenhuma das duas fontes de
+  notificação registrava visualização no servidor — a manual controlava
+  tudo em `localStorage` do navegador, e o alerta de cobrança só tinha um
+  contador agregado por oficina (`oficinas.alerta_cobranca_exibicoes_hoje`),
+  sem log por evento.
+- **O que foi implementado**: nova tabela central `notificacao_visualizacoes`
+  (tipo MANUAL/COBRANCA, snapshot de título/mensagem, oficina/usuário/IP/
+  user-agent/timestamp). `POST /notificacoes/{id}/visualizar` novo
+  (tenant) grava a leitura; `GET /notificacoes/ativas` passou a decidir
+  elegibilidade (vezes_dia/intervalo_minutos) no servidor, por oficina —
+  `NotificacaoModal.tsx` não usa mais `localStorage`.
+  `AssinaturaAlertaService::status()` ganhou uma gravação de log logo
+  após `registrarExibicao()`, SEM alterar o throttle existente (caminho
+  crítico de cobrança, intocado). SaaS Admin (`/saas-admin/notificacoes`)
+  ganhou abas "Manuais" (coluna Leituras + toggle de log) e "Cobrança"
+  (tabela agrupada por oficina/fatura + toggle de log), via componente
+  compartilhado `NotificacaoLogInline.tsx`.
+- **`TrustProxies` configurado** (`backend/bootstrap/app.php`) — sem
+  isso, `$request->ip()` sempre devolveria o IP interno do Traefik, não o
+  do usuário, e o log de IP não teria valor nenhum.
+- **Bug crítico achado pela revisão final de branch (não pelas revisões
+  por task) e corrigido**: Carbon 3 mudou `diffIn*()` pra diff com sinal;
+  `now()->diffInMinutes($ultima)` (código original) é sempre negativo
+  quando `$ultima` é passado, então o throttle de intervalo nunca
+  expirava — notificação manual sumia pra sempre depois da primeira
+  visualização. Corrigido pra `$ultima->diffInMinutes(now())`
+  (commit `49c4fd7`), com 3 testes novos cobrindo os gaps que a revisão
+  também apontou (fase VENCIDA do alerta de cobrança, role não-ADMIN em
+  `visualizar()`, direção "ainda dentro do intervalo" do throttle).
+- **Endurecimento de segurança pós-revisão**: a revisão final também
+  achou que `trustProxies(at: '*')` confia em QUALQUER proxy — dá pra
+  forjar `X-Forwarded-For` e falsificar o IP do log de auditoria E burlar
+  o rate limit de login. Usuário aprovou restringir. Commit `abe7812`:
+  trocado por faixas privadas do Docker (10.0.0.0/8, 172.16.0.0/12,
+  192.168.0.0/16) + 127.0.0.1 (usado pelo test client do Laravel) — só
+  uma conexão que já chega pela rede interna (ou seja, o próprio Traefik)
+  é tratada como proxy confiável.
+- **Itens Minor registrados, não corrigidos** (ver
+  `.superpowers/sdd/progress.md` pro detalhe): `visualizar()` não valida
+  `alvo_tipo` antes de logar (poderia logar visualização de notificação
+  não destinada à oficina — impacto restrito à própria oficina do
+  usuário); coluna Fase da aba Cobrança mostra status ao vivo da cobrança
+  em vez do snapshot da fase no momento da exibição; sem purga/retenção
+  automática do log (pode crescer bastante em fatura vencida há muito
+  tempo).
+- Todos os 9 commits da feature + o fix + o endurecimento de segurança
+  estão na `main`, com `npx tsc --noEmit`/`npm run build` limpos e 34
+  testes Unit locais passando (sem regressão). **Feature tests nunca
+  rodaram contra Postgres de verdade** (indisponível localmente,
+  limitação já documentada) — recomendo fortemente rodar
+  `php artisan test tests/Feature` num ambiente com Postgres (CI ou a
+  própria VPS) antes de considerar a rodada 100% validada, já que foi
+  exatamente esse tipo de bug (lógica de throttle) que passou batido pelas
+  revisões individuais e só apareceu na revisão final de branch inteira.
+- **Ainda não commitado no PROGRESSO.md antes disso, não deployado.**
+  Perguntar ao usuário sobre deploy antes de seguir pro próximo pedido
+  (era a instrução original: "ao concluir essa tarefa me pergunte se
+  desejo fazer o deploy antes de iniciar a próxima tarefa").
+
 ## Próxima tarefa
-1. Confirmar com o usuário se quer corrigir também NF/relatórios/orçamento
-   (mesmo bug, ver Rodada 11).
-2. Deploy da rodada 10 (roda a migration automaticamente) + rodada 11 juntos,
-   se o usuário aprovar.
-3. Usuário precisa: cadastrar o webhook da MP no painel deles (instruções
-   já passadas) e conectar o WhatsApp do admin em
-   `/saas-admin/configuracoes/whatsapp` (escanear QR code + salvar número
-   de destino + ativar).
-4. Testar: pagamento de cartão/PIX continua funcionando normalmente após
-   as validações mais estritas da rodada 9. Confirmar que MECANICO/
-   ATENDENTE não veem mais o CPF pré-preenchido.
-5. Se quiserem reativar o gateway Asaas no futuro: configurar
-   `ASAAS_WEBHOOK_TOKEN` no `.env` de produção (já documentado antes).
-6. Depois disso: (a) página de log de notificações lidas por
-   oficina/usuário/IP com toggle de histórico para notificações
-   repetidas; (b) estudo de viabilidade fiscal do NFePHP como motor
-   gratuito adicional (contexto Ilicínea/MG, IBGE 3130507) — pedidos pelo
+1. Perguntar ao usuário se quer deploy da Rodada 12 agora.
+2. Se sim: `git push`, `git pull` na VPS, `bash deploy-vps.sh`, validar
+   domínios (mesmo padrão das rodadas anteriores) — e idealmente rodar
+   `php artisan test tests/Feature` no container de produção/homologação
+   pra validar de verdade os testes que só puderam ser conferidos por
+   `php -l` localmente.
+3. Depois do deploy (ou se o usuário preferir pular): seguir para o
+   pedido ainda pendente da mesma mensagem original — estudo de
+   viabilidade fiscal do NFePHP como motor gratuito adicional (contexto
+   Ilicínea/MG, IBGE 3130507), comparando com os motores pagos já
+   existentes (Spedy/Focus NFe) e dizendo se é seguro prosseguir.
    usuário na mesma mensagem, ainda não iniciados.
