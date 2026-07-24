@@ -143,6 +143,10 @@ Route::prefix('saas')->group(function () {
         Route::patch('notificacoes/{id}/ativo', [\App\Http\Controllers\SaaS\NotificacaoController::class, 'publicar']);
         Route::get('notificacoes/{id}/log', [\App\Http\Controllers\SaaS\NotificacaoController::class, 'log']);
 
+        // Log agrupado de exibições do alerta de cobrança
+        Route::get('notificacoes-cobranca',     [\App\Http\Controllers\SaaS\NotificacaoCobrancaLogController::class, 'index']);
+        Route::get('notificacoes-cobranca/log', [\App\Http\Controllers\SaaS\NotificacaoCobrancaLogController::class, 'log']);
+
         // Pacotes de serviço avulso — catálogo
         Route::get('pacotes',         [\App\Http\Controllers\SaaS\PacoteServicoController::class, 'index']);
         Route::post('pacotes',        [\App\Http\Controllers\SaaS\PacoteServicoController::class, 'store']);
