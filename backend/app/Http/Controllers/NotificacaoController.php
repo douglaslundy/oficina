@@ -4,13 +4,15 @@ declare(strict_types=1);
 namespace App\Http\Controllers;
 
 use App\Models\Notificacao;
+use App\Models\NotificacaoVisualizacao;
 use App\Models\Oficina;
 use App\Tenancy\TenancyContext;
 use Illuminate\Http\JsonResponse;
+use Illuminate\Http\Request;
 
 class NotificacaoController extends Controller
 {
-    /** Notificações ativas direcionadas à oficina atual (para exibir no modal). */
+    /** Notificações ativas e elegíveis para a oficina atual (para exibir no modal). */
     public function ativas(): JsonResponse
     {
         $oficina = Oficina::find(TenancyContext::get());
@@ -33,17 +35,67 @@ class NotificacaoController extends Controller
                     default    => false,
                 };
             })
+            ->filter(fn (Notificacao $n) => $this->elegivelParaExibir($n, $oficina))
             ->map(fn (Notificacao $n) => [
-                'id'                => $n->id,
-                'titulo'            => $n->titulo,
-                'subtitulo'         => $n->subtitulo,
-                'texto'             => $n->texto,
-                'imagem'            => $n->imagem,
-                'vezes_dia'         => $n->vezes_dia,
-                'intervalo_minutos' => $n->intervalo_minutos,
+                'id'        => $n->id,
+                'titulo'    => $n->titulo,
+                'subtitulo' => $n->subtitulo,
+                'texto'     => $n->texto,
+                'imagem'    => $n->imagem,
             ])
             ->values();
 
         return response()->json(['data' => $notificacoes]);
+    }
+
+    /** Registra que a oficina/usuário atual visualizou (fechou) a notificação. */
+    public function visualizar(string $id): JsonResponse
+    {
+        $notificacao = Notificacao::findOrFail($id);
+        $oficinaId = TenancyContext::get();
+
+        NotificacaoVisualizacao::create([
+            'tipo'           => 'MANUAL',
+            'notificacao_id' => $notificacao->id,
+            'titulo'         => $notificacao->titulo,
+            'mensagem'       => $notificacao->texto,
+            'oficina_id'     => $oficinaId,
+            'usuario_id'     => auth()->id(),
+            'ip'             => request()->ip(),
+            'user_agent'     => request()->userAgent(),
+        ]);
+
+        return response()->json(['message' => 'Visualização registrada.'], 201);
+    }
+
+    /**
+     * Elegibilidade server-side: no máximo `vezes_dia` exibições por dia,
+     * respeitando `intervalo_minutos` desde a última exibição — throttle
+     * por oficina (todos os usuários da equipe compartilham a mesma cota),
+     * não por usuário individual.
+     */
+    private function elegivelParaExibir(Notificacao $n, Oficina $oficina): bool
+    {
+        $hoje = now()->toDateString();
+
+        $countHoje = NotificacaoVisualizacao::where('notificacao_id', $n->id)
+            ->where('oficina_id', $oficina->id)
+            ->whereDate('visualizado_em', $hoje)
+            ->count();
+
+        if ($countHoje >= $n->vezes_dia) {
+            return false;
+        }
+
+        $ultima = NotificacaoVisualizacao::where('notificacao_id', $n->id)
+            ->where('oficina_id', $oficina->id)
+            ->orderByDesc('visualizado_em')
+            ->value('visualizado_em');
+
+        if ($ultima && now()->diffInMinutes($ultima) < $n->intervalo_minutos) {
+            return false;
+        }
+
+        return true;
     }
 }

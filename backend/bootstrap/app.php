@@ -12,6 +12,13 @@ return Application::configure(basePath: dirname(__DIR__))
         health: '/up',
     )
     ->withMiddleware(function (Middleware $middleware): void {
+        // Backend nunca é exposto diretamente — só o Traefik tem porta
+        // publicada (ver docker-compose.vps.yml/prod.yml) — confiar em
+        // qualquer proxy é seguro nesta topologia e necessário pra
+        // $request->ip() refletir o IP real do usuário, não o do container
+        // do proxy.
+        $middleware->trustProxies(at: '*');
+
         $middleware->api(
             prepend: [\Illuminate\Http\Middleware\HandleCors::class],
             append: [\App\Http\Middleware\SecurityHeaders::class],

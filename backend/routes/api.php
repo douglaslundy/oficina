@@ -183,6 +183,7 @@ Route::middleware(['tenant', 'auth:sanctum'])->group(function () {
     Route::get('dashboard',      [DashboardController::class, 'index']);
     Route::get('plano/limites',  [PlanController::class, 'limites']);
     Route::get('notificacoes/ativas', [\App\Http\Controllers\NotificacaoController::class, 'ativas']);
+    Route::post('notificacoes/{id}/visualizar', [\App\Http\Controllers\NotificacaoController::class, 'visualizar']);
     Route::get('assinatura/alerta', [AssinaturaController::class, 'alerta']);
     Route::get('assinatura/status-bloqueio', [AssinaturaController::class, 'statusBloqueio']);
     // Checkout transparente (Mercado Pago) — mesmo acesso do link externo que substitui, todos os roles
