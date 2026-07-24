@@ -74,4 +74,21 @@ class NotificacaoAtivasEligibilidadeTest extends TestCase
         $this->comoTenant($oficina, $usuario)->getJson('/api/notificacoes/ativas')
             ->assertStatus(200)->assertJsonCount(1, 'data');
     }
+
+    public function test_notificacao_ainda_bloqueada_antes_do_intervalo_completar(): void
+    {
+        [$oficina, $usuario] = $this->criarOficinaComUsuario();
+        $notificacao = Notificacao::create([
+            'titulo' => 'Aviso', 'texto' => 'Texto', 'alvo_tipo' => 'TODOS',
+            'vezes_dia' => 5, 'intervalo_minutos' => 60, 'ativo' => true,
+        ]);
+
+        $this->comoTenant($oficina, $usuario)->postJson("/api/notificacoes/{$notificacao->id}/visualizar")
+            ->assertStatus(201);
+
+        $this->travel(30)->minutes();
+
+        $this->comoTenant($oficina, $usuario)->getJson('/api/notificacoes/ativas')
+            ->assertStatus(200)->assertJsonCount(0, 'data');
+    }
 }

@@ -92,7 +92,7 @@ class NotificacaoController extends Controller
             ->orderByDesc('visualizado_em')
             ->value('visualizado_em');
 
-        if ($ultima && now()->diffInMinutes($ultima) < $n->intervalo_minutos) {
+        if ($ultima && $ultima->diffInMinutes(now()) < $n->intervalo_minutos) {
             return false;
         }
 

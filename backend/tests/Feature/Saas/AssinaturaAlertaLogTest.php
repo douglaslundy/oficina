@@ -45,4 +45,35 @@ class AssinaturaAlertaLogTest extends TestCase
             'oficina_id' => $oficina->id, 'usuario_id' => $usuario->id,
         ]);
     }
+
+    public function test_alerta_de_cobranca_vencida_grava_log_com_titulo_de_fatura_vencida(): void
+    {
+        $plano = Plano::create(['nome' => 'Padrão', 'preco_mensal' => 100]);
+        $oficina = Oficina::create([
+            'nome' => 'Teste', 'cnpj' => '11222333000181', 'slug' => 'teste-' . uniqid(),
+            'plano_id' => $plano->id, 'status' => 'ATIVA', 'ciclo_cobranca' => 'MENSAL',
+            'proximo_vencimento' => now()->addMonth()->toDateString(),
+        ]);
+        TenancyContext::set($oficina->id, $oficina->slug);
+        $usuario = Usuario::create([
+            'nome' => 'Fulano', 'email' => 'fulano@' . uniqid() . '.com', 'cpf' => '52998224725',
+            'role' => 'ADMIN', 'status' => 'ATIVO', 'senha_hash' => Hash::make('senha123'),
+        ]);
+        TenancyContext::clear();
+        $cobranca = Cobranca::create([
+            'oficina_id' => $oficina->id, 'tipo' => 'ASSINATURA', 'valor' => 100,
+            'status' => 'VENCIDA', 'vencimento' => now()->subDays(5)->toDateString(),
+        ]);
+
+        $response = $this->withHeaders(['X-Tenant' => $oficina->slug])
+            ->actingAs($usuario)
+            ->getJson('/api/assinatura/alerta');
+
+        $response->assertStatus(200)->assertJson(['show' => true]);
+        $this->assertDatabaseHas('notificacao_visualizacoes', [
+            'tipo' => 'COBRANCA', 'cobranca_id' => $cobranca->id,
+            'oficina_id' => $oficina->id, 'usuario_id' => $usuario->id,
+            'titulo' => 'Fatura vencida',
+        ]);
+    }
 }

@@ -45,4 +45,30 @@ class NotificacaoVisualizarTest extends TestCase
             'ip' => '203.0.113.7',
         ]);
     }
+
+    public function test_visualizar_permite_role_nao_admin_como_mecanico(): void
+    {
+        $plano = Plano::create(['nome' => 'Padrão', 'preco_mensal' => 100]);
+        $oficina = Oficina::create([
+            'nome' => 'Teste', 'cnpj' => '11222333000181', 'slug' => 'teste-' . uniqid(),
+            'plano_id' => $plano->id, 'status' => 'ATIVA',
+        ]);
+        TenancyContext::set($oficina->id, $oficina->slug);
+        $usuario = Usuario::create([
+            'nome' => 'Ciclano', 'email' => 'ciclano@' . uniqid() . '.com', 'cpf' => '52998224725',
+            'role' => 'MECANICO', 'status' => 'ATIVO', 'senha_hash' => Hash::make('senha123'),
+        ]);
+        TenancyContext::clear();
+        $notificacao = Notificacao::create(['titulo' => 'Aviso', 'texto' => 'Texto', 'alvo_tipo' => 'TODOS']);
+
+        $response = $this->withHeaders(['X-Tenant' => $oficina->slug])
+            ->actingAs($usuario)
+            ->postJson("/api/notificacoes/{$notificacao->id}/visualizar");
+
+        $response->assertStatus(201);
+        $this->assertDatabaseHas('notificacao_visualizacoes', [
+            'tipo' => 'MANUAL', 'notificacao_id' => $notificacao->id,
+            'oficina_id' => $oficina->id, 'usuario_id' => $usuario->id,
+        ]);
+    }
 }
