@@ -4,11 +4,17 @@ declare(strict_types=1);
 namespace App\Services;
 
 use App\Models\Cobranca;
+use App\Models\NotificacaoVisualizacao;
 use App\Models\Oficina;
 use App\Models\SaasConfig;
+use Illuminate\Http\Request;
 
 class AssinaturaAlertaService
 {
+    public function __construct(private readonly Request $request)
+    {
+    }
+
     public function status(Oficina $oficina): array
     {
         $cobranca = Cobranca::where('oficina_id', $oficina->id)
@@ -37,6 +43,7 @@ class AssinaturaAlertaService
         }
 
         $this->registrarExibicao($oficina);
+        $this->registrarLog($oficina, $cobranca, $fase, $mensagem);
 
         return [
             'show'               => true,
@@ -128,6 +135,20 @@ class AssinaturaAlertaService
         $oficina->update([
             'alerta_cobranca_exibicoes_hoje'     => $this->exibicoesHoje($oficina) + 1,
             'alerta_cobranca_ultima_exibicao_em' => now()->toDateString(),
+        ]);
+    }
+
+    private function registrarLog(Oficina $oficina, Cobranca $cobranca, string $fase, string $mensagem): void
+    {
+        NotificacaoVisualizacao::create([
+            'tipo'        => 'COBRANCA',
+            'cobranca_id' => $cobranca->id,
+            'titulo'      => $fase === 'VENCIDA' ? 'Fatura vencida' : 'Fatura disponível para pagamento',
+            'mensagem'    => $mensagem,
+            'oficina_id'  => $oficina->id,
+            'usuario_id'  => auth()->id(),
+            'ip'          => $this->request->ip(),
+            'user_agent'  => $this->request->userAgent(),
         ]);
     }
 
