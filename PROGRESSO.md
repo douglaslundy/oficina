@@ -515,10 +515,67 @@ notificações manuais do admin quanto o alerta do motor de cobrança.
   conferir a aba Cobrança em `/saas-admin/notificacoes` com uma oficina
   que tenha fatura pendente/vencida.
 
+## Rodada 13 (mesma sessão) — agendador do Laravel nunca rodava em produção
+Usuário testou a rodada 12 e reportou dois sintomas: (1) aba Cobrança de
+`/saas-admin/notificacoes` vazia mesmo com fatura pendente existindo; (2)
+fatura mensal automática da `oficina-do-lundy` não foi gerada.
+
+- **(1) Não era bug** — expliquei ao usuário: a aba Cobrança é um log de
+  *visualização* (só grava linha quando um usuário da oficina abre o
+  sistema e o alerta é exibido pra ele), não uma lista de faturas
+  pendentes (isso já existe em "Cobranças" no menu). Vazio é esperado se
+  ninguém da oficina logou desde o deploy.
+- **(2) Bug real e sério, confirmado direto na produção**: `crontab -l` na
+  VPS não tinha NENHUMA entrada pro projeto mecanicapro, e os containers
+  só rodavam `artisan serve` (backend) e `queue:work` (worker) — nada
+  chamava `php artisan schedule:run`. Os 3 comandos agendados em
+  `routes/console.php` (`cobrancas:gerar` 06:00, `alertas:verificar`
+  07:00, `oficina:recalcular-status-clientes` 02:00) **nunca dispararam
+  sozinhos em produção**, desde que foram criados — `Schedule::command()`
+  no código não faz nada sozinho, precisa de algo externo cutucando
+  `schedule:run` a cada minuto. Confirmado também que a única fatura
+  pendente existente (`stuntmotos`, vencimento 01/08) foi criada
+  manualmente (botão "Gerar Cobrança do Ciclo Agora"), não pelo job.
+  Causa adicional específica da `oficina-do-lundy`: seu
+  `proximo_vencimento` foi empurrado pra 2026-09-01 por um pagamento que
+  depois foi estornado — estorno não desfaz esse avanço (comportamento já
+  documentado antes, rodada 7) — usuário optou por gerar manualmente via
+  botão em vez de eu editar a data direto no banco.
+- **Fix**: novo container `scheduler` (mesma imagem do backend,
+  `CONTAINER_ROLE=scheduler`) rodando `php artisan schedule:work`
+  continuamente — processo dedicado do Laravel pra isso, não depende de
+  cron do SO (evita ficar invisível num host compartilhado com outros
+  projetos). `backend/docker-entrypoint.sh` ganhou o branch
+  `CONTAINER_ROLE=scheduler` (mesmo padrão do branch `worker` já
+  existente, antes da seção de migrations). `docker-compose.prod.yml`
+  ganhou o serviço `scheduler`. **Não toquei em `docker-compose.vps.yml`**
+  — confirmado que esse arquivo não é usado por `deploy-vps.sh` (só
+  `docker-compose.prod.yml` é), parece ser um artefato antigo não
+  referenciado por nenhum script.
+- Commit `b241e78`, deployado e validado: `docker compose ps scheduler`
+  mostra o container `Up`, log mostra `INFO No scheduled commands are
+  ready to run.` (mensagem normal do `schedule:work` quando ainda não é a
+  hora de nenhum comando — confirma que o loop de verificação por minuto
+  está rodando de verdade).
+- **Nota de fuso horário (não corrigida, FYI)**: `config/app.php` usa
+  `'timezone' => 'UTC'` hardcoded, então `dailyAt('06:00')` dispara às
+  06:00 UTC = 03:00 horário de Brasília, não 06:00 local. Não é o que foi
+  pedido pra corrigir (o pedido era "o job não roda nunca", não "roda na
+  hora errada") e mudar o timezone da app tem efeito colateral em outras
+  datas do sistema (vencimentos, `now()->toDateString()` etc) — decidi
+  não mexer sem o usuário pedir explicitamente.
+- Usuário vai gerar a fatura da `oficina-do-lundy` manualmente pelo botão
+  "Gerar Cobrança do Ciclo Agora" (preferência dele, não fiz isso por ele).
+
 ## Próxima tarefa
 1. Estudo de viabilidade fiscal do NFePHP como motor gratuito adicional
    (contexto Ilicínea/MG, IBGE 3130507), comparando com os motores pagos
    já existentes (Spedy/Focus NFe) e dizendo se é seguro prosseguir —
    pedido pendente da mesma mensagem original do usuário, ainda não
    iniciado.
-2. Usuário validar manualmente a rodada 12 na tela (ver itens logo acima).
+2. Usuário validar manualmente a rodada 12 (notificações) e a rodada 13
+   (agendador — conferir amanhã se `cobrancas:gerar`/`alertas:verificar`
+   realmente rodaram nos horários certos, via
+   `docker compose logs scheduler`).
+3. Usuário gerar a fatura da oficina do Lundy pelo botão "Gerar Cobrança
+   do Ciclo Agora".
