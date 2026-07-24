@@ -1,7 +1,9 @@
 'use client'
-import { useState, useEffect, useCallback } from 'react'
+import { useState, useEffect, useCallback, Fragment } from 'react'
 import saasApi from '@/lib/saas-api'
 import { NotificacaoCard } from '@/components/NotificacaoCard'
+import { NotificacaoLogInline } from '@/components/saas/NotificacaoLogInline'
+import { NotificacaoCobrancaTable } from '@/components/saas/NotificacaoCobrancaTable'
 
 interface Notif {
   id: string
@@ -17,6 +19,8 @@ interface Notif {
   data_inicio: string | null
   data_fim: string | null
   ativo: boolean
+  total_visualizacoes?: number
+  oficinas_distintas?: number
 }
 interface Opt { id: string; nome: string }
 
@@ -156,6 +160,8 @@ export default function NotificacoesPage() {
   const [loading, setLoading] = useState(true)
   const [previewing, setPreviewing] = useState<Notif | null>(null)
   const [togglingId, setTogglingId] = useState<string | null>(null)
+  const [aba, setAba] = useState<'manuais' | 'cobranca'>('manuais')
+  const [expandido, setExpandido] = useState<string | null>(null)
 
   const carregar = useCallback(() => {
     setLoading(true)
@@ -203,51 +209,82 @@ export default function NotificacoesPage() {
           <h1 className="font-display" style={{ fontSize: 26, fontWeight: 800, margin: 0 }}>Notificações</h1>
           <p style={{ color: 'var(--muted)', fontSize: 14, margin: '4px 0 0' }}>Avisos exibidos às oficinas ao acessar o sistema</p>
         </div>
-        <button onClick={() => setEditando({ ...VAZIO })} style={{ background: 'var(--accent)', color: '#000', border: 'none', borderRadius: 8, padding: '10px 22px', fontSize: 14, fontWeight: 700, cursor: 'pointer', fontFamily: "'Barlow Condensed', sans-serif" }}>
-          + Nova Notificação
-        </button>
+        {aba === 'manuais' && (
+          <button onClick={() => setEditando({ ...VAZIO })} style={{ background: 'var(--accent)', color: '#000', border: 'none', borderRadius: 8, padding: '10px 22px', fontSize: 14, fontWeight: 700, cursor: 'pointer', fontFamily: "'Barlow Condensed', sans-serif" }}>
+            + Nova Notificação
+          </button>
+        )}
       </div>
 
+      <div style={{ display: 'flex', gap: 8, marginBottom: 20 }}>
+        {(['manuais', 'cobranca'] as const).map(a => (
+          <button key={a} onClick={() => setAba(a)}
+            style={{
+              padding: '8px 18px', borderRadius: 8, cursor: 'pointer', fontSize: 14, fontWeight: 700,
+              fontFamily: "'Barlow Condensed', sans-serif",
+              background: aba === a ? 'var(--accent)' : 'transparent',
+              color: aba === a ? '#000' : 'var(--muted)',
+              border: `1px solid ${aba === a ? 'var(--accent)' : 'var(--border)'}`,
+            }}>
+            {a === 'manuais' ? 'Manuais' : 'Cobrança'}
+          </button>
+        ))}
+      </div>
+
+      {aba === 'cobranca' && <NotificacaoCobrancaTable />}
+      {aba === 'manuais' && (
       <div style={{ background: 'var(--card)', border: '1px solid var(--border)', borderRadius: 10, overflow: 'hidden' }}>
         <table style={{ width: '100%', borderCollapse: 'collapse' }}>
           <thead>
             <tr>
-              {['Título', 'Direcionamento', 'Freq.', 'Status', 'Ações'].map(c => (
+              {['Título', 'Direcionamento', 'Freq.', 'Leituras', 'Status', 'Ações'].map(c => (
                 <th key={c} style={{ padding: '11px 16px', textAlign: 'left', fontSize: 11, fontWeight: 600, color: 'var(--muted)', textTransform: 'uppercase', letterSpacing: '0.06em', borderBottom: '1px solid var(--border)', background: 'var(--surface)' }}>{c}</th>
               ))}
             </tr>
           </thead>
           <tbody>
             {loading ? (
-              <tr><td colSpan={5} style={{ padding: 40, textAlign: 'center', color: 'var(--muted)' }}>Carregando...</td></tr>
+              <tr><td colSpan={6} style={{ padding: 40, textAlign: 'center', color: 'var(--muted)' }}>Carregando...</td></tr>
             ) : lista.length === 0 ? (
-              <tr><td colSpan={5} style={{ padding: 40, textAlign: 'center', color: 'var(--muted)' }}>Nenhuma notificação cadastrada.</td></tr>
+              <tr><td colSpan={6} style={{ padding: 40, textAlign: 'center', color: 'var(--muted)' }}>Nenhuma notificação cadastrada.</td></tr>
             ) : lista.map((n, i) => (
-              <tr key={n.id} style={{ borderBottom: i < lista.length - 1 ? '1px solid var(--border)' : undefined }}>
-                <td style={{ padding: '12px 16px' }}>
-                  <div style={{ fontWeight: 600 }}>{n.titulo}</div>
-                  {n.subtitulo && <div style={{ fontSize: 12, color: 'var(--muted)' }}>{n.subtitulo}</div>}
-                </td>
-                <td style={{ padding: '12px 16px', fontSize: 13, color: 'var(--muted)' }}>{ALVO[n.alvo_tipo]}</td>
-                <td style={{ padding: '12px 16px', fontSize: 13, color: 'var(--muted)' }}>{n.vezes_dia}x/dia · {n.intervalo_minutos}min</td>
-                <td style={{ padding: '12px 16px' }}>
-                  <span className={`pill ${n.ativo ? 'pill-success' : 'pill-muted'}`}>{n.ativo ? 'Publicada' : 'Rascunho'}</span>
-                </td>
-                <td style={{ padding: '12px 16px' }}>
-                  <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
-                    <button onClick={() => setPreviewing(n)} style={{ padding: '5px 12px', borderRadius: 6, background: 'rgba(30,136,229,.1)', border: '1px solid rgba(30,136,229,.3)', color: 'var(--info)', cursor: 'pointer', fontSize: 13 }}>👁 Visualizar</button>
-                    <button onClick={() => alternarAtivo(n)} disabled={togglingId === n.id} style={{ padding: '5px 12px', borderRadius: 6, background: n.ativo ? 'rgba(122,128,144,.15)' : 'rgba(67,160,71,.1)', border: `1px solid ${n.ativo ? 'var(--border)' : 'rgba(67,160,71,.3)'}`, color: n.ativo ? 'var(--muted)' : 'var(--success)', cursor: togglingId === n.id ? 'not-allowed' : 'pointer', fontSize: 13 }}>
-                      {togglingId === n.id ? '⟳' : n.ativo ? 'Despublicar' : 'Publicar'}
+              <Fragment key={n.id}>
+                <tr style={{ borderBottom: i < lista.length - 1 && expandido !== n.id ? '1px solid var(--border)' : undefined }}>
+                  <td style={{ padding: '12px 16px' }}>
+                    <div style={{ fontWeight: 600 }}>{n.titulo}</div>
+                    {n.subtitulo && <div style={{ fontSize: 12, color: 'var(--muted)' }}>{n.subtitulo}</div>}
+                  </td>
+                  <td style={{ padding: '12px 16px', fontSize: 13, color: 'var(--muted)' }}>{ALVO[n.alvo_tipo]}</td>
+                  <td style={{ padding: '12px 16px', fontSize: 13, color: 'var(--muted)' }}>{n.vezes_dia}x/dia · {n.intervalo_minutos}min</td>
+                  <td style={{ padding: '12px 16px' }}>
+                    <button onClick={() => setExpandido(expandido === n.id ? null : n.id)}
+                      style={{ padding: '5px 12px', borderRadius: 6, background: 'rgba(30,136,229,.1)', border: '1px solid rgba(30,136,229,.3)', color: 'var(--info)', cursor: 'pointer', fontSize: 13 }}>
+                      {n.total_visualizacoes ?? 0} · {n.oficinas_distintas ?? 0} oficina(s) {expandido === n.id ? '▲' : '▼'}
                     </button>
-                    <button onClick={() => setEditando(n)} style={{ padding: '5px 12px', borderRadius: 6, background: 'rgba(245,166,35,.1)', border: '1px solid rgba(245,166,35,.3)', color: 'var(--accent)', cursor: 'pointer', fontSize: 13 }}>Editar</button>
-                    <button onClick={() => remover(n.id)} style={{ padding: '5px 12px', borderRadius: 6, background: 'rgba(229,57,53,.1)', border: '1px solid rgba(229,57,53,.3)', color: 'var(--danger)', cursor: 'pointer', fontSize: 13 }}>🗑</button>
-                  </div>
-                </td>
-              </tr>
+                  </td>
+                  <td style={{ padding: '12px 16px' }}>
+                    <span className={`pill ${n.ativo ? 'pill-success' : 'pill-muted'}`}>{n.ativo ? 'Publicada' : 'Rascunho'}</span>
+                  </td>
+                  <td style={{ padding: '12px 16px' }}>
+                    <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+                      <button onClick={() => setPreviewing(n)} style={{ padding: '5px 12px', borderRadius: 6, background: 'rgba(30,136,229,.1)', border: '1px solid rgba(30,136,229,.3)', color: 'var(--info)', cursor: 'pointer', fontSize: 13 }}>👁 Visualizar</button>
+                      <button onClick={() => alternarAtivo(n)} disabled={togglingId === n.id} style={{ padding: '5px 12px', borderRadius: 6, background: n.ativo ? 'rgba(122,128,144,.15)' : 'rgba(67,160,71,.1)', border: `1px solid ${n.ativo ? 'var(--border)' : 'rgba(67,160,71,.3)'}`, color: n.ativo ? 'var(--muted)' : 'var(--success)', cursor: togglingId === n.id ? 'not-allowed' : 'pointer', fontSize: 13 }}>
+                        {togglingId === n.id ? '⟳' : n.ativo ? 'Despublicar' : 'Publicar'}
+                      </button>
+                      <button onClick={() => setEditando(n)} style={{ padding: '5px 12px', borderRadius: 6, background: 'rgba(245,166,35,.1)', border: '1px solid rgba(245,166,35,.3)', color: 'var(--accent)', cursor: 'pointer', fontSize: 13 }}>Editar</button>
+                      <button onClick={() => remover(n.id)} style={{ padding: '5px 12px', borderRadius: 6, background: 'rgba(229,57,53,.1)', border: '1px solid rgba(229,57,53,.3)', color: 'var(--danger)', cursor: 'pointer', fontSize: 13 }}>🗑</button>
+                    </div>
+                  </td>
+                </tr>
+                {expandido === n.id && (
+                  <NotificacaoLogInline endpoint={`/saas/notificacoes/${n.id}/log`} mostrarOficina colSpan={6} />
+                )}
+              </Fragment>
             ))}
           </tbody>
         </table>
       </div>
+      )}
     </div>
   )
 }
