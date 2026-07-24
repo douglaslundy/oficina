@@ -1,7 +1,7 @@
 # Progresso do Projeto
 
 ## Última atualização
-2026-07-19
+2026-07-24
 
 ## Tarefa em andamento
 Correções pós-deploy reportadas pelo usuário em produção — código pronto,
@@ -557,13 +557,10 @@ fatura mensal automática da `oficina-do-lundy` não foi gerada.
   ready to run.` (mensagem normal do `schedule:work` quando ainda não é a
   hora de nenhum comando — confirma que o loop de verificação por minuto
   está rodando de verdade).
-- **Nota de fuso horário (não corrigida, FYI)**: `config/app.php` usa
-  `'timezone' => 'UTC'` hardcoded, então `dailyAt('06:00')` dispara às
-  06:00 UTC = 03:00 horário de Brasília, não 06:00 local. Não é o que foi
-  pedido pra corrigir (o pedido era "o job não roda nunca", não "roda na
-  hora errada") e mudar o timezone da app tem efeito colateral em outras
-  datas do sistema (vencimentos, `now()->toDateString()` etc) — decidi
-  não mexer sem o usuário pedir explicitamente.
+- **Nota de fuso horário — corrigida logo em seguida, ver próxima entrada
+  abaixo.** (Registrei aqui inicialmente como "FYI, não corrigida" por não
+  fazer parte do pedido original; o usuário perguntou na sequência e pediu
+  pra corrigir também.)
 - Usuário vai gerar a fatura da `oficina-do-lundy` manualmente pelo botão
   "Gerar Cobrança do Ciclo Agora" (preferência dele, não fiz isso por ele).
 - **Correção adicional pedida pelo usuário**: horário estava certo em
@@ -580,15 +577,63 @@ fatura mensal automática da `oficina-do-lundy` não foi gerada.
   exibição sem essa flag mostra em UTC por padrão, é só cosmético do
   comando `schedule:list`, não indica bug).
 
+## Rodada 14 (mesma sessão) — parecer de viabilidade do NFePHP (entregue, não implementado)
+Pedido original do usuário (mesma mensagem que trouxe a rodada 12): estudo
+de viabilidade fiscal do NFePHP como motor gratuito adicional (contexto
+Ilicínea/MG, IBGE 3130507), comparando com Spedy/Focus NFe já existentes.
+
+- **Entregue só como parecer no chat** (não virou spec/plano ainda — ver
+  "Próxima tarefa"). Pesquisa via WebSearch/WebFetch, sem escrever código.
+- **Achados principais**:
+  - `nfephp-org/nfephp` (pacote original) está DEPRECATED — sucessor é
+    `nfephp-org/sped-nfe` (1,64M installs, v5.2.6 jun/2026, MIT/LGPL/GPL,
+    ativamente mantido). Confiável para **NF-e/NFC-e** (peças, ICMS).
+  - **NFS-e (serviço/mão de obra) mudou de figura em 2026**: LC 214/2025
+    obriga todo município a aderir ao padrão nacional único (Ambiente de
+    Dados Nacional / ADN) desde 01/01/2026 — resolve o problema histórico
+    de cada prefeitura ter layout próprio (motivo dos pacotes
+    `sped-nfse-*` do nfephp-org estarem fragmentados/abandonados).
+    Achei biblioteca nova e específica pro padrão nacional:
+    `nfse-nacional/nfse-php` (terceiros, não nfephp-org — MIT, 162
+    stars, ativa).
+  - **Ilicínea-MG**: sistema municipal roda em
+    `ilicinea-mg.prefeituramoderna.com.br`; indício forte de que já exige
+    emissão exclusiva pelo Portal Nacional (LC 214/2025). **Alíquota
+    exata de ISS NÃO confirmada** (só o intervalo legal 2%–5%,
+    LC 116/2003 + LC 157/2016) — fontes públicas indexadas não têm a lei
+    municipal específica; recomendei confirmar direto com a Secretaria de
+    Finanças ((35) 3854-1319) ou contador local antes de codificar
+    qualquer valor.
+  - Peças: maioria já chega com ICMS recolhido via substituição
+    tributária (regra estadual MG) — oficina normalmente não recolhe de
+    novo, só precisa emitir com CST/CSOSN de ST correto.
+  - Reforma Tributária (IBS/CBS): já em vigor informativamente desde
+    jan/2026 (alíquota teste 1%, sem alterar valor total); Simples
+    Nacional só entra em set/2026; migração completa até 2033 — vale
+    tanto pra Spedy/Focus quanto pra qualquer motor novo.
+- **Recomendação dada**: SIM, seguro prosseguir, mas como motor adicional
+  OPCIONAL (configurável por oficina), não substituto dos pagos — a
+  interface `FiscalProvider` já existente no código (`app/Services/Fiscal/
+  Contracts/FiscalProvider.php`) já comporta isso sem redesenho, bastaria
+  um novo `Providers/NfePhpProvider.php`. Ponto central do parecer: o
+  pacote em si é confiável, mas adotá-lo faz o MecânicaPro virar o próprio
+  emissor perante o fisco (hoje Spedy/Focus absorvem contingência,
+  atualização de schema, suporte a nota rejeitada — isso passaria a ser
+  responsabilidade nossa).
+- Passos sugeridos ao usuário, ainda não decididos: (1) confirmar alíquota
+  real de Ilicínea antes de codificar; (2) teste isolado de emissão em
+  homologação com `sped-nfe` + `nfse-nacional/nfse-php` fora do sistema
+  antes de integrar; (3) documentar como limitação conhecida que a v1 não
+  cobre contingência/fallback automático.
+
 ## Próxima tarefa
-1. Estudo de viabilidade fiscal do NFePHP como motor gratuito adicional
-   (contexto Ilicínea/MG, IBGE 3130507), comparando com os motores pagos
-   já existentes (Spedy/Focus NFe) e dizendo se é seguro prosseguir —
-   pedido pendente da mesma mensagem original do usuário, ainda não
-   iniciado.
+1. Usuário decidir se quer seguir com a implementação do motor NFePHP
+   (rodada 14) — se sim, próximo passo é `superpowers:brainstorming` →
+   spec → plano, do zero (nada disso foi desenhado ainda, só o parecer).
+   Ideal confirmar a alíquota de ISS de Ilicínea antes.
 2. Usuário validar manualmente a rodada 12 (notificações) e a rodada 13
    (agendador — já validado estruturalmente via `schedule:list`; conferir
-   amanhã se `cobrancas:gerar`/`alertas:verificar` de fato executaram nos
+   se `cobrancas:gerar`/`alertas:verificar` de fato executaram nos
    horários certos, via `docker compose logs scheduler`).
 3. Usuário gerar a fatura da oficina do Lundy pelo botão "Gerar Cobrança
-   do Ciclo Agora".
+   do Ciclo Agora" (ver rodada 13).
