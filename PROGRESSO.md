@@ -493,21 +493,32 @@ notificações manuais do admin quanto o alerta do motor de cobrança.
   própria VPS) antes de considerar a rodada 100% validada, já que foi
   exatamente esse tipo de bug (lógica de throttle) que passou batido pelas
   revisões individuais e só apareceu na revisão final de branch inteira.
-- **Ainda não commitado no PROGRESSO.md antes disso, não deployado.**
-  Perguntar ao usuário sobre deploy antes de seguir pro próximo pedido
-  (era a instrução original: "ao concluir essa tarefa me pergunte se
-  desejo fazer o deploy antes de iniciar a próxima tarefa").
+- **Deployado e validado** (commit `abe7812`, deploy concluído
+  2026-07-24 02:22 -03): containers saudáveis, domínio público OK.
+  Migration `2026_07_23_000001_create_notificacao_visualizacoes_table`
+  confirmada `Ran` via `php artisan migrate:status` no container. Smoke
+  test manual (seguro, sem escrever nada): `GET /api/saas/notificacoes`,
+  `/api/saas/notificacoes-cobranca` e `/api/notificacoes/ativas`
+  (stuntmotos) respondem `401` com `Accept: application/json` — igual a
+  rotas antigas do mesmo padrão (`/api/saas/oficinas`,
+  `/api/assinatura/alerta`), confirmando que as rotas novas existem e
+  estão protegidas por auth corretamente. **NÃO rodei
+  `php artisan test tests/Feature` em produção** — `RefreshDatabase`
+  dropa e recria o banco, apagaria dados reais (regra permanente do
+  projeto, ver `feedback-local-testing`). A cobertura de Feature tests
+  desta rodada segue validada só por leitura de código + revisão, nunca
+  executada de fato contra Postgres — se quiser essa validação real,
+  precisa de um banco de teste dedicado/CI, não o de produção.
+- Falta o usuário validar manualmente na tela: abrir uma notificação
+  manual publicada, fechar, conferir que ela reaparece só depois do
+  `intervalo_minutos` configurado (é exatamente o bug que foi corrigido);
+  conferir a aba Cobrança em `/saas-admin/notificacoes` com uma oficina
+  que tenha fatura pendente/vencida.
 
 ## Próxima tarefa
-1. Perguntar ao usuário se quer deploy da Rodada 12 agora.
-2. Se sim: `git push`, `git pull` na VPS, `bash deploy-vps.sh`, validar
-   domínios (mesmo padrão das rodadas anteriores) — e idealmente rodar
-   `php artisan test tests/Feature` no container de produção/homologação
-   pra validar de verdade os testes que só puderam ser conferidos por
-   `php -l` localmente.
-3. Depois do deploy (ou se o usuário preferir pular): seguir para o
-   pedido ainda pendente da mesma mensagem original — estudo de
-   viabilidade fiscal do NFePHP como motor gratuito adicional (contexto
-   Ilicínea/MG, IBGE 3130507), comparando com os motores pagos já
-   existentes (Spedy/Focus NFe) e dizendo se é seguro prosseguir.
-   usuário na mesma mensagem, ainda não iniciados.
+1. Estudo de viabilidade fiscal do NFePHP como motor gratuito adicional
+   (contexto Ilicínea/MG, IBGE 3130507), comparando com os motores pagos
+   já existentes (Spedy/Focus NFe) e dizendo se é seguro prosseguir —
+   pedido pendente da mesma mensagem original do usuário, ainda não
+   iniciado.
+2. Usuário validar manualmente a rodada 12 na tela (ver itens logo acima).
