@@ -47,6 +47,16 @@ if [ "${CONTAINER_ROLE:-web}" = "worker" ]; then
     exec php artisan queue:work redis --queue=whatsapp,default --tries=3 --sleep=3 --timeout=120 --backoff=30
 fi
 
+# Papel "scheduler": roda o agendador do Laravel (routes/console.php:
+# cobrancas:gerar, alertas:verificar, oficina:recalcular-status-clientes).
+# `schedule:work` é um processo contínuo (dorme até o próximo minuto e
+# dispara o que estiver na hora) — não depende de crontab externo, então
+# não fica invisível/esquecido num host compartilhado com outros projetos.
+if [ "${CONTAINER_ROLE:-web}" = "scheduler" ]; then
+    echo "=== Starting Laravel scheduler ==="
+    exec php artisan schedule:work
+fi
+
 # Run migrations (creates migrations table if needed, then runs all)
 echo "Running migrations..."
 php artisan migrate --force --no-interaction

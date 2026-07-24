@@ -101,6 +101,29 @@ services:
       - mecanicapro_net
     restart: unless-stopped
 
+  # Agendador do Laravel — sem isso, os Schedule::command(...) de
+  # routes/console.php (cobrancas:gerar, alertas:verificar,
+  # oficina:recalcular-status-clientes) nunca disparam sozinhos: nada mais
+  # no host chama `artisan schedule:run`. `schedule:work` roda contínuo,
+  # sem precisar de crontab do sistema operacional.
+  scheduler:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile.prod
+    environment:
+      <<: *backend-env
+      CONTAINER_ROLE: scheduler
+    volumes:
+      - /etc/localtime:/etc/localtime:ro
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    networks:
+      - mecanicapro_net
+    restart: unless-stopped
+
   frontend:
     build:
       context: ./frontend
