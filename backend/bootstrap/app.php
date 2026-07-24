@@ -13,11 +13,20 @@ return Application::configure(basePath: dirname(__DIR__))
     )
     ->withMiddleware(function (Middleware $middleware): void {
         // Backend nunca é exposto diretamente — só o Traefik tem porta
-        // publicada (ver docker-compose.vps.yml/prod.yml) — confiar em
-        // qualquer proxy é seguro nesta topologia e necessário pra
+        // publicada (ver docker-compose.vps.yml/prod.yml) — necessário pra
         // $request->ip() refletir o IP real do usuário, não o do container
-        // do proxy.
-        $middleware->trustProxies(at: '*');
+        // do proxy. Confiar em '*' permitiria qualquer cliente forjar
+        // X-Forwarded-For (afeta o log de auditoria e o rate limit de
+        // login); restrito às faixas privadas do Docker + loopback (usado
+        // pelo cliente de teste do Laravel) — só uma conexão que já chega
+        // por dentro da rede interna (ou seja, o próprio Traefik) é
+        // tratada como proxy confiável.
+        $middleware->trustProxies(at: [
+            '10.0.0.0/8',
+            '172.16.0.0/12',
+            '192.168.0.0/16',
+            '127.0.0.1',
+        ]);
 
         $middleware->api(
             prepend: [\Illuminate\Http\Middleware\HandleCors::class],
