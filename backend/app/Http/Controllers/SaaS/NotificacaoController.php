@@ -5,6 +5,7 @@ namespace App\Http\Controllers\SaaS;
 
 use App\Http\Controllers\Controller;
 use App\Models\Notificacao;
+use App\Models\NotificacaoVisualizacao;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 
@@ -12,8 +13,28 @@ class NotificacaoController extends Controller
 {
     public function index(): JsonResponse
     {
-        $data = Notificacao::orderByDesc('criado_em')->get();
+        $data = Notificacao::orderByDesc('criado_em')->get()->map(function (Notificacao $n) {
+            $arr = $n->toArray();
+            $arr['total_visualizacoes'] = NotificacaoVisualizacao::where('notificacao_id', $n->id)->count();
+            $arr['oficinas_distintas']  = NotificacaoVisualizacao::where('notificacao_id', $n->id)
+                ->distinct()->count('oficina_id');
+            return $arr;
+        });
+
         return response()->json(['data' => $data]);
+    }
+
+    /** Log paginado de visualizações de uma notificação manual específica. */
+    public function log(string $id): JsonResponse
+    {
+        Notificacao::findOrFail($id);
+
+        $logs = NotificacaoVisualizacao::where('notificacao_id', $id)
+            ->with(['oficina:id,nome', 'usuario:id,nome'])
+            ->orderByDesc('visualizado_em')
+            ->paginate(20);
+
+        return response()->json($logs);
     }
 
     public function store(Request $request): JsonResponse
@@ -63,7 +84,6 @@ class NotificacaoController extends Controller
             'ativo'             => ['boolean'],
         ]);
 
-        // Limpa campos não usados conforme o alvo
         if ($validated['alvo_tipo'] !== 'PLANO')    $validated['plano_id'] = null;
         if ($validated['alvo_tipo'] !== 'OFICINAS') $validated['oficina_ids'] = [];
 

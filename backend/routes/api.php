@@ -141,6 +141,7 @@ Route::prefix('saas')->group(function () {
         Route::put('notificacoes/{id}',     [\App\Http\Controllers\SaaS\NotificacaoController::class, 'update']);
         Route::delete('notificacoes/{id}',  [\App\Http\Controllers\SaaS\NotificacaoController::class, 'destroy']);
         Route::patch('notificacoes/{id}/ativo', [\App\Http\Controllers\SaaS\NotificacaoController::class, 'publicar']);
+        Route::get('notificacoes/{id}/log', [\App\Http\Controllers\SaaS\NotificacaoController::class, 'log']);
 
         // Pacotes de serviço avulso — catálogo
         Route::get('pacotes',         [\App\Http\Controllers\SaaS\PacoteServicoController::class, 'index']);
