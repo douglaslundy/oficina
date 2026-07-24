@@ -566,6 +566,19 @@ fatura mensal automática da `oficina-do-lundy` não foi gerada.
   não mexer sem o usuário pedir explicitamente.
 - Usuário vai gerar a fatura da `oficina-do-lundy` manualmente pelo botão
   "Gerar Cobrança do Ciclo Agora" (preferência dele, não fiz isso por ele).
+- **Correção adicional pedida pelo usuário**: horário estava certo em
+  quantidade (dispara todo dia), mas errado em fuso — sem `->timezone()`
+  explícito, `dailyAt()` usa `config('app.timezone')` (UTC), então
+  `cobrancas:gerar` disparava às 03:00 de Brasília em vez de 06:00.
+  Corrigido com `->timezone('America/Sao_Paulo')` nos 3 agendamentos em
+  `routes/console.php` (escopo mínimo — não mexe no timezone global da
+  app, só em quando o agendador considera "a hora certa"). Commit
+  `0712887`, deployado. **Validado em produção**:
+  `php artisan schedule:list --timezone=America/Sao_Paulo` dentro do
+  container mostra exatamente `0 2`/`0 7`/`0 6` (02:00/07:00/06:00
+  Brasília) — confirma que a lógica real já usa o timezone certo (a
+  exibição sem essa flag mostra em UTC por padrão, é só cosmético do
+  comando `schedule:list`, não indica bug).
 
 ## Próxima tarefa
 1. Estudo de viabilidade fiscal do NFePHP como motor gratuito adicional
@@ -574,8 +587,8 @@ fatura mensal automática da `oficina-do-lundy` não foi gerada.
    pedido pendente da mesma mensagem original do usuário, ainda não
    iniciado.
 2. Usuário validar manualmente a rodada 12 (notificações) e a rodada 13
-   (agendador — conferir amanhã se `cobrancas:gerar`/`alertas:verificar`
-   realmente rodaram nos horários certos, via
-   `docker compose logs scheduler`).
+   (agendador — já validado estruturalmente via `schedule:list`; conferir
+   amanhã se `cobrancas:gerar`/`alertas:verificar` de fato executaram nos
+   horários certos, via `docker compose logs scheduler`).
 3. Usuário gerar a fatura da oficina do Lundy pelo botão "Gerar Cobrança
    do Ciclo Agora".
