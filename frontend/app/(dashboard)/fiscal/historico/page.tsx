@@ -15,8 +15,6 @@ interface NotaFiscal {
   status: string
 }
 
-const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000'
-
 export default function HistoricoNFPage() {
   const [notas, setNotas]               = useState<NotaFiscal[]>([])
   const [loading, setLoading]           = useState(true)
@@ -57,12 +55,12 @@ export default function HistoricoNFPage() {
     setBaixandoZip(true)
     try {
       const token = localStorage.getItem('auth_token')
-      const res = await fetch(`${API_URL}/api/notas-fiscais/download-zip`, {
+      const res = await fetch(`${window.location.origin}/api/notas-fiscais/download-zip`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
           'Authorization': `Bearer ${token}`,
-          'X-Tenant': localStorage.getItem('tenant_slug') ?? '',
+          'X-Tenant': localStorage.getItem('oficina_slug') ?? '',
         },
         body: JSON.stringify({ ids: Array.from(selected) }),
       })
@@ -85,10 +83,10 @@ export default function HistoricoNFPage() {
   async function baixarPdf(nota: NotaFiscal) {
     try {
       const token = localStorage.getItem('auth_token')
-      const res = await fetch(`${API_URL}/api/notas-fiscais/${nota.id}/pdf`, {
+      const res = await fetch(`${window.location.origin}/api/notas-fiscais/${nota.id}/pdf`, {
         headers: {
           'Authorization': `Bearer ${token}`,
-          'X-Tenant': localStorage.getItem('tenant_slug') ?? '',
+          'X-Tenant': localStorage.getItem('oficina_slug') ?? '',
         },
       })
       if (!res.ok) throw new Error()

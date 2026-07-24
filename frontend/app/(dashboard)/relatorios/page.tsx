@@ -59,7 +59,7 @@ export default function RelatoriosPage() {
         if (statusFiltro) qs += `&status=${statusFiltro}`
       }
       const res = await fetch(
-        `${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000'}/api/relatorios/${tipo}${qs}`,
+        `${window.location.origin}/api/relatorios/${tipo}${qs}`,
         { headers: { Authorization: `Bearer ${token}`, 'X-Tenant': slug ?? '' } }
       )
       if (!res.ok) throw new Error()

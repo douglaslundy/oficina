@@ -374,14 +374,72 @@ depois na rodada 3).
   próximo deploy (`docker-entrypoint.sh` já faz `migrate --force`
   automaticamente).
 
+## Rodada 11 (nova sessão) — PDF da OS indisponível
+- Usuário reportou: PDF da OS não abre/baixa.
+- **Causa raiz (debugging sistemático)**: `downloadFile()` em
+  `frontend/app/(dashboard)/os/[id]/page.tsx` (usada pelos botões PDF e
+  Recibo) fazia `fetch()` direto pra `NEXT_PUBLIC_API_URL`, uma env
+  gravada em BUILD TIME no Docker como `https://oficina.dlsistemas.com.br`
+  (fixa, um único domínio). Em produção, `CORS_ALLOWED_ORIGINS`
+  (`docker-compose.vps.yml`) só libera esse mesmo domínio fixo. Qualquer
+  oficina acessando pelo PRÓPRIO subdomínio (`stuntmotos.dlsistemas.com.br`,
+  `oficina-do-lundy...`) faz uma requisição cross-origin bloqueada pelo
+  CORS do navegador → `fetch` falha → "Erro ao baixar PDF."
+  A instância `axios` global (`lib/api.ts`) já tinha sido corrigida pra
+  esse exato problema antes (reescreve `baseURL` pra
+  `window.location.origin + '/api'`, comentário explícito no código:
+  "avoids cross-origin CORS entirely" — Traefik roteia `<subdominio>/api/*`
+  pro backend dentro do MESMO container/origem). A função de download de
+  PDF só não tinha recebido esse mesmo tratamento.
+- **Fix**: troquei `NEXT_PUBLIC_API_URL` por `window.location.origin` na
+  `downloadFile()` — mesmo padrão do `api.ts`. Corrige PDF **e** Recibo (
+  mesma função). `npx tsc --noEmit` limpo.
+- **Usuário aprovou corrigir todas as ocorrências do mesmo padrão.**
+  Também corrigidas (mesma troca: URL hardcoded → `window.location.origin`):
+  - `frontend/app/(dashboard)/fiscal/historico/page.tsx` (PDF de NF +
+    download ZIP em lote). **Bug extra encontrado e corrigido aqui**: o
+    header `X-Tenant` usava `localStorage.getItem('tenant_slug')` — essa
+    chave NUNCA é gravada em lugar nenhum do app (só `oficina_slug`
+    existe, gravada em `useAuth.ts`). Ou seja, o download de NF sempre
+    mandava `X-Tenant` vazio, independente do bug de CORS. Corrigido pra
+    `oficina_slug`.
+  - `frontend/app/(dashboard)/relatorios/page.tsx` (exportação XLSX de
+    OS/clientes/estoque) — só a URL, `X-Tenant` já usava a chave certa.
+  - `frontend/app/orcamento/[token]/page.tsx` (página pública de
+    aprovação de orçamento, usa `axios` direto, não a instância
+    `lib/api.ts`) — trocado `const API` hardcoded por `apiBase()` chamada
+    dentro das funções (evita `window is not defined` em SSR, já que o
+    módulo é avaliado também no server).
+  - `frontend/app/saas-admin/(protected)/backup/page.tsx` (download de
+    backup do saas-admin) — mesma troca. Relevante mesmo sem X-Tenant
+    (saas-admin não é tenant-scoped): `saas.dlsistemas.com.br` nem consta
+    em `CORS_ALLOWED_ORIGINS` do `docker-compose.vps.yml` (só
+    `oficina.dlsistemas.com.br`), então dependia inteiramente de virar
+    same-origin pra funcionar.
+- **Sem teste automatizado**: bug depende de CORS real do navegador +
+  múltiplos domínios; sem Docker/DB local pra reproduzir (limitação já
+  documentada). Validação real só acontece após deploy, testando em uma
+  oficina que NÃO seja `oficina.dlsistemas.com.br` (ex.: `stuntmotos`).
+- `npx tsc --noEmit` e `npm run build` (Next.js, produção) limpos nos 5
+  arquivos alterados.
+- Usuário aprovou commit + deploy imediato desta rodada.
+
 ## Próxima tarefa
-1. Deploy da rodada 10 (roda a migration automaticamente).
-2. Usuário precisa: cadastrar o webhook da MP no painel deles (instruções
+1. Confirmar com o usuário se quer corrigir também NF/relatórios/orçamento
+   (mesmo bug, ver Rodada 11).
+2. Deploy da rodada 10 (roda a migration automaticamente) + rodada 11 juntos,
+   se o usuário aprovar.
+3. Usuário precisa: cadastrar o webhook da MP no painel deles (instruções
    já passadas) e conectar o WhatsApp do admin em
    `/saas-admin/configuracoes/whatsapp` (escanear QR code + salvar número
    de destino + ativar).
-3. Testar: pagamento de cartão/PIX continua funcionando normalmente após
+4. Testar: pagamento de cartão/PIX continua funcionando normalmente após
    as validações mais estritas da rodada 9. Confirmar que MECANICO/
    ATENDENTE não veem mais o CPF pré-preenchido.
-4. Se quiserem reativar o gateway Asaas no futuro: configurar
+5. Se quiserem reativar o gateway Asaas no futuro: configurar
    `ASAAS_WEBHOOK_TOKEN` no `.env` de produção (já documentado antes).
+6. Depois disso: (a) página de log de notificações lidas por
+   oficina/usuário/IP com toggle de histórico para notificações
+   repetidas; (b) estudo de viabilidade fiscal do NFePHP como motor
+   gratuito adicional (contexto Ilicínea/MG, IBGE 3130507) — pedidos pelo
+   usuário na mesma mensagem, ainda não iniciados.

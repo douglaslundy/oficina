@@ -101,7 +101,7 @@ export default function OSDetailPage() {
       const token = localStorage.getItem('auth_token')
       const slug  = localStorage.getItem('oficina_slug')
       const response = await fetch(
-        `${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000'}/api/os/${id}/${endpoint}`,
+        `${window.location.origin}/api/os/${id}/${endpoint}`,
         { headers: { Authorization: `Bearer ${token}`, 'X-Tenant': slug ?? '' } }
       )
       if (!response.ok) throw new Error('Erro ao gerar PDF')

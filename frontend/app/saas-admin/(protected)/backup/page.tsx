@@ -95,8 +95,7 @@ export default function BackupPage() {
 
   function baixarBackup(arquivo: string) {
     const token = localStorage.getItem('saas_token')
-    const base = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000'
-    const url = `${base}/api/saas/backup/${encodeURIComponent(arquivo)}/download`
+    const url = `${window.location.origin}/api/saas/backup/${encodeURIComponent(arquivo)}/download`
     const a = document.createElement('a')
     a.href = url
     a.setAttribute('download', arquivo)

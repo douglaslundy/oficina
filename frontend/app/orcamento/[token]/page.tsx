@@ -3,7 +3,9 @@ import { useCallback, useEffect, useState } from 'react'
 import { useParams } from 'next/navigation'
 import axios from 'axios'
 
-const API = (process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000') + '/api'
+function apiBase() {
+  return window.location.origin + '/api'
+}
 
 interface Item {
   id: string
@@ -49,7 +51,7 @@ export default function OrcamentoPublicoPage() {
 
   const carregar = useCallback(() => {
     setLoading(true)
-    axios.get<{ data: Orc }>(`${API}/orcamento/${token}`)
+    axios.get<{ data: Orc }>(`${apiBase()}/orcamento/${token}`)
       .then(r => {
         setOrc(r.data.data)
         const sel: Record<string, boolean> = {}
@@ -76,7 +78,7 @@ export default function OrcamentoPublicoPage() {
     const pecas_aprovadas    = orc.pecas.filter(p => selecionados[p.id]).map(p => p.id)
     setEnviando(true)
     try {
-      const r = await axios.post<{ status: string }>(`${API}/orcamento/${token}/responder`, { servicos_aprovados, pecas_aprovadas })
+      const r = await axios.post<{ status: string }>(`${apiBase()}/orcamento/${token}/responder`, { servicos_aprovados, pecas_aprovadas })
       setFeito(r.data.status)
     } catch (e: unknown) {
       const msg = (e as { response?: { data?: { message?: string } } })?.response?.data?.message
