@@ -423,6 +423,11 @@ depois na rodada 3).
 - `npx tsc --noEmit` e `npm run build` (Next.js, produção) limpos nos 5
   arquivos alterados.
 - Usuário aprovou commit + deploy imediato desta rodada.
+- **Deployado e validado** (commit `b6fc7bd`): containers saudáveis,
+  `saas.dlsistemas.com.br`, `stuntmotos.dlsistemas.com.br` e
+  `oficina-do-lundy.dlsistemas.com.br` respondendo 200 em `/api/health`.
+  Falta o usuário validar manualmente que o download de PDF/recibo/NF/
+  relatório/backup abre de fato numa oficina que não seja o domínio base.
 
 ## Próxima tarefa
 1. Confirmar com o usuário se quer corrigir também NF/relatórios/orçamento
