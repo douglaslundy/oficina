@@ -15,6 +15,7 @@ use App\Http\Controllers\NotaFiscalController;
 use App\Http\Controllers\OrdemServicoController;
 use App\Http\Controllers\OrcamentoController;
 use App\Http\Controllers\ProdutoController;
+use App\Http\Controllers\ProdutoFiscalController;
 use App\Http\Controllers\AuditController;
 use App\Http\Controllers\PlanController;
 use App\Http\Controllers\RelatorioController;
@@ -227,6 +228,7 @@ Route::middleware(['tenant', 'auth:sanctum', 'role:ADMIN,ATENDENTE'])->group(fun
 // ─── Produtos — leitura: todos; escrita: ADMIN, ATENDENTE ───────────────────
 Route::middleware(['tenant', 'auth:sanctum'])->group(function () {
     Route::get('produtos',            [ProdutoController::class, 'index']);
+    Route::get('produtos/pendencias-fiscais', [ProdutoFiscalController::class, 'pendencias']);
     Route::get('produtos/{produto}',  [ProdutoController::class, 'show']);
     Route::get('produtos/{produto}/estoque/historico', [EstoqueController::class, 'historico']);
     Route::get('entradas-nf',      [EntradaNfController::class, 'index']);
@@ -239,6 +241,7 @@ Route::middleware(['tenant', 'auth:sanctum', 'role:ADMIN,ATENDENTE'])->group(fun
     Route::delete('produtos/{produto}',  [ProdutoController::class, 'destroy']);
     Route::post('produtos/{produto}/estoque/entrada', [EstoqueController::class, 'entrada']);
     Route::post('produtos/{produto}/estoque/saida', [EstoqueController::class, 'saida']);
+    Route::post('produtos/divergencias/{id}/resolver', [ProdutoFiscalController::class, 'resolverDivergencia']);
     Route::post('entradas-nf/parse', [EntradaNfController::class, 'parse']);
     Route::post('entradas-nf', [EntradaNfController::class, 'store']);
     Route::put('categorias-fiscais', [CategoriaPadraoFiscalController::class, 'update']);
