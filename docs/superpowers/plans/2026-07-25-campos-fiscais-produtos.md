@@ -1391,33 +1391,69 @@ Em `backend/app/Http/Resources/ProdutoResource.php`, insira antes de `'criado_em
 
 - [ ] **Step 2: Aceitar os campos em `store` e `update`**
 
-Em `backend/app/Http/Controllers/ProdutoController.php`, adicione a estas duas regras de validação (nos dois métodos, `store` e `update`):
+`store()` e `update()` precisam exatamente das mesmas regras fiscais e do mesmo
+carimbo de revisão. **Extraia os dois blocos para métodos privados** em vez de
+duplicá-los — duplicação verbatim de bloco lógico é defeito de revisão.
 
-```php
-            'ncm'             => ['nullable', 'string', 'size:8'],
-            'cest'            => ['nullable', 'string', 'size:7'],
-            'origem'          => ['nullable', 'integer', 'min:0', 'max:8'],
-            'tributacao_icms' => ['nullable', 'string', 'in:NORMAL,ST'],
-```
-
-Adicione o import:
+Em `backend/app/Http/Controllers/ProdutoController.php`, adicione o import:
 
 ```php
 use App\Services\Fiscal\ProdutoFiscalService;
 ```
 
-Em **ambos** os métodos, depois de criar/atualizar o produto e antes de devolver a resposta, carimbe a revisão quando o usuário mandou algum campo fiscal:
+Adicione os dois métodos privados antes do `}` que fecha a classe:
 
 ```php
-        if (array_intersect_key($validated, array_flip(['ncm', 'cest', 'origem', 'tributacao_icms'])) !== []) {
-            $produto->update([
-                'fiscal_fonte'       => 'MANUAL',
-                'fiscal_revisado_em' => now(),
-            ]);
+    /** @return array<string, list<string>> Regras de validação dos campos fiscais editáveis. */
+    private function regrasFiscais(): array
+    {
+        return [
+            'ncm'             => ['nullable', 'string', 'size:8'],
+            'cest'            => ['nullable', 'string', 'size:7'],
+            'origem'          => ['nullable', 'integer', 'min:0', 'max:8'],
+            'tributacao_icms' => ['nullable', 'string', 'in:NORMAL,ST'],
+        ];
+    }
+
+    /**
+     * Carimba a revisão manual quando o usuário enviou algum campo fiscal.
+     * É o carimbo que tira o produto da tela de pendências.
+     *
+     * @param array<string, mixed> $validated
+     */
+    private function carimbarRevisaoFiscal(Produto $produto, array $validated): void
+    {
+        $camposFiscais = array_keys($this->regrasFiscais());
+
+        if (array_intersect_key($validated, array_flip($camposFiscais)) === []) {
+            return;
         }
+
+        $produto->update([
+            'fiscal_fonte'       => 'MANUAL',
+            'fiscal_revisado_em' => now(),
+        ]);
+    }
 ```
 
-Em `store()`, logo após a criação do produto, aplique o padrão da categoria (só preenche o que ficou vazio):
+Em `store()` **e** em `update()`, mescle as regras no array passado a
+`$request->validate(...)`:
+
+```php
+        $validated = $request->validate(array_merge([
+            // ... regras existentes do método, inalteradas ...
+        ], $this->regrasFiscais()));
+```
+
+Em **ambos** os métodos, depois de criar/atualizar o produto e antes de
+devolver a resposta:
+
+```php
+        $this->carimbarRevisaoFiscal($produto, $validated);
+```
+
+E em `store()` apenas, logo após a criação do produto (antes do carimbo),
+aplique o padrão da categoria — só preenche o que ficou vazio:
 
 ```php
         app(ProdutoFiscalService::class)->aplicarPadraoCategoria($produto);
