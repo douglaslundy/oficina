@@ -919,11 +919,26 @@ preenchido). Testes desta etapa RODAM localmente (lógica pura, sem DB).
 
 Spec do NFePHP recebeu nota de sequenciamento no topo (é a etapa C).
 
+### Etapa A — PLANO ESCRITO (commit `42260fb`)
+`docs/superpowers/plans/2026-07-25-campos-fiscais-produtos.md` — 12 tasks.
+Autorrevisão do plano pegou 4 problemas reais, todos já corrigidos no
+arquivo (registrados aqui porque são decisões, não detalhe):
+1. `fiscal_pendente` e a query de pendências incluíam
+   `fiscal_revisado_em IS NULL` — isso manteria TODO produto preenchido
+   por XML na lista de pendências pra sempre. Dado do fornecedor é
+   confiável e não exige conferência humana. Removido dos dois lugares.
+2. A aplicação dos dados fiscais estava DENTRO do `DB::transaction` da
+   importação — violava a regra "importação nunca falha inteira por dado
+   fiscal". E `try/catch` dentro de transação no Postgres não resolve: o
+   primeiro erro aborta a transação inteira. Movido pra DEPOIS do commit,
+   com try/catch + `Log::warning`.
+3/4. Dois pontos vagos (`eStyle`, link de Configurações) viraram código
+   concreto — o plano é executado por agente sem contexto do repo.
+
 ## Próxima tarefa (retomar exatamente aqui)
-0. **Usuário revisar os 2 specs** (etapa A e etapa C). Etapa A é a que
-   vai virar plano primeiro.
-1. Aprovada a etapa A → `superpowers:writing-plans` para ela.
-   **Não pular pra implementação** (gate do brainstorming).
+0. **Executar o plano da etapa A** — usuário escolhe entre
+   `superpowers:subagent-driven-development` (recomendado) ou
+   `superpowers:executing-plans`. Aguardando essa escolha.
 2. Depois: desenhar a **etapa B** (spec ainda não existe) — refactor
    compartilhado + NF-e no Spedy/Focus + os 5 defeitos.
 3. Por último a etapa C (NFePHP), cujo spec já está escrito em
