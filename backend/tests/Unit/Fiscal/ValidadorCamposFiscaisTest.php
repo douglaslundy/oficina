@@ -23,6 +23,14 @@ class ValidadorCamposFiscaisTest extends TestCase
         $this->assertNull(ValidadorCamposFiscais::ncm('ABCDEFGH'));
     }
 
+    public function test_ncm_rejeita_lixo_apos_formatacao(): void
+    {
+        // Rejeita se houver caracteres não-dígito após remover separadores conhecidos
+        $this->assertNull(ValidadorCamposFiscais::ncm('87083090abc'));
+        $this->assertNull(ValidadorCamposFiscais::ncm('8708-30-90xyz'));
+        $this->assertNull(ValidadorCamposFiscais::ncm('87083090 def'));
+    }
+
     public function test_cest_valido(): void
     {
         $this->assertSame('0100100', ValidadorCamposFiscais::cest('0100100'));
@@ -34,6 +42,14 @@ class ValidadorCamposFiscaisTest extends TestCase
         $this->assertNull(ValidadorCamposFiscais::cest('010010'));   // 6 dígitos
         $this->assertNull(ValidadorCamposFiscais::cest('01001000')); // 8 dígitos
         $this->assertNull(ValidadorCamposFiscais::cest(null));
+    }
+
+    public function test_cest_rejeita_lixo_apos_formatacao(): void
+    {
+        // Rejeita se houver caracteres não-dígito após remover separadores conhecidos
+        $this->assertNull(ValidadorCamposFiscais::cest('0100100xyz'));
+        $this->assertNull(ValidadorCamposFiscais::cest('01-001-00abc'));
+        $this->assertNull(ValidadorCamposFiscais::cest('0100100 def'));
     }
 
     public function test_origem_valida(): void

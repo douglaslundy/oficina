@@ -38,8 +38,16 @@ final class ValidadorCamposFiscais
     private static function apenasDigitos(?string $valor, int $tamanho): ?string
     {
         if ($valor === null) return null;
-        $digitos = preg_replace('/\D/', '', $valor) ?? '';
 
-        return strlen($digitos) === $tamanho ? $digitos : null;
+        // Strip only known separators (formatting punctuation)
+        $limpo = str_replace(['.', '-', '/', ' '], '', $valor);
+
+        // Check if non-digits remain (malformed input)
+        if (preg_match('/\D/', $limpo)) {
+            return null;
+        }
+
+        // Verify length and return
+        return strlen($limpo) === $tamanho ? $limpo : null;
     }
 }
