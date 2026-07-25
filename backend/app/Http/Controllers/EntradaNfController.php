@@ -54,6 +54,7 @@ class EntradaNfController extends Controller
                     'nome'            => $produto->nome,
                     'categoria'       => $produto->categoria,
                     'unidade'         => $produto->unidade,
+                    'unidade_xml'     => $item['unidade'],
                     'qty_atual'       => $produto->qty_atual,
                     'preco_venda'     => $produto->preco_venda,
                     'qty_minima'      => $produto->qty_minima,
@@ -79,6 +80,7 @@ class EntradaNfController extends Controller
                 'nome'            => $item['descricao'],
                 'categoria'       => 'Outros',
                 'unidade'         => $item['unidade'] ?? 'Un',
+                'unidade_xml'     => $item['unidade'],
                 'qty_atual'       => 0,
                 'preco_venda'     => round($custo * (1 + $markup / 100), 2),
                 'qty_minima'      => $qtyMinimaPadrao,
@@ -135,6 +137,7 @@ class EntradaNfController extends Controller
             'itens.*.valor_unitario' => ['required', 'numeric', 'min:0'],
             'itens.*.preco_venda'    => ['nullable', 'numeric', 'min:0'],
             'itens.*.qty_minima'     => ['nullable', 'integer', 'min:0'],
+            'itens.*.unidade_xml'     => ['nullable', 'string', 'max:6'],
             'itens.*.ncm'             => ['nullable', 'string', 'max:8'],
             'itens.*.cfop'            => ['nullable', 'string', 'max:4'],
             'itens.*.cest'            => ['nullable', 'string', 'max:7'],
@@ -223,7 +226,7 @@ class EntradaNfController extends Controller
                     'cest_xml'          => $item['cest'] ?? null,
                     'origem_xml'        => $item['origem'] ?? null,
                     'cst_csosn_xml'     => $item['cst_csosn'] ?? null,
-                    'unidade_xml'       => $item['unidade'] ?? null,
+                    'unidade_xml'       => $item['unidade_xml'] ?? null,
                 ]);
             }
 
