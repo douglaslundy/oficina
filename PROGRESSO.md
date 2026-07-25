@@ -626,14 +626,197 @@ Ilicínea/MG, IBGE 3130507), comparando com Spedy/Focus NFe já existentes.
   antes de integrar; (3) documentar como limitação conhecida que a v1 não
   cobre contingência/fallback automático.
 
-## Próxima tarefa
-1. Usuário decidir se quer seguir com a implementação do motor NFePHP
-   (rodada 14) — se sim, próximo passo é `superpowers:brainstorming` →
-   spec → plano, do zero (nada disso foi desenhado ainda, só o parecer).
-   Ideal confirmar a alíquota de ISS de Ilicínea antes.
-2. Usuário validar manualmente a rodada 12 (notificações) e a rodada 13
-   (agendador — já validado estruturalmente via `schedule:list`; conferir
-   se `cobrancas:gerar`/`alertas:verificar` de fato executaram nos
-   horários certos, via `docker compose logs scheduler`).
-3. Usuário gerar a fatura da oficina do Lundy pelo botão "Gerar Cobrança
-   do Ciclo Agora" (ver rodada 13).
+## Rodada 15 (nova sessão) — brainstorming do motor NFePHP EM ANDAMENTO
+Retomando a rodada 14 (que era só parecer, nada implementado). Estamos no
+meio do `superpowers:brainstorming` (skill carregada, ver
+`C:\Users\dougl\.claude\plugins\cache\claude-plugins-official\superpowers\6.1.1\skills\brainstorming`)
+— **NENHUM código escrito ainda, nenhum spec salvo ainda**. Sessão foi
+interrompida a pedido do usuário (troca de modelo + relogin) antes de eu
+terminar de reunir todas as decisões e apresentar o design formal.
+
+**Instrução do usuário para a próxima sessão**: ele vai digitar "continue"
+numa sessão nova e espera que eu retome EXATAMENTE daqui — sem reexplicar,
+sem repetir perguntas já respondidas abaixo.
+
+### Escopo já fechado com o usuário (não perguntar de novo)
+- **Pedido original, textual**: "eu quero o NFePHP como terceiro motor
+  para gerar nfe e nfse, porem tanto spedy como o focus precisam tambem
+  emitir nfe e nfse" — ou seja, são DUAS frentes de trabalho distintas:
+  1. NFePHP como motor novo (NF-e + NFS-e), usando `sped-nfe` +
+     `nfse-nacional/nfse-php`.
+  2. Spedy e Focus (que hoje SÓ emitem NFS-e no nosso código — confirmado
+     lendo `SpedyProvider.php`/`FocusNfeProvider.php`, só batem em
+     `/service-invoices` e `/v2/nfse`) precisam ganhar emissão de NF-e
+     também, usando a API deles mesmo (não é NFePHP).
+- **Sequenciamento decidido pelo usuário**: NFePHP PRIMEIRO. NF-e no
+  Spedy/Focus fica pra uma rodada seguinte (spec separado, mais simples —
+  é "ligar cabo que falta" na API deles, baixo risco). Esta rodada 15 é
+  100% sobre o design do motor NFePHP.
+- **Modelos de nota cobertos pelo NFePHP v1**: NF-e (modelo 55) + NFS-e
+  nacional (ADN). NFC-e (modelo 65) FICA DE FORA da v1 (usuário escolheu
+  a opção recomendada, não a de "NF-e + NFS-e + NFC-e").
+- **Abrangência de UF na v1**: SÓ Minas Gerais (oficina real fica em
+  Ilicínea/MG, webservice próprio da SEFAZ-MG). Multi-UF fica pra quando
+  aparecer oficina fora de MG.
+- **Contingência**: usuário PEDIU CONTINGÊNCIA JÁ NA V1 (escolheu a opção
+  NÃO recomendada por mim — "Não, quero contingência já na v1"). Ou seja,
+  o design PRECISA cobrir EPEC (Evento Prévio de Emissão em Contingência)
+  desde o início, não é um "fica de fora, documentar como limitação"
+  como o parecer da rodada 14 tinha sugerido. Isso aumenta bastante o
+  escopo em relação ao que eu tinha estimado inicialmente — preciso
+  detalhar isso na seção de arquitetura do design (fluxo de detecção de
+  SEFAZ indisponível, geração/transmissão do evento EPEC, reautorização
+  posterior do XML normal quando a SEFAZ voltar).
+- **Execução**: EM FILA (Horizon), não síncrono. Reusa o padrão
+  `PROCESSANDO` que já existe em `EmissaoResultado` (mesmo usado hoje por
+  Spedy/Focus quando o status é "processando_autorizacao"/"enqueued").
+- **Geração de PDF (DANFE/DANFSe)**: usuário escolheu DomPDF (já usado no
+  projeto pra PDF de OS/relatórios), NÃO a lib `sped-da` do próprio
+  ecossistema NFePHP. Ou seja, vou precisar de um template HTML nosso que
+  bata o layout oficial exigido — vale registrar como trabalho não-trivial
+  no design (vou precisar validar visualmente contra um DANFE/DANFSe real).
+- **OS mista (peças + serviços)**: usuário escolheu emitir as DUAS notas
+  juntas automaticamente ao emitir a partir de uma OS mista — o sistema
+  separa por tipo de item (`PECA` → NF-e, `SERVICO` → NFS-e) e gera as
+  duas numa ação só, cada uma com status/PDF/cancelamento independentes.
+  NÃO é o fluxo de "usuário escolhe manualmente" nem o de "só nota
+  avulsa separada".
+
+### Pesquisa de Reforma Tributária (IBS/CBS) — REFEITA E CONCLUÍDA (2026-07-25)
+Refeita nesta sessão via WebSearch/WebFetch direto (sem subagente — o limite
+que derrubou a tentativa anterior era do fork, a busca sequencial funcionou).
+Achados que impactam o design do motor NFePHP:
+
+- **NF-e/NFC-e — NT 2025.002-RTC**, versão atual **v1.40 (publicada
+  20/05/2026)**. Cria os grupos novos de IBS/CBS/IS no leiaute (bloco
+  `IBSCBS`, campos `cClassTrib`, `cIndOp`, grupos `gALCZFMCBS`,
+  `refDFeAnt`). Regra de validação **UB12-10_1115** é a que rejeita nota
+  sem os campos.
+- **Cronograma de obrigatoriedade da NF-e** (crítico pro nosso caso):
+  - **03/08/2026** — obrigatório só pra **Regime Normal (CRT=3 — Lucro
+    Real/Presumido)**. Sem os campos → rejeição na autorização.
+  - **04/01/2027** — obrigatório pra **Simples Nacional (CRT=1) e MEI**.
+    Até lá o Simples está **dispensado de destacar IBS/CBS**; obrigação
+    real é informar o **Regime Tributário (CRT)** corretamente.
+  - A NT diz explicitamente que as orientações de preenchimento pro
+    CRT=1 virão em **NT futura ainda não publicada**.
+- **NFS-e nacional**: bloco `IBSCBS` entrou na DPS; **NT SE/CGNFS-e
+  nº 007/2026 (07/02/2026)** atualizou o leiaute (IBS/CBS + ajustes de
+  PIS/COFINS/CSLL). Em **2026 o preenchimento do grupo IBSCBS é
+  OPCIONAL** — mas se preenchido, TODAS as regras de validação da NT 04
+  v2.0 se aplicam. Obrigatoriedade real começa em **2027**.
+- **🔴 Achado novo e urgente, fora do que estava previsto: Resolução
+  CGSN nº 189/2026** torna **obrigatório o uso do Emissor Nacional da
+  NFS-e para ME/EPP do Simples Nacional** que prestam serviço sujeito a
+  ISS, **a partir de 01/09/2026** (~5 semanas da data desta sessão).
+  Isso reforça a decisão de usar `nfse-nacional/nfse-php` (padrão
+  nacional/ADN) e não um integrador municipal, e cria um prazo real.
+- **`nfephp-org/sped-nfe` — já suporta a NT 2025.002**: versão
+  **v5.2.6 (15/06/2026)** publicada no Packagist, com menção explícita às
+  NT 2025.002 v1.01/v1.10/v1.20 no changelog. A issue #1274 ("publicar
+  versão com suporte a IBS/CBS/IS", aberta 13/11/2025) está **fechada**.
+  Ressalva: o changelog menciona até a **v1.20** da NT; a NT já está na
+  **v1.40** — pode haver defasagem de campos das versões 1.30/1.40.
+  Impacto baixo pra v1 do nosso motor porque o emitente é Simples
+  Nacional (dispensado até 2027), mas precisa ser reavaliado antes de
+  atender qualquer oficina em Regime Normal.
+- **`nfse-nacional/nfse-php` — NÃO confirmado suporte ao bloco IBSCBS /
+  NT 007/2026**: o README não menciona reforma tributária, IBS, CBS nem
+  ADN nesse contexto, e há discussão aberta de reescrita de arquitetura
+  ("a próxima versão será uma oportunidade para consolidar uma
+  arquitetura mais simples"). É o ponto mais frágil da stack proposta.
+- **EPEC confirmado no `sped-nfe`** (`docs/Contingency.md`): fluxo é
+  gerar a NF-e já com `tpEmis=4` + `dhCont` + `xJust`, chamar
+  `$tools->sefazEPEC($xml, $verAplic)`, e **transmitir o XML normal
+  quando a SEFAZ voltar — prazo de 7 dias**, senão a SEFAZ bloqueia
+  novos EPEC por "Pendência de Conciliação". Esse prazo de 7 dias vira
+  requisito de design (job de reconciliação agendado, não só "tenta de
+  novo quando alguém clicar").
+- **ISS**: o padrão nacional NÃO padroniza alíquota — continua municipal
+  (2%–5%, LC 116/2003). Alíquota de Ilicínea segue **não confirmada**
+  (mesma pendência da rodada 14): confirmar com a Secretaria de Finanças
+  ou contador antes de codificar qualquer valor.
+
+### (histórico) Pesquisa de Reforma Tributária — tentativa anterior que FALHOU
+- Usuário pediu explicitamente (mensagem literal): "para estudar as
+  regras fiscais, não esqueça de considerar e pesquisar muito a fundo a
+  respeito da reforma tributaria e os novos impostos principalmente a
+  respeito das novas regras, novos tipos de impostos como ibs e cbs e
+  todos os outros que foram criados e fizer sentido."
+- Eu disparei um agente (fork) de pesquisa profunda sobre isso — **o
+  agente FALHOU** por limite semanal de uso da conta atingido (reseta
+  2026-07-26 15h America/Sao_Paulo), não por erro de execução. Nenhum
+  resultado foi retornado, nenhuma informação nova foi obtida além do que
+  já constava no parecer da rodada 14 (que já tinha uma nota solta sobre
+  IBS/CBS: "alíquota teste 1% desde jan/2026, sem alterar valor total;
+  Simples Nacional só entra em set/2026; migração completa até 2033" —
+  ESSE DADO NÃO FOI VERIFICADO A FUNDO, é só o que sobrou da pesquisa
+  anterior, mais superficial).
+- **Isso é bloqueante para o design técnico do NFePHP** porque a Reforma
+  Tributária muda o leiaute XML da NF-e e da NFS-e nacional (novos grupos
+  tipo IBSCBS) bem no meio da janela em que este motor está sendo
+  desenhado (2026). Preciso saber, antes de fechar a arquitetura de
+  dados (`NotaFiscalData` etc.) e o mapeamento de payload:
+  1. Quais tags/grupos novos do XML da NF-e/NFS-e nacional já são
+     obrigatórios em 2026 por causa da EC 132/2023 + LC 214/2025.
+  2. Se `nfephp-org/sped-nfe` e `nfse-nacional/nfse-php` já suportam
+     esses campos nas versões atuais.
+  3. Se uma oficina no Simples Nacional em MG precisa preencher esses
+     campos já em 2026 (fase "informativa"/teste) ou só a partir de
+     set/2026.
+  4. Qualquer obrigatoriedade de campo que cause rejeição SEFAZ mesmo
+     com imposto zerado.
+
+### Decisões da sessão 2026-07-25 (pós-pesquisa)
+- **IBS/CBS na v1: estrutura preparada, não preenchida.** `NotaFiscalData`
+  carrega os campos e o CRT do emitente, mas o `NfePhpProvider` só emite o
+  bloco `IBSCBS` quando CRT=3 (Regime Normal). Simples Nacional emite sem o
+  bloco — que é o que a lei permite até 04/01/2027, e a NT de orientação
+  pro CRT=1 nem foi publicada (preencher hoje seria adivinhar).
+- **Escopo da v1: NF-e + NFS-e juntas, com EPEC** (escopo original mantido).
+  Eu cheguei a sugerir separar (NFS-e primeiro) por causa do prazo de
+  01/09/2026 da Res. CGSN 189/2026, e o usuário chegou a aceitar — mas ao
+  ser questionado ("pq vamos deixar produtos pra depois?") revisei e
+  **voltei atrás**: esse prazo cobra emissão de NFS-e pelo padrão nacional,
+  coisa que a oficina JÁ FAZ via Spedy/Focus. O motor NFePHP é adicional e
+  gratuito, não o caminho de conformidade — logo o prazo não é bloqueante
+  pra este projeto e separar só geraria retrabalho (OS mista quebrada +
+  EPEC adiado por acidente). Usuário confirmou fazer junto.
+- **Premissa a verificar fora do código (não bloqueia o design)**: Ilicínea
+  usa `ilicinea-mg.prefeituramoderna.com.br`; se o município não aderiu ao
+  ADN, a `nfse-nacional/nfse-php` não tem com quem falar. Res. CGSN
+  189/2026 tende a resolver. Confirmar em `nfse.gov.br` ou com o contador.
+
+### Design apresentado e aprovado (4 seções) — spec escrito
+Apresentei o design em 4 seções, todas aprovadas pelo usuário:
+1. Escopo revisado + premissas; 2. Arquitetura e componentes;
+3. Numeração, contingência EPEC e PDFs; 4. Erro e estratégia de teste.
+
+Spec commitado em
+`docs/superpowers/specs/2026-07-25-motor-nfephp-design.md`.
+Decisões de arquitetura registradas lá (não repetir aqui): interface
+`FiscalProvider` NÃO muda — `NfePhpProvider` reinterpreta
+`registrarEmissor()`/`enviarCertificado()` como validação local de
+prontidão; `NotaFiscalData` vira envelope com `itens[]` (aditivo, Spedy/
+Focus intocados); emissão passa a ser em fila pra TODOS os provedores;
+número da NF-e alocado dentro do job (não no clique); retentativa sempre
+consulta `sefazConsultaChave` antes (mesma lição das rodadas 7/8 de
+pagamento); PDF renderizado sob demanda, não armazenado.
+
+## Próxima tarefa (retomar exatamente aqui)
+1. **Usuário revisar o spec** em
+   `docs/superpowers/specs/2026-07-25-motor-nfephp-design.md`. Aguardando
+   aprovação ou pedidos de mudança.
+2. Aprovado o spec → `superpowers:writing-plans` pra virar plano de
+   implementação. **Não pular direto pra implementação** (gate da skill
+   de brainstorming).
+3. **Não esquecer o item 2 do escopo original** (NF-e no Spedy/Focus) —
+   fica pra depois do NFePHP, spec separado.
+4. Verificações de fato que dependem do usuário (não bloqueiam escrever o
+   plano, bloqueiam a validação em homologação): adesão de Ilicínea ao
+   ADN (`nfse.gov.br` ou contador); alíquota real de ISS de Ilicínea.
+5. Pendências mais antigas, ainda não feitas: usuário validar
+   manualmente rodada 12 (notificações) e rodada 13 (agendador — checar
+   `docker compose logs scheduler` pros horários reais de disparo);
+   usuário gerar a fatura da oficina do Lundy pelo botão "Gerar Cobrança
+   do Ciclo Agora".
