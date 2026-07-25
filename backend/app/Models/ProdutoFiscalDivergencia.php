@@ -3,34 +3,40 @@ declare(strict_types=1);
 
 namespace App\Models;
 
+use App\Tenancy\HasTenantScope;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Support\Str;
 
-class NotaEntradaItem extends Model
+class ProdutoFiscalDivergencia extends Model
 {
-    protected $table = 'notas_entrada_itens';
+    use HasTenantScope;
+
+    protected $table = 'produto_fiscal_divergencias';
     protected $primaryKey = 'id';
     public $incrementing = false;
     protected $keyType = 'string';
     public $timestamps = false;
 
     protected $fillable = [
-        'nota_entrada_id', 'produto_id', 'codigo_barras_xml', 'descricao_xml',
-        'quantidade', 'valor_unitario', 'produto_criado',
-        'ncm_xml', 'cfop_xml', 'cest_xml', 'origem_xml', 'cst_csosn_xml', 'unidade_xml',
+        'id', 'oficina_id', 'produto_id', 'nota_entrada_id',
+        'campo', 'valor_atual', 'valor_xml', 'resolvido_em', 'resolucao',
     ];
 
     protected $casts = [
-        'quantidade'     => 'float',
-        'valor_unitario' => 'float',
-        'produto_criado' => 'boolean',
+        'criado_em'    => 'datetime',
+        'resolvido_em' => 'datetime',
     ];
 
     protected static function boot(): void
     {
         parent::boot();
-        static::creating(fn($m) => $m->id = $m->id ?: (string) Str::uuid());
+        static::creating(fn ($m) => $m->id = $m->id ?: (string) Str::uuid());
+    }
+
+    public function produto(): BelongsTo
+    {
+        return $this->belongsTo(Produto::class, 'produto_id');
     }
 
     public function notaEntrada(): BelongsTo

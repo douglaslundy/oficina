@@ -23,13 +23,16 @@ class Produto extends Model
     protected $fillable = [
         'nome', 'sku', 'codigo_barras', 'categoria', 'unidade',
         'qty_atual', 'qty_minima', 'preco_custo', 'preco_venda', 'ativo', 'oficina_id',
+        'ncm', 'cest', 'origem', 'tributacao_icms', 'fiscal_fonte', 'fiscal_revisado_em',
     ];
 
     protected $casts = [
-        'ativo'       => 'boolean',
-        'criado_em'   => 'datetime',
-        'preco_custo' => 'float',
-        'preco_venda' => 'float',
+        'ativo'              => 'boolean',
+        'criado_em'          => 'datetime',
+        'preco_custo'        => 'float',
+        'preco_venda'        => 'float',
+        'origem'             => 'integer',
+        'fiscal_revisado_em' => 'datetime',
     ];
 
     public function getActivitylogOptions(): LogOptions
