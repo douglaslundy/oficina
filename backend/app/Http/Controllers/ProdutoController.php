@@ -5,6 +5,7 @@ namespace App\Http\Controllers;
 
 use App\Http\Resources\ProdutoResource;
 use App\Models\Produto;
+use App\Services\Fiscal\ProdutoFiscalService;
 use App\Services\PlanLimitService;
 use App\Tenancy\TenancyContext;
 use Illuminate\Http\JsonResponse;
@@ -61,7 +62,7 @@ class ProdutoController extends Controller
     {
         $planLimit->verificarLimiteProdutos();
 
-        $validated = $request->validate([
+        $validated = $request->validate(array_merge([
             'nome'          => ['required', 'string', 'max:150'],
             'sku'           => ['nullable', 'string', 'max:30', 'unique:produtos,sku'],
             'codigo_barras' => ['nullable', 'string', 'max:20', Rule::unique('produtos', 'codigo_barras')->where('oficina_id', TenancyContext::get())],
@@ -71,11 +72,13 @@ class ProdutoController extends Controller
             'qty_minima'    => ['nullable', 'integer', 'min:0'],
             'preco_custo'   => ['nullable', 'numeric', 'min:0'],
             'preco_venda'   => ['nullable', 'numeric', 'min:0'],
-        ]);
+        ], $this->regrasFiscais()));
 
         $validated['sku'] = $validated['sku'] ?? strtoupper(Str::random(8));
 
         $produto = Produto::create($validated);
+        app(ProdutoFiscalService::class)->aplicarPadraoCategoria($produto);
+        $this->carimbarRevisaoFiscal($produto, $validated);
         return (new ProdutoResource($produto))->response()->setStatusCode(201);
     }
 
@@ -96,7 +99,7 @@ class ProdutoController extends Controller
     public function update(Request $request, string $id): ProdutoResource
     {
         $produto   = Produto::findOrFail($id);
-        $validated = $request->validate([
+        $validated = $request->validate(array_merge([
             'nome'          => ['sometimes', 'required', 'string', 'max:150'],
             'sku'           => ['sometimes', 'required', 'string', 'max:30', "unique:produtos,sku,{$id}"],
             'codigo_barras' => ['nullable', 'string', 'max:20', Rule::unique('produtos', 'codigo_barras')->where('oficina_id', TenancyContext::get())->ignore($id)],
@@ -105,8 +108,9 @@ class ProdutoController extends Controller
             'qty_minima'    => ['nullable', 'integer', 'min:0'],
             'preco_custo'   => ['nullable', 'numeric', 'min:0'],
             'preco_venda'   => ['nullable', 'numeric', 'min:0'],
-        ]);
+        ], $this->regrasFiscais()));
         $produto->update($validated);
+        $this->carimbarRevisaoFiscal($produto, $validated);
         return new ProdutoResource($produto->fresh());
     }
 
@@ -115,5 +119,36 @@ class ProdutoController extends Controller
         $produto = Produto::findOrFail($id);
         $produto->update(['ativo' => false]);
         return response()->json(['message' => 'Produto desativado.']);
+    }
+
+    /** @return array<string, list<string>> Regras de validação dos campos fiscais editáveis. */
+    private function regrasFiscais(): array
+    {
+        return [
+            'ncm'             => ['nullable', 'string', 'size:8'],
+            'cest'            => ['nullable', 'string', 'size:7'],
+            'origem'          => ['nullable', 'integer', 'min:0', 'max:8'],
+            'tributacao_icms' => ['nullable', 'string', 'in:NORMAL,ST'],
+        ];
+    }
+
+    /**
+     * Carimba a revisão manual quando o usuário enviou algum campo fiscal.
+     * É o carimbo que tira o produto da tela de pendências.
+     *
+     * @param array<string, mixed> $validated
+     */
+    private function carimbarRevisaoFiscal(Produto $produto, array $validated): void
+    {
+        $camposFiscais = array_keys($this->regrasFiscais());
+
+        if (array_intersect_key($validated, array_flip($camposFiscais)) === []) {
+            return;
+        }
+
+        $produto->update([
+            'fiscal_fonte'       => 'MANUAL',
+            'fiscal_revisado_em' => now(),
+        ]);
     }
 }
