@@ -3,13 +3,19 @@ declare(strict_types=1);
 
 namespace App\Services;
 
+use App\Services\Fiscal\ClassificacaoIcms;
+use App\Services\Fiscal\ValidadorCamposFiscais;
+
 class NotaEntradaXmlParser
 {
     /**
      * @return array{
      *   chave_acesso: ?string, numero_nf: ?string, serie: ?string, data_emissao: ?string,
      *   fornecedor_nome: ?string, fornecedor_cnpj: ?string, valor_total: float,
-     *   itens: list<array{codigo_barras: ?string, descricao: string, quantidade: float, valor_unitario: float}>
+     *   itens: list<array{codigo_barras: ?string, descricao: string, quantidade: float,
+     *                     valor_unitario: float, ncm: ?string, cfop: ?string, cest: ?string,
+     *                     unidade: ?string, origem: ?int, cst_csosn: ?string,
+     *                     tributacao_icms: ?string}>
      * }
      */
     public function parse(string $xmlContent): array
@@ -49,11 +55,20 @@ class NotaEntradaXmlParser
                 $ean = null;
             }
 
+            $icms = $this->extrairIcms($det);
+
             $itens[] = [
-                'codigo_barras'  => $ean,
-                'descricao'      => (string) ($prod->xProd ?? ''),
-                'quantidade'     => (float) ($prod->qCom ?? 0),
-                'valor_unitario' => (float) ($prod->vUnCom ?? 0),
+                'codigo_barras'   => $ean,
+                'descricao'       => (string) ($prod->xProd ?? ''),
+                'quantidade'      => (float) ($prod->qCom ?? 0),
+                'valor_unitario'  => (float) ($prod->vUnCom ?? 0),
+                'ncm'             => ValidadorCamposFiscais::ncm(isset($prod->NCM) ? (string) $prod->NCM : null),
+                'cfop'            => $this->digitosOuNull(isset($prod->CFOP) ? (string) $prod->CFOP : null, 4),
+                'cest'            => ValidadorCamposFiscais::cest(isset($prod->CEST) ? (string) $prod->CEST : null),
+                'unidade'         => ((string) ($prod->uCom ?? '')) ?: null,
+                'origem'          => ValidadorCamposFiscais::origem($icms['orig']),
+                'cst_csosn'       => $icms['cst'] ?? $icms['csosn'],
+                'tributacao_icms' => ClassificacaoIcms::derivar($icms['cst'], $icms['csosn']),
             ];
         }
 
@@ -69,5 +84,39 @@ class NotaEntradaXmlParser
             'valor_total'     => (float) ($infNFe->total->ICMSTot->vNF ?? 0),
             'itens'           => $itens,
         ];
+    }
+
+    /**
+     * O nó de ICMS tem nome variável (ICMS00, ICMS60, ICMSSN500, ...), então
+     * é preciso iterar os filhos em vez de acessar por nome fixo — acessar
+     * por nome fixo é o erro clássico neste parse.
+     *
+     * @return array{orig: ?string, cst: ?string, csosn: ?string}
+     */
+    private function extrairIcms(\SimpleXMLElement $det): array
+    {
+        $vazio = ['orig' => null, 'cst' => null, 'csosn' => null];
+
+        if (!isset($det->imposto->ICMS)) {
+            return $vazio;
+        }
+
+        foreach ($det->imposto->ICMS->children() as $grupo) {
+            return [
+                'orig'  => isset($grupo->orig)  ? (string) $grupo->orig  : null,
+                'cst'   => isset($grupo->CST)   ? (string) $grupo->CST   : null,
+                'csosn' => isset($grupo->CSOSN) ? (string) $grupo->CSOSN : null,
+            ];
+        }
+
+        return $vazio;
+    }
+
+    private function digitosOuNull(?string $valor, int $tamanho): ?string
+    {
+        if ($valor === null) return null;
+        $digitos = preg_replace('/\D/', '', $valor) ?? '';
+
+        return strlen($digitos) === $tamanho ? $digitos : null;
     }
 }
