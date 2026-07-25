@@ -52,6 +52,28 @@ class ValidadorCamposFiscaisTest extends TestCase
         $this->assertNull(ValidadorCamposFiscais::cest('0100100 def'));
     }
 
+    public function test_cfop_valido(): void
+    {
+        $this->assertSame('5405', ValidadorCamposFiscais::cfop('5405'));
+        $this->assertSame('6404', ValidadorCamposFiscais::cfop('6404'));
+    }
+
+    public function test_cfop_invalido_devolve_null(): void
+    {
+        $this->assertNull(ValidadorCamposFiscais::cfop('540'));    // 3 dígitos
+        $this->assertNull(ValidadorCamposFiscais::cfop('54050'));  // 5 dígitos
+        $this->assertNull(ValidadorCamposFiscais::cfop(''));
+        $this->assertNull(ValidadorCamposFiscais::cfop(null));
+    }
+
+    public function test_cfop_rejeita_lixo_apos_formatacao(): void
+    {
+        // Rejeita se houver caracteres não-dígito após remover separadores conhecidos
+        $this->assertNull(ValidadorCamposFiscais::cfop('5X05'));
+        $this->assertNull(ValidadorCamposFiscais::cfop('540abc'));
+        $this->assertNull(ValidadorCamposFiscais::cfop('5405 def'));
+    }
+
     public function test_origem_valida(): void
     {
         $this->assertSame(0, ValidadorCamposFiscais::origem('0'));

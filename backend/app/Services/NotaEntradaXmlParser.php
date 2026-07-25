@@ -63,7 +63,7 @@ class NotaEntradaXmlParser
                 'quantidade'      => (float) ($prod->qCom ?? 0),
                 'valor_unitario'  => (float) ($prod->vUnCom ?? 0),
                 'ncm'             => ValidadorCamposFiscais::ncm(isset($prod->NCM) ? (string) $prod->NCM : null),
-                'cfop'            => $this->digitosOuNull(isset($prod->CFOP) ? (string) $prod->CFOP : null, 4),
+                'cfop'            => ValidadorCamposFiscais::cfop(isset($prod->CFOP) ? (string) $prod->CFOP : null),
                 'cest'            => ValidadorCamposFiscais::cest(isset($prod->CEST) ? (string) $prod->CEST : null),
                 'unidade'         => ((string) ($prod->uCom ?? '')) ?: null,
                 'origem'          => ValidadorCamposFiscais::origem($icms['orig']),
@@ -112,11 +112,4 @@ class NotaEntradaXmlParser
         return $vazio;
     }
 
-    private function digitosOuNull(?string $valor, int $tamanho): ?string
-    {
-        if ($valor === null) return null;
-        $digitos = preg_replace('/\D/', '', $valor) ?? '';
-
-        return strlen($digitos) === $tamanho ? $digitos : null;
-    }
 }

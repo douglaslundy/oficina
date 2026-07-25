@@ -24,6 +24,12 @@ final class ValidadorCamposFiscais
         return self::apenasDigitos($valor, 7);
     }
 
+    /** CFOP (Código Fiscal de Operações) tem 4 dígitos. */
+    public static function cfop(?string $valor): ?string
+    {
+        return self::apenasDigitos($valor, 4);
+    }
+
     /** Origem da mercadoria: 0 a 8 (Tabela A do Anexo do Convênio SINIEF s/nº 1970). */
     public static function origem(int|string|null $valor): ?int
     {
