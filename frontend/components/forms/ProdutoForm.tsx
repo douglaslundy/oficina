@@ -18,12 +18,24 @@ const schema = z.object({
   qty_minima:  z.number().min(0, 'O estoque mínimo não pode ser negativo'),
   preco_custo: z.number().min(0, 'O preço de custo não pode ser negativo').optional(),
   preco_venda: z.number().min(0, 'O preço de venda não pode ser negativo').optional(),
+  ncm: z.string().refine(v => v === '' || /^\d{8}$/.test(v), 'NCM deve ter 8 dígitos'),
+  cest: z.string().refine(v => v === '' || /^\d{7}$/.test(v), 'CEST deve ter 7 dígitos'),
+  origem: z.string(),
+  tributacao_icms: z.string(),
 })
 
 type FormData = z.infer<typeof schema>
 
 interface ProdutoFormProps {
-  initialData?: Partial<FormData> & { id?: string }
+  initialData?: Partial<FormData> & {
+    id?: string
+    ncm?: string | null
+    cest?: string | null
+    origem?: string | number | null
+    tributacao_icms?: string | null
+    fiscal_fonte?: string | null
+    fiscal_revisado_em?: string | null
+  }
   onSuccess?: () => void
 }
 
@@ -33,6 +45,7 @@ const iStyle: React.CSSProperties = {
   color: 'var(--text)', fontSize: 14, outline: 'none', boxSizing: 'border-box',
 }
 const lStyle: React.CSSProperties = { color: 'var(--muted)', fontSize: 13, display: 'block', marginBottom: 4 }
+const eStyle: React.CSSProperties = { fontSize: 11, color: 'var(--danger)' }
 
 export function ProdutoForm({ initialData, onSuccess }: ProdutoFormProps) {
   const isEdit = !!initialData?.id
@@ -49,6 +62,10 @@ export function ProdutoForm({ initialData, onSuccess }: ProdutoFormProps) {
       qty_minima:  initialData?.qty_minima ?? 5,
       preco_custo: initialData?.preco_custo ?? undefined,
       preco_venda: initialData?.preco_venda ?? undefined,
+      ncm:         initialData?.ncm ?? '',
+      cest:        initialData?.cest ?? '',
+      origem:      initialData?.origem ? String(initialData.origem) : '',
+      tributacao_icms: initialData?.tributacao_icms ?? '',
     },
   })
 
@@ -159,6 +176,59 @@ export function ProdutoForm({ initialData, onSuccess }: ProdutoFormProps) {
           <input type="number" min={0} step="0.01" {...register('preco_venda', { valueAsNumber: true })}
             style={{ ...iStyle, borderColor: errors.preco_venda ? 'var(--danger)' : 'var(--border)' }} placeholder="0,00" />
           {errors.preco_venda && <p style={{ color: 'var(--danger)', fontSize: 12, marginTop: 4 }}>{errors.preco_venda.message}</p>}
+        </div>
+
+        <div style={{ gridColumn: '1 / -1', borderTop: '1px solid var(--border)', paddingTop: 16, marginTop: 8 }}>
+          <h3 style={{ fontFamily: 'Barlow Condensed', fontWeight: 700, fontSize: 15, color: 'var(--text)', margin: '0 0 4px' }}>
+            Dados fiscais
+          </h3>
+          <p style={{ fontSize: 12, color: 'var(--muted)', margin: '0 0 12px' }}>
+            Necessários para emitir NF-e desta peça. Ao importar a nota do fornecedor, são preenchidos automaticamente.
+          </p>
+        </div>
+
+        <div>
+          <label style={lStyle}>NCM (8 dígitos)</label>
+          <input {...register('ncm')} placeholder="87083090" maxLength={8} style={iStyle} />
+          {errors.ncm && <span style={eStyle}>{errors.ncm.message}</span>}
+          {initialData?.fiscal_fonte && (
+            <span style={{ fontSize: 11, color: 'var(--muted)' }}>
+              {initialData.fiscal_fonte === 'XML' && 'Veio da NF-e do fornecedor'}
+              {initialData.fiscal_fonte === 'PADRAO' && 'Padrão da categoria — revise'}
+              {initialData.fiscal_fonte === 'MANUAL' && `Preenchido manualmente${initialData.fiscal_revisado_em ? ` em ${initialData.fiscal_revisado_em}` : ''}`}
+            </span>
+          )}
+        </div>
+
+        <div>
+          <label style={lStyle}>CEST (7 dígitos)</label>
+          <input {...register('cest')} placeholder="0100100" maxLength={7} style={iStyle} />
+          {errors.cest && <span style={eStyle}>{errors.cest.message}</span>}
+        </div>
+
+        <div>
+          <label style={lStyle}>Origem da mercadoria</label>
+          <select {...register('origem')} style={iStyle}>
+            <option value="">Selecione</option>
+            <option value="0">0 — Nacional</option>
+            <option value="1">1 — Estrangeira, importação direta</option>
+            <option value="2">2 — Estrangeira, adquirida no mercado interno</option>
+            <option value="3">3 — Nacional, conteúdo de importação &gt; 40% e ≤ 70%</option>
+            <option value="4">4 — Nacional, processos produtivos básicos</option>
+            <option value="5">5 — Nacional, conteúdo de importação ≤ 40%</option>
+            <option value="6">6 — Estrangeira, importação direta sem similar nacional</option>
+            <option value="7">7 — Estrangeira, mercado interno sem similar nacional</option>
+            <option value="8">8 — Nacional, conteúdo de importação &gt; 70%</option>
+          </select>
+        </div>
+
+        <div>
+          <label style={lStyle}>Tributação do ICMS</label>
+          <select {...register('tributacao_icms')} style={iStyle}>
+            <option value="">Selecione</option>
+            <option value="NORMAL">Normal</option>
+            <option value="ST">Substituição tributária</option>
+          </select>
         </div>
 
       </div>
