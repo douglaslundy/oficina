@@ -803,18 +803,136 @@ número da NF-e alocado dentro do job (não no clique); retentativa sempre
 consulta `sefazConsultaChave` antes (mesma lição das rodadas 7/8 de
 pagamento); PDF renderizado sob demanda, não armazenado.
 
+## Rodada 16 (mesma sessão) — REORDENAÇÃO: 3 etapas antes do NFePHP
+Usuário disse: "ele será opcional, inclusive se precisar corrigir alguma
+coisa no spedy e no focus corrija porque ele será os motores oficiais".
+Isso mudou o sequenciamento — Spedy/Focus são os motores OFICIAIS e hoje
+**não emitem NF-e**, só NFS-e. Fazer NFePHP primeiro faria a única
+capacidade de emitir nota de peça chegar pelo motor opcional/experimental.
+Usuário aprovou inverter.
+
+**Roteiro acordado (nesta ordem):**
+- **Etapa A (nova, primeiro)** — campos fiscais em `produtos` +
+  corrigir a importação de NF-e por XML pra popular esses campos.
+  Usuário pediu explicitamente etapa separada "pra fazer bem feito".
+- **Etapa B** — refactor compartilhado (`NotaFiscalData` com `itens[]`,
+  `EmissaoOrquestrador` da OS mista, emissão em fila) + **NF-e via API do
+  Spedy/Focus** + os 5 defeitos abaixo.
+- **Etapa C** — motor NFePHP (spec já escrito, commit `2411fd5`).
+
+### 5 defeitos achados em Spedy/Focus (usuário mandou corrigir)
+1. **XML nunca é armazenado (Focus)** — `FocusNfeProvider.php:195` grava
+   `caminho_xml_nota_fiscal` (um PATH) em `notas_fiscais.xml_retorno`
+   (coluna TEXT que deveria ter o XML). O documento fiscal legal nunca é
+   arquivado de verdade. Corrigir: baixar o XML e persistir o conteúdo.
+2. **Ambiente da Focus inferido de substring de URL** —
+   `FocusNfeProvider.php:23` usa `str_contains($baseUrl,
+   'api.focusnfe.com.br')` pra escolher entre `token_producao` e
+   `token_homologacao`. NÃO está quebrado com os defaults, mas as URLs vêm
+   de env e o `FiscalProviderManager::build()` JÁ recebe `$ambiente` e não
+   repassa. Modo de falha: emitir nota real achando que está testando.
+   Prova de que o risco é concreto: `sandbox-api.spedy.com.br` CONTÉM
+   `api.spedy.com.br` — replicar o padrão no Spedy quebra de cara.
+3. **Status desconhecido vira PROCESSANDO** nos dois
+   (`SpedyProvider.php:160`, `FocusNfeProvider.php:160`) — `default` do
+   `match` engole estado não mapeado; nota fica presa pra sempre. Piora
+   com a mudança pra fila+polling. Corrigir: logar antes do default.
+4. **`protocolo` recebe o mesmo valor de `numero`** nos dois
+   (`SpedyProvider.php:192-193`, `FocusNfeProvider.php:193-194`).
+5. **`naturezaOperacao` coletada e descartada** — existe em
+   `NotaFiscalData` e nenhum dos dois payloads envia.
+
+### Etapa A — investigação já feita (não repetir)
+- **`produtos` NÃO tem NENHUM campo fiscal.** `grep -riE
+  "ncm|cfop|csosn|cest|origem_mercadoria" app/ database/migrations/`
+  retorna VAZIO no projeto inteiro. Sem NCM/CFOP/CSOSN/origem a SEFAZ
+  rejeita a NF-e — é dado inexistente no banco, não detalhe de código.
+- **A importação de NF por XML já recebe esses dados e os joga fora.**
+  `NotaEntradaXmlParser.php:52-57` extrai só `cEAN`, `xProd`, `qCom`,
+  `vUnCom` de `$det->prod`. Descarta `prod->NCM`, `prod->CFOP`,
+  `prod->CEST`, `prod->uCom` e, dentro de `imposto->ICMS->*`, o `orig`
+  (origem) e o `CST`/`CSOSN`. A tabela `notas_entrada_itens` também não
+  tem colunas pra isso.
+- **Regra de ouro da etapa A — nem todo campo se copia:**
+  - NCM, CEST, origem → copiam direto (atributo da mercadoria).
+  - **CFOP NÃO se copia** — o da entrada é de COMPRA (5405, 6404…);
+    reusar na saída = venda com código de compra = rejeição. CFOP de
+    saída é DERIVADO (dentro/fora do estado, com/sem ST).
+  - CST/CSOSN do fornecedor não vira o nosso, mas é o melhor sinal
+    disponível: CST 60 / CSOSN 500 = ICMS já recolhido por substituição
+    tributária (caso dominante em MG). A importação passa a saber item a
+    item quais peças são ST.
+- Nó `ICMS` tem nome variável (`ICMS00`, `ICMS60`, `ICMSSN500`…) — o
+  parser precisa iterar os filhos, não acessar por nome fixo.
+
+### Base legal VERIFICADA (não repesquisar — usuário pediu confirmação)
+**Contexto importante: o usuário NÃO tem contador.** Ele disse que confia
+na pesquisa, mas isso aumenta a responsabilidade — separar sempre o que é
+tabela verificável do que é juízo de classificação.
+
+- **CSOSN — Ajuste SINIEF 03/2010, Anexo Único, Tabela B** (conferido no
+  texto do próprio CONFAZ). Códigos com ST: **201, 202, 203, 500**. ✅
+  (Ajuste SINIEF 14/2019 revogou o Anexo I do Ajuste SINIEF 07/2005 a
+  partir de 01/01/2022 — a referência válida hoje é o 03/2010.)
+- **CST — Tabela B do Anexo do Convênio SINIEF s/nº de 15/12/1970.**
+  Com ST: **10** (tributada c/ ST), **30** (isenta/não tributada c/ ST),
+  **60** (ICMS cobrado anteriormente por ST — caso dominante de peça de
+  reposição), **70** (redução de base c/ ST). ✅
+- **Origem da mercadoria — Tabela A do mesmo anexo: 0 a 8.** ✅
+  (confirma `origem smallint` 0..8)
+- **⚠️ A tabela CST é instável:** o **Ajuste SINIEF 39/2023** criaria os
+  CST **12, 13, 52, 72, 74** (todos de ST) a partir de 01/04/2024, e o
+  **Ajuste SINIEF 20/2024** (09/07/2024) REVOGOU essa criação. Há fonte
+  estadual (SEFAZ-PB) publicando a tabela COM esses códigos — versões
+  conflitantes circulando, e ajuste futuro pode ressuscitá-los.
+- **[decisão] Por causa disso, NÃO usar lista fixa com `else` → NORMAL.**
+  Regra: conjunto conhecido de ST → `ST`; conjunto conhecido de não-ST →
+  `NORMAL`; **código desconhecido → NÃO adivinha, vira pendência.**
+  É a mesma doença do defeito 3 de Spedy/Focus (`default` do `match`
+  engolindo caso não previsto) — não repetir numa tabela que a
+  legislação comprovadamente altera.
+
+### Limites do que NÃO dá pra verificar por pesquisa (dizer ao usuário)
+1. **Qual NCM classifica uma peça específica** — juízo sobre a
+   mercadoria, não consulta de tabela. MAS: no fluxo dele isso quase se
+   resolve sozinho, porque o NCM vem assinado na NF-e do fornecedor e a
+   importação passa a lê-lo. O padrão por categoria é só rede de
+   segurança pra produto cadastrado na mão.
+2. **Alíquota de ISS de Ilicínea** — lei municipal, não indexada. A
+   PREFEITURA informa por telefone; não precisa de contador.
+3. **Se uma peça está na lista de ST de MG** — lista estadual (Anexo do
+   RICMS/MG). CST do fornecedor é evidência forte, não prova.
+
+### Etapa A — design aprovado e spec escrito
+Design apresentado em 2 seções, ambas aprovadas. Spec em
+`docs/superpowers/specs/2026-07-25-campos-fiscais-produtos-design.md`.
+Decisões (detalhe no spec, não repetir aqui): colunas fiscais em
+`produtos` + `fiscal_fonte`/`fiscal_revisado_em` (distinguem "conferido
+por gente" de "herdado do padrão"); `notas_entrada_itens` guarda o valor
+BRUTO do fornecedor como auditoria; tabelas novas
+`produto_fiscal_divergencias` e `categoria_padrao_fiscal` (ambas
+tenant-scoped — `Produto` usa `HasTenantScope`); padrões por categoria
+nascem VAZIOS (não invento NCM); CFOP NÃO é coluna de produto;
+divergência não sobrescreve; importação nunca falha inteira por dado
+fiscal; valor malformado não é gravado (vazio é visível, lixo passa por
+preenchido). Testes desta etapa RODAM localmente (lógica pura, sem DB).
+
+Spec do NFePHP recebeu nota de sequenciamento no topo (é a etapa C).
+
 ## Próxima tarefa (retomar exatamente aqui)
-1. **Usuário revisar o spec** em
+0. **Usuário revisar os 2 specs** (etapa A e etapa C). Etapa A é a que
+   vai virar plano primeiro.
+1. Aprovada a etapa A → `superpowers:writing-plans` para ela.
+   **Não pular pra implementação** (gate do brainstorming).
+2. Depois: desenhar a **etapa B** (spec ainda não existe) — refactor
+   compartilhado + NF-e no Spedy/Focus + os 5 defeitos.
+3. Por último a etapa C (NFePHP), cujo spec já está escrito em
    `docs/superpowers/specs/2026-07-25-motor-nfephp-design.md`. Aguardando
    aprovação ou pedidos de mudança.
-2. Aprovado o spec → `superpowers:writing-plans` pra virar plano de
-   implementação. **Não pular direto pra implementação** (gate da skill
-   de brainstorming).
-3. **Não esquecer o item 2 do escopo original** (NF-e no Spedy/Focus) —
-   fica pra depois do NFePHP, spec separado.
-4. Verificações de fato que dependem do usuário (não bloqueiam escrever o
-   plano, bloqueiam a validação em homologação): adesão de Ilicínea ao
-   ADN (`nfse.gov.br` ou contador); alíquota real de ISS de Ilicínea.
+4. Verificações de fato que dependem do usuário (não bloqueiam escrever
+   os planos; bloqueiam a validação em homologação das etapas B/C):
+   adesão de Ilicínea ao ADN (`nfse.gov.br`); **alíquota de ISS de
+   Ilicínea — a PREFEITURA informa, o usuário NÃO tem contador**.
 5. Pendências mais antigas, ainda não feitas: usuário validar
    manualmente rodada 12 (notificações) e rodada 13 (agendador — checar
    `docker compose logs scheduler` pros horários reais de disparo);

@@ -1,5 +1,24 @@
 # Motor fiscal NFePHP (NF-e + NFS-e nacional) — design
 
+> **Sequenciamento (definido após a escrita deste spec).** Este é o
+> trabalho da **etapa C**, e depende de duas etapas anteriores:
+>
+> - **Etapa A** — campos fiscais em `produtos` + importação de XML que os
+>   preenche. Spec: `2026-07-25-campos-fiscais-produtos-design.md`.
+>   Sem NCM/origem/situação tributária por item não há NF-e possível, em
+>   nenhum motor.
+> - **Etapa B** — refactor compartilhado (`NotaFiscalData` com `itens[]`,
+>   `EmissaoOrquestrador`, emissão em fila), NF-e via API do Spedy/Focus e
+>   correção de 5 defeitos nesses providers. Spec ainda não escrito.
+>
+> A inversão foi decidida porque **Spedy e Focus são os motores oficiais**
+> e hoje não emitem NF-e: fazer o NFePHP primeiro faria a única capacidade
+> de emitir nota de peça chegar pelo motor opcional e ainda não validado
+> contra a SEFAZ. Como consequência, boa parte da seção A deste spec
+> (envelope `NotaFiscalData`, `EmissaoOrquestrador`, emissão em fila) já
+> estará **pronta e validada em produção** quando a etapa C começar — aqui
+> ela permanece documentada como contexto, não como trabalho a fazer.
+
 ## Contexto
 
 Pedido do usuário, textual: *"eu quero o NFePHP como terceiro motor para
