@@ -5,6 +5,7 @@ use App\Http\Controllers\Auth\LoginController;
 use App\Http\Controllers\Auth\ForgotPasswordController;
 use App\Http\Controllers\Auth\ResetPasswordController;
 use App\Http\Controllers\AgendamentoController;
+use App\Http\Controllers\CategoriaPadraoFiscalController;
 use App\Http\Controllers\ClienteController;
 use App\Http\Controllers\ConfiguracaoController;
 use App\Http\Controllers\DashboardController;
@@ -230,6 +231,7 @@ Route::middleware(['tenant', 'auth:sanctum'])->group(function () {
     Route::get('produtos/{produto}/estoque/historico', [EstoqueController::class, 'historico']);
     Route::get('entradas-nf',      [EntradaNfController::class, 'index']);
     Route::get('entradas-nf/{id}', [EntradaNfController::class, 'show']);
+    Route::get('categorias-fiscais', [CategoriaPadraoFiscalController::class, 'index']);
 });
 Route::middleware(['tenant', 'auth:sanctum', 'role:ADMIN,ATENDENTE'])->group(function () {
     Route::post('produtos',              [ProdutoController::class, 'store']);
@@ -239,6 +241,7 @@ Route::middleware(['tenant', 'auth:sanctum', 'role:ADMIN,ATENDENTE'])->group(fun
     Route::post('produtos/{produto}/estoque/saida', [EstoqueController::class, 'saida']);
     Route::post('entradas-nf/parse', [EntradaNfController::class, 'parse']);
     Route::post('entradas-nf', [EntradaNfController::class, 'store']);
+    Route::put('categorias-fiscais', [CategoriaPadraoFiscalController::class, 'update']);
 });
 
 // ─── Serviços — leitura: todos; escrita: ADMIN, ATENDENTE; desativar: ADMIN ───
