@@ -7,6 +7,8 @@ import { toast } from '@/hooks/useToast'
 
 const CATEGORIAS = ['Filtros', 'Óleo/Fluidos', 'Freios', 'Suspensão', 'Elétrica', 'Motor', 'Outros']
 const UNIDADES = ['Un', 'L', 'Par', 'Cx', 'Kg', 'm']
+const ORIGEM_VALUES = ['', '0', '1', '2', '3', '4', '5', '6', '7', '8'] as const
+const TRIBUTACAO_VALUES = ['', 'NORMAL', 'ST'] as const
 
 const schema = z.object({
   nome:          z.string().min(2, 'Nome do produto é obrigatório'),
@@ -20,8 +22,8 @@ const schema = z.object({
   preco_venda: z.number().min(0, 'O preço de venda não pode ser negativo').optional(),
   ncm: z.string().refine(v => v === '' || /^\d{8}$/.test(v), 'NCM deve ter 8 dígitos'),
   cest: z.string().refine(v => v === '' || /^\d{7}$/.test(v), 'CEST deve ter 7 dígitos'),
-  origem: z.string(),
-  tributacao_icms: z.string(),
+  origem: z.enum(ORIGEM_VALUES),
+  tributacao_icms: z.enum(TRIBUTACAO_VALUES),
 })
 
 type FormData = z.infer<typeof schema>
@@ -64,7 +66,7 @@ export function ProdutoForm({ initialData, onSuccess }: ProdutoFormProps) {
       preco_venda: initialData?.preco_venda ?? undefined,
       ncm:         initialData?.ncm ?? '',
       cest:        initialData?.cest ?? '',
-      origem:      initialData?.origem ? String(initialData.origem) : '',
+      origem:      (initialData?.origem !== undefined && initialData?.origem !== null ? String(initialData.origem) : '') as typeof ORIGEM_VALUES[number],
       tributacao_icms: initialData?.tributacao_icms ?? '',
     },
   })

@@ -76,9 +76,12 @@ class ProdutoController extends Controller
 
         $validated['sku'] = $validated['sku'] ?? strtoupper(Str::random(8));
 
+        // Detectar se o usuário forneceu dados fiscais não-vazios
+        $temMudancaFiscal = $this->temMudancaFiscalNoValidated($validated);
+
         $produto = Produto::create($validated);
         app(ProdutoFiscalService::class)->aplicarPadraoCategoria($produto);
-        $this->carimbarRevisaoFiscal($produto, $validated);
+        $this->carimbarRevisaoFiscal($produto, $temMudancaFiscal);
         return (new ProdutoResource($produto))->response()->setStatusCode(201);
     }
 
@@ -110,7 +113,11 @@ class ProdutoController extends Controller
             'preco_venda'   => ['nullable', 'numeric', 'min:0'],
         ], $this->regrasFiscais()));
         $produto->update($validated);
-        $this->carimbarRevisaoFiscal($produto, $validated);
+
+        // Capturar mudanças fiscais imediatamente após update e antes de chamar stamp
+        $temMudancaFiscal = $this->temMudancaFiscalNoProduto($produto);
+
+        $this->carimbarRevisaoFiscal($produto, $temMudancaFiscal);
         return new ProdutoResource($produto->fresh());
     }
 
@@ -133,16 +140,12 @@ class ProdutoController extends Controller
     }
 
     /**
-     * Carimba a revisão manual quando o usuário enviou algum campo fiscal.
-     * É o carimbo que tira o produto da tela de pendências.
-     *
-     * @param array<string, mixed> $validated
+     * Carimba a revisão manual quando o usuário realmente alterou dados fiscais.
+     * Só é chamado quando há mudança fiscal efetiva, evitando sobrescrever PADRAO.
      */
-    private function carimbarRevisaoFiscal(Produto $produto, array $validated): void
+    private function carimbarRevisaoFiscal(Produto $produto, bool $temMudancaFiscal): void
     {
-        $camposFiscais = array_keys($this->regrasFiscais());
-
-        if (array_intersect_key($validated, array_flip($camposFiscais)) === []) {
+        if (!$temMudancaFiscal) {
             return;
         }
 
@@ -150,5 +153,35 @@ class ProdutoController extends Controller
             'fiscal_fonte'       => 'MANUAL',
             'fiscal_revisado_em' => now(),
         ]);
+    }
+
+    /**
+     * Verifica se o validated request contém algum campo fiscal não-vazio.
+     * Usado em store() para distinguir entre "usuário preencheu" vs "formulário apenas enviou campo vazio".
+     */
+    private function temMudancaFiscalNoValidated(array $validated): bool
+    {
+        $camposFiscais = array_keys($this->regrasFiscais());
+        foreach ($camposFiscais as $campo) {
+            if (!empty($validated[$campo] ?? null)) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    /**
+     * Verifica se algum campo fiscal foi realmente alterado no modelo.
+     * Usado em update() após $produto->update() para capturar mudanças reais.
+     */
+    private function temMudancaFiscalNoProduto(Produto $produto): bool
+    {
+        $camposFiscais = array_keys($this->regrasFiscais());
+        foreach ($camposFiscais as $campo) {
+            if ($produto->wasChanged($campo)) {
+                return true;
+            }
+        }
+        return false;
     }
 }
