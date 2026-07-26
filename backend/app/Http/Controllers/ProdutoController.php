@@ -163,7 +163,7 @@ class ProdutoController extends Controller
     {
         $camposFiscais = array_keys($this->regrasFiscais());
         foreach ($camposFiscais as $campo) {
-            if (!empty($validated[$campo] ?? null)) {
+            if ($validated[$campo] !== null) {
                 return true;
             }
         }
