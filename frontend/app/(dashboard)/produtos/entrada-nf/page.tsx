@@ -18,6 +18,13 @@ interface ItemPreview {
   qty_atual: number
   preco_venda: number
   qty_minima: number
+  ncm: string | null
+  cfop: string | null
+  cest: string | null
+  origem: number | null
+  cst_csosn: string | null
+  tributacao_icms: string | null
+  fiscal_pendente: boolean
 }
 
 interface NotaPreview {
@@ -96,6 +103,12 @@ export default function EntradaNfPage() {
           valor_unitario: i.valor_unitario,
           preco_venda: i.preco_venda,
           qty_minima: i.qty_minima,
+          ncm: i.ncm,
+          cfop: i.cfop,
+          cest: i.cest,
+          origem: i.origem,
+          cst_csosn: i.cst_csosn,
+          tributacao_icms: i.tributacao_icms,
         })),
       })
       toast('Entrada de estoque registrada com sucesso!', 'success')
@@ -174,7 +187,7 @@ export default function EntradaNfPage() {
               <table style={{ width: '100%', borderCollapse: 'collapse' }}>
                 <thead>
                   <tr>
-                    {['Cód. barras', 'Descrição', 'Status', 'Categoria', 'Qtd', 'Custo', 'Venda', ''].map(h => (
+                    {['Cód. barras', 'Descrição', 'Status', 'Categoria', 'Qtd', 'Custo', 'Venda', 'Fiscal', ''].map(h => (
                       <th key={h} style={{ padding: '10px 12px', textAlign: 'left', fontSize: 12, fontWeight: 600, color: 'var(--muted)', textTransform: 'uppercase', borderBottom: '1px solid var(--border)' }}>{h}</th>
                     ))}
                   </tr>
@@ -219,6 +232,20 @@ export default function EntradaNfPage() {
                         <input type="number" min={0} step="0.01" style={inputStyle} value={item.preco_venda} disabled={item.matched}
                           onChange={e => updateItem(idx, 'preco_venda', Math.max(0, parseFloat(e.target.value) || 0))} />
                       </td>
+                      <td style={{ padding: 8, fontSize: 12 }}>
+                        {item.fiscal_pendente ? (
+                          <span style={{ color: 'var(--accent)' }} title="Faltou NCM ou situação tributária no XML — o produto entrará com pendência fiscal">
+                            Pendente
+                          </span>
+                        ) : (
+                          <span style={{ fontFamily: 'JetBrains Mono', color: 'var(--muted)' }}>
+                            {item.ncm}
+                            {item.tributacao_icms === 'ST' && (
+                              <span style={{ color: 'var(--accent)', marginLeft: 6 }}>ST</span>
+                            )}
+                          </span>
+                        )}
+                      </td>
                       <td style={{ padding: '8px 12px', borderBottom: '1px solid var(--border)' }}>
                         <button type="button" onClick={() => removeItem(idx)}
                           style={{ background: 'none', border: 'none', color: 'var(--danger)', cursor: 'pointer', fontSize: 16 }}
@@ -227,7 +254,7 @@ export default function EntradaNfPage() {
                     </tr>
                   ))}
                   {itens.length === 0 && (
-                    <tr><td colSpan={8} style={{ padding: 24, textAlign: 'center', color: 'var(--muted)' }}>Nenhum item na nota.</td></tr>
+                    <tr><td colSpan={9} style={{ padding: 24, textAlign: 'center', color: 'var(--muted)' }}>Nenhum item na nota.</td></tr>
                   )}
                 </tbody>
               </table>
