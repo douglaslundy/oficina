@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from 'react'
 import Link from 'next/link'
+import { toast } from '@/hooks/useToast'
 import api from '@/lib/api'
 
 interface ProdutoPendente {
@@ -29,13 +30,20 @@ export default function PendenciasFiscaisPage() {
   const [divergencias, setDivergencias] = useState<Divergencia[]>([])
   const [carregando, setCarregando] = useState(true)
   const [resolvendo, setResolvendo] = useState<string | null>(null)
+  const [erroCarregamento, setErroCarregamento] = useState<string | null>(null)
 
   async function carregar() {
     setCarregando(true)
+    setErroCarregamento(null)
     try {
       const { data } = await api.get('/produtos/pendencias-fiscais')
       setProdutos(data.data ?? [])
       setDivergencias(data.divergencias ?? [])
+    } catch (err: unknown) {
+      const e = err as { response?: { data?: { message?: string } } }
+      const mensagem = e.response?.data?.message ?? 'Erro ao carregar pendências fiscais.'
+      setErroCarregamento(mensagem)
+      toast(mensagem, 'danger')
     } finally {
       setCarregando(false)
     }
@@ -47,7 +55,11 @@ export default function PendenciasFiscaisPage() {
     setResolvendo(id)
     try {
       await api.post(`/produtos/divergencias/${id}/resolver`, { resolucao })
+      toast('Divergência resolvida com sucesso!', 'success')
       await carregar()
+    } catch (err: unknown) {
+      const e = err as { response?: { data?: { message?: string } } }
+      toast(e.response?.data?.message ?? 'Erro ao resolver divergência.', 'danger')
     } finally {
       setResolvendo(null)
     }
@@ -61,6 +73,33 @@ export default function PendenciasFiscaisPage() {
 
   if (carregando) {
     return <div style={{ padding: 24, color: 'var(--muted)' }}>Carregando pendências…</div>
+  }
+
+  if (erroCarregamento) {
+    return (
+      <div style={{ padding: 24 }}>
+        <div style={{ background: 'rgba(229,57,53,.06)', border: '1px solid var(--danger)', borderRadius: 8, padding: 16, marginBottom: 20 }}>
+          <p style={{ color: 'var(--danger)', margin: 0, fontSize: 14 }}>
+            ⚠ {erroCarregamento}
+          </p>
+          <button
+            onClick={carregar}
+            style={{
+              marginTop: 12,
+              padding: '6px 14px',
+              borderRadius: 6,
+              background: 'var(--danger)',
+              color: '#fff',
+              border: 'none',
+              cursor: 'pointer',
+              fontSize: 13,
+              fontWeight: 600,
+            }}>
+            Tentar novamente
+          </button>
+        </div>
+      </div>
+    )
   }
 
   return (
