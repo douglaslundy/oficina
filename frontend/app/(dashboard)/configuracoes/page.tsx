@@ -1,5 +1,6 @@
 'use client'
 import { useState, useEffect } from 'react'
+import Link from 'next/link'
 import api from '@/lib/api'
 import { toast } from '@/hooks/useToast'
 
@@ -96,6 +97,21 @@ export default function ConfiguracoesPage() {
           style={{ marginTop: 8, padding: '10px 28px', background: saving ? 'var(--muted)' : 'var(--accent)', color: '#000', borderRadius: 8, border: 'none', fontWeight: 800, fontSize: 16, cursor: saving ? 'not-allowed' : 'pointer' }}>
           {saving ? 'Salvando...' : 'Salvar Configurações'}
         </button>
+
+        <div style={{ background: 'var(--card)', border: '1px solid var(--border)', borderRadius: 8, padding: 16, marginTop: 16 }}>
+          <h3 style={{ fontFamily: 'Barlow Condensed', fontWeight: 700, fontSize: 16, margin: '0 0 4px' }}>
+            Padrões fiscais por categoria
+          </h3>
+          <p style={{ fontSize: 13, color: 'var(--muted)', margin: '0 0 12px' }}>
+            NCM, origem e tributação usados como ponto de partida para produtos cadastrados manualmente.
+          </p>
+          <Link
+            href="/configuracoes/categorias-fiscais"
+            style={{ padding: '8px 14px', fontSize: 13, color: 'var(--text)', border: '1px solid var(--border)', borderRadius: 6, textDecoration: 'none', display: 'inline-block' }}
+          >
+            Configurar
+          </Link>
+        </div>
       </div>
     </div>
   )
