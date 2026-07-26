@@ -1,6 +1,7 @@
 'use client'
 import { useState, useEffect, useCallback } from 'react'
 import { useRouter } from 'next/navigation'
+import Link from 'next/link'
 import { DataTable, Column } from '@/components/ui/DataTable'
 import { StatusPill } from '@/components/ui/StatusPill'
 import { StockBar } from '@/components/ui/StockBar'
@@ -214,6 +215,12 @@ export default function ProdutosPage() {
             }}>
             + Lançar NF
           </button>
+          <Link
+            href="/produtos/pendencias-fiscais"
+            style={{ padding: '8px 14px', fontSize: 13, color: 'var(--text)', border: '1px solid var(--border)', borderRadius: 6, textDecoration: 'none', display: 'flex', alignItems: 'center' }}
+          >
+            Pendências fiscais
+          </Link>
           <input
             value={search}
             onChange={e => setSearch(e.target.value)}
