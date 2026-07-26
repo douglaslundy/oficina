@@ -24,6 +24,7 @@ interface ItemPreview {
   origem: number | null
   cst_csosn: string | null
   tributacao_icms: string | null
+  unidade_xml: string | null
   fiscal_pendente: boolean
 }
 
@@ -109,6 +110,7 @@ export default function EntradaNfPage() {
           origem: i.origem,
           cst_csosn: i.cst_csosn,
           tributacao_icms: i.tributacao_icms,
+          unidade_xml: i.unidade_xml,
         })),
       })
       toast('Entrada de estoque registrada com sucesso!', 'success')
@@ -232,7 +234,7 @@ export default function EntradaNfPage() {
                         <input type="number" min={0} step="0.01" style={inputStyle} value={item.preco_venda} disabled={item.matched}
                           onChange={e => updateItem(idx, 'preco_venda', Math.max(0, parseFloat(e.target.value) || 0))} />
                       </td>
-                      <td style={{ padding: 8, fontSize: 12 }}>
+                      <td style={{ padding: '8px 12px', borderBottom: '1px solid var(--border)', fontSize: 12 }}>
                         {item.fiscal_pendente ? (
                           <span style={{ color: 'var(--accent)' }} title="Faltou NCM ou situação tributária no XML — o produto entrará com pendência fiscal">
                             Pendente
