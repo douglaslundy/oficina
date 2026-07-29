@@ -138,9 +138,13 @@ class EntradaNfController extends Controller
             'itens.*.preco_venda'    => ['nullable', 'numeric', 'min:0'],
             'itens.*.qty_minima'     => ['nullable', 'integer', 'min:0'],
             'itens.*.unidade_xml'     => ['nullable', 'string', 'max:6'],
-            'itens.*.ncm'             => ['nullable', 'string', 'max:8'],
-            'itens.*.cfop'            => ['nullable', 'string', 'max:4'],
-            'itens.*.cest'            => ['nullable', 'string', 'max:7'],
+            // Regra de tamanho por si só aceita lixo do tamanho certo
+            // ("XX000000"); a garantia de verdade é ProdutoFiscalService
+            // sanitizando via ValidadorCamposFiscais antes de gravar — isto
+            // aqui só rejeita cedo o que já dá pra rejeitar na validação.
+            'itens.*.ncm'             => ['nullable', 'string', 'size:8', 'regex:/^\d{8}$/'],
+            'itens.*.cfop'            => ['nullable', 'string', 'size:4', 'regex:/^\d{4}$/'],
+            'itens.*.cest'            => ['nullable', 'string', 'size:7', 'regex:/^\d{7}$/'],
             'itens.*.origem'          => ['nullable', 'integer', 'min:0', 'max:8'],
             'itens.*.cst_csosn'       => ['nullable', 'string', 'max:4'],
             'itens.*.tributacao_icms' => ['nullable', 'string', 'in:NORMAL,ST'],
@@ -156,7 +160,7 @@ class EntradaNfController extends Controller
 
         $pendenteDeAplicacaoFiscal = [];
 
-        $nota = DB::transaction(function () use ($validated, $estoqueService, $planLimit, $atualizarCusto, $usuarioId, &$pendenteDeAplicacaoFiscal) {
+        $nota = DB::transaction(function () use ($validated, $estoqueService, $planLimit, $atualizarCusto, $usuarioId, $fiscalService, &$pendenteDeAplicacaoFiscal) {
             $valorTotal = collect($validated['itens'])->sum(fn($i) => $i['quantidade'] * $i['valor_unitario']);
 
             $nota = NotaEntrada::create([
@@ -181,6 +185,14 @@ class EntradaNfController extends Controller
                     }
                 } else {
                     $planLimit->verificarLimiteProdutos();
+
+                    // O item chega validado pelas regras acima, mas a
+                    // request é editável pelo usuário na tela de revisão —
+                    // não é garantidamente o que o parser extraiu do XML.
+                    // Sanitiza de novo no ponto de escrita, pela mesma
+                    // rotina usada em aplicarDoXml/aplicarPadraoCategoria.
+                    $fiscalSanitizado = $fiscalService->sanitizarCampos($item);
+
                     $produto = Produto::create([
                         'nome'            => $item['nome'],
                         'sku'             => strtoupper(Str::random(8)),
@@ -191,11 +203,11 @@ class EntradaNfController extends Controller
                         'qty_minima'      => $item['qty_minima'] ?? 5,
                         'preco_custo'     => $item['valor_unitario'],
                         'preco_venda'     => $item['preco_venda'] ?? $item['valor_unitario'],
-                        'ncm'             => $item['ncm'] ?? null,
-                        'cest'            => $item['cest'] ?? null,
-                        'origem'          => $item['origem'] ?? null,
-                        'tributacao_icms' => $item['tributacao_icms'] ?? null,
-                        'fiscal_fonte'    => isset($item['ncm']) ? 'XML' : null,
+                        'ncm'             => $fiscalSanitizado['ncm'],
+                        'cest'            => $fiscalSanitizado['cest'],
+                        'origem'          => $fiscalSanitizado['origem'],
+                        'tributacao_icms' => $fiscalSanitizado['tributacao_icms'],
+                        'fiscal_fonte'    => $fiscalSanitizado['ncm'] !== null ? 'XML' : null,
                     ]);
                     $produtoCriado = true;
                 }

@@ -34,7 +34,7 @@ class ProdutoFiscalService
         $paraGravar = [];
 
         foreach (self::CAMPOS as $campo) {
-            $doXml = $fiscalXml[self::ORIGEM_XML[$campo]] ?? null;
+            $doXml = $this->sanitizar($campo, $fiscalXml[self::ORIGEM_XML[$campo]] ?? null);
             $atual = $produto->{$campo};
 
             switch (PoliticaConflitoFiscal::decidir($atual, $doXml)) {
@@ -80,6 +80,52 @@ class ProdutoFiscalService
             $paraGravar['fiscal_fonte'] = 'PADRAO';
             $produto->update($paraGravar);
         }
+    }
+
+    /**
+     * Sanitiza um conjunto de valores fiscais brutos (ex.: item de XML de
+     * fornecedor reenviado — possivelmente editado — pelo frontend) antes
+     * de gravar num produto. Garante a mesma invariante de aplicarDoXml
+     * para escritas que não passam por ali, como a criação direta de
+     * produto novo em EntradaNfController::store().
+     *
+     * @param array<string, mixed> $dados chaves entre self::CAMPOS
+     * @return array<string, mixed> mesmas chaves, valor normalizado ou null
+     */
+    public function sanitizarCampos(array $dados): array
+    {
+        $sanitizado = [];
+        foreach (self::CAMPOS as $campo) {
+            $sanitizado[$campo] = $this->sanitizar($campo, $dados[$campo] ?? null);
+        }
+        return $sanitizado;
+    }
+
+    /**
+     * Nunca grava valor malformado: devolve o valor normalizado ou null.
+     * Um campo vazio aparece na tela de pendências; lixo passaria por
+     * preenchido e nunca mais seria revisado.
+     */
+    private function sanitizar(string $campo, mixed $valor): mixed
+    {
+        return match ($campo) {
+            'ncm'    => ValidadorCamposFiscais::ncm($this->paraString($valor)),
+            'cest'   => ValidadorCamposFiscais::cest($this->paraString($valor)),
+            'origem' => ValidadorCamposFiscais::origem($valor),
+            // tributacao_icms não tem normalizador em ValidadorCamposFiscais
+            // (não é um código numérico) — mantém a mesma ideia: valor fora
+            // do domínio conhecido vira null, nunca lixo gravado.
+            'tributacao_icms' => in_array($valor, ['NORMAL', 'ST'], true) ? $valor : null,
+            default => null,
+        };
+    }
+
+    private function paraString(mixed $valor): ?string
+    {
+        if ($valor === null) {
+            return null;
+        }
+        return is_string($valor) ? $valor : (string) $valor;
     }
 
     private function registrarDivergencia(
