@@ -58,7 +58,7 @@ class ProdutoController extends Controller
         ]);
     }
 
-    public function store(Request $request, PlanLimitService $planLimit): JsonResponse
+    public function store(Request $request, PlanLimitService $planLimit, ProdutoFiscalService $fiscalService): JsonResponse
     {
         $planLimit->verificarLimiteProdutos();
 
@@ -76,7 +76,14 @@ class ProdutoController extends Controller
 
         $validated['sku'] = $validated['sku'] ?? strtoupper(Str::random(8));
 
-        // Detectar se o usuário forneceu dados fiscais não-vazios
+        // Laravel valida tamanho/tipo (size:8, in:NORMAL,ST...), mas não
+        // conteúdo — "AAAAAAAA" passa size:8 sem ser NCM válido. Sanitiza
+        // antes de qualquer decisão fiscal ou escrita: a mesma garantia do
+        // caminho de importação de XML vale para o formulário manual.
+        $validated = $this->mesclarFiscalSanitizado($validated, $fiscalService->sanitizarCampos($validated));
+
+        // Detectar se o usuário forneceu dados fiscais não-vazios (usa os
+        // valores já sanitizados — lixo não conta como revisão manual).
         $temMudancaFiscal = $this->temMudancaFiscalNoValidated($validated);
 
         $produto = Produto::create($validated);
@@ -85,7 +92,7 @@ class ProdutoController extends Controller
         // gravador precisa ser aplicarPadraoCategoria (fiscal_fonte=PADRAO),
         // não o carimbo manual — senão a pendência de revisão fica escondida.
         $this->carimbarRevisaoFiscal($produto, $temMudancaFiscal);
-        app(ProdutoFiscalService::class)->aplicarPadraoCategoria($produto);
+        $fiscalService->aplicarPadraoCategoria($produto);
         return (new ProdutoResource($produto))->response()->setStatusCode(201);
     }
 
@@ -103,7 +110,7 @@ class ProdutoController extends Controller
         return new ProdutoResource($produto);
     }
 
-    public function update(Request $request, string $id): ProdutoResource
+    public function update(Request $request, string $id, ProdutoFiscalService $fiscalService): ProdutoResource
     {
         $produto   = Produto::findOrFail($id);
         $validated = $request->validate(array_merge([
@@ -116,6 +123,12 @@ class ProdutoController extends Controller
             'preco_custo'   => ['nullable', 'numeric', 'min:0'],
             'preco_venda'   => ['nullable', 'numeric', 'min:0'],
         ], $this->regrasFiscais()));
+
+        // Mesma sanitização de store(): garante que wasChanged(), usado
+        // logo abaixo para decidir o carimbo MANUAL, reflita o valor
+        // sanitizado — nunca lixo bruto — e nunca perca origem = 0.
+        $validated = $this->mesclarFiscalSanitizado($validated, $fiscalService->sanitizarCampos($validated));
+
         $produto->update($validated);
 
         // Capturar mudanças fiscais imediatamente após update e antes de chamar stamp
@@ -157,6 +170,33 @@ class ProdutoController extends Controller
             'fiscal_fonte'       => 'MANUAL',
             'fiscal_revisado_em' => now(),
         ]);
+    }
+
+    /**
+     * Sobrescreve, em $validated, apenas as chaves de campo fiscal que
+     * estavam de fato presentes na request, com o valor já sanitizado.
+     *
+     * Não força a presença de chaves nunca enviadas pelo cliente — isso
+     * preservaria um `null` explícito onde antes não havia chave nenhuma,
+     * o que não muda o resultado de temMudancaFiscalNoValidated() (ele já
+     * trata ausência e null da mesma forma), mas manteria a semântica de
+     * "campo omitido" enganosa para quem ler $validated depois.
+     *
+     * Função pura — não toca banco nem serviço — para poder ser testada
+     * sem depender de ProdutoFiscalService/DB.
+     *
+     * @param array<string, mixed> $validated
+     * @param array<string, mixed> $sanitizado saída de ProdutoFiscalService::sanitizarCampos()
+     * @return array<string, mixed>
+     */
+    private function mesclarFiscalSanitizado(array $validated, array $sanitizado): array
+    {
+        foreach (array_keys($this->regrasFiscais()) as $campo) {
+            if (array_key_exists($campo, $validated)) {
+                $validated[$campo] = $sanitizado[$campo] ?? null;
+            }
+        }
+        return $validated;
     }
 
     /**
