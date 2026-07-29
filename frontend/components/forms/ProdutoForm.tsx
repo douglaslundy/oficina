@@ -191,10 +191,11 @@ export function ProdutoForm({ initialData, onSuccess }: ProdutoFormProps) {
 
         <div>
           <label style={lStyle}>NCM (8 dígitos)</label>
-          <input {...register('ncm')} placeholder="87083090" maxLength={8} style={iStyle} />
+          <input {...register('ncm')} placeholder="87083090" maxLength={8}
+            style={{ ...iStyle, borderColor: errors.ncm ? 'var(--danger)' : 'var(--border)' }} />
           {errors.ncm && <span style={eStyle}>{errors.ncm.message}</span>}
           {initialData?.fiscal_fonte && (
-            <span style={{ fontSize: 11, color: 'var(--muted)' }}>
+            <span style={{ fontSize: 11, color: initialData.fiscal_fonte === 'PADRAO' ? 'var(--accent)' : 'var(--muted)' }}>
               {initialData.fiscal_fonte === 'XML' && 'Veio da NF-e do fornecedor'}
               {initialData.fiscal_fonte === 'PADRAO' && 'Padrão da categoria — revise'}
               {initialData.fiscal_fonte === 'MANUAL' && `Preenchido manualmente${initialData.fiscal_revisado_em ? ` em ${initialData.fiscal_revisado_em}` : ''}`}
@@ -204,7 +205,8 @@ export function ProdutoForm({ initialData, onSuccess }: ProdutoFormProps) {
 
         <div>
           <label style={lStyle}>CEST (7 dígitos)</label>
-          <input {...register('cest')} placeholder="0100100" maxLength={7} style={iStyle} />
+          <input {...register('cest')} placeholder="0100100" maxLength={7}
+            style={{ ...iStyle, borderColor: errors.cest ? 'var(--danger)' : 'var(--border)' }} />
           {errors.cest && <span style={eStyle}>{errors.cest.message}</span>}
         </div>
 
