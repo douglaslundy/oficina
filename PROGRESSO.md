@@ -892,6 +892,25 @@ tabela verificável do que é juízo de classificação.
   engolindo caso não previsto) — não repetir numa tabela que a
   legislação comprovadamente altera.
 
+### Fonte extra do usuário (2026-07-26) — confirma a pesquisa + 1 fato novo
+Usuário compartilhou `https://blog.spedy.com.br/cbs-e-ibs-na-nota-fiscal/`
+(disse que vai compartilhar links assim quando forem pertinentes).
+- **Confirma** tudo que já estava levantado: 03/08/2026 obrigatório p/ regime
+  normal, Simples Nacional só em jan/2027, NT 2025.002-RTC v1.40, alíquotas
+  de teste CBS 0,9% / IBS 0,1% compensadas com PIS/Cofins. Dá também o
+  código de rejeição da SEFAZ: **1115**.
+- **FATO NOVO, não estava em nenhuma pesquisa anterior**: **setembro/2026 é
+  o prazo para o Simples Nacional decidir se adota REGIME HÍBRIDO em 2027**,
+  para gerar crédito transferível a clientes PJ. Não muda código nenhum,
+  mas é decisão de negócio com data: se a oficina atende PJ (frota,
+  locadora, transportadora), sem regime híbrido a nota dela deixa de gerar
+  crédito de CBS/IBS em 2027 e o comprador PJ ganha incentivo pra trocar de
+  fornecedor. Se atende só PF, irrelevante. Usuário NÃO tem contador —
+  recomendei consultar um só pra essa pergunta pontual.
+- **Reforça a decisão de design já tomada** (estrutura de IBS/CBS preparada,
+  não preenchida): se ele optar pelo híbrido, passa a precisar destacar os
+  campos em 2027 e a estrutura já estará pronta pro mapeamento.
+
 ### Limites do que NÃO dá pra verificar por pesquisa (dizer ao usuário)
 1. **Qual NCM classifica uma peça específica** — juízo sobre a
    mercadoria, não consulta de tabela. MAS: no fluxo dele isso quase se
