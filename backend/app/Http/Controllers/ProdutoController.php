@@ -80,8 +80,12 @@ class ProdutoController extends Controller
         $temMudancaFiscal = $this->temMudancaFiscalNoValidated($validated);
 
         $produto = Produto::create($validated);
-        app(ProdutoFiscalService::class)->aplicarPadraoCategoria($produto);
+        // Carimbar ANTES de aplicar o padrão da categoria: se o padrão
+        // preencher algum campo que o usuário deixou em branco, o último
+        // gravador precisa ser aplicarPadraoCategoria (fiscal_fonte=PADRAO),
+        // não o carimbo manual — senão a pendência de revisão fica escondida.
         $this->carimbarRevisaoFiscal($produto, $temMudancaFiscal);
+        app(ProdutoFiscalService::class)->aplicarPadraoCategoria($produto);
         return (new ProdutoResource($produto))->response()->setStatusCode(201);
     }
 
@@ -163,7 +167,11 @@ class ProdutoController extends Controller
     {
         $camposFiscais = array_keys($this->regrasFiscais());
         foreach ($camposFiscais as $campo) {
-            if ($validated[$campo] !== null) {
+            // Laravel's validated() só inclui a chave quando ela veio na
+            // request. Um corpo que omite o campo (comum: cliente só manda
+            // os campos fiscais que preencheu) faz $validated[$campo]
+            // inexistir — acessar direto lança Undefined array key.
+            if (($validated[$campo] ?? null) !== null) {
                 return true;
             }
         }
