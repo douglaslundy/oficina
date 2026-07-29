@@ -138,13 +138,16 @@ class EntradaNfController extends Controller
             'itens.*.preco_venda'    => ['nullable', 'numeric', 'min:0'],
             'itens.*.qty_minima'     => ['nullable', 'integer', 'min:0'],
             'itens.*.unidade_xml'     => ['nullable', 'string', 'max:6'],
-            // Regra de tamanho por si só aceita lixo do tamanho certo
-            // ("XX000000"); a garantia de verdade é ProdutoFiscalService
-            // sanitizando via ValidadorCamposFiscais antes de gravar — isto
-            // aqui só rejeita cedo o que já dá pra rejeitar na validação.
-            'itens.*.ncm'             => ['nullable', 'string', 'size:8', 'regex:/^\d{8}$/'],
-            'itens.*.cfop'            => ['nullable', 'string', 'size:4', 'regex:/^\d{4}$/'],
-            'itens.*.cest'            => ['nullable', 'string', 'size:7', 'regex:/^\d{7}$/'],
+            // Deliberadamente frouxo (max:, não size:/regex): a importação
+            // nunca pode falhar inteira por causa de dado fiscal (é um
+            // array de itens — uma regra que rejeita a request inteira
+            // reprovaria também os itens que estavam corretos). A garantia
+            // real é ProdutoFiscalService sanitizando via
+            // ValidadorCamposFiscais no ponto de escrita: valor malformado
+            // vira null e aparece como pendência, nunca derruba o lote.
+            'itens.*.ncm'             => ['nullable', 'string', 'max:8'],
+            'itens.*.cfop'            => ['nullable', 'string', 'max:4'],
+            'itens.*.cest'            => ['nullable', 'string', 'max:7'],
             'itens.*.origem'          => ['nullable', 'integer', 'min:0', 'max:8'],
             'itens.*.cst_csosn'       => ['nullable', 'string', 'max:4'],
             'itens.*.tributacao_icms' => ['nullable', 'string', 'in:NORMAL,ST'],
