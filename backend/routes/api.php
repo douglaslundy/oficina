@@ -242,6 +242,7 @@ Route::middleware(['tenant', 'auth:sanctum', 'role:ADMIN,ATENDENTE'])->group(fun
     Route::post('produtos/{produto}/estoque/entrada', [EstoqueController::class, 'entrada']);
     Route::post('produtos/{produto}/estoque/saida', [EstoqueController::class, 'saida']);
     Route::post('produtos/divergencias/{id}/resolver', [ProdutoFiscalController::class, 'resolverDivergencia']);
+    Route::post('produtos/{produto}/marcar-revisado', [ProdutoFiscalController::class, 'marcarRevisado']);
     Route::post('entradas-nf/parse', [EntradaNfController::class, 'parse']);
     Route::post('entradas-nf', [EntradaNfController::class, 'store']);
     Route::put('categorias-fiscais', [CategoriaPadraoFiscalController::class, 'update']);
