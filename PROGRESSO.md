@@ -1017,9 +1017,22 @@ Nada disso rodou contra banco de verdade. Após `git pull` + `bash deploy-vps.sh
    essa validação manual é a única prova real.
 
 ## Próxima tarefa (retomar exatamente aqui)
-0. **Executar o plano da etapa A** — usuário escolhe entre
-   `superpowers:subagent-driven-development` (recomendado) ou
-   `superpowers:executing-plans`. Aguardando essa escolha.
+0. **DEPLOY DA ETAPA A** — código commitado e **já no GitHub** (push feito,
+   `main` = `origin/main`, HEAD `9e47914`). Usuário optou por implantar
+   depois, não na hora do push. Ao retomar: `git pull` + `bash deploy-vps.sh`
+   na VPS 144.91.92.70. As 4 migrations `2026_07_25_*` rodam sozinhas no
+   `docker-entrypoint.sh`. Pós-deploy, conferir nesta ordem:
+   a) containers saudáveis + domínios públicos reais respondendo;
+   b) `php artisan migrate:status` no container — as 4 como `Ran`;
+   c) **validação manual com XML real de fornecedor** — é a ÚNICA prova da
+      persistência da política de conflito (só a decisão tem teste):
+      produto novo nasce com NCM; produto existente com NCM diferente NÃO é
+      sobrescrito e gera divergência; tela de pendências lista o resíduo.
+1. **Antes da etapa B: escrever os Feature tests** que nunca existiram —
+   recomendação explícita da revisão final de branch. Na etapa B o assunto é
+   emissão, onde bug de numeração ou de tenancy não se conserta editando um
+   produto depois. Precisa de Postgres (CI ou banco de teste dedicado);
+   NUNCA rodar em produção (`RefreshDatabase` dropa o banco).
 2. Depois: desenhar a **etapa B** (spec ainda não existe) — refactor
    compartilhado + NF-e no Spedy/Focus + os 5 defeitos.
 3. Por último a etapa C (NFePHP), cujo spec já está escrito em
