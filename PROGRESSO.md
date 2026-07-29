@@ -954,6 +954,68 @@ arquivo (registrados aqui porque são decisões, não detalhe):
 3/4. Dois pontos vagos (`eStyle`, link de Configurações) viraram código
    concreto — o plano é executado por agente sem contexto do repo.
 
+## Rodada 17 — ETAPA A IMPLEMENTADA (12 tasks + revisão final + 3 ondas de fix)
+Executada via `superpowers:subagent-driven-development` direto na `main`
+(consentimento explícito do usuário, mesmo fluxo da rodada 12). Range completo:
+`cd111f9..3a59f13`. **80 testes unitários passando** (eram 65 no início da
+execução), `npx tsc --noEmit` e `npm run build` limpos.
+
+### O que foi entregue
+Colunas fiscais em `produtos` (`ncm`, `cest`, `origem`, `tributacao_icms`,
+`fiscal_fonte`, `fiscal_revisado_em`) + `*_xml` em `notas_entrada_itens` +
+tabelas `produto_fiscal_divergencias` e `categoria_padrao_fiscal`. Parser de
+NF-e passa a extrair NCM/CFOP/CEST/origem/CST-CSOSN e derivar a tributação em
+3 estados. Política de conflito que nunca sobrescreve. Telas: bloco fiscal no
+formulário de produto, pendências fiscais (com paginação, filtro e resolução de
+divergência), padrões por categoria, e coluna fiscal na conferência de entrada.
+
+### Revisão final de branch (opus): 0 Critical, 6 Important, 6 Minor
+Todos os Important corrigidos. Os mais relevantes, porque são erros de DESIGN
+meus e não de implementação:
+1. Produto marcado "revise" não conseguia ser marcado como revisado ao ser
+   confirmado — ficava pendente pra sempre. Corrigido com **botão explícito
+   "Marcar como revisado"** (escolha do usuário), que recusa produto sem NCM.
+2. `MANUAL` mascarava chute de categoria na criação — corrigido invertendo duas
+   linhas em `store()`.
+3. Tela de pendências carregava o catálogo inteiro no dia 1 (todo produto nasce
+   sem NCM). Paginada + filtro por categoria.
+4. `POST /produtos` dava 500 se o cliente omitisse os campos fiscais.
+5. Nome de coluna dinâmico em atribuição em massa, sem guarda no ponto de escrita.
+
+### ⚠️ Padrão que se repetiu — LER ANTES DA ETAPA B
+- **Fix introduzindo defeito novo, 2x:** (a) o conserto do `0` falso em JS foi
+  reimplementado com `empty()` em PHP, reintroduzindo o MESMO bug; (b) apertar
+  a validação da importação fez uma nota inteira ser rejeitada por um campo ruim
+  num item — violando a restrição global "a importação nunca falha inteira".
+  Ambos por instrução minha pedindo mais do que era necessário.
+- **`0` é valor fiscal VÁLIDO** (origem 0 = nacional). Defeito reincidiu 4x.
+  Ver memória `project-zero-e-valor-fiscal-valido`.
+- **Os 3 achados mais valiosos vieram de verificação DIRIGIDA**, não de "revise o
+  diff": dar ao revisor uma tese concreta pra checar é o que produziu resultado.
+
+### Pendências registradas, não corrigidas
+- `ProdutoController::update()` — se o usuário submeter lixo num campo fiscal que
+  já tinha valor real (com `ncm` válido intacto), `wasChanged()` dispara e carimba
+  MANUAL mesmo o valor tendo virado null. Não esconde pendência (a fórmula olha
+  `ncm`/`PADRAO`), lógica pré-existente, sem cobertura de teste.
+- `max:N` na importação ainda derruba o lote se um valor for MAIOR que o limite.
+  Baseline pré-existente; o parser só entrega 8-dígitos-ou-null e a tela de
+  conferência não deixa editar campo fiscal, então não é alcançável na prática.
+- `categoria` não restrita a `CATEGORIAS` no `PUT /categorias-fiscais` (linha órfã).
+- Sem CHECK no banco pra `produto_fiscal_divergencias.campo` (só guarda de aplicação).
+- **Feature tests nunca foram escritos** — recomendação explícita da revisão final:
+  escrever ANTES da etapa B, porque lá é emissão e bug de numeração/tenancy não se
+  conserta editando produto depois.
+
+### Falta: DEPLOY + validação manual
+Nada disso rodou contra banco de verdade. Após `git pull` + `bash deploy-vps.sh`:
+1. `php artisan migrate:status` no container — as 4 migrations `2026_07_25_*` como `Ran`.
+2. Importar XML real de fornecedor e conferir os 3 comportamentos: (a) produto novo
+   nasce com NCM; (b) produto existente com NCM diferente NÃO é sobrescrito e gera
+   divergência; (c) tela de pendências lista o que falta.
+   A política de conflito tem teste da DECISÃO, zero cobertura da PERSISTÊNCIA —
+   essa validação manual é a única prova real.
+
 ## Próxima tarefa (retomar exatamente aqui)
 0. **Executar o plano da etapa A** — usuário escolhe entre
    `superpowers:subagent-driven-development` (recomendado) ou
