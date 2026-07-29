@@ -1,9 +1,11 @@
 'use client'
 
-import { useEffect, useState } from 'react'
+import { useCallback, useEffect, useState } from 'react'
 import Link from 'next/link'
 import { toast } from '@/hooks/useToast'
 import api from '@/lib/api'
+
+const CATEGORIAS = ['Filtros', 'Óleo/Fluidos', 'Freios', 'Suspensão', 'Elétrica', 'Motor', 'Outros']
 
 interface ProdutoPendente {
   id: string
@@ -25,20 +27,39 @@ interface Divergencia {
   criado_em: string | null
 }
 
+interface Meta {
+  total: number
+  per_page: number
+  current_page: number
+}
+
+const metaInicial: Meta = { total: 0, per_page: 20, current_page: 1 }
+
 export default function PendenciasFiscaisPage() {
   const [produtos, setProdutos] = useState<ProdutoPendente[]>([])
   const [divergencias, setDivergencias] = useState<Divergencia[]>([])
+  const [meta, setMeta] = useState<Meta>(metaInicial)
   const [carregando, setCarregando] = useState(true)
   const [resolvendo, setResolvendo] = useState<string | null>(null)
+  const [marcando, setMarcando] = useState<string | null>(null)
   const [erroCarregamento, setErroCarregamento] = useState<string | null>(null)
+  const [page, setPage] = useState(1)
+  const [categoriaFiltro, setCategoriaFiltro] = useState('')
 
-  async function carregar() {
+  const carregar = useCallback(async () => {
     setCarregando(true)
     setErroCarregamento(null)
     try {
-      const { data } = await api.get('/produtos/pendencias-fiscais')
+      const { data } = await api.get('/produtos/pendencias-fiscais', {
+        params: {
+          page,
+          per_page: metaInicial.per_page,
+          categoria: categoriaFiltro || undefined,
+        },
+      })
       setProdutos(data.data ?? [])
       setDivergencias(data.divergencias ?? [])
+      setMeta(data.meta ?? metaInicial)
     } catch (err: unknown) {
       const e = err as { response?: { data?: { message?: string } } }
       const mensagem = e.response?.data?.message ?? 'Erro ao carregar pendências fiscais.'
@@ -47,9 +68,14 @@ export default function PendenciasFiscaisPage() {
     } finally {
       setCarregando(false)
     }
-  }
+  }, [page, categoriaFiltro])
 
-  useEffect(() => { carregar() }, [])
+  useEffect(() => { carregar() }, [carregar])
+
+  function selecionarCategoria(categoria: string) {
+    setCategoriaFiltro(categoria)
+    setPage(1)
+  }
 
   async function resolver(id: string, resolucao: 'MANTEVE' | 'ACEITOU_XML') {
     setResolvendo(id)
@@ -65,11 +91,27 @@ export default function PendenciasFiscaisPage() {
     }
   }
 
+  async function marcarRevisado(id: string) {
+    setMarcando(id)
+    try {
+      await api.post(`/produtos/${id}/marcar-revisado`)
+      toast('Produto marcado como revisado!', 'success')
+      await carregar()
+    } catch (err: unknown) {
+      const e = err as { response?: { data?: { message?: string } } }
+      toast(e.response?.data?.message ?? 'Erro ao marcar produto como revisado.', 'danger')
+    } finally {
+      setMarcando(null)
+    }
+  }
+
   function situacao(p: ProdutoPendente): { texto: string; cor: string } {
     if (!p.ncm) return { texto: 'Sem NCM', cor: 'var(--danger)' }
     if (p.fiscal_fonte === 'PADRAO') return { texto: 'Padrão da categoria', cor: 'var(--accent)' }
     return { texto: 'Não revisado', cor: 'var(--accent)' }
   }
+
+  const lastPage = Math.max(1, Math.ceil(meta.total / meta.per_page))
 
   if (carregando) {
     return <div style={{ padding: 24, color: 'var(--muted)' }}>Carregando pendências…</div>
@@ -156,9 +198,25 @@ export default function PendenciasFiscaisPage() {
         </section>
       )}
 
-      <h2 style={{ fontFamily: 'Barlow Condensed', fontWeight: 700, fontSize: 18, marginBottom: 12 }}>
-        Produtos pendentes ({produtos.length})
-      </h2>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12, gap: 16, flexWrap: 'wrap' }}>
+        <h2 style={{ fontFamily: 'Barlow Condensed', fontWeight: 700, fontSize: 18, margin: 0 }}>
+          Produtos pendentes ({meta.total})
+        </h2>
+        <div>
+          <label style={{ color: 'var(--muted)', fontSize: 12, marginRight: 8 }}>Categoria</label>
+          <select
+            value={categoriaFiltro}
+            onChange={(e) => selecionarCategoria(e.target.value)}
+            style={{
+              padding: '6px 10px', borderRadius: 6, background: 'var(--bg)',
+              border: '1px solid var(--border)', color: 'var(--text)', fontSize: 13,
+            }}
+          >
+            <option value="">Todas</option>
+            {CATEGORIAS.map((c) => <option key={c} value={c}>{c}</option>)}
+          </select>
+        </div>
+      </div>
 
       {produtos.length === 0 ? (
         <p style={{ color: 'var(--muted)' }}>Nenhuma pendência fiscal. Todos os produtos ativos estão prontos para NF-e.</p>
@@ -171,6 +229,7 @@ export default function PendenciasFiscaisPage() {
               <th style={{ padding: 10, fontSize: 12, color: 'var(--muted)' }}>Categoria</th>
               <th style={{ padding: 10, fontSize: 12, color: 'var(--muted)' }}>NCM</th>
               <th style={{ padding: 10, fontSize: 12, color: 'var(--muted)' }}>Situação</th>
+              <th style={{ padding: 10, fontSize: 12, color: 'var(--muted)' }}>Ação</th>
             </tr>
           </thead>
           <tbody>
@@ -195,11 +254,41 @@ export default function PendenciasFiscaisPage() {
                       {s.texto}
                     </span>
                   </td>
+                  <td style={{ padding: 10 }}>
+                    {p.ncm && (
+                      <button
+                        onClick={() => marcarRevisado(p.id)}
+                        disabled={marcando === p.id}
+                        style={{
+                          padding: '4px 10px', fontSize: 12,
+                          background: marcando === p.id ? 'var(--muted)' : 'var(--accent)',
+                          color: '#000', border: 'none', borderRadius: 4,
+                          cursor: marcando === p.id ? 'not-allowed' : 'pointer',
+                        }}
+                      >
+                        {marcando === p.id ? 'Marcando...' : 'Marcar como revisado'}
+                      </button>
+                    )}
+                  </td>
                 </tr>
               )
             })}
           </tbody>
         </table>
+      )}
+
+      {lastPage > 1 && (
+        <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', gap: 16, marginTop: 16 }}>
+          <button onClick={() => setPage((p) => Math.max(1, p - 1))} disabled={page <= 1}
+            style={{ padding: '6px 14px', borderRadius: 6, background: 'none', border: '1px solid var(--border)', color: page <= 1 ? 'var(--muted)' : 'var(--text)', cursor: page <= 1 ? 'not-allowed' : 'pointer', fontSize: 13 }}>
+            ← Anterior
+          </button>
+          <span style={{ color: 'var(--muted)', fontSize: 13 }}>Página {meta.current_page} de {lastPage}</span>
+          <button onClick={() => setPage((p) => Math.min(lastPage, p + 1))} disabled={page >= lastPage}
+            style={{ padding: '6px 14px', borderRadius: 6, background: 'none', border: '1px solid var(--border)', color: page >= lastPage ? 'var(--muted)' : 'var(--text)', cursor: page >= lastPage ? 'not-allowed' : 'pointer', fontSize: 13 }}>
+            Próxima →
+          </button>
+        </div>
       )}
     </div>
   )
