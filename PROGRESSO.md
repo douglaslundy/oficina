@@ -1016,34 +1016,79 @@ Nada disso rodou contra banco de verdade. Após `git pull` + `bash deploy-vps.sh
    A política de conflito tem teste da DECISÃO, zero cobertura da PERSISTÊNCIA —
    essa validação manual é a única prova real.
 
+## Rodada 18 (nova sessão) — deploy da Etapa A + Feature tests
+Usuário confirmou deploy ("faça o depósito depois continue o desenvolvimento" —
+autocorretor pra "deploy"). Fluxo:
+
+- **Deploy**: `git pull origin main` na VPS (fast-forward `0712887..7eca748`, 35
+  arquivos) + `bash deploy-vps.sh` em background (build `--no-cache` demora
+  ~10min, compila extensões PHP do zero). Antes de puxar, chequei
+  `git status`/`git diff` na VPS por causa da lição registrada em
+  `feedback-deploy` — havia 1 modificação local não commitada em
+  `docker/nginx/tenant-slugs.map` (linha `oficina-do-lundy...` adicionada
+  em runtime pelo provisionamento de tenant), não tocada por nenhum commit
+  da Etapa A, preservada pelo merge (fast-forward simples, sem conflito).
+- **Feature tests da Etapa A escritos**: `backend/tests/Feature/ProdutoFiscalTest.php`
+  (novo, 13 testes) — cobre exatamente a lacuna que a revisão final da rodada 17
+  apontou (política de conflito só tinha teste da DECISÃO em memória, zero da
+  PERSISTÊNCIA real via HTTP+Postgres):
+  - Produto novo nasce com NCM/CEST/origem/tributação do XML.
+  - Produto novo sem dado no XML recebe o padrão da categoria (`fiscal_fonte=PADRAO`).
+  - Produto existente com NCM vazio é preenchido pelo XML.
+  - Produto existente com NCM já revisado (`MANUAL`) **não é sobrescrito** e gera
+    `produto_fiscal_divergencias` — a garantia central da Etapa A, antes só
+    testada em memória.
+  - Regressão dedicada pro bug "0 é valor fiscal válido" que reincidiu 4x
+    (rodada 17): `origem=0` do XML é persistido, não tratado como vazio.
+  - `GET /produtos/pendencias-fiscais` lista produto sem NCM + produto com
+    divergência aberta, exclui produto já revisado.
+  - `marcar-revisado` recusa produto sem NCM / confirma produto com NCM.
+  - `resolver-divergencia` nos dois ramos (ACEITOU_XML atualiza o produto;
+    MANTEVE preserva o valor atual), ambos marcando a divergência resolvida.
+  - `categorias-fiscais` (PUT+GET) round-trip e **isolamento entre oficinas**
+    (padrão da oficina A não vaza pra oficina B — `categoria_padrao_fiscal`
+    é tenant-scoped via `HasTenantScope`).
+  - Todos os testes que envolvem `produto_fiscal_divergencias` ou
+    `categoria_padrao_fiscal` precisam de `X-Tenant` real (essas tabelas têm
+    `oficina_id` NOT NULL com FK — sem tenant no request, `TenancyContext::get()`
+    seria null e o insert falharia; segue o padrão de
+    `OrdemServicoNumeracaoTest::criarOficinaComAdmin()` já usado no projeto).
+  - `php -l` limpo. **Não rodei os testes** — confirmado de novo que não há
+    Postgres/Docker local (ver `feedback-local-testing`); precisam rodar em
+    CI ou banco de teste dedicado antes de considerar a Etapa A 100%
+    coberta. Nunca rodar `php artisan test` na VPS de produção
+    (`RefreshDatabase` dropa o banco).
+
 ## Próxima tarefa (retomar exatamente aqui)
-0. **DEPLOY DA ETAPA A** — código commitado e **já no GitHub** (push feito,
-   `main` = `origin/main`, HEAD `9e47914`). Usuário optou por implantar
-   depois, não na hora do push. Ao retomar: `git pull` + `bash deploy-vps.sh`
-   na VPS 144.91.92.70. As 4 migrations `2026_07_25_*` rodam sozinhas no
-   `docker-entrypoint.sh`. Pós-deploy, conferir nesta ordem:
-   a) containers saudáveis + domínios públicos reais respondendo;
-   b) `php artisan migrate:status` no container — as 4 como `Ran`;
-   c) **validação manual com XML real de fornecedor** — é a ÚNICA prova da
-      persistência da política de conflito (só a decisão tem teste):
-      produto novo nasce com NCM; produto existente com NCM diferente NÃO é
-      sobrescrito e gera divergência; tela de pendências lista o resíduo.
-1. **Antes da etapa B: escrever os Feature tests** que nunca existiram —
-   recomendação explícita da revisão final de branch. Na etapa B o assunto é
-   emissão, onde bug de numeração ou de tenancy não se conserta editando um
-   produto depois. Precisa de Postgres (CI ou banco de teste dedicado);
-   NUNCA rodar em produção (`RefreshDatabase` dropa o banco).
-2. Depois: desenhar a **etapa B** (spec ainda não existe) — refactor
-   compartilhado + NF-e no Spedy/Focus + os 5 defeitos.
-3. Por último a etapa C (NFePHP), cujo spec já está escrito em
+- [x] **DEPLOY DA ETAPA A** — feito na rodada 18 (2026-08-02). `git pull`
+  fast-forward `0712887..7eca748` + `bash deploy-vps.sh`. Validado: HEAD na
+  VPS = `7eca748`; as 4 migrations `2026_07_25_*` como `Ran`; domínios
+  públicos `saas`/`stuntmotos`/`oficina-do-lundy`/`oficina` respondendo 200
+  em `/api/health`; `produtos/pendencias-fiscais` e `categorias-fiscais`
+  respondendo 401 sem token (rotas novas existem e estão protegidas).
+- [x] **Feature tests da Etapa A** — `backend/tests/Feature/ProdutoFiscalTest.php`
+  (rodada 18, 13 testes, detalhe acima). `php -l` limpo, **nunca executados**
+  contra Postgres real (limitação de ambiente local, não do teste em si) —
+  falta rodar em CI ou banco de teste dedicado pra fechar 100% a cobertura.
+- [ ] **Validação manual com XML real de fornecedor em produção** — ainda
+  pendente do usuário (os feature tests cobrem a persistência em teoria, mas
+  só um XML real confirma que o parser lê corretamente notas do mundo real,
+  não só o fixture do teste): (a) produto novo nasce com NCM; (b) produto
+  existente com NCM diferente NÃO é sobrescrito e gera divergência; (c) tela
+  de pendências fiscais lista o resíduo.
+1. Próximo: desenhar a **etapa B** (spec ainda não existe) — refactor
+   compartilhado (`NotaFiscalData` com `itens[]`, `EmissaoOrquestrador` da OS
+   mista, emissão em fila) + NF-e no Spedy/Focus + os 5 defeitos registrados
+   na rodada 16. **Merece uma sessão de brainstorming com o usuário antes do
+   spec** (mesmo padrão usado na Etapa A e na rodada 15 do NFePHP) — não
+   pular direto pro código.
+2. Depois: a etapa C (NFePHP), cujo spec já está escrito em
    `docs/superpowers/specs/2026-07-25-motor-nfephp-design.md`. Aguardando
    aprovação ou pedidos de mudança.
-4. Verificações de fato que dependem do usuário (não bloqueiam escrever
+3. Verificações de fato que dependem do usuário (não bloqueiam escrever
    os planos; bloqueiam a validação em homologação das etapas B/C):
    adesão de Ilicínea ao ADN (`nfse.gov.br`); **alíquota de ISS de
    Ilicínea — a PREFEITURA informa, o usuário NÃO tem contador**.
-5. Pendências mais antigas, ainda não feitas: usuário validar
+4. Pendências mais antigas, ainda não feitas: usuário validar
    manualmente rodada 12 (notificações) e rodada 13 (agendador — checar
-   `docker compose logs scheduler` pros horários reais de disparo);
-   usuário gerar a fatura da oficina do Lundy pelo botão "Gerar Cobrança
-   do Ciclo Agora".
+   `docker compose logs scheduler` pros horários reais de disparo).
