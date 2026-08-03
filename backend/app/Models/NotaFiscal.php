@@ -51,4 +51,8 @@ class NotaFiscal extends Model
 
     public function cliente(): BelongsTo { return $this->belongsTo(Cliente::class, 'cliente_id'); }
     public function ordemServico(): BelongsTo { return $this->belongsTo(OrdemServico::class, 'os_id'); }
+    public function itens(): \Illuminate\Database\Eloquent\Relations\HasMany
+    {
+        return $this->hasMany(NotaFiscalItem::class, 'nota_fiscal_id');
+    }
 }
