@@ -1155,11 +1155,61 @@ implementação real, só evita o pior enquanto isso não acontece.
    linha sem aviso nenhum. Corrigido aplicando a mesma política já
    confirmada 2x nesta rodada, sem precisar perguntar de novo.
 
-### O que falta antes de considerar a Etapa B pronta
-- **Revisão final de branch inteira** (próximo passo do
-  `subagent-driven-development`, ainda não rodada nesta sessão).
-- **Feature tests nunca executados contra Postgres real** (`NotaFiscalNfeTest`,
-  teste novo em `NfeServiceTest`) — precisam rodar em CI/banco dedicado.
-- **Task 7 (Spedy NF-e) real** — bloqueada por acesso à doc/sandbox.
+### Revisão final de branch inteira (opus) — achou 3 Critical reais, todos corrigidos
+A revisão final (per-task já tinha passado tudo limpo) pegou o que as
+revisões individuais, cada uma olhando um diff isolado, não conseguiriam ver
+— uma propriedade cross-cutting quebrada. Todos os 3 Critical eram bugs no
+meu próprio texto do plano/brief, mascarados por `Http::fake()` com
+wildcards largos demais nos testes:
+1. **Endpoint da Focus pra NF-e sem o prefixo `/v2`** (`/nfe` em vez de
+   `/v2/nfe`, único método divergente dos outros 4 da mesma classe) — toda
+   emissão real teria dado 404. Corrigido + testes com o path completo
+   (não mais wildcard prefixo, que escondia o bug).
+2. **Download do XML falha em silêncio com path relativo** — a Focus
+   devolve path relativo de verdade (o próprio fixture de NFS-e já
+   existente no repo já usava isso), o teste novo usou URL absoluta por
+   engano e mascarou o bug. Corrigido: prefixa `baseUrl` quando o path não
+   começa com `http`.
+3. **`origem` nulo virava `0` ("mercadoria nacional") em silêncio** —
+   diferente de NCM nulo (lacuna visível, decisão de design deliberada e
+   mantida intocada), `origem` ausente sendo tratado como 0 é uma afirmação
+   fiscal específica e possivelmente errada. Corrigido com o mesmo padrão
+   de guarda 422 já usado pra `tributacao_icms`.
+
+Mais 6 Important corrigidos na mesma rodada: campo real de protocolo da
+Focus é `numero_protocolo` (não `protocolo`, que sempre resolvia null);
+defeitos #1/#4 só tinham sido corrigidos no fluxo novo de NF-e, não no
+fluxo antigo de NFS-e (corrigido nos dois provedores); frontend mostrava
+desconto/ISS que o backend ignorava em venda de mercadoria (corrigido,
+oculta os campos); número real da NF-e atribuído pelo provedor era
+descartado, ficando só o contador interno (corrigido, persiste
+`$resultado['numero']`); cobertura de teste sem CFOP/CST-CSOSN nem cenário
+interestadual nem round-trip de emissão (adicionados). 104 testes Unit
+locais passando (up de 102).
+
+**Deliberadamente NÃO corrigido nesta rodada (registrado como limitação
+conhecida, não bloqueante pro merge, mas bloqueante pra considerar "NF-e
+end-to-end usável em produção")**: não existe polling/webhook/reconciliação
+pra nota em status PROCESSANDO, e `consultar()`/`cancelar()` continuam
+hardcoded pra `/v2/nfse` mesmo quando a nota é NF-e — é trabalho novo real
+(job de reconciliação, ou webhook), não um fix rápido. Fica pra uma etapa
+B2 ou ticket separado.
+
+Minors registrados, não corrigidos (baixo risco): `unidade_comercial`
+hardcoded 'UN' (produtos.unidade existe mas não é usado no payload);
+`codigo_produto` envia UUID em vez de SKU (aparece no DANFE); sem índice em
+`notas_fiscais_itens.nota_fiscal_id`/`oficina_id` (seq scan em toda
+consulta/cascade); `RegistrarEmissorService.php:27` tem o mesmo padrão de
+fallback silencioso já eliminado do resto do fluxo (fora do escopo desta
+etapa).
+
+### O que falta antes de considerar a emissão de NF-e pronta pra produção
+- **Feature tests nunca executados contra Postgres real** (todos os novos em
+  `NotaFiscalNfeTest`, `NfeServiceTest`) — precisam rodar em CI/banco
+  dedicado antes de confiar na cobertura.
+- **Task 7 (Spedy NF-e) real** — bloqueada por acesso à doc/sandbox da Spedy.
+- **Reconciliação de status PROCESSANDO** (achado 8, acima) — sem isso, uma
+  NF-e que a Focus processa assincronamente fica presa sem forma de ser
+  consultada/cancelada corretamente pelo sistema.
 - Deploy + validação manual em homologação (Focus) antes de considerar a
   emissão de NF-e pronta pra produção de verdade.
