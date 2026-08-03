@@ -13,7 +13,9 @@ use Illuminate\Support\Facades\Crypt;
  * existe só porque a biblioteca nfse-nacional/nfse-php exige um caminho de
  * arquivo (NfseContext::certificatePath), diferente do sped-nfe (que aceita
  * bytes direto via Certificate::readPfx()). O arquivo temporário é apagado
- * no finally, mesmo se o callback lançar exceção.
+ * no finally, mesmo se a escrita, o chmod ou o callback lançarem exceção —
+ * uma vez que tempnam() cria o arquivo em disco, nada entre esse ponto e o
+ * retorno da função pode deixá-lo órfão com o PFX em texto claro.
  */
 class CertificadoStore
 {
@@ -42,10 +44,12 @@ class CertificadoStore
             throw new \RuntimeException('Não foi possível criar arquivo temporário para o certificado.');
         }
 
-        file_put_contents($caminho, $dados['pfx']);
-        chmod($caminho, 0600);
-
         try {
+            if (file_put_contents($caminho, $dados['pfx']) === false) {
+                throw new \RuntimeException('Não foi possível escrever o certificado no arquivo temporário.');
+            }
+            chmod($caminho, 0600);
+
             return $callback($caminho);
         } finally {
             if (file_exists($caminho)) {
