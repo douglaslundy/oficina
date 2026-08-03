@@ -8,6 +8,18 @@ interface ItemNF {
   descricao: string
   quantidade: number
   valor_unitario: number
+  produto_id?: string
+}
+
+interface ProdutoOpt {
+  id: string
+  nome: string
+  sku: string
+  ncm: string | null
+  origem: number | null
+  tributacao_icms: string | null
+  fiscal_pendente: boolean
+  preco_venda: number | null
 }
 
 interface ClienteOpt {
@@ -66,6 +78,7 @@ export function NotaFiscalForm() {
   const [loading, setLoading] = useState(false)
   const [empresa, setEmpresa] = useState<Empresa | null>(null)
   const [planInfo, setPlanInfo] = useState<PlanInfo | null>(null)
+  const [produtos, setProdutos] = useState<ProdutoOpt[]>([])
 
   useEffect(() => {
     Promise.all([
@@ -80,6 +93,12 @@ export function NotaFiscalForm() {
     }).catch(() => {})
   }, [])
 
+  useEffect(() => {
+    if (natureza === 'Venda de Mercadoria' && produtos.length === 0) {
+      api.get('/produtos?per_page=200').then(r => setProdutos(r.data.data ?? [])).catch(() => {})
+    }
+  }, [natureza, produtos.length])
+
   const clienteSelecionado = clientes.find(c => c.id === clienteId)
   const subtotal = itens.reduce((acc, i) => acc + i.quantidade * i.valor_unitario, 0)
   const valorIss = ((subtotal - desconto) * aliquota) / 100
@@ -91,18 +110,27 @@ export function NotaFiscalForm() {
 
   async function emitir() {
     if (!clienteId) { toast('Selecione um cliente.', 'danger'); return }
-    if (itens.every(i => !i.descricao)) { toast('Adicione pelo menos um item.', 'danger'); return }
+    const ehVenda = natureza === 'Venda de Mercadoria'
+    if (ehVenda && itens.every(i => !i.produto_id)) { toast('Adicione pelo menos um produto.', 'danger'); return }
+    if (!ehVenda && itens.every(i => !i.descricao)) { toast('Adicione pelo menos um item.', 'danger'); return }
     setLoading(true)
     try {
-      const nf = await api.post('/notas-fiscais', {
+      const payload: Record<string, unknown> = {
         cliente_id: clienteId,
         natureza_operacao: natureza,
         forma_pagamento: formaPgto || undefined,
-        subtotal,
-        desconto,
-        aliquota_iss: aliquota,
         observacoes: obs || undefined,
-      })
+      }
+      if (ehVenda) {
+        payload.itens = itens.filter(i => i.produto_id).map(i => ({
+          produto_id: i.produto_id, quantidade: i.quantidade, valor_unitario: i.valor_unitario,
+        }))
+      } else {
+        payload.subtotal = subtotal
+        payload.desconto = desconto
+        payload.aliquota_iss = aliquota
+      }
+      const nf = await api.post('/notas-fiscais', payload)
       const resultado = await api.post(`/notas-fiscais/${nf.data.data.id}/emitir`)
       toast(`NF #${resultado.data.data.numero} emitida com sucesso!`, 'success')
       setClienteId('')
@@ -138,7 +166,7 @@ export function NotaFiscalForm() {
             <select value={natureza} onChange={e => setNatureza(e.target.value)} style={iStyle}>
               <option>Prestação de Serviços</option>
               <option>Venda de Mercadoria</option>
-              <option>Misto</option>
+              <option disabled>Misto (em breve)</option>
             </select>
           </div>
           <div>
@@ -181,12 +209,35 @@ export function NotaFiscalForm() {
           </div>
           {itens.map((item, idx) => (
             <div key={idx} style={{ display: 'grid', gridTemplateColumns: '3fr 1fr 1fr auto', gap: 6, marginBottom: 6 }}>
-              <input
-                value={item.descricao}
-                onChange={e => updateItem(idx, 'descricao', e.target.value)}
-                placeholder="Descrição"
-                style={iStyle}
-              />
+              {natureza === 'Venda de Mercadoria' ? (
+                <select
+                  value={item.produto_id ?? ''}
+                  onChange={e => {
+                    const p = produtos.find(x => x.id === e.target.value)
+                    setItens(prev => prev.map((it, j) => j === idx ? {
+                      ...it,
+                      produto_id: p?.id,
+                      descricao: p?.nome ?? '',
+                      valor_unitario: p?.preco_venda ?? 0,
+                    } : it))
+                  }}
+                  style={iStyle}
+                >
+                  <option value="">Selecionar produto...</option>
+                  {produtos.map(p => (
+                    <option key={p.id} value={p.id}>
+                      {p.nome} {p.fiscal_pendente ? '⚠ dados fiscais pendentes' : ''}
+                    </option>
+                  ))}
+                </select>
+              ) : (
+                <input
+                  value={item.descricao}
+                  onChange={e => updateItem(idx, 'descricao', e.target.value)}
+                  placeholder="Descrição"
+                  style={iStyle}
+                />
+              )}
               <input
                 type="number"
                 min={0.01}
