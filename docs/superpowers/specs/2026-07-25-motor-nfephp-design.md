@@ -1,23 +1,32 @@
 # Motor fiscal NFePHP (NF-e + NFS-e nacional) — design
 
-> **Sequenciamento (definido após a escrita deste spec).** Este é o
-> trabalho da **etapa C**, e depende de duas etapas anteriores:
+> **Sequenciamento.** Este é o trabalho da **etapa C**, e depende de duas
+> etapas anteriores:
 >
-> - **Etapa A** — campos fiscais em `produtos` + importação de XML que os
->   preenche. Spec: `2026-07-25-campos-fiscais-produtos-design.md`.
->   Sem NCM/origem/situação tributária por item não há NF-e possível, em
->   nenhum motor.
-> - **Etapa B** — refactor compartilhado (`NotaFiscalData` com `itens[]`,
->   `EmissaoOrquestrador`, emissão em fila), NF-e via API do Spedy/Focus e
->   correção de 5 defeitos nesses providers. Spec ainda não escrito.
+> - **Etapa A** (concluída, deployada) — campos fiscais em `produtos` +
+>   importação de XML que os preenche. Sem NCM/origem/situação tributária
+>   por item não há NF-e possível, em nenhum motor.
+> - **Etapa B** (concluída, commitada e empurrada pro GitHub em 2026-08-03,
+>   deploy ainda pendente) — refactor compartilhado + NF-e via API do
+>   Spedy/Focus + correção de 5 defeitos. Spec:
+>   `2026-08-02-etapa-b-refactor-nfe-design.md`.
 >
-> A inversão foi decidida porque **Spedy e Focus são os motores oficiais**
-> e hoje não emitem NF-e: fazer o NFePHP primeiro faria a única capacidade
-> de emitir nota de peça chegar pelo motor opcional e ainda não validado
-> contra a SEFAZ. Como consequência, boa parte da seção A deste spec
-> (envelope `NotaFiscalData`, `EmissaoOrquestrador`, emissão em fila) já
-> estará **pronta e validada em produção** quando a etapa C começar — aqui
-> ela permanece documentada como contexto, não como trabalho a fazer.
+> **⚠️ Revisão de 2026-08-03 — o que a Etapa B realmente entregou é
+> diferente do que este spec assumia quando foi escrito (rodada 15/16).**
+> Por decisão explícita no brainstorming da Etapa B (pra não dobrar o
+> escopo), **`EmissaoOrquestrador` e emissão em fila NÃO foram construídos**
+> — ficaram adiados pra uma etapa futura que beneficiaria os três
+> provedores de uma vez. O usuário confirmou, ao retomar a etapa C, que o
+> NFePHP deve ficar **no mesmo nível da Etapa B**: emissão manual, síncrona,
+> uma nota de cada vez (Serviço OU Venda) — não o fluxo automático de OS
+> mista que a Seção A abaixo descrevia como premissa. As seções B-F
+> (numeração, contingência EPEC, PDFs, tratamento de erro, testes)
+> continuam válidas como escritas. A Seção A foi reescrita nesta revisão
+> pra refletir a infraestrutura real que a Etapa B deixou pronta:
+> `NotaFiscalData` com `itens[]` (array simples, não uma classe
+> `ItemNotaData`), a tabela `notas_fiscais_itens` (que este spec original
+> não sabia que ia existir), e o padrão de dispatch por `$nota->modelo`
+> já usado em `FocusNfeProvider`/`SpedyProvider`.
 
 ## Contexto
 
@@ -26,10 +35,13 @@ gerar nfe e nfse, porem tanto spedy como o focus precisam tambem emitir nfe
 e nfse"*. São duas frentes distintas:
 
 1. **NFePHP como motor novo** (NF-e + NFS-e) — objeto **deste** spec.
-2. **NF-e no Spedy e no Focus** — hoje os dois providers só emitem NFS-e
-   (`SpedyProvider` bate em `/service-invoices`, `FocusNfeProvider` em
-   `/v2/nfse`). Ganhar NF-e via API deles é trabalho separado, de risco bem
-   menor. **Fora do escopo deste spec**, rodada seguinte.
+2. **NF-e no Spedy e no Focus** — **entregue na Etapa B** (2026-08-03):
+   `FocusNfeProvider` já emite NF-e (`POST /v2/nfe`, confirmado contra a doc
+   oficial); `SpedyProvider` ainda só emite NFS-e (`/service-invoices`) —
+   NF-e real ficou pendente por falta de acesso à doc/sandbox da Spedy,
+   com uma guarda de segurança no lugar (`emitir()` rejeita `modelo=NFE`
+   com erro claro). **Fora do escopo deste spec** de qualquer forma — já
+   foi tratado separadamente.
 
 O motivo do motor NFePHP é ter uma alternativa **gratuita** aos provedores
 pagos, configurável por oficina. A interface `FiscalProvider` já existente
@@ -122,10 +134,13 @@ tributação**: a alíquota de ISS continua municipal (2%–5%, LC 116/2003).
 
 - NF-e **modelo 55** via `sped-nfe`, contra a SEFAZ-**MG** apenas.
 - NFS-e **padrão nacional (ADN)** via `nfse-nacional/nfse-php`.
-- Contingência **EPEC** para NF-e, com reconciliação posterior.
-- Emissão **em fila** (Horizon), reusando o status `PROCESSANDO`.
+- Contingência **EPEC** para NF-e, com reconciliação posterior (via
+  comando agendado, não fila — ver Seção A revisada).
+- Emissão continua **síncrona** dentro da requisição, no mesmo padrão que
+  Spedy/Focus já usam hoje (nenhum comportamento novo pro frontend).
 - PDFs (**DANFE** e **DANFSe**) via **DomPDF**.
-- **OS mista** (peças + serviços) gera as duas notas em uma ação só.
+- Emissão manual, uma nota por vez — mesma UX da Etapa B (o usuário escolhe
+  Serviço OU Venda no formulário; sem vínculo automático com OS).
 - Estrutura de IBS/CBS presente, **emitida só para CRT=3**.
 
 ### Fora da v1
@@ -133,8 +148,13 @@ tributação**: a alíquota de ISS continua municipal (2%–5%, LC 116/2003).
 - **NFC-e (modelo 65)** — decisão do usuário.
 - **Multi-UF** — só MG. A oficina real fica em Ilicínea/MG; outras UFs
   quando surgir demanda.
-- **NF-e no Spedy/Focus** — spec próprio, rodada seguinte.
+- **NF-e no Spedy/Focus** — já entregue na Etapa B (Focus emitindo; Spedy
+  pendente de acesso à doc/sandbox real).
 - **Preenchimento de IBS/CBS para CRT=1** — depende de NT não publicada.
+- **`EmissaoOrquestrador` de OS mista e emissão em fila** — adiados
+  explicitamente na Etapa B pra não dobrar escopo; decisão confirmada de
+  novo ao retomar a Etapa C (2026-08-03). Ficam pra uma etapa futura que
+  beneficia os três provedores (Spedy, Focus e NFePHP) de uma vez.
 
 ### Premissas a confirmar fora do código
 
@@ -175,16 +195,18 @@ honesta para os três provedores ("preparar o emissor para este provedor"):
 
 | Componente | Responsabilidade |
 |---|---|
-| `Services/Fiscal/Providers/NfePhpProvider` | Implementa `FiscalProvider`; delega para o motor conforme `NotaFiscalData->tipo` |
-| `Services/Fiscal/NfePhp/MotorNfe` | Monta, assina e transmite NF-e via `sped-nfe` |
-| `Services/Fiscal/NfePhp/MotorNfse` | Monta e transmite DPS via `nfse-nacional/nfse-php` |
+| `Services/Fiscal/Providers/NfePhpProvider` | Implementa `FiscalProvider`; `emitir()` ramifica por `$nota->modelo` (`NFE`→`MotorNfe`, `NFSE`→`MotorNfse`), mesmo padrão de `FocusNfeProvider`/`SpedyProvider` da Etapa B |
+| `Services/Fiscal/NfePhp/MotorNfe` | Monta, assina e transmite NF-e via `sped-nfe`, síncrono dentro da própria chamada de `emitir()` |
+| `Services/Fiscal/NfePhp/MotorNfse` | Monta e transmite DPS via `nfse-nacional/nfse-php`, síncrono |
 | `Services/Fiscal/NfePhp/CertificadoStore` | Devolve `[pfx, senha]` decifrados do tenant atual, em memória |
-| `Services/Fiscal/NfePhp/ContingenciaEpec` | Detecção de SEFAZ fora, geração e transmissão do EPEC |
-| `Services/Fiscal/EmissaoOrquestrador` | Dada uma OS, separa itens por tipo e cria 1..2 `NotaFiscal` |
-| `Jobs/EmitirNotaFiscalJob` | Emissão em fila; atualiza a `NotaFiscal` ao concluir |
+| `Services/Fiscal/NfePhp/ContingenciaEpec` | Detecção de SEFAZ fora, geração e transmissão do EPEC — chamado de dentro do próprio `MotorNfe::emitir()` quando a transmissão normal falha por timeout/conexão, não por um worker separado |
 | `Services/Fiscal/Pdf/DanfeRenderer` | XML da NF-e → HTML → DomPDF |
 | `Services/Fiscal/Pdf/DanfseRenderer` | XML da NFS-e → HTML → DomPDF |
-| `Console/Commands/ReconciliarContingencia` | Retransmite notas em EPEC; alerta antes dos 7 dias |
+| `Console/Commands/ReconciliarContingencia` | Comando agendado (não job de fila) que retransmite notas em EPEC de hora em hora e alerta antes dos 7 dias — usa o mesmo agendador (`Schedule::command()` + `->timezone('America/Sao_Paulo')`) já corrigido na rodada 13 |
+
+**Removidos desta revisão** (existiam no spec original, dependiam de
+`EmissaoOrquestrador`/fila que não foram construídos): `EmissaoOrquestrador`
+e `Jobs/EmitirNotaFiscalJob`. Não fazem parte do escopo da Etapa C.
 
 `CertificadoStore` existe porque a decifragem do `.pfx` está hoje num método
 `private` do `RegistrarEmissorService`, usado uma única vez no registro.
@@ -197,51 +219,79 @@ dentro do provider) porque são a costura com as bibliotecas externas. Atrás
 de interfaces finas, podem ser substituídos por fakes — sem isso, testar
 qualquer coisa exigiria SEFAZ de verdade.
 
-### Mudança no `NotaFiscalData`
+### `NotaFiscalData` — já é o envelope certo, não precisa de nova cirurgia
 
-Hoje é NFS-e puro (`valorServicos`, `aliquotaIss`, `codigoServicoMunicipal`).
-Passa a ser um envelope capaz de carregar os dois modelos:
+**Revisão de 2026-08-03:** a Etapa B já transformou `NotaFiscalData` no
+envelope que este spec pedia, só que mais simples do que a versão
+hipotética descrita aqui originalmente. O formato real, já em produção:
 
 ```
-NotaFiscalData
-  tipo            'NFSE' | 'NFE'
-  emitente        EmissorData
-  tomador         array
-  crt             int      -- 1 Simples | 2 Simples excesso | 3 Regime Normal
-  itens           ItemNotaData[]
-  ibsCbs          ?IbsCbsData   -- null enquanto crt !== 3
-  ... (campos atuais preservados)
-
-ItemNotaData
-  descricao, quantidade, valorUnitario, unidade
-  ncm, cfop, cst/csosn        -- NF-e
-  cTribNac, aliquotaIss       -- NFS-e
+NotaFiscalData (já existe, aditivo desde a Etapa B)
+  tipo                     'NFSE' (mantido, não usado quando modelo=NFE)
+  tomador                  array
+  modelo                   'NFE' | 'NFSE'
+  itens                    array<array{
+    produto_id, descricao, ncm, cfop, origem,
+    tributacao_icms, cst_csosn, quantidade, valor_unitario,
+  }>
+  ... (demais campos da Etapa A/B preservados)
 ```
 
-**Todos os campos novos entram com default.** É adição, não alteração:
-`SpedyProvider` e `FocusNfeProvider` continuam funcionando sem serem
-tocados.
+**NFePHP reusa esse formato tal como está — não precisa de `ItemNotaData`
+como classe nem de alteração no DTO.** Os itens de NF-e já persistem em
+`notas_fiscais_itens` (tabela nova da Etapa B) com exatamente os campos que
+`sped-nfe` precisa (NCM, CFOP, origem, CST/CSOSN). Pra NFS-e, o motor
+NFePHP usa os mesmos campos flat que Spedy/Focus já usam (`valorServicos`,
+`descricao`, `codigoServicoMunicipal`) — não há itemização de serviço nesta
+etapa, mesma decisão que a Etapa B tomou.
 
-### Emissão em fila, para todos os provedores
+**CRT não é um campo novo do DTO.** Deriva-se de `Configuracao.regime_tributario`
+no momento de montar o payload, com o mesmo padrão de mapeamento por string
+que `TributacaoIcmsSaidaResolver` já usa (`'Simples Nacional'` → CRT 1,
+`'Lucro Presumido'`/`'Lucro Real'` → CRT 3) — não precisa de coluna nova
+nem de mais um campo passado pelo `NotaFiscalData`.
 
-Hoje `NfeService::emitir()` é síncrono. Passa a ser: o controller grava a
-nota como `PROCESSANDO`, despacha `EmitirNotaFiscalJob` e responde na hora.
+**`emitente` também não precisa entrar no DTO.** Ao contrário de Spedy/Focus
+(que registram a empresa uma vez e emitem contra um id remoto), o NFePHP
+monta o XML no próprio processo — `MotorNfe`/`MotorNfse` consultam
+`Configuracao::first()` diretamente ao montar o payload, no mesmo padrão que
+`NfeService::montarNotaData()` já usa pra montar o `tomador` a partir do
+`Cliente`. Fica de fora do DTO porque nenhum outro provedor precisa disso.
 
-**[decisão] Unificar Spedy/Focus no mesmo caminho**, em vez de enfileirar só
-o NFePHP. Eles **já retornam `PROCESSANDO`** hoje (`enqueued`/
-`processando_autorizacao`), então o frontend já lida com esse estado — não é
-comportamento novo para ninguém, e evita dois caminhos de emissão
-convivendo. Assinatura + ida à SEFAZ leva segundos e pode estourar o
-timeout HTTP; a fila remove essa classe de falha.
+**IBS/CBS continua precisando de dado novo** (`cClassTrib`, `cIndOp` etc.) —
+essa parte do spec original permanece válida, só que não é um bloco do
+`NotaFiscalData`: é calculado dentro do `MotorNfe`, condicionado ao CRT
+derivado acima, e só entra no XML quando `CRT === 3`.
 
-### OS mista
+### Emissão continua síncrona — sem fila nesta etapa
 
-`EmissaoOrquestrador` separa os `os_itens` por `tipo` (`PECA` → NF-e,
-`SERVICO` → NFS-e) e cria uma `NotaFiscal` por grupo não-vazio, cada uma com
-seu job. Status, PDF e cancelamento seguem independentes por nota.
+Removido desta revisão: a ideia de enfileirar Spedy/Focus/NFePHP via
+`EmitirNotaFiscalJob`. A Etapa B manteve emissão síncrona por decisão
+explícita (sem orquestrador de OS mista, não há pressão real por fila
+ainda), e a Etapa C mantém o mesmo nível — `NfePhpProvider::emitir()` roda
+dentro da própria requisição, igual a `FocusNfeProvider`/`SpedyProvider`.
 
-O agrupamento é gratuito: `notas_fiscais.os_id` já existe e aponta para as
-duas — **não é preciso coluna nova** para relacioná-las.
+Isso **não compromete o EPEC**: a tentativa de transmissão normal e a
+queda pra contingência acontecem na mesma chamada síncrona (a chamada
+`sefazEPEC()` do `sped-nfe` é só mais uma chamada de rede, não precisa de
+worker). O que exige agendamento é só a **reconciliação posterior** (Seção
+C) — e isso já é resolvido por um comando agendado (`Console\Commands\
+ReconciliarContingencia`), não por fila.
+
+Fila (Horizon) fica para uma etapa futura, se o `EmissaoOrquestrador` (OS
+mista automática) vier a ser construído — nesse ponto, sim, várias notas
+disparando de uma ação só justificam enfileirar, pros três provedores de
+uma vez.
+
+### OS mista — fora de escopo, mesma decisão da Etapa B
+
+O usuário confirmou (2026-08-03), ao retomar a Etapa C, que o
+`EmissaoOrquestrador` (separar `os_itens` por tipo e criar NF-e + NFS-e
+automaticamente numa ação só) fica fora desta etapa — mesma decisão
+tomada na Etapa B, agora reafirmada. O NFePHP emite uma nota por vez
+(Serviço OU Venda), pelo mesmo formulário manual que a Etapa B já entregou;
+o usuário escolhe o provedor (Spedy/Focus/NFePHP) na configuração da
+oficina, não por nota.
 
 ### Registro do provedor
 
@@ -257,6 +307,12 @@ externo). Recebe o ambiente e resolve o resto via `CertificadoStore` e
 `Configuracao`.
 
 ### Mudanças de schema (consolidado)
+
+**Já existem, graças à Etapa B — não recriar:** `notas_fiscais.modelo`
+(`'NF-e'`/`'NFS-e'`, reusada tal como está) e a tabela
+`notas_fiscais_itens` (`ncm`, `cfop`, `origem`, `tributacao_icms`,
+`cst_csosn`, `quantidade`, `valor_unitario` — exatamente os campos que
+`sped-nfe` precisa pro item de NF-e).
 
 **`configuracoes`**
 
@@ -300,9 +356,12 @@ Mesmo `lockForUpdate()` já usado em `NfeService::proximoNumeroNf()`.
 **Buraco na numeração da NF-e exige justificativa ao fisco** (inutilização
 de faixa). Duas medidas:
 
-1. **[decisão] O número é alocado dentro do job, imediatamente antes de
-   transmitir** — não quando o usuário clica em emitir. Encurta ao máximo a
-   janela em que um número está reservado sem nota.
+1. **[decisão] O número é alocado dentro de `MotorNfe::emitir()`,
+   imediatamente antes de transmitir** — não quando o usuário clica em
+   emitir. Mesmo lugar que já aloca `proximo_numero_nf` hoje pra NFS-e
+   (dentro da chamada síncrona), só que na tabela de série própria da
+   NF-e. Encurta ao máximo a janela em que um número está reservado sem
+   nota.
 2. **Nota rejeitada não queima o número**: como a SEFAZ não autorizou, a
    retentativa reusa o mesmo `nNF`.
 
@@ -382,17 +441,24 @@ projeto) com o custo visível.
 significa que a nota não chegou — a SEFAZ pode ter autorizado e a resposta
 é que se perdeu. Retransmitir cego gera nota duplicada com número queimado.
 
-**[decisão]** Antes de qualquer retentativa de NF-e, o job consulta
-`sefazConsultaChave` com a chave já calculada: se já está autorizada, apenas
-concilia o resultado localmente.
+**[decisão]** Antes de qualquer retentativa de NF-e — seja um reenvio manual
+pelo usuário, seja a reconciliação agendada de contingência (Seção C) —
+`MotorNfe` consulta `sefazConsultaChave` com a chave já calculada: se já
+está autorizada, apenas concilia o resultado localmente.
 
 É a mesma lição das rodadas 7 e 8 do fluxo de pagamento — ack perdido não
 significa que o efeito não aconteceu, e a correção certa é consultar o
 estado real na origem em vez de confiar no que voltou (ou não voltou) pela
 rede.
 
-O job implementa `failed()` gravando o erro na nota: **nenhuma nota fica
-presa em `PROCESSANDO` porque o job morreu** — vira `ERRO` com a mensagem.
+Sem fila, não há `failed()` de job — o equivalente é `NfePhpProvider::emitir()`
+capturar qualquer exceção não prevista (certificado corrompido no meio da
+assinatura, erro de biblioteca) e devolver `EmissaoResultado` com um status
+que o controller mapeia pra `ERRO` (nunca deixando a nota presa em
+`PROCESSANDO` silenciosamente), no mesmo padrão que `NotaFiscalController::emitir()`
+já usa hoje pra capturar exceção e marcar a nota como `REJEITADA` — só que
+`ERRO` é um status novo, distinto, porque a causa é técnica, não uma
+recusa do fisco.
 
 ## F) Estratégia de teste
 
@@ -401,7 +467,9 @@ presa em `PROCESSANDO` porque o job morreu** — vira `ERRO` com a mensagem.
 - montagem do payload de NF-e e de NFS-e, no espírito do
   `RegistrarEmissorMontagemTest` existente;
 - mapeamento de `cStat` → status interno;
-- separação de itens da OS mista: só peças, só serviços, mista, OS vazia;
+- derivação de CRT a partir de `regime_tributario` (mesmo padrão de
+  `TributacaoIcmsSaidaResolverTest`, incluindo o caso não coberto lançando
+  exceção, nunca um CRT chutado);
 - alocação de número sob concorrência, e reuso do número após rejeição;
 - **gating de IBS/CBS pelo CRT**: bloco ausente com CRT=1, presente com
   CRT=3 — é o teste que protege a decisão de escopo deste spec;
