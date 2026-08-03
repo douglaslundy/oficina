@@ -22,6 +22,7 @@ class NfeService
         });
     }
 
+    // Quando $nota->modelo === 'NF-e', $nota precisa ter sido carregado com ->load('itens') antes de chamar este método.
     public function montarNotaData(
         NotaFiscal $nota,
         string $codigoServicoFederal = '14.01',
@@ -30,6 +31,8 @@ class NfeService
     ): NotaFiscalData {
         $cliente = $nota->cliente;
         $aliquota = (float) ($nota->aliquota_iss ?? 5.0);
+
+        $ehNfe = $nota->modelo === 'NF-e';
 
         return new NotaFiscalData(
             tipo: 'NFSE',
@@ -53,6 +56,18 @@ class NfeService
             codigoServicoMunicipal: $codigoServicoMunicipal,
             naturezaOperacao: $nota->natureza_operacao ?? 'Prestação de Serviços',
             referenciaExterna: $nota->referencia_externa ?? ('nf-' . $nota->id),
+            modelo: $ehNfe ? 'NFE' : 'NFSE',
+            itens: $ehNfe ? $nota->itens->map(fn ($item) => [
+                'produto_id'      => $item->produto_id,
+                'descricao'       => $item->descricao,
+                'ncm'             => $item->ncm,
+                'cfop'            => $item->cfop,
+                'origem'          => $item->origem,
+                'tributacao_icms' => $item->tributacao_icms,
+                'cst_csosn'       => $item->cst_csosn,
+                'quantidade'      => $item->quantidade,
+                'valor_unitario'  => $item->valor_unitario,
+            ])->all() : [],
         );
     }
 

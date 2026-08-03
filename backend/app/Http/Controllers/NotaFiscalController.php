@@ -154,7 +154,7 @@ class NotaFiscalController extends Controller
 
     public function emitir(string $id): JsonResponse
     {
-        $nota = NotaFiscal::with('cliente')->findOrFail($id);
+        $nota = NotaFiscal::with(['cliente', 'itens'])->findOrFail($id);
 
         if ($nota->status === 'AUTORIZADA') {
             return response()->json(['message' => 'NF já foi emitida.'], 400);

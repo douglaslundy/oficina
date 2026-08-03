@@ -71,4 +71,30 @@ class NfeServiceTest extends TestCase
 
         $this->service->proximoNumeroNf();
     }
+
+    public function test_montar_nota_data_nfe_inclui_itens(): void
+    {
+        Configuracao::create([
+            'razao_social' => 'Oficina Teste', 'cnpj' => '12.345.678/0001-90',
+            'proximo_numero_nf' => 1, 'ambiente_fiscal' => 'HOMOLOGACAO',
+            'estoque_limite_padrao' => 5, 'alertas_email' => false,
+        ]);
+        $cliente = \App\Models\Cliente::create(['nome' => 'Cliente', 'cpf_cnpj' => '87748248800']);
+        $nota = \App\Models\NotaFiscal::create([
+            'cliente_id' => $cliente->id, 'modelo' => 'NF-e',
+            'natureza_operacao' => 'Venda de Mercadoria', 'subtotal' => 90, 'valor_total' => 90,
+        ]);
+        \App\Models\NotaFiscalItem::create([
+            'nota_fiscal_id' => $nota->id, 'descricao' => 'Filtro',
+            'ncm' => '84212300', 'cfop' => '5102', 'origem' => 0,
+            'tributacao_icms' => 'NORMAL', 'cst_csosn' => '102',
+            'quantidade' => 2, 'valor_unitario' => 45,
+        ]);
+
+        $data = $this->service->montarNotaData($nota->load('itens'));
+
+        $this->assertSame('NFE', $data->modelo);
+        $this->assertCount(1, $data->itens);
+        $this->assertSame('84212300', $data->itens[0]['ncm']);
+    }
 }
