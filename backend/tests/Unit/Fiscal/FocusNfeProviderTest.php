@@ -80,20 +80,20 @@ class FocusNfeProviderTest extends TestCase
     public function test_emitir_nfe_processando(): void
     {
         Http::fake([
-            '*/nfe?ref=os-456' => Http::response(['status' => 'processando_autorizacao'], 202),
+            '*/v2/nfe?ref=os-456' => Http::response(['status' => 'processando_autorizacao'], 202),
         ]);
 
         $p = new FocusNfeProvider('https://homologacao.focusnfe.com.br', 'master', 'HOMOLOGACAO', 'tok');
         $r = $p->emitir($this->notaNfe());
 
         $this->assertSame('PROCESSANDO', $r->status);
-        Http::assertSent(fn ($req) => str_contains($req->url(), '/nfe?ref=os-456'));
+        Http::assertSent(fn ($req) => str_contains($req->url(), '/v2/nfe?ref=os-456'));
     }
 
     public function test_emitir_nfe_autorizada_baixa_xml_real_e_nao_reusa_numero_como_protocolo(): void
     {
         Http::fake([
-            '*/nfe?ref=os-456' => Http::response([
+            '*/v2/nfe?ref=os-456' => Http::response([
                 'status' => 'autorizado',
                 'numero' => '999',
                 'chave_nfe' => 'CHAVE123',
@@ -115,7 +115,7 @@ class FocusNfeProviderTest extends TestCase
     public function test_emitir_nfe_autorizada_com_xml_indisponivel_status_nao_sucesso_degrada_para_xml_null(): void
     {
         Http::fake([
-            '*/nfe?ref=os-456' => Http::response([
+            '*/v2/nfe?ref=os-456' => Http::response([
                 'status' => 'autorizado',
                 'numero' => '999',
                 'chave_nfe' => 'CHAVE123',
@@ -140,7 +140,7 @@ class FocusNfeProviderTest extends TestCase
     public function test_emitir_nfe_autorizada_com_falha_de_conexao_no_download_do_xml_degrada_para_xml_null(): void
     {
         Http::fake([
-            '*/nfe?ref=os-456' => Http::response([
+            '*/v2/nfe?ref=os-456' => Http::response([
                 'status' => 'autorizado',
                 'numero' => '999',
                 'chave_nfe' => 'CHAVE123',
@@ -162,6 +162,54 @@ class FocusNfeProviderTest extends TestCase
         $this->assertSame('AUTORIZADA', $r->status);
         $this->assertSame('999', $r->numero);
         $this->assertNull($r->xml);
+    }
+
+    public function test_emitir_nfe_autorizada_com_caminho_xml_relativo_baixa_prefixando_baseurl(): void
+    {
+        // Forma real e mais comum da Focus (confirmada na doc): caminho_xml_nota_fiscal
+        // é um PATH RELATIVO, não uma URL absoluta — mesmo estilo já usado pela
+        // fixture de NFS-e existente ('caminho_xml_nota_fiscal' => '/xml/os-123.xml').
+        // Um Http::get() direto nesse valor lançaria (sem host na URI); o provider
+        // precisa prefixar com o baseUrl antes de baixar.
+        Http::fake([
+            '*/v2/nfe?ref=os-456' => Http::response([
+                'status' => 'autorizado',
+                'numero' => '999',
+                'chave_nfe' => 'CHAVE123',
+                'caminho_xml_nota_fiscal' => '/arquivos/12345678000123/201906/XMLs/os-456-nfe.xml',
+                'caminho_danfe' => '/arquivos/12345678000123/201906/DANFE/os-456-nfe.pdf',
+            ], 201),
+            'https://homologacao.focusnfe.com.br/arquivos/12345678000123/201906/XMLs/os-456-nfe.xml' =>
+                Http::response('<xml>conteudo real da nfe via path relativo</xml>', 200),
+        ]);
+
+        $p = new FocusNfeProvider('https://homologacao.focusnfe.com.br', 'master', 'HOMOLOGACAO', 'tok');
+        $r = $p->emitir($this->notaNfe());
+
+        $this->assertSame('AUTORIZADA', $r->status);
+        $this->assertStringContainsString('<xml>conteudo real da nfe via path relativo</xml>', $r->xml);
+    }
+
+    public function test_emitir_nfe_autorizada_extrai_numero_protocolo_do_campo_real_da_focus(): void
+    {
+        Http::fake([
+            '*/v2/nfe?ref=os-456' => Http::response([
+                'status' => 'autorizado',
+                'numero' => '999',
+                'numero_protocolo' => '151260029467289',
+                'chave_nfe' => 'CHAVE123',
+                'caminho_xml_nota_fiscal' => 'https://focus/xml/os-456.xml',
+                'caminho_danfe' => 'https://focus/danfe/os-456.pdf',
+            ], 201),
+            'https://focus/xml/os-456.xml' => Http::response('<xml>ok</xml>', 200),
+        ]);
+
+        $p = new FocusNfeProvider('https://homologacao.focusnfe.com.br', 'master', 'HOMOLOGACAO', 'tok');
+        $r = $p->emitir($this->notaNfe());
+
+        $this->assertSame('AUTORIZADA', $r->status);
+        $this->assertSame('151260029467289', $r->protocolo);
+        $this->assertNotSame($r->numero, $r->protocolo);
     }
 
     public function test_map_status_normaliza(): void
@@ -211,6 +259,7 @@ class FocusNfeProviderTest extends TestCase
                 'caminho_xml_nota_fiscal' => '/xml/os-123.xml',
                 'url' => 'http://focus/danfse/os-123.pdf',
             ], 200),
+            'https://homologacao.focusnfe.com.br/xml/os-123.xml' => Http::response('<xml>nfse real</xml>', 200),
         ]);
 
         $p = new FocusNfeProvider('https://homologacao.focusnfe.com.br', 'master', 'HOMOLOGACAO', 'tok');
@@ -218,6 +267,12 @@ class FocusNfeProviderTest extends TestCase
 
         $this->assertSame('AUTORIZADA', $r->status);
         $this->assertSame('77', $r->numero);
+        // Defeito #1 (fix 5): resultadoDe() (fluxo NFS-e) também baixa o XML real,
+        // usando o mesmo helper baixarXmlNfe() já corrigido para a NF-e.
+        $this->assertStringContainsString('<xml>nfse real</xml>', $r->xml);
+        // Defeito #4 (fix 5): protocolo não reusa "numero" no fluxo NFS-e — a Focus
+        // não confirma um campo de protocolo distinto de "numero" nesse fluxo.
+        $this->assertNull($r->protocolo);
     }
 
     public function test_registrar_emissor_retorna_token_homologacao(): void

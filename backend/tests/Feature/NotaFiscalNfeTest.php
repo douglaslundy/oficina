@@ -6,10 +6,12 @@ namespace Tests\Feature;
 use App\Models\Cliente;
 use App\Models\Configuracao;
 use App\Models\NotaFiscal;
+use App\Models\Oficina;
 use App\Models\Produto;
 use App\Models\Usuario;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\Hash;
+use Illuminate\Support\Facades\Http;
 use Tests\TestCase;
 
 class NotaFiscalNfeTest extends TestCase
@@ -90,8 +92,103 @@ class NotaFiscalNfeTest extends TestCase
             'produto_id'     => $produto->id,
             'ncm'            => '84212300',
             'origem'         => 0,
+            // Cliente e oficina no mesmo estado (SP/SP), sem ST -> CFOP 5102
+            // (Convênio s/nº de 15/12/1970). Regime Simples Nacional + NORMAL -> CSOSN 102
+            // (Ajuste SINIEF 03/2010, Anexo Único, Tabela B). Ver CfopSaidaResolver e
+            // TributacaoIcmsSaidaResolver.
+            'cfop'           => '5102',
+            'cst_csosn'      => '102',
         ]);
         $this->assertDatabaseHas('notas_fiscais', ['id' => $notaId, 'subtotal' => 90.00]);
+    }
+
+    public function test_venda_de_mercadoria_calcula_cfop_interestadual_quando_cliente_e_oficina_estao_em_ufs_diferentes(): void
+    {
+        // Oficina em SP, cliente em RJ -> operação interestadual sem ST -> CFOP 6102
+        // (em vez do CFOP 5102 usado dentro do mesmo estado). Esse é exatamente o
+        // ramo que ficaria sem cobertura se o CfopSaidaResolver estivesse mal
+        // encanado (ex.: sempre usando o CFOP "de dentro do estado").
+        $this->criarConfiguracao(['uf' => 'SP']);
+        $token   = $this->loginAdmin();
+        $cliente = $this->criarCliente(['uf' => 'RJ']);
+        $produto = $this->criarProduto();
+
+        $response = $this->withToken($token)->postJson('/api/notas-fiscais', [
+            'cliente_id'        => $cliente->id,
+            'natureza_operacao' => 'Venda de Mercadoria',
+            'itens'             => [[
+                'produto_id'     => $produto->id,
+                'quantidade'     => 2,
+                'valor_unitario' => 45.00,
+            ]],
+        ]);
+
+        $response->assertStatus(201);
+
+        $notaId = $response->json('data.id');
+        $this->assertDatabaseHas('notas_fiscais_itens', [
+            'nota_fiscal_id' => $notaId,
+            'produto_id'     => $produto->id,
+            'cfop'           => '6102',
+            'cst_csosn'      => '102',
+        ]);
+    }
+
+    public function test_emitir_venda_de_mercadoria_fim_a_fim_via_provedor_focus(): void
+    {
+        // Round-trip completo: cria a NF-e (POST /notas-fiscais) e emite
+        // (POST /notas-fiscais/{id}/emitir) contra um Http::fake da Focus, provando
+        // que o resultado real do provedor (numero, chave, xml) chega até o registro
+        // persistido — não só a camada de unit do FocusNfeProvider isoladamente.
+        $this->criarConfiguracao(['uf' => 'SP']);
+        $oficina = Oficina::create([
+            'nome' => 'Oficina Focus Teste', 'cnpj' => '11222333000181',
+            'slug' => 'oficina-focus-' . uniqid(), 'provedor_fiscal' => 'FOCUS',
+        ]);
+        $token   = $this->loginAdmin();
+        $cliente = $this->criarCliente(['uf' => 'SP']);
+        $produto = $this->criarProduto();
+
+        Http::fake([
+            '*/v2/nfe?ref=*' => Http::response([
+                'status'                  => 'autorizado',
+                'numero'                  => '4321',
+                'numero_protocolo'        => '151260029467289',
+                'chave_nfe'               => 'CHAVE-E2E-XYZ',
+                'caminho_xml_nota_fiscal' => 'https://focus/xml/e2e.xml',
+                'caminho_danfe'           => 'https://focus/danfe/e2e.pdf',
+            ], 201),
+            'https://focus/xml/e2e.xml' => Http::response('<xml>nfe e2e</xml>', 200),
+        ]);
+
+        $headers = ['X-Tenant' => $oficina->slug];
+
+        $criar = $this->withToken($token)->withHeaders($headers)->postJson('/api/notas-fiscais', [
+            'cliente_id'        => $cliente->id,
+            'natureza_operacao' => 'Venda de Mercadoria',
+            'itens'             => [[
+                'produto_id'     => $produto->id,
+                'quantidade'     => 2,
+                'valor_unitario' => 45.00,
+            ]],
+        ]);
+        $criar->assertStatus(201);
+        $notaId = $criar->json('data.id');
+
+        $emitir = $this->withToken($token)->withHeaders($headers)
+            ->postJson("/api/notas-fiscais/{$notaId}/emitir");
+
+        $emitir->assertStatus(200)
+            ->assertJsonPath('data.status', 'AUTORIZADA')
+            ->assertJsonPath('data.numero', 4321)
+            ->assertJsonPath('data.chave_acesso', 'CHAVE-E2E-XYZ');
+
+        $this->assertDatabaseHas('notas_fiscais', [
+            'id'           => $notaId,
+            'status'       => 'AUTORIZADA',
+            'numero'       => 4321,
+            'chave_acesso' => 'CHAVE-E2E-XYZ',
+        ]);
     }
 
     public function test_venda_de_mercadoria_exige_itens(): void
@@ -177,6 +274,34 @@ class NotaFiscalNfeTest extends TestCase
         $response->assertStatus(422)->assertJsonPath(
             'message',
             "Produto \"{$produto->nome}\" está com a tributação de ICMS pendente de revisão. Complete em Produtos › Pendências Fiscais antes de emitir NF-e."
+        );
+        $this->assertDatabaseCount('notas_fiscais', 0);
+    }
+
+    public function test_venda_de_mercadoria_bloqueia_produto_com_origem_pendente(): void
+    {
+        // origem === null não pode virar (int) 0 silenciosamente no payload da Focus —
+        // 0 é "mercadoria nacional", um fato fiscal específico, não um placeholder de
+        // "vazio". Mesma família de guarda que a de tributacao_icms acima, mas para
+        // um campo com semântica de default perigosa (ver fix #3 da onda final).
+        $this->criarConfiguracao();
+        $token   = $this->loginAdmin();
+        $cliente = $this->criarCliente();
+        $produto = $this->criarProduto(['origem' => null]);
+
+        $response = $this->withToken($token)->postJson('/api/notas-fiscais', [
+            'cliente_id'        => $cliente->id,
+            'natureza_operacao' => 'Venda de Mercadoria',
+            'itens'             => [[
+                'produto_id'     => $produto->id,
+                'quantidade'     => 2,
+                'valor_unitario' => 45.00,
+            ]],
+        ]);
+
+        $response->assertStatus(422)->assertJsonPath(
+            'message',
+            "Produto \"{$produto->nome}\" está com a origem da mercadoria pendente de revisão. Complete em Produtos › Pendências Fiscais antes de emitir NF-e."
         );
         $this->assertDatabaseCount('notas_fiscais', 0);
     }

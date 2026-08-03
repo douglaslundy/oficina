@@ -207,7 +207,11 @@ class SpedyProvider implements FiscalProvider
 
         return EmissaoResultado::autorizada(
             chave: $json['accessKey'] ?? null,
-            protocolo: isset($json['number']) ? (string) $json['number'] : null,
+            // 2026-08-03: não reusa "number" como protocolo (defeito #4) — a doc
+            // de NFS-e da Spedy não confirma um campo de protocolo distinto de
+            // "number". Sem confirmação, documentamos como limitação do
+            // provedor em vez de inventar um valor (ver spec da Etapa B).
+            protocolo: null,
             numero: isset($json['number']) ? (string) $json['number'] : null,
             xml: $json['xml'] ?? null,
             pdfUrl: $json['pdfUrl'] ?? null,

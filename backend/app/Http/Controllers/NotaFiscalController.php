@@ -82,6 +82,15 @@ class NotaFiscalController extends Controller
                     return response()->json(['message' => "Produto \"{$produto->nome}\" está com a tributação de ICMS pendente de revisão. Complete em Produtos › Pendências Fiscais antes de emitir NF-e."], 422);
                 }
 
+                // origem === null não pode virar (int) 0 silenciosamente: 0 é um valor
+                // fiscal válido e distinto ("mercadoria nacional") — diferente de ncm,
+                // que pode ficar incompleto sem bloquear a emissão (decisão deliberada),
+                // origem nula precisa bloquear porque defaultar pra 0 afirma um fato
+                // fiscal específico que pode ser falso.
+                if ($produto->origem === null) {
+                    return response()->json(['message' => "Produto \"{$produto->nome}\" está com a origem da mercadoria pendente de revisão. Complete em Produtos › Pendências Fiscais antes de emitir NF-e."], 422);
+                }
+
                 $produtosPorId[$produto->id] = $produto;
             }
         }
@@ -179,6 +188,11 @@ class NotaFiscalController extends Controller
                 'chave_acesso' => $resultado['chave'],
                 'protocolo'    => $resultado['protocolo'],
                 'xml_retorno'  => $resultado['xml_retorno'],
+                // Para NF-e o número que importa legalmente é o atribuído pela
+                // Focus/SEFAZ na própria série, não o contador interno gravado antes
+                // da emissão. Fallback pro valor já existente se o provedor não
+                // retornar um número (mantém o comportamento atual pra NFS-e).
+                'numero'       => isset($resultado['numero']) ? (int) $resultado['numero'] : $nota->numero,
                 'emitido_em'   => $resultado['status'] === 'AUTORIZADA' ? now() : null,
             ]);
 

@@ -79,7 +79,7 @@ class FocusNfeProvider implements FiscalProvider
     private function emitirNfe(NotaFiscalData $nota): EmissaoResultado
     {
         $resp = Http::withBasicAuth($this->emissorToken ?? $this->masterToken, '')
-            ->post("{$this->baseUrl}/nfe?ref={$nota->referenciaExterna}", $this->montarPayloadNfe($nota));
+            ->post("{$this->baseUrl}/v2/nfe?ref={$nota->referenciaExterna}", $this->montarPayloadNfe($nota));
 
         if ($resp->status() >= 400) {
             return EmissaoResultado::rejeitada(
@@ -254,11 +254,19 @@ class FocusNfeProvider implements FiscalProvider
             return EmissaoResultado::cancelada($ref);
         }
 
+        $xmlUrl      = $json['caminho_xml_nota_fiscal'] ?? null;
+        $xmlConteudo = $xmlUrl ? $this->baixarXmlNfe($xmlUrl) : null;
+
         return EmissaoResultado::autorizada(
             chave: $json['codigo_verificacao'] ?? ($json['chave_nfe'] ?? null),
-            protocolo: isset($json['numero']) ? (string) $json['numero'] : null,
+            // 2026-08-03: não reusa "numero" como protocolo (defeito #4) — a doc
+            // de NFS-e da Focus não confirma um campo de protocolo distinto de
+            // "numero" (ao contrário da NF-e, que expõe "numero_protocolo"). Sem
+            // confirmação, documentamos como limitação do provedor em vez de
+            // inventar um valor.
+            protocolo: null,
             numero: isset($json['numero']) ? (string) $json['numero'] : null,
-            xml: $json['caminho_xml_nota_fiscal'] ?? null,
+            xml: $xmlConteudo,
             pdfUrl: $json['url'] ?? ($json['caminho_danfse'] ?? null),
             ref: $ref,
         );
@@ -284,9 +292,14 @@ class FocusNfeProvider implements FiscalProvider
         $xmlUrl = $json['caminho_xml_nota_fiscal'] ?? null;
         $xmlConteudo = $xmlUrl ? $this->baixarXmlNfe($xmlUrl) : null;
 
+        // Campo real da Focus para o protocolo é "numero_protocolo" (confirmado na
+        // doc de consulta: "numero_protocolo": "151260029467289"), não "protocolo".
+        // NÃO reusa "numero" (defeito #4).
+        $protocoloBruto = $json['numero_protocolo'] ?? $json['protocolo'] ?? null;
+
         return EmissaoResultado::autorizada(
             chave: $json['chave_nfe'] ?? null,
-            protocolo: isset($json['protocolo']) ? (string) $json['protocolo'] : null, // NÃO reusa "numero" (defeito #4)
+            protocolo: $protocoloBruto !== null ? (string) $protocoloBruto : null,
             numero: isset($json['numero']) ? (string) $json['numero'] : null,
             xml: $xmlConteudo,
             pdfUrl: $json['caminho_danfe'] ?? null,
@@ -302,6 +315,16 @@ class FocusNfeProvider implements FiscalProvider
      */
     private function baixarXmlNfe(string $xmlUrl): ?string
     {
+        // Focus retorna caminho_xml_nota_fiscal como PATH RELATIVO na maioria dos
+        // casos reais (ex.: "/arquivos/12345678000123/201906/XMLs/...-nfe.xml"),
+        // não uma URL absoluta — Http::get() num path relativo lança exceção (sem
+        // host na URI). A doc da Focus não é totalmente consistente nisso, então
+        // aceitamos as duas formas: se não vier com esquema http(s), prefixamos
+        // com o baseUrl do provider.
+        if (!str_starts_with($xmlUrl, 'http://') && !str_starts_with($xmlUrl, 'https://')) {
+            $xmlUrl = $this->baseUrl . '/' . ltrim($xmlUrl, '/');
+        }
+
         try {
             $resp = Http::get($xmlUrl);
         } catch (\Throwable $e) {
