@@ -58,6 +58,11 @@ class FocusNfeProvider implements FiscalProvider
 
     public function emitir(NotaFiscalData $nota): EmissaoResultado
     {
+        return $nota->modelo === 'NFE' ? $this->emitirNfe($nota) : $this->emitirNfse($nota);
+    }
+
+    private function emitirNfse(NotaFiscalData $nota): EmissaoResultado
+    {
         $resp = Http::withBasicAuth($this->emissorToken ?? $this->masterToken, '')
             ->post("{$this->baseUrl}/v2/nfse?ref={$nota->referenciaExterna}", $this->montarPayloadNfse($nota));
 
@@ -69,6 +74,21 @@ class FocusNfeProvider implements FiscalProvider
         }
 
         return $this->resultadoDe($resp->json(), $nota->referenciaExterna);
+    }
+
+    private function emitirNfe(NotaFiscalData $nota): EmissaoResultado
+    {
+        $resp = Http::withBasicAuth($this->emissorToken ?? $this->masterToken, '')
+            ->post("{$this->baseUrl}/nfe?ref={$nota->referenciaExterna}", $this->montarPayloadNfe($nota));
+
+        if ($resp->status() >= 400) {
+            return EmissaoResultado::rejeitada(
+                $resp->json('mensagem') ?? ($resp->json('erros.0.mensagem') ?? 'Erro na emissão de NF-e (Focus).'),
+                $nota->referenciaExterna,
+            );
+        }
+
+        return $this->resultadoNfeDe($resp->json(), $nota->referenciaExterna);
     }
 
     public function consultar(string $referencia): EmissaoResultado
@@ -152,6 +172,40 @@ class FocusNfeProvider implements FiscalProvider
         ];
     }
 
+    public function montarPayloadNfe(NotaFiscalData $n): array
+    {
+        $docTomador = preg_replace('/\D/', '', $n->tomador['cpf_cnpj']) ?? '';
+        $chaveDoc   = strlen($docTomador) > 11 ? 'cnpj_destinatario' : 'cpf_destinatario';
+
+        return [
+            'natureza_operacao'  => $n->naturezaOperacao,
+            'data_emissao'       => date('Y-m-d'),
+            'tipo_documento'     => 1, // saída
+            'finalidade_emissao' => 1, // normal
+            'nome_destinatario'  => $n->tomador['nome'],
+            $chaveDoc            => $docTomador,
+            'logradouro_destinatario'   => $n->tomador['logradouro'] ?? '',
+            'numero_destinatario'       => $n->tomador['numero'] ?? 'S/N',
+            'bairro_destinatario'       => $n->tomador['bairro'] ?? '',
+            'municipio_destinatario'    => $n->tomador['cidade'] ?? '',
+            'uf_destinatario'           => $n->tomador['uf'] ?? '',
+            'cep_destinatario'          => preg_replace('/\D/', '', $n->tomador['cep'] ?? ''),
+            'items' => array_map(fn (int $i, array $item) => [
+                'numero_item'               => $i + 1,
+                'codigo_produto'            => $item['produto_id'],
+                'descricao'                 => $item['descricao'],
+                'cfop'                      => $item['cfop'],
+                'codigo_ncm'                => $item['ncm'],
+                'unidade_comercial'         => 'UN',
+                'quantidade_comercial'      => (float) $item['quantidade'],
+                'valor_unitario_comercial'  => (float) $item['valor_unitario'],
+                'valor_bruto'               => round((float) $item['quantidade'] * (float) $item['valor_unitario'], 2),
+                'icms_origem'               => (int) $item['origem'],
+                'icms_situacao_tributaria'  => $item['cst_csosn'],
+            ], array_keys($n->itens), $n->itens),
+        ];
+    }
+
     public function mapStatus(string $focusStatus): string
     {
         return match ($focusStatus) {
@@ -206,6 +260,36 @@ class FocusNfeProvider implements FiscalProvider
             numero: isset($json['numero']) ? (string) $json['numero'] : null,
             xml: $json['caminho_xml_nota_fiscal'] ?? null,
             pdfUrl: $json['url'] ?? ($json['caminho_danfse'] ?? null),
+            ref: $ref,
+        );
+    }
+
+    private function resultadoNfeDe(array $json, ?string $ref): EmissaoResultado
+    {
+        $status = $this->mapStatus((string) ($json['status'] ?? 'processando_autorizacao'));
+
+        if ($status === 'REJEITADA') {
+            return EmissaoResultado::rejeitada(
+                $json['mensagem'] ?? ($json['erros'][0]['mensagem'] ?? 'Rejeitada pela SEFAZ.'),
+                $ref,
+            );
+        }
+        if ($status === 'PROCESSANDO') {
+            return EmissaoResultado::processando($ref);
+        }
+        if ($status === 'CANCELADA') {
+            return EmissaoResultado::cancelada($ref);
+        }
+
+        $xmlUrl = $json['caminho_xml_nota_fiscal'] ?? null;
+        $xmlConteudo = $xmlUrl ? (Http::get($xmlUrl)->body() ?: null) : null;
+
+        return EmissaoResultado::autorizada(
+            chave: $json['chave_nfe'] ?? null,
+            protocolo: isset($json['protocolo']) ? (string) $json['protocolo'] : null, // NÃO reusa "numero" (defeito #4)
+            numero: isset($json['numero']) ? (string) $json['numero'] : null,
+            xml: $xmlConteudo,
+            pdfUrl: $json['caminho_danfe'] ?? null,
             ref: $ref,
         );
     }

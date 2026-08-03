@@ -31,6 +31,87 @@ class FocusNfeProviderTest extends TestCase
         );
     }
 
+    private function notaNfe(): NotaFiscalData
+    {
+        return new NotaFiscalData(
+            tipo: 'NFSE',
+            tomador: [
+                'nome' => 'Cliente Teste', 'cpf_cnpj' => '12345678000199',
+                'email' => 'c@x.com', 'cep' => '01310100', 'logradouro' => 'Av A',
+                'numero' => '10', 'bairro' => 'Centro', 'cidade' => 'São Paulo',
+                'uf' => 'SP', 'codigo_ibge' => '3550308',
+            ],
+            descricao: 'Venda de peças',
+            valorServicos: 0.0,
+            aliquotaIss: 0.0,
+            issRetido: false,
+            codigoServicoFederal: '',
+            codigoServicoMunicipal: '',
+            naturezaOperacao: 'Venda de Mercadoria',
+            referenciaExterna: 'os-456',
+            modelo: 'NFE',
+            itens: [[
+                'produto_id' => 'prod-1', 'descricao' => 'Filtro de óleo',
+                'ncm' => '84212300', 'cfop' => '6102', 'origem' => 0,
+                'tributacao_icms' => 'NORMAL', 'cst_csosn' => '00',
+                'quantidade' => 2, 'valor_unitario' => 35.50,
+            ]],
+        );
+    }
+
+    public function test_payload_nfe_monta_itens_com_dados_fiscais(): void
+    {
+        $p = new FocusNfeProvider('https://homologacao.focusnfe.com.br', 'master', 'HOMOLOGACAO', 'tok');
+        $payload = $p->montarPayloadNfe($this->notaNfe());
+
+        $this->assertSame('Venda de Mercadoria', $payload['natureza_operacao']);
+        $this->assertSame(1, $payload['tipo_documento']);
+        $this->assertSame(1, $payload['finalidade_emissao']);
+        $this->assertCount(1, $payload['items']);
+        $this->assertSame('84212300', $payload['items'][0]['codigo_ncm']);
+        $this->assertSame('6102', $payload['items'][0]['cfop']);
+        $this->assertSame(0, $payload['items'][0]['icms_origem']);
+        $this->assertSame('00', $payload['items'][0]['icms_situacao_tributaria']);
+        $this->assertSame(2.0, $payload['items'][0]['quantidade_comercial']);
+        $this->assertSame(35.50, $payload['items'][0]['valor_unitario_comercial']);
+        $this->assertSame(71.0, $payload['items'][0]['valor_bruto']);
+    }
+
+    public function test_emitir_nfe_processando(): void
+    {
+        Http::fake([
+            '*/nfe?ref=os-456' => Http::response(['status' => 'processando_autorizacao'], 202),
+        ]);
+
+        $p = new FocusNfeProvider('https://homologacao.focusnfe.com.br', 'master', 'HOMOLOGACAO', 'tok');
+        $r = $p->emitir($this->notaNfe());
+
+        $this->assertSame('PROCESSANDO', $r->status);
+        Http::assertSent(fn ($req) => str_contains($req->url(), '/nfe?ref=os-456'));
+    }
+
+    public function test_emitir_nfe_autorizada_baixa_xml_real_e_nao_reusa_numero_como_protocolo(): void
+    {
+        Http::fake([
+            '*/nfe?ref=os-456' => Http::response([
+                'status' => 'autorizado',
+                'numero' => '999',
+                'chave_nfe' => 'CHAVE123',
+                'caminho_xml_nota_fiscal' => 'https://focus/xml/os-456.xml',
+                'caminho_danfe' => 'https://focus/danfe/os-456.pdf',
+            ], 201),
+            'https://focus/xml/os-456.xml' => Http::response('<xml>conteudo real da nfe</xml>', 200),
+        ]);
+
+        $p = new FocusNfeProvider('https://homologacao.focusnfe.com.br', 'master', 'HOMOLOGACAO', 'tok');
+        $r = $p->emitir($this->notaNfe());
+
+        $this->assertSame('AUTORIZADA', $r->status);
+        $this->assertSame('999', $r->numero);
+        $this->assertStringContainsString('<xml>conteudo real da nfe</xml>', $r->xml);
+        $this->assertNotSame($r->numero, $r->protocolo);
+    }
+
     public function test_map_status_normaliza(): void
     {
         $p = new FocusNfeProvider('https://homologacao.focusnfe.com.br', 'master', 'HOMOLOGACAO', 'tok');
