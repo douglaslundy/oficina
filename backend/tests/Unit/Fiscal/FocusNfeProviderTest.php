@@ -112,6 +112,58 @@ class FocusNfeProviderTest extends TestCase
         $this->assertNotSame($r->numero, $r->protocolo);
     }
 
+    public function test_emitir_nfe_autorizada_com_xml_indisponivel_status_nao_sucesso_degrada_para_xml_null(): void
+    {
+        Http::fake([
+            '*/nfe?ref=os-456' => Http::response([
+                'status' => 'autorizado',
+                'numero' => '999',
+                'chave_nfe' => 'CHAVE123',
+                'caminho_xml_nota_fiscal' => 'https://focus/xml/os-456.xml',
+                'caminho_danfe' => 'https://focus/danfe/os-456.pdf',
+            ], 201),
+            'https://focus/xml/os-456.xml' => Http::response('<html>erro interno do servidor</html>', 500),
+        ]);
+
+        \Illuminate\Support\Facades\Log::shouldReceive('warning')
+            ->once()
+            ->with(\Mockery::pattern('/falha ao baixar XML/i'), \Mockery::any());
+
+        $p = new FocusNfeProvider('https://homologacao.focusnfe.com.br', 'master', 'HOMOLOGACAO', 'tok');
+        $r = $p->emitir($this->notaNfe());
+
+        $this->assertSame('AUTORIZADA', $r->status);
+        $this->assertSame('999', $r->numero);
+        $this->assertNull($r->xml);
+    }
+
+    public function test_emitir_nfe_autorizada_com_falha_de_conexao_no_download_do_xml_degrada_para_xml_null(): void
+    {
+        Http::fake([
+            '*/nfe?ref=os-456' => Http::response([
+                'status' => 'autorizado',
+                'numero' => '999',
+                'chave_nfe' => 'CHAVE123',
+                'caminho_xml_nota_fiscal' => 'https://focus/xml/os-456.xml',
+                'caminho_danfe' => 'https://focus/danfe/os-456.pdf',
+            ], 201),
+            'https://focus/xml/os-456.xml' => function () {
+                throw new \Illuminate\Http\Client\ConnectionException('Timed out ao baixar XML.');
+            },
+        ]);
+
+        \Illuminate\Support\Facades\Log::shouldReceive('warning')
+            ->once()
+            ->with(\Mockery::pattern('/falha ao baixar XML/i'), \Mockery::any());
+
+        $p = new FocusNfeProvider('https://homologacao.focusnfe.com.br', 'master', 'HOMOLOGACAO', 'tok');
+        $r = $p->emitir($this->notaNfe());
+
+        $this->assertSame('AUTORIZADA', $r->status);
+        $this->assertSame('999', $r->numero);
+        $this->assertNull($r->xml);
+    }
+
     public function test_map_status_normaliza(): void
     {
         $p = new FocusNfeProvider('https://homologacao.focusnfe.com.br', 'master', 'HOMOLOGACAO', 'tok');

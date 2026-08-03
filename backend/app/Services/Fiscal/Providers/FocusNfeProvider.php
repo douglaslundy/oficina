@@ -282,7 +282,7 @@ class FocusNfeProvider implements FiscalProvider
         }
 
         $xmlUrl = $json['caminho_xml_nota_fiscal'] ?? null;
-        $xmlConteudo = $xmlUrl ? (Http::get($xmlUrl)->body() ?: null) : null;
+        $xmlConteudo = $xmlUrl ? $this->baixarXmlNfe($xmlUrl) : null;
 
         return EmissaoResultado::autorizada(
             chave: $json['chave_nfe'] ?? null,
@@ -292,5 +292,34 @@ class FocusNfeProvider implements FiscalProvider
             pdfUrl: $json['caminho_danfe'] ?? null,
             ref: $ref,
         );
+    }
+
+    /**
+     * Baixa o conteúdo real do XML da NF-e (defeito #1). Isola falhas: um erro HTTP
+     * (status não-2xx) ou uma exceção de conexão (timeout/DNS) no download do XML não
+     * pode derrubar o resultado — a NF-e já foi autorizada pela SEFAZ nesse ponto, então
+     * degradamos para xml: null (com log) em vez de propagar a exceção.
+     */
+    private function baixarXmlNfe(string $xmlUrl): ?string
+    {
+        try {
+            $resp = Http::get($xmlUrl);
+        } catch (\Throwable $e) {
+            \Illuminate\Support\Facades\Log::warning(
+                'Focus NFe: falha ao baixar XML da NF-e (exceção na requisição).',
+                ['url' => $xmlUrl, 'erro' => $e->getMessage()],
+            );
+            return null;
+        }
+
+        if (! $resp->successful()) {
+            \Illuminate\Support\Facades\Log::warning(
+                'Focus NFe: falha ao baixar XML da NF-e (status HTTP não-sucesso).',
+                ['url' => $xmlUrl, 'status' => $resp->status()],
+            );
+            return null;
+        }
+
+        return $resp->body() ?: null;
     }
 }
