@@ -41,28 +41,81 @@ class NotaFiscalController extends Controller
         $validated = $request->validate([
             'cliente_id'        => ['required', 'string', 'exists:clientes,id'],
             'os_id'             => ['nullable', 'string', 'exists:ordens_servico,id'],
-            'natureza_operacao' => ['required', 'string', 'max:50'],
+            'natureza_operacao' => ['required', 'string', 'in:Prestação de Serviços,Venda de Mercadoria'],
             'forma_pagamento'   => ['nullable', 'string', 'max:30'],
-            'subtotal'          => ['required', 'numeric', 'min:0'],
+            'subtotal'          => ['required_if:natureza_operacao,Prestação de Serviços', 'nullable', 'numeric', 'min:0'],
             'desconto'          => ['nullable', 'numeric', 'min:0'],
             'aliquota_iss'      => ['nullable', 'numeric', 'min:0', 'max:100'],
             'observacoes'       => ['nullable', 'string'],
+            'itens'                  => ['required_if:natureza_operacao,Venda de Mercadoria', 'array'],
+            'itens.*.produto_id'     => ['required_with:itens', 'uuid', 'exists:produtos,id'],
+            'itens.*.quantidade'     => ['required_with:itens', 'numeric', 'min:0.01'],
+            'itens.*.valor_unitario' => ['required_with:itens', 'numeric', 'min:0'],
         ]);
 
-        $subtotal   = (float)$validated['subtotal'];
-        $desconto   = (float)($validated['desconto'] ?? 0);
-        $aliquota   = (float)($validated['aliquota_iss'] ?? 5.00);
-        $valorIss   = (($subtotal - $desconto) * $aliquota) / 100;
+        $ehVenda = $validated['natureza_operacao'] === 'Venda de Mercadoria';
+        $modelo  = $ehVenda ? 'NF-e' : 'NFS-e';
+
+        $subtotal = $ehVenda
+            ? collect($validated['itens'])->sum(fn ($i) => $i['quantidade'] * $i['valor_unitario'])
+            : (float) $validated['subtotal'];
+
+        $desconto   = (float) ($validated['desconto'] ?? 0);
+        $aliquota   = (float) ($validated['aliquota_iss'] ?? 5.00);
+        $valorIss   = $ehVenda ? 0.0 : (($subtotal - $desconto) * $aliquota) / 100;
         $valorTotal = ($subtotal - $desconto) + $valorIss;
 
-        $nota = NotaFiscal::create([
-            ...$validated,
-            'valor_iss'   => $valorIss,
-            'valor_total' => $valorTotal,
-            'status'      => 'RASCUNHO',
-        ]);
+        $nota = \Illuminate\Support\Facades\DB::transaction(function () use ($validated, $modelo, $subtotal, $desconto, $aliquota, $valorIss, $valorTotal, $ehVenda) {
+            $nota = NotaFiscal::create([
+                'cliente_id'        => $validated['cliente_id'],
+                'os_id'             => $validated['os_id'] ?? null,
+                'natureza_operacao' => $validated['natureza_operacao'],
+                'forma_pagamento'   => $validated['forma_pagamento'] ?? null,
+                'observacoes'       => $validated['observacoes'] ?? null,
+                'modelo'            => $modelo,
+                'subtotal'          => $subtotal,
+                'desconto'          => $desconto,
+                'aliquota_iss'      => $aliquota,
+                'valor_iss'         => $valorIss,
+                'valor_total'       => $valorTotal,
+                'status'            => 'RASCUNHO',
+            ]);
 
-        return (new NotaFiscalResource($nota->load('cliente')))->response()->setStatusCode(201);
+            if ($ehVenda) {
+                $oficinaUf = \App\Models\Configuracao::first()?->uf ?? '';
+                $regime    = \App\Models\Configuracao::first()?->regime_tributario ?? 'Simples Nacional';
+
+                foreach ($validated['itens'] as $item) {
+                    $produto = \App\Models\Produto::findOrFail($item['produto_id']);
+                    $cliente = \App\Models\Cliente::find($validated['cliente_id']);
+
+                    $tributacao = $produto->tributacao_icms ?? 'NORMAL';
+                    $cfop = \App\Services\Fiscal\CfopSaidaResolver::resolver(
+                        $oficinaUf ?: 'MG',
+                        $cliente?->uf ?: ($oficinaUf ?: 'MG'),
+                        $tributacao === 'ST',
+                    );
+                    $cstCsosn = \App\Services\Fiscal\TributacaoIcmsSaidaResolver::resolver($regime, $tributacao);
+
+                    \App\Models\NotaFiscalItem::create([
+                        'nota_fiscal_id'  => $nota->id,
+                        'produto_id'      => $produto->id,
+                        'descricao'       => $produto->nome,
+                        'ncm'             => $produto->ncm,
+                        'cfop'            => $cfop,
+                        'origem'          => $produto->origem,
+                        'tributacao_icms' => $tributacao,
+                        'cst_csosn'       => $cstCsosn,
+                        'quantidade'      => $item['quantidade'],
+                        'valor_unitario'  => $item['valor_unitario'],
+                    ]);
+                }
+            }
+
+            return $nota;
+        });
+
+        return (new NotaFiscalResource($nota->load(['cliente', 'itens'])))->response()->setStatusCode(201);
     }
 
     public function show(string $id): NotaFiscalResource
