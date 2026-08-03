@@ -100,9 +100,14 @@ export function NotaFiscalForm() {
   }, [natureza, produtos.length])
 
   const clienteSelecionado = clientes.find(c => c.id === clienteId)
+  const ehVenda = natureza === 'Venda de Mercadoria'
   const subtotal = itens.reduce((acc, i) => acc + i.quantidade * i.valor_unitario, 0)
-  const valorIss = ((subtotal - desconto) * aliquota) / 100
-  const total = subtotal - desconto + valorIss
+  // Venda de Mercadoria não tem desconto/ISS no backend (emitir() só envia `itens`
+  // nesse caso — NotaFiscalController::store() calcula desconto: 0, valor_iss: 0,
+  // valor_total: subtotal). Zerar aqui evita mostrar um total que diverge do que
+  // realmente é emitido.
+  const valorIss = ehVenda ? 0 : ((subtotal - desconto) * aliquota) / 100
+  const total = ehVenda ? subtotal : subtotal - desconto + valorIss
 
   function updateItem(idx: number, field: keyof ItemNF, value: string | number) {
     setItens(prev => prev.map((item, j) => j === idx ? { ...item, [field]: value } : item))
@@ -110,7 +115,6 @@ export function NotaFiscalForm() {
 
   async function emitir() {
     if (!clienteId) { toast('Selecione um cliente.', 'danger'); return }
-    const ehVenda = natureza === 'Venda de Mercadoria'
     if (ehVenda && itens.some(i => !i.produto_id)) { toast('Selecione um produto para todos os itens (ou remova as linhas vazias).', 'danger'); return }
     if (!ehVenda && itens.every(i => !i.descricao)) { toast('Adicione pelo menos um item.', 'danger'); return }
     setLoading(true)
@@ -270,14 +274,18 @@ export function NotaFiscalForm() {
         </div>
 
         <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16, marginBottom: 20 }}>
-          <div>
-            <label style={lStyle}>Desconto (R$)</label>
-            <input type="number" min={0} step="0.01" value={desconto} onChange={e => setDesconto(+e.target.value)} style={iStyle} />
-          </div>
-          <div>
-            <label style={lStyle}>Alíquota ISS (%)</label>
-            <input type="number" min={0} max={100} step="0.01" value={aliquota} onChange={e => setAliquota(+e.target.value)} style={iStyle} />
-          </div>
+          {!ehVenda && (
+            <>
+              <div>
+                <label style={lStyle}>Desconto (R$)</label>
+                <input type="number" min={0} step="0.01" value={desconto} onChange={e => setDesconto(+e.target.value)} style={iStyle} />
+              </div>
+              <div>
+                <label style={lStyle}>Alíquota ISS (%)</label>
+                <input type="number" min={0} max={100} step="0.01" value={aliquota} onChange={e => setAliquota(+e.target.value)} style={iStyle} />
+              </div>
+            </>
+          )}
           <div style={{ gridColumn: '1 / -1' }}>
             <label style={lStyle}>Observações</label>
             <textarea value={obs} onChange={e => setObs(e.target.value)} rows={3} style={{ ...iStyle, resize: 'vertical' }} />
@@ -286,11 +294,14 @@ export function NotaFiscalForm() {
 
         {/* Resumo */}
         <div style={{ background: 'var(--bg)', borderRadius: 8, padding: 16, fontFamily: 'JetBrains Mono, monospace', fontSize: 14 }}>
-          {([
-            ['Subtotal', formatarMoeda(subtotal)],
-            ['Desconto', `-${formatarMoeda(desconto)}`],
-            [`ISS (${aliquota}%)`, formatarMoeda(valorIss)],
-          ] as [string, string][]).map(([l, v]) => (
+          {(ehVenda
+            ? ([['Subtotal', formatarMoeda(subtotal)]] as [string, string][])
+            : ([
+                ['Subtotal', formatarMoeda(subtotal)],
+                ['Desconto', `-${formatarMoeda(desconto)}`],
+                [`ISS (${aliquota}%)`, formatarMoeda(valorIss)],
+              ] as [string, string][])
+          ).map(([l, v]) => (
             <div key={l} style={{ display: 'flex', justifyContent: 'space-between', color: 'var(--muted)', marginBottom: 6 }}>
               <span>{l}</span><span>{v}</span>
             </div>
