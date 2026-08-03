@@ -15,7 +15,7 @@ use Illuminate\Support\Facades\Crypt;
 
 class FiscalProviderManager
 {
-    private const PROVEDORES = ['SPEDY', 'FOCUS'];
+    private const PROVEDORES = ['SPEDY', 'FOCUS', 'NFEPHP'];
 
     public static function resolverProvedor(?string $override, string $padrao): string
     {
@@ -69,6 +69,10 @@ class FiscalProviderManager
                 ? $this->decifrar($cfg->getRawOriginal('focus_master_token_producao'))
                 : $this->decifrar($cfg->getRawOriginal('focus_master_token_homologacao'));
             return new FocusNfeProvider($baseUrl, $master, $ambiente, $emissorToken);
+        }
+
+        if ($provedor === 'NFEPHP') {
+            return new \App\Services\Fiscal\Providers\NfePhpProvider($ambiente);
         }
 
         // SPEDY
