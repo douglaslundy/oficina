@@ -68,7 +68,7 @@ class FiscalProviderManager
             $master = $ambiente === 'PRODUCAO'
                 ? $this->decifrar($cfg->getRawOriginal('focus_master_token_producao'))
                 : $this->decifrar($cfg->getRawOriginal('focus_master_token_homologacao'));
-            return new FocusNfeProvider($baseUrl, $master, $emissorToken);
+            return new FocusNfeProvider($baseUrl, $master, $ambiente, $emissorToken);
         }
 
         // SPEDY

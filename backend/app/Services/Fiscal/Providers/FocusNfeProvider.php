@@ -15,12 +15,13 @@ class FocusNfeProvider implements FiscalProvider
     public function __construct(
         private readonly string $baseUrl,
         private readonly string $masterToken,
+        private readonly string $ambiente,
         private readonly ?string $emissorToken = null,
     ) {}
 
-    private function ambienteProducao(): bool
+    public function ambienteProducao(): bool
     {
-        return str_contains($this->baseUrl, 'api.focusnfe.com.br');
+        return $this->ambiente === 'PRODUCAO';
     }
 
     public function registrarEmissor(EmissorData $e): RegistroResultado

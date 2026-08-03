@@ -33,7 +33,7 @@ class FocusNfeProviderTest extends TestCase
 
     public function test_map_status_normaliza(): void
     {
-        $p = new FocusNfeProvider('https://homologacao.focusnfe.com.br', 'master', 'tok');
+        $p = new FocusNfeProvider('https://homologacao.focusnfe.com.br', 'master', 'HOMOLOGACAO', 'tok');
         $this->assertSame('AUTORIZADA', $p->mapStatus('autorizado'));
         $this->assertSame('PROCESSANDO', $p->mapStatus('processando_autorizacao'));
         $this->assertSame('REJEITADA', $p->mapStatus('erro_autorizacao'));
@@ -42,7 +42,7 @@ class FocusNfeProviderTest extends TestCase
 
     public function test_payload_nfse_usa_campos_focus(): void
     {
-        $p = new FocusNfeProvider('https://homologacao.focusnfe.com.br', 'master', 'tok');
+        $p = new FocusNfeProvider('https://homologacao.focusnfe.com.br', 'master', 'HOMOLOGACAO', 'tok');
         $payload = $p->montarPayloadNfse($this->nota());
 
         $this->assertSame(200.00, $payload['servico']['valor_servicos']);
@@ -59,7 +59,7 @@ class FocusNfeProviderTest extends TestCase
             ], 202),
         ]);
 
-        $p = new FocusNfeProvider('https://homologacao.focusnfe.com.br', 'master', 'tok');
+        $p = new FocusNfeProvider('https://homologacao.focusnfe.com.br', 'master', 'HOMOLOGACAO', 'tok');
         $r = $p->emitir($this->nota());
 
         $this->assertSame('PROCESSANDO', $r->status);
@@ -79,7 +79,7 @@ class FocusNfeProviderTest extends TestCase
             ], 200),
         ]);
 
-        $p = new FocusNfeProvider('https://homologacao.focusnfe.com.br', 'master', 'tok');
+        $p = new FocusNfeProvider('https://homologacao.focusnfe.com.br', 'master', 'HOMOLOGACAO', 'tok');
         $r = $p->consultar('os-123');
 
         $this->assertSame('AUTORIZADA', $r->status);
@@ -96,7 +96,7 @@ class FocusNfeProviderTest extends TestCase
             ], 201),
         ]);
 
-        $p = new FocusNfeProvider('https://homologacao.focusnfe.com.br', 'master', null);
+        $p = new FocusNfeProvider('https://homologacao.focusnfe.com.br', 'master', 'HOMOLOGACAO', null);
         $e = new \App\Services\Fiscal\Data\EmissorData(
             cnpj: '12.345.678/0001-99', razaoSocial: 'Oficina X Ltda', nomeFantasia: 'Oficina X',
             inscricaoEstadual: '123', inscricaoMunicipal: '456', regimeTributario: 'Simples Nacional',
@@ -114,9 +114,17 @@ class FocusNfeProviderTest extends TestCase
     {
         Http::fake(['*/v2/nfse/os-1' => Http::response([], 200)]);
 
-        $p = new FocusNfeProvider('https://homologacao.focusnfe.com.br', 'master', 'tok');
+        $p = new FocusNfeProvider('https://homologacao.focusnfe.com.br', 'master', 'HOMOLOGACAO', 'tok');
         $r = $p->cancelar('os-1', 'Serviço não prestado conforme acordado');
 
         $this->assertSame('CANCELADA', $r->status);
+    }
+
+    public function test_ambiente_e_explicito_nao_inferido_por_url(): void
+    {
+        // URL de homologação, mas ambiente PRODUCAO passado explicitamente —
+        // o provider deve confiar no parâmetro, não no substring da URL.
+        $p = new FocusNfeProvider('https://homologacao.focusnfe.com.br', 'master', 'PRODUCAO', 'tok');
+        $this->assertTrue($p->ambienteProducao());
     }
 }
