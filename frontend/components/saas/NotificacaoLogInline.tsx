@@ -1,13 +1,17 @@
 'use client'
 import { useState, useEffect, useCallback } from 'react'
+import { createPortal } from 'react-dom'
 import saasApi from '@/lib/saas-api'
 import { formatarDataHora } from '@/lib/formatters'
+import { AlertaCobrancaPreviewModal } from '@/components/saas/AlertaCobrancaPreviewModal'
 
 interface LogRow {
   id: string
   ip: string | null
   user_agent: string | null
   visualizado_em: string
+  titulo: string
+  mensagem: string
   oficina?: { nome: string } | null
   usuario?: { nome: string } | null
 }
@@ -18,14 +22,16 @@ interface Paginated {
   total: number
 }
 
-export function NotificacaoLogInline({ endpoint, mostrarOficina, colSpan }: {
+export function NotificacaoLogInline({ endpoint, mostrarOficina, colSpan, mostrarPreviewCobranca }: {
   endpoint: string
   mostrarOficina: boolean
   colSpan: number
+  mostrarPreviewCobranca?: boolean
 }) {
   const [logs, setLogs] = useState<Paginated | null>(null)
   const [loading, setLoading] = useState(true)
   const [page, setPage] = useState(1)
+  const [previewando, setPreviewando] = useState<LogRow | null>(null)
 
   const carregar = useCallback(() => {
     setLoading(true)
@@ -51,7 +57,7 @@ export function NotificacaoLogInline({ endpoint, mostrarOficina, colSpan }: {
               <table style={{ width: '100%', borderCollapse: 'collapse' }}>
                 <thead>
                   <tr>
-                    {[...(mostrarOficina ? ['Oficina'] : []), 'Usuário', 'Data/Hora', 'IP'].map(h => (
+                    {[...(mostrarOficina ? ['Oficina'] : []), 'Usuário', 'Data/Hora', 'IP', ...(mostrarPreviewCobranca ? [''] : [])].map(h => (
                       <th key={h} style={{ padding: '6px 10px', textAlign: 'left', fontSize: 10, fontWeight: 700, color: 'var(--muted)', textTransform: 'uppercase', letterSpacing: '0.05em' }}>{h}</th>
                     ))}
                   </tr>
@@ -63,6 +69,14 @@ export function NotificacaoLogInline({ endpoint, mostrarOficina, colSpan }: {
                       <td style={{ padding: '6px 10px', fontSize: 12 }}>{l.usuario?.nome ?? '—'}</td>
                       <td style={{ padding: '6px 10px', fontSize: 12, fontFamily: 'monospace' }}>{formatarDataHora(l.visualizado_em)}</td>
                       <td style={{ padding: '6px 10px', fontSize: 12, fontFamily: 'monospace' }}>{l.ip ?? '—'}</td>
+                      {mostrarPreviewCobranca && (
+                        <td style={{ padding: '6px 10px' }}>
+                          <button onClick={() => setPreviewando(l)}
+                            style={{ padding: '3px 8px', borderRadius: 5, background: 'transparent', border: '1px solid var(--border)', color: 'var(--muted)', cursor: 'pointer', fontSize: 12 }}>
+                            👁
+                          </button>
+                        </td>
+                      )}
                     </tr>
                   ))}
                 </tbody>
@@ -80,6 +94,17 @@ export function NotificacaoLogInline({ endpoint, mostrarOficina, colSpan }: {
           )}
         </div>
       </td>
+      {previewando && typeof document !== 'undefined' && createPortal(
+        <AlertaCobrancaPreviewModal
+          titulo={previewando.titulo}
+          mensagem={previewando.mensagem}
+          visualizadoEm={previewando.visualizado_em}
+          usuarioNome={previewando.usuario?.nome}
+          ip={previewando.ip}
+          onClose={() => setPreviewando(null)}
+        />,
+        document.body
+      )}
     </tr>
   )
 }

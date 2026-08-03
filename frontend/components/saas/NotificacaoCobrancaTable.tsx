@@ -71,6 +71,7 @@ export function NotificacaoCobrancaTable() {
                     endpoint={`/saas/notificacoes-cobranca/log?oficina_id=${g.oficina_id}&cobranca_id=${g.cobranca_id}`}
                     mostrarOficina={false}
                     colSpan={6}
+                    mostrarPreviewCobranca
                   />
                 )}
               </Fragment>
