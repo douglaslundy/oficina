@@ -56,6 +56,36 @@ class NotaFiscalController extends Controller
         $ehVenda = $validated['natureza_operacao'] === 'Venda de Mercadoria';
         $modelo  = $ehVenda ? 'NF-e' : 'NFS-e';
 
+        // Dados fiscais que alimentam CfopSaidaResolver/TributacaoIcmsSaidaResolver
+        // precisam estar completos ANTES de abrir a transação — nunca cair num
+        // default/fallback silencioso em decisão fiscal (gera CFOP/CST-CSOSN
+        // errado num documento fiscal real, sem erro visível em lugar nenhum).
+        $configuracao  = null;
+        $cliente       = null;
+        $produtosPorId = [];
+
+        if ($ehVenda) {
+            $configuracao = \App\Models\Configuracao::first();
+            if (!$configuracao || empty($configuracao->uf) || empty($configuracao->regime_tributario)) {
+                return response()->json(['message' => 'Complete a UF e o regime tributário da empresa em Configurações antes de emitir NF-e.'], 422);
+            }
+
+            $cliente = \App\Models\Cliente::find($validated['cliente_id']);
+            if (!$cliente || empty($cliente->uf)) {
+                return response()->json(['message' => 'Complete a UF do cliente antes de emitir NF-e.'], 422);
+            }
+
+            foreach ($validated['itens'] as $item) {
+                $produto = \App\Models\Produto::findOrFail($item['produto_id']);
+
+                if ($produto->tributacao_icms === null) {
+                    return response()->json(['message' => "Produto \"{$produto->nome}\" está com a tributação de ICMS pendente de revisão. Complete em Produtos › Pendências Fiscais antes de emitir NF-e."], 422);
+                }
+
+                $produtosPorId[$produto->id] = $produto;
+            }
+        }
+
         $subtotal = $ehVenda
             ? collect($validated['itens'])->sum(fn ($i) => $i['quantidade'] * $i['valor_unitario'])
             : (float) $validated['subtotal'];
@@ -65,7 +95,7 @@ class NotaFiscalController extends Controller
         $valorIss   = $ehVenda ? 0.0 : (($subtotal - $desconto) * $aliquota) / 100;
         $valorTotal = ($subtotal - $desconto) + $valorIss;
 
-        $nota = \Illuminate\Support\Facades\DB::transaction(function () use ($validated, $modelo, $subtotal, $desconto, $aliquota, $valorIss, $valorTotal, $ehVenda) {
+        $nota = \Illuminate\Support\Facades\DB::transaction(function () use ($validated, $modelo, $subtotal, $desconto, $aliquota, $valorIss, $valorTotal, $ehVenda, $configuracao, $cliente, $produtosPorId) {
             $nota = NotaFiscal::create([
                 'cliente_id'        => $validated['cliente_id'],
                 'os_id'             => $validated['os_id'] ?? null,
@@ -82,17 +112,16 @@ class NotaFiscalController extends Controller
             ]);
 
             if ($ehVenda) {
-                $oficinaUf = \App\Models\Configuracao::first()?->uf ?? '';
-                $regime    = \App\Models\Configuracao::first()?->regime_tributario ?? 'Simples Nacional';
+                $oficinaUf = $configuracao->uf;
+                $regime    = $configuracao->regime_tributario;
 
                 foreach ($validated['itens'] as $item) {
-                    $produto = \App\Models\Produto::findOrFail($item['produto_id']);
-                    $cliente = \App\Models\Cliente::find($validated['cliente_id']);
+                    $produto    = $produtosPorId[$item['produto_id']];
+                    $tributacao = $produto->tributacao_icms;
 
-                    $tributacao = $produto->tributacao_icms ?? 'NORMAL';
                     $cfop = \App\Services\Fiscal\CfopSaidaResolver::resolver(
-                        $oficinaUf ?: 'MG',
-                        $cliente?->uf ?: ($oficinaUf ?: 'MG'),
+                        $oficinaUf,
+                        $cliente->uf,
                         $tributacao === 'ST',
                     );
                     $cstCsosn = \App\Services\Fiscal\TributacaoIcmsSaidaResolver::resolver($regime, $tributacao);
