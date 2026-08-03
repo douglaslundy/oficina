@@ -1213,3 +1213,52 @@ etapa).
   consultada/cancelada corretamente pelo sistema.
 - Deploy + validação manual em homologação (Focus) antes de considerar a
   emissão de NF-e pronta pra produção de verdade.
+
+## Backlog geral de pendências (consolidado em 2026-08-03 — corrigir depois)
+
+Lista única de tudo que ficou pendente até agora, pra não se perder entre
+rodadas. Cada item cita a rodada de origem.
+
+### Validações manuais que dependem do usuário
+- [ ] **Rodada 11** — validar que o download de PDF/recibo/NF/relatório/
+  backup abre de fato numa oficina que não seja o domínio base (ex.:
+  `stuntmotos.dlsistemas.com.br`), depois do fix de CORS cross-subdomínio.
+  Nunca teve confirmação registrada.
+- [ ] **Rodada 12** — abrir uma notificação manual publicada, fechar, e
+  confirmar que ela só reaparece depois do `intervalo_minutos` configurado
+  (era exatamente o bug do fuso/Carbon 3, corrigido mas nunca validado na
+  prática). Conferir também a aba "Cobrança" em `/saas-admin/notificacoes`
+  com uma oficina que tenha fatura pendente/vencida.
+- [ ] **Rodada 13** — checar `docker compose logs scheduler` na VPS e
+  confirmar que os horários reais de disparo batem (`cobrancas:gerar` 06h,
+  `alertas:verificar` 07h, `oficina:recalcular-status-clientes` 02h,
+  horário de Brasília).
+- [ ] **Rodadas 14-19 (fiscal)** — confirmar a alíquota real de ISS de
+  Ilicínea (só a prefeitura informa por telefone, usuário não tem contador)
+  e a adesão do município ao ADN (`nfse.gov.br`). Bloqueia validação em
+  homologação das Etapas B e C.
+
+### Etapa B — pendências técnicas
+- [ ] Feature tests nunca executados contra Postgres real
+  (`NotaFiscalNfeTest`, `NfeServiceTest`) — precisam de CI/banco dedicado.
+- [ ] Task 7 real (NF-e via Spedy) — bloqueada por acesso à doc/sandbox.
+- [ ] Reconciliação de status PROCESSANDO pra NF-e (sem polling/webhook,
+  uma nota presa em processamento não tem como ser consultada/cancelada
+  direito) — trabalho novo, não fix rápido.
+- [ ] Deploy da Etapa B + validação manual em homologação com a Focus real.
+- [ ] Minors de baixo risco: `unidade_comercial` hardcoded 'UN' (ignora
+  `produtos.unidade`); `codigo_produto` manda UUID em vez de SKU (aparece
+  no DANFE); falta índice em `notas_fiscais_itens.nota_fiscal_id`/
+  `oficina_id`; `RegistrarEmissorService.php:27` tem o mesmo padrão de
+  fallback silencioso (`?? 'Simples Nacional'`) já eliminado do resto do
+  fluxo fiscal.
+
+### Trabalho adiado por decisão (não é bug, é escopo pra depois)
+- [ ] **EmissaoOrquestrador de OS mista** — gerar NF-e + NFS-e
+  automaticamente a partir de uma OS com peça+serviço, com um clique. Vira
+  uma "Etapa B2".
+- [ ] **Emissão em fila (Horizon)** — adiada até o orquestrador acima ou o
+  NFePHP (que precisa de EPEC assíncrono) exigirem de verdade.
+
+Etapa B foi commitada e empurrada pro GitHub (`5c47bd2..693629c`) em
+2026-08-03. Deploy ainda não feito — aguardando decisão do usuário.
