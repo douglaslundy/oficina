@@ -36,6 +36,11 @@ class CertificadoStore
         return ['pfx' => $pfx, 'senha' => $senha];
     }
 
+    /**
+     * @param callable(string $caminho, string $senha): mixed $callback Recebe também a senha já
+     *   decifrada (mesma chamada a obter() que já busca o pfx), para que o chamador não precise
+     *   decifrar o certificado uma segunda vez só para pegar a senha.
+     */
     public function comoArquivoTemporario(Configuracao $cfg, callable $callback): mixed
     {
         $dados = $this->obter($cfg);
@@ -50,7 +55,7 @@ class CertificadoStore
             }
             chmod($caminho, 0600);
 
-            return $callback($caminho);
+            return $callback($caminho, $dados['senha']);
         } finally {
             if (file_exists($caminho)) {
                 unlink($caminho);

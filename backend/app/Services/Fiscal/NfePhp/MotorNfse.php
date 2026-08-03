@@ -39,8 +39,8 @@ class MotorNfse
         }
 
         try {
-            return $this->certificados->comoArquivoTemporario($cfg, function (string $caminhoCertificado) use ($nota, $cfg, $ambiente) {
-                $nfse = new Nfse($this->contexto($cfg, $ambiente, $caminhoCertificado));
+            return $this->certificados->comoArquivoTemporario($cfg, function (string $caminhoCertificado, string $senha) use ($nota, $cfg, $ambiente) {
+                $nfse = new Nfse($this->contexto($cfg, $ambiente, $caminhoCertificado, $senha));
 
                 $dps = $this->montarDps($nota, $cfg);
 
@@ -180,8 +180,8 @@ class MotorNfse
         }
 
         try {
-            return $this->certificados->comoArquivoTemporario($cfg, function (string $caminhoCertificado) use ($referencia, $cfg, $ambiente) {
-                $nfse = new Nfse($this->contexto($cfg, $ambiente, $caminhoCertificado));
+            return $this->certificados->comoArquivoTemporario($cfg, function (string $caminhoCertificado, string $senha) use ($referencia, $cfg, $ambiente) {
+                $nfse = new Nfse($this->contexto($cfg, $ambiente, $caminhoCertificado, $senha));
 
                 // Nfse\Service\ContribuinteService::consultar() engole
                 // internamente qualquer NfseApiException e devolve null —
@@ -238,8 +238,8 @@ class MotorNfse
         }
 
         try {
-            return $this->certificados->comoArquivoTemporario($cfg, function (string $caminhoCertificado) use ($referencia, $motivo, $cfg, $ambiente) {
-                $nfse = new Nfse($this->contexto($cfg, $ambiente, $caminhoCertificado));
+            return $this->certificados->comoArquivoTemporario($cfg, function (string $caminhoCertificado, string $senha) use ($referencia, $motivo, $cfg, $ambiente) {
+                $nfse = new Nfse($this->contexto($cfg, $ambiente, $caminhoCertificado, $senha));
 
                 $cnpjAutor = preg_replace('/\D/', '', $cfg->cnpj ?? '') ?? '';
 
@@ -286,12 +286,18 @@ class MotorNfse
         }
     }
 
-    private function contexto(Configuracao $cfg, string $ambiente, string $caminhoCertificado): NfseContext
+    /**
+     * $senha já vem decifrada do callback de comoArquivoTemporario() — não
+     * chamamos $this->certificados->obter($cfg) de novo aqui, para não
+     * decifrar o mesmo certificado duas vezes por chamada (comoArquivoTemporario()
+     * já decifrou pfx+senha juntos para escrever o arquivo temporário).
+     */
+    private function contexto(Configuracao $cfg, string $ambiente, string $caminhoCertificado, string $senha): NfseContext
     {
         return new NfseContext(
             ambiente: $ambiente === 'PRODUCAO' ? TipoAmbiente::Producao : TipoAmbiente::Homologacao,
             certificatePath: $caminhoCertificado,
-            certificatePassword: $this->certificados->obter($cfg)['senha'],
+            certificatePassword: $senha,
             codigoMunicipio: $cfg->codigo_ibge,
         );
     }
