@@ -50,6 +50,7 @@ class SpedyProviderTest extends TestCase
         $this->assertSame(200.00, $payload['total']['invoiceAmount']);
         $this->assertSame(0.05, $payload['total']['issRate']);
         $this->assertSame('12345678000199', $payload['receiver']['federalTaxNumber']);
+        $this->assertSame('Prestação de Serviços', $payload['operationNature']);
     }
 
     public function test_emitir_autorizada(): void

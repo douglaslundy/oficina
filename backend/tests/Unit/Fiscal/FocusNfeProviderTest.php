@@ -49,6 +49,7 @@ class FocusNfeProviderTest extends TestCase
         $this->assertSame('1401', $payload['servico']['codigo_tributario_municipio']);
         $this->assertSame(5.0, $payload['servico']['aliquota']);
         $this->assertSame('12345678000199', $payload['tomador']['cnpj']);
+        $this->assertSame('Prestação de Serviços', $payload['natureza_operacao']);
     }
 
     public function test_emitir_envia_ref_e_processa(): void

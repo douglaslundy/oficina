@@ -126,8 +126,9 @@ class FocusNfeProvider implements FiscalProvider
         $chaveDoc   = strlen($docTomador) > 11 ? 'cnpj' : 'cpf';
 
         return [
-            'data_emissao' => date('Y-m-d'),
-            'tomador'      => [
+            'data_emissao'      => date('Y-m-d'),
+            'natureza_operacao' => $n->naturezaOperacao,
+            'tomador'           => [
                 $chaveDoc      => $docTomador,
                 'razao_social' => $n->tomador['nome'],
                 'email'        => $n->tomador['email'] ?? null,

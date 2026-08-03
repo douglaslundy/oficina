@@ -126,6 +126,7 @@ class SpedyProvider implements FiscalProvider
             'federalServiceCode'  => $n->codigoServicoFederal,
             'cityServiceCode'     => $n->codigoServicoMunicipal,
             'taxationType'        => 'taxationInMunicipality',
+            'operationNature'     => $n->naturezaOperacao,
             'receiver'            => [
                 'name'             => $n->tomador['nome'],
                 'federalTaxNumber' => preg_replace('/\D/', '', $n->tomador['cpf_cnpj']),
