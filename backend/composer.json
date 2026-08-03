@@ -13,6 +13,7 @@
         "laravel/sanctum": "^4.3",
         "laravel/tinker": "^2.10.1",
         "maatwebsite/excel": "^3.1",
+        "nfse-nacional/nfse-php": "^1.21@beta",
         "predis/predis": "^3.4",
         "spatie/laravel-activitylog": "^5.0",
         "spatie/laravel-permission": "^7.4"
