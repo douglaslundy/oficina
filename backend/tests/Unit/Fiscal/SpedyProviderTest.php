@@ -133,4 +133,27 @@ class SpedyProviderTest extends TestCase
 
         $this->assertSame('PROCESSANDO', $status);
     }
+
+    public function test_emitir_nfe_rejeitado_ate_schema_ser_confirmado(): void
+    {
+        $p = new SpedyProvider('https://sandbox-api.spedy.com.br/v1', 'master', 'tok', 'emp-1');
+        $nota = new NotaFiscalData(
+            tipo: 'NFSE',
+            tomador: ['nome' => 'Cliente Teste', 'cpf_cnpj' => '12345678000199'],
+            descricao: 'Venda de peças',
+            valorServicos: 0.0,
+            aliquotaIss: 0.0,
+            issRetido: false,
+            codigoServicoFederal: '',
+            codigoServicoMunicipal: '',
+            naturezaOperacao: 'Venda de Mercadoria',
+            referenciaExterna: 'os-999',
+            modelo: 'NFE',
+        );
+
+        $r = $p->emitir($nota);
+
+        $this->assertSame('REJEITADA', $r->status);
+        $this->assertSame('os-999', $r->referenciaExterna);
+    }
 }

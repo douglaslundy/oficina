@@ -49,6 +49,13 @@ class SpedyProvider implements FiscalProvider
 
     public function emitir(NotaFiscalData $nota): EmissaoResultado
     {
+        if ($nota->modelo === 'NFE') {
+            return EmissaoResultado::rejeitada(
+                'Emissão de NF-e ainda não disponível para o provedor Spedy neste sistema — schema do endpoint pendente de confirmação. Use a Focus NFe ou aguarde uma etapa futura.',
+                $nota->referenciaExterna,
+            );
+        }
+
         $resp = Http::withHeaders(['X-Api-Key' => $this->emissorToken ?? $this->masterKey])
             ->post("{$this->baseUrl}/service-invoices", $this->montarPayloadNfse($nota));
 
