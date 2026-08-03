@@ -1092,3 +1092,74 @@ autocorretor pra "deploy"). Fluxo:
 4. Pendências mais antigas, ainda não feitas: usuário validar
    manualmente rodada 12 (notificações) e rodada 13 (agendador — checar
    `docker compose logs scheduler` pros horários reais de disparo).
+
+## Rodada 19 (2026-08-03) — Etapa B implementada via subagent-driven-development
+
+Brainstorming da Etapa B (5 seções, todas aprovadas) → spec commitado em
+`docs/superpowers/specs/2026-08-02-etapa-b-refactor-nfe-design.md` → plano de
+12 tasks commitado em `docs/superpowers/plans/2026-08-02-etapa-b-refactor-nfe.md`
+→ executado com `superpowers:subagent-driven-development` direto na `main`
+(consentimento explícito do usuário, mesmo padrão da rodada 12/17). Ledger
+completo em `.superpowers/sdd/2026-08-02-etapa-b-refactor-nfe/progress.md`.
+
+### O que foi entregue
+- `CfopSaidaResolver` e `TributacaoIcmsSaidaResolver` (CFOP/CST-CSOSN de
+  saída, nunca default silencioso — combinação não coberta lança exceção).
+- `NotaFiscalData` ganhou `modelo`/`itens[]` de forma aditiva (NFS-e intocada).
+- Nova tabela `notas_fiscais_itens` + model `NotaFiscalItem` + relação
+  `NotaFiscal::itens()`.
+- **Focus NFe emite NF-e** (`POST /nfe`, confirmado contra a doc oficial
+  nesta sessão) — com os defeitos #1 (XML real baixado, não só o path) e #4
+  (protocolo nunca reusa número) corrigidos no fluxo novo.
+- Defeitos #2 (ambiente explícito, só na Focus — Spedy nunca teve esse bug),
+  #3 (status desconhecido loga warning) e #5 (naturezaOperacao no payload)
+  corrigidos nos dois provedores.
+- `NotaFiscalController::store()` deriva `modelo`, rejeita `Misto` (422,
+  servidor E cliente), persiste itens com CFOP/CST-CSOSN calculados.
+- `NfeService::montarNotaData()` monta os itens de NF-e a partir de
+  `notas_fiscais_itens` — tradução cuidadosa entre a convenção do DTO
+  (`'NFE'`/`'NFSE'`, sem hífen) e a coluna do banco (`'NF-e'`/`'NFS-e'`,
+  com hífen, coluna que **já existia** e nunca tinha sido usada por nenhum
+  controller).
+- Frontend (`NotaFiscalForm.tsx`): "Misto" desabilitado, itens de venda
+  viram `<select>` de produto (herdando NCM/origem/tributação da Etapa A),
+  serviço continua texto livre.
+- 102 testes Unit locais passando (up de ~80 no início da rodada).
+
+### Spedy NÃO ganhou NF-e nesta rodada (Task 7 pulada por decisão do usuário)
+`docs.spedy.com.br` bloqueou acesso automatizado (403) tanto no brainstorming
+quanto na tentativa de implementação — sem sandbox/credenciais, o plano
+proíbe explicitamente adivinhar schema de payload fiscal real. Usuário optou
+por pular a task agora. **Guarda de segurança aplicada** (`SpedyProvider::
+emitir()` rejeita `modelo=NFE` com mensagem clara) pra evitar que uma oficina
+na Spedy gere uma NF-e malformada via o fluxo de NFS-e por engano — não é a
+implementação real, só evita o pior enquanto isso não acontece.
+**Retomar quando o usuário tiver acesso ao portal/sandbox da Spedy.**
+
+### 3 rondas de correção — todas por bugs no meu próprio texto do plano/brief, não dos implementadores
+1. **Task 6 (Focus NF-e)**: download do XML sem tratamento de falha —
+   corrigido pra degradar a `xml: null` + log, sem derrubar uma emissão já
+   autorizada pela SEFAZ por causa de um erro de rede no passo seguinte.
+2. **Task 8 (`store()`)**: meu próprio brief tinha fallback silencioso
+   (`'MG'`/`'Simples Nacional'`) que contradizia o Global Constraint que eu
+   mesmo escrevi no topo do plano. Escalei pro usuário (regra do
+   subagent-driven-development pra achado "plan-mandated") — confirmado:
+   **erro claro, nunca chutar**. Também apliquei o mesmo princípio a
+   `tributacao_icms` (defaultar pra NORMAL seria uma afirmação específica
+   errada, diferente de NCM nulo que é só uma lacuna visível — essa
+   distinção foi mantida). Achado de fora do escopo, não corrigido: o mesmo
+   padrão de fallback existe em `RegistrarEmissorService.php:27`.
+3. **Task 11 (frontend)**: minha prosa do brief dizia "valide todo item"
+   mas meu código de exemplo só validava "pelo menos um" e descartava em
+   silêncio os itens sem produto selecionado — um NF-e podia sair faltando
+   linha sem aviso nenhum. Corrigido aplicando a mesma política já
+   confirmada 2x nesta rodada, sem precisar perguntar de novo.
+
+### O que falta antes de considerar a Etapa B pronta
+- **Revisão final de branch inteira** (próximo passo do
+  `subagent-driven-development`, ainda não rodada nesta sessão).
+- **Feature tests nunca executados contra Postgres real** (`NotaFiscalNfeTest`,
+  teste novo em `NfeServiceTest`) — precisam rodar em CI/banco dedicado.
+- **Task 7 (Spedy NF-e) real** — bloqueada por acesso à doc/sandbox.
+- Deploy + validação manual em homologação (Focus) antes de considerar a
+  emissão de NF-e pronta pra produção de verdade.
