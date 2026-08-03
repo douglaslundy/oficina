@@ -35,4 +35,9 @@ final class EmissaoResultado
     {
         return new self('CANCELADA', null, null, null, null, null, null, $ref);
     }
+
+    public static function erro(string $mensagemErro, ?string $ref = null): self
+    {
+        return new self('ERRO', null, null, null, null, null, $mensagemErro, $ref);
+    }
 }

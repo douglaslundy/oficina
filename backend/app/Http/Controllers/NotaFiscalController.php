@@ -213,6 +213,10 @@ class NotaFiscalController extends Controller
             if ($resultado['status'] === 'REJEITADA') {
                 return response()->json(['message' => $resultado['mensagem_erro'] ?? 'Nota rejeitada.'], 422);
             }
+
+            if ($resultado['status'] === 'ERRO') {
+                return response()->json(['message' => $resultado['mensagem_erro'] ?? 'Falha técnica ao emitir a nota. Tente novamente ou contate o suporte.'], 500);
+            }
         } catch (\Exception $e) {
             $nota->update(['status' => 'REJEITADA']);
             return response()->json(['message' => $e->getMessage()], 422);
