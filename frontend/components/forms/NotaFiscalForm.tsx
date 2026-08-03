@@ -111,7 +111,7 @@ export function NotaFiscalForm() {
   async function emitir() {
     if (!clienteId) { toast('Selecione um cliente.', 'danger'); return }
     const ehVenda = natureza === 'Venda de Mercadoria'
-    if (ehVenda && itens.every(i => !i.produto_id)) { toast('Adicione pelo menos um produto.', 'danger'); return }
+    if (ehVenda && itens.some(i => !i.produto_id)) { toast('Selecione um produto para todos os itens (ou remova as linhas vazias).', 'danger'); return }
     if (!ehVenda && itens.every(i => !i.descricao)) { toast('Adicione pelo menos um item.', 'danger'); return }
     setLoading(true)
     try {
@@ -122,9 +122,11 @@ export function NotaFiscalForm() {
         observacoes: obs || undefined,
       }
       if (ehVenda) {
-        payload.itens = itens.filter(i => i.produto_id).map(i => ({
-          produto_id: i.produto_id, quantidade: i.quantidade, valor_unitario: i.valor_unitario,
-        }))
+        payload.itens = itens
+          .filter((i): i is ItemNF & { produto_id: string } => !!i.produto_id)
+          .map(i => ({
+            produto_id: i.produto_id, quantidade: i.quantidade, valor_unitario: i.valor_unitario,
+          }))
       } else {
         payload.subtotal = subtotal
         payload.desconto = desconto
@@ -166,7 +168,7 @@ export function NotaFiscalForm() {
             <select value={natureza} onChange={e => setNatureza(e.target.value)} style={iStyle}>
               <option>Prestação de Serviços</option>
               <option>Venda de Mercadoria</option>
-              <option disabled>Misto (em breve)</option>
+              <option value="Misto" disabled>Misto (em breve)</option>
             </select>
           </div>
           <div>
