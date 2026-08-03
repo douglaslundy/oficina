@@ -236,6 +236,30 @@ class NotaFiscalController extends Controller
     public function pdf(string $id): \Illuminate\Http\Response
     {
         $nota = NotaFiscal::with('cliente')->findOrFail($id);
+
+        // NFS-e emitida via NFePHP: o PDF (DANFSe) é obtido pronto direto da
+        // API oficial do ambiente nacional (Motor::baixarDanfse()), em vez de
+        // renderizar o template local pdf.nota_fiscal — que só reflete os
+        // dados salvos localmente, não o layout oficial assinado. Guard
+        // inclui 'modelo' === 'NFS-e' porque NfePhpProvider::emitir() rejeita
+        // NF-e (modelo NFE) antes de chegar a AUTORIZADA (ver
+        // NfePhpProvider::emitir()), mas o check aqui é defensivo/explícito
+        // em vez de depender só dessa invariante de outra classe.
+        if ($nota->provedor === 'NFEPHP' && $nota->modelo === 'NFS-e' && $nota->status === 'AUTORIZADA' && $nota->chave_acesso) {
+            try {
+                $pdfBinario = app(\App\Services\Fiscal\NfePhp\MotorNfse::class)
+                    ->baixarDanfse($nota->chave_acesso, $nota->ambiente ?? 'HOMOLOGACAO');
+
+                return response($pdfBinario, 200, [
+                    'Content-Type' => 'application/pdf',
+                    'Content-Disposition' => 'attachment; filename="NFSe-' . ($nota->numero ?? $nota->id) . '.pdf"',
+                ]);
+            } catch (\Throwable $e) {
+                \Illuminate\Support\Facades\Log::warning('Falha ao baixar DANFSe da biblioteca NFePHP, caindo para erro explícito.', ['erro' => $e->getMessage(), 'nota_id' => $nota->id]);
+                abort(502, 'Não foi possível obter o PDF da NFS-e no momento. Tente novamente em instantes.');
+            }
+        }
+
         $empresa = \App\Models\Configuracao::first()?->toArray() ?? [];
 
         $pdf = Pdf::loadView('pdf.nota_fiscal', compact('nota', 'empresa'))

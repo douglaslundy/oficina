@@ -287,6 +287,43 @@ class MotorNfse
     }
 
     /**
+     * Baixa os bytes crus do PDF (DANFSe) de uma NFS-e já autorizada, via a
+     * API oficial do ambiente nacional.
+     *
+     * Confirmado em vendor/nfse-nacional/nfse-php/src/Service/ContribuinteService.php:
+     * `downloadDanfse(string $chaveAcesso): string` delega para
+     * `Nfse\Http\Client\AdnClient::obterDanfse()`, que faz um GET em
+     * `/danfse/{chaveAcesso}` (ADN — Ambiente de Dados Nacional, host próprio,
+     * diferente do SEFIN usado por emitir/consultar/cancelar) e devolve
+     * `$response->getBody()->getContents()` diretamente — ou seja, bytes crus
+     * do PDF, sem DTO/wrapper. Isso confirma a suposição do brief.
+     *
+     * Em caso de erro de rede/API, `AdnClient::handleException()` lança
+     * `Nfse\Http\Exceptions\NfseApiException` (um `\Throwable`) — deixamos
+     * propagar para o chamador (`NotaFiscalController::pdf()`), que já tem um
+     * `catch(\Throwable)` dedicado e responde com um erro HTTP explícito ao
+     * usuário, em vez de mascarar a falha aqui.
+     *
+     * ATENÇÃO (mesmo aviso do docblock de `ContribuinteService::downloadDanfse()`):
+     * esta API oficial de geração de DANFSe será descontinuada em 01/07/2026 —
+     * quando isso ocorrer, este método precisará gerar o DANFSe localmente em
+     * vez de baixá-lo pronto do ambiente nacional.
+     */
+    public function baixarDanfse(string $chaveAcesso, string $ambiente): string
+    {
+        $cfg = Configuracao::first();
+        if (! $cfg) {
+            throw new \RuntimeException('Configurações da empresa não encontradas.');
+        }
+
+        return $this->certificados->comoArquivoTemporario($cfg, function (string $caminhoCertificado, string $senha) use ($chaveAcesso, $cfg, $ambiente) {
+            $nfse = new Nfse($this->contexto($cfg, $ambiente, $caminhoCertificado, $senha));
+
+            return $nfse->contribuinte()->downloadDanfse($chaveAcesso);
+        });
+    }
+
+    /**
      * $senha já vem decifrada do callback de comoArquivoTemporario() — não
      * chamamos $this->certificados->obter($cfg) de novo aqui, para não
      * decifrar o mesmo certificado duas vezes por chamada (comoArquivoTemporario()
