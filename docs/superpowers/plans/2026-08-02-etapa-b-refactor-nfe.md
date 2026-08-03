@@ -513,7 +513,7 @@ git commit -m "feat(fiscal): tabela notas_fiscais_itens e model NotaFiscalItem"
 - Modify: `backend/tests/Unit/Fiscal/SpedyProviderTest.php`
 
 **Interfaces:**
-- Produces: construtor de `FocusNfeProvider` ganha `string $ambiente` como 4º parâmetro posicional (antes de `?string $emissorToken = null`); `SpedyProvider` ganha o mesmo. `FiscalProviderManager::build()` passa esse valor (já tem `$ambiente` disponível, só não repassava).
+- Produces: construtor de `FocusNfeProvider` ganha `string $ambiente` como 3º parâmetro posicional (antes de `?string $emissorToken = null`). `FiscalProviderManager::build()` passa esse valor (já tem `$ambiente` disponível, só não repassava). **`SpedyProvider` não muda neste task** — código já lido nesta sessão confirma que ela não tem nenhuma lógica que infira ambiente por substring de URL nem que dependa de ambiente de nenhuma outra forma; adicionar o parâmetro lá seria um parâmetro morto (YAGNI). O defeito #2 é específico da Focus.
 
 - [ ] **Step 1: Write the failing tests (defeito #2 — ambiente explícito)**
 
@@ -529,15 +529,7 @@ Em `backend/tests/Unit/Fiscal/FocusNfeProviderTest.php`, adicione:
     }
 ```
 
-Em `backend/tests/Unit/Fiscal/SpedyProviderTest.php`, adicione o teste equivalente (confira o construtor atual do arquivo antes de escrever — ele segue o mesmo padrão de `baseUrl, masterKey, emissorToken, emissorExternoId`; o novo `$ambiente` entra na 3ª posição, empurrando os dois últimos):
-
-```php
-    public function test_ambiente_e_explicito(): void
-    {
-        $p = new SpedyProvider('https://sandbox.spedy.com.br', 'master', 'PRODUCAO', 'tok', 'ext-1');
-        $this->assertTrue($p->ambienteProducao());
-    }
-```
+Não crie um teste equivalente em `SpedyProviderTest.php` — este defeito não existe na Spedy (ver nota em Interfaces acima).
 
 - [ ] **Step 2: Run tests to verify they fail**
 
@@ -577,7 +569,7 @@ por:
     }
 ```
 
-Repita o padrão equivalente em `SpedyProvider.php` (adicione `private readonly string $ambiente` como 3º parâmetro do construtor, antes de `$emissorToken`/`$emissorExternoId`; se o Spedy hoje não tem um método `ambienteProducao()`, adicione-o do mesmo jeito — verifique o conteúdo atual do arquivo, ele pode não precisar de lógica de ambiente hoje se não inferir por URL, mas o parâmetro precisa existir pra manter os dois providers com a mesma assinatura de construtor, já que `FiscalProviderManager::build()` os instancia de forma simétrica).
+**Não mexa em `SpedyProvider.php` neste step** — ver nota em Interfaces acima.
 
 Em `FiscalProviderManager.php::build()`, troque:
 
@@ -589,20 +581,13 @@ por
             return new FocusNfeProvider($baseUrl, $master, $ambiente, $emissorToken);
 ```
 
-e:
-```php
-        return new SpedyProvider($baseUrl, $master, $emissorToken, $emissorExtId);
-```
-por
-```php
-        return new SpedyProvider($baseUrl, $master, $ambiente, $emissorToken, $emissorExtId);
-```
+A chamada de `new SpedyProvider(...)` logo abaixo, no mesmo método, **não muda**.
 
-**Atenção:** isso muda a assinatura posicional do construtor dos dois providers. Busque TODOS os outros call sites antes de seguir:
+**Atenção:** isso muda a assinatura posicional do construtor da `FocusNfeProvider`. Busque TODOS os outros call sites antes de seguir:
 
-Run: `cd backend && grep -rn "new FocusNfeProvider\|new SpedyProvider" app tests`
+Run: `cd backend && grep -rn "new FocusNfeProvider" app tests`
 
-Atualize cada instanciação encontrada (inclusive as que já existem em `FocusNfeProviderTest.php`/`SpedyProviderTest.php` nos testes que não foram tocados neste step) pra incluir o novo parâmetro `$ambiente` na posição certa — use `'HOMOLOGACAO'` nos testes existentes que não estão testando ambiente especificamente.
+Atualize cada instanciação encontrada (inclusive as que já existem em `FocusNfeProviderTest.php` nos testes que não foram tocados neste step) pra incluir o novo parâmetro `$ambiente` na posição certa — use `'HOMOLOGACAO'` nos testes existentes que não estão testando ambiente especificamente.
 
 - [ ] **Step 4: Run tests to verify they pass**
 
@@ -1013,7 +998,7 @@ Antes de escrever o Step 3 deste task, o implementador **precisa**:
 
     public function test_payload_nfe_monta_itens_com_dados_fiscais(): void
     {
-        $p = new SpedyProvider('https://sandbox.spedy.com.br', 'master', 'HOMOLOGACAO', 'tok', 'ext-1');
+        $p = new SpedyProvider('https://sandbox.spedy.com.br', 'master', 'tok', 'ext-1');
         $payload = $p->montarPayloadNfe($this->notaNfe());
 
         // Confirme os nomes de campo exatos contra a doc/sandbox real da Spedy
@@ -1027,7 +1012,7 @@ Antes de escrever o Step 3 deste task, o implementador **precisa**:
             '*/product-invoices' => Http::response(['status' => 'enqueued'], 202),
         ]);
 
-        $p = new SpedyProvider('https://sandbox.spedy.com.br', 'master', 'HOMOLOGACAO', 'tok', 'ext-1');
+        $p = new SpedyProvider('https://sandbox.spedy.com.br', 'master', 'tok', 'ext-1');
         $r = $p->emitir($this->notaNfe());
 
         $this->assertSame('PROCESSANDO', $r->status);
