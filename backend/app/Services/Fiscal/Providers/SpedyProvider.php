@@ -154,11 +154,21 @@ class SpedyProvider implements FiscalProvider
     public function mapStatus(string $spedyStatus): string
     {
         return match ($spedyStatus) {
-            'authorized' => 'AUTORIZADA',
-            'rejected'   => 'REJEITADA',
-            'canceled'   => 'CANCELADA',
-            default      => 'PROCESSANDO', // enqueued, processing, etc.
+            'authorized'             => 'AUTORIZADA',
+            'rejected'               => 'REJEITADA',
+            'canceled'               => 'CANCELADA',
+            'enqueued', 'processing' => 'PROCESSANDO',
+            default                  => $this->statusDesconhecido($spedyStatus),
         };
+    }
+
+    private function statusDesconhecido(string $status): string
+    {
+        \Illuminate\Support\Facades\Log::warning(
+            'Spedy: status desconhecido recebido, tratando como PROCESSANDO.',
+            ['status' => $status],
+        );
+        return 'PROCESSANDO';
     }
 
     private function mapRegime(string $regime): string

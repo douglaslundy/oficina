@@ -158,8 +158,18 @@ class FocusNfeProvider implements FiscalProvider
             'cancelado'               => 'CANCELADA',
             'erro_autorizacao',
             'denegado'                => 'REJEITADA',
-            default                   => 'PROCESSANDO', // processando_autorizacao
+            'processando_autorizacao' => 'PROCESSANDO',
+            default                   => $this->statusDesconhecido($focusStatus),
         };
+    }
+
+    private function statusDesconhecido(string $status): string
+    {
+        \Illuminate\Support\Facades\Log::warning(
+            'Focus NFe: status desconhecido recebido, tratando como PROCESSANDO.',
+            ['status' => $status],
+        );
+        return 'PROCESSANDO';
     }
 
     private function mapRegime(string $regime): string

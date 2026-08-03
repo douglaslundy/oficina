@@ -127,4 +127,16 @@ class FocusNfeProviderTest extends TestCase
         $p = new FocusNfeProvider('https://homologacao.focusnfe.com.br', 'master', 'PRODUCAO', 'tok');
         $this->assertTrue($p->ambienteProducao());
     }
+
+    public function test_status_desconhecido_loga_warning(): void
+    {
+        \Illuminate\Support\Facades\Log::shouldReceive('warning')
+            ->once()
+            ->with(\Mockery::pattern('/status desconhecido/i'), \Mockery::any());
+
+        $p = new FocusNfeProvider('https://homologacao.focusnfe.com.br', 'master', 'HOMOLOGACAO', 'tok');
+        $status = $p->mapStatus('status_nunca_visto_antes');
+
+        $this->assertSame('PROCESSANDO', $status);
+    }
 }

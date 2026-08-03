@@ -120,4 +120,16 @@ class SpedyProviderTest extends TestCase
 
         $this->assertSame('CANCELADA', $r->status);
     }
+
+    public function test_status_desconhecido_loga_warning(): void
+    {
+        \Illuminate\Support\Facades\Log::shouldReceive('warning')
+            ->once()
+            ->with(\Mockery::pattern('/status desconhecido/i'), \Mockery::any());
+
+        $p = new SpedyProvider('https://sandbox-api.spedy.com.br/v1', 'master', 'tok', 'emp-1');
+        $status = $p->mapStatus('status_nunca_visto_antes');
+
+        $this->assertSame('PROCESSANDO', $status);
+    }
 }
