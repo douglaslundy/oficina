@@ -534,7 +534,7 @@ class OficinaController extends Controller
     public function updateFiscal(Request $request, string $id): JsonResponse
     {
         $validated = $request->validate([
-            'provedor_fiscal'     => ['nullable', 'in:SPEDY,FOCUS'],
+            'provedor_fiscal'     => ['nullable', 'in:SPEDY,FOCUS,NFEPHP'],
             'emissao_fiscal_modo' => ['nullable', 'in:MANUAL,AUTOMATICO'],
         ]);
         $oficina = \App\Models\Oficina::findOrFail($id);
