@@ -61,7 +61,7 @@ class MotorNfseMontarDpsTest extends TestCase
         $nota = $this->notaServico();
 
         $motor = new MotorNfse();
-        $dps = $motor->montarDps($nota, $cfg);
+        $dps = $motor->montarDps($nota, $cfg, 'HOMOLOGACAO');
 
         $this->assertSame('1.01', $dps->versao);
         $this->assertNotNull($dps->infDps);
@@ -116,7 +116,7 @@ class MotorNfseMontarDpsTest extends TestCase
             referenciaExterna: 'nfse-2',
         );
 
-        $dps = (new MotorNfse())->montarDps($nota, $cfg);
+        $dps = (new MotorNfse())->montarDps($nota, $cfg, 'HOMOLOGACAO');
 
         // Regressão da inversão que existia no brief (issRetido true virava
         // "Não Retido" em vez de "Retido pelo Tomador").
@@ -128,7 +128,7 @@ class MotorNfseMontarDpsTest extends TestCase
         $cfg = $this->configuracaoSimplesNacional();
         $cfg->regime_tributario = 'Lucro Presumido';
 
-        $dps = (new MotorNfse())->montarDps($this->notaServico(), $cfg);
+        $dps = (new MotorNfse())->montarDps($this->notaServico(), $cfg, 'HOMOLOGACAO');
 
         $this->assertSame(OpcaoSimplesNacional::NaoOptante, $dps->infDps->prestador->regimeTributario->opcaoSimplesNacional);
         $this->assertNull($dps->infDps->prestador->regimeTributario->regimeApuracaoTributosSn);
@@ -137,10 +137,24 @@ class MotorNfseMontarDpsTest extends TestCase
     public function test_ambiente_producao_usa_tpamb_1(): void
     {
         $cfg = $this->configuracaoSimplesNacional();
-        $cfg->ambiente_fiscal = 'PRODUCAO';
 
-        $dps = (new MotorNfse())->montarDps($this->notaServico(), $cfg);
+        // $ambiente agora é um parâmetro explícito de montarDps() (Fix 5 da
+        // revisão final) — $cfg->ambiente_fiscal já não é lido para tpAmb.
+        $dps = (new MotorNfse())->montarDps($this->notaServico(), $cfg, 'PRODUCAO');
 
         $this->assertSame(TipoAmbiente::Producao, $dps->infDps->tipoAmbiente);
+    }
+
+    public function test_ambiente_do_parametro_prevalece_sobre_config_divergente(): void
+    {
+        // Regressão específica do Fix 5: mesmo com $cfg->ambiente_fiscal
+        // dizendo PRODUCAO, o parâmetro $ambiente = HOMOLOGACAO deve
+        // prevalecer — a config nunca mais deve ser lida aqui dentro.
+        $cfg = $this->configuracaoSimplesNacional();
+        $cfg->ambiente_fiscal = 'PRODUCAO';
+
+        $dps = (new MotorNfse())->montarDps($this->notaServico(), $cfg, 'HOMOLOGACAO');
+
+        $this->assertSame(TipoAmbiente::Homologacao, $dps->infDps->tipoAmbiente);
     }
 }
