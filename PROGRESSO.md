@@ -1262,3 +1262,120 @@ rodadas. Cada item cita a rodada de origem.
 
 Etapa B foi commitada e empurrada pro GitHub (`5c47bd2..693629c`) em
 2026-08-03. Deploy ainda não feito — aguardando decisão do usuário.
+
+## Rodada 20 (2026-08-03) — Etapa C1 (motor NFePHP, NFS-e) implementada em worktree isolado
+
+Spec do NFePHP (rodada 15/16) revisado à luz do que a Etapa B realmente
+entregou → plano de 8 tasks (`docs/superpowers/plans/2026-08-03-etapa-c1-nfephp-nfse.md`)
+→ executado com `superpowers:subagent-driven-development` num **worktree
+isolado** (`.claude/worktrees/etapa-c1-nfephp-nfse`, branch
+`worktree-etapa-c1-nfephp-nfse`) — primeira vez nesta sessão usando
+isolamento em vez de commitar direto na main, por envolver uma dependência
+externa nova/experimental. Ledger completo no próprio worktree.
+
+### Decisão de escopo confirmada ao retomar (2026-08-03)
+NFePHP fica **no mesmo nível da Etapa B**: emissão manual e síncrona, sem
+`EmissaoOrquestrador` de OS mista, sem fila. Motor NFePHP cobre só **NFS-e**
+nesta etapa (via `nfse-nacional/nfse-php`) — NF-e via `sped-nfe` + EPEC
+fica pra um plano C2 separado, ainda não escrito.
+
+### O que foi entregue
+- `nfse-nacional/nfse-php` instalado (pacote **beta-only**, `^1.21@beta`,
+  com dependência transitiva `spatie/data-transfer-object` marcada
+  "abandoned" — risco de supply-chain já catalogado no spec, reforçado
+  aqui).
+- `CrtResolver` (deriva CRT de `regime_tributario`) e `CertificadoStore`
+  (decifra o `.pfx` sob demanda; certificado nunca fica em disco além de
+  um arquivo temporário efêmero, 0600, apagado em `finally` mesmo se a
+  chamada falhar).
+- `EmissaoResultado::erro()` — status novo, distingue falha técnica
+  (`ERRO`, HTTP 500) de rejeição do fisco (`REJEITADA`, HTTP 422).
+- `NfePhpProvider` implementa `FiscalProvider` sem mudar a interface —
+  `registrarEmissor()`/`enviarCertificado()` viram validação local (nunca
+  chamam nada externo); NF-e retorna rejeição clara (motor NFePHP de NF-e
+  é o plano C2, ainda não existe).
+- `MotorNfse` emite/consulta/cancela NFS-e de verdade via
+  `nfse-nacional/nfse-php`. **Cancelamento real implementado** (evento
+  101101) — o plano original achava que isso não seria confirmável e
+  previa um placeholder; o implementador encontrou o payload completo no
+  próprio exemplo da biblioteca instalada.
+- PDF da DANFSe usa `downloadDanfse()` da própria biblioteca em vez de um
+  template DomPDF próprio (decisão tomada nesta sessão, mais simples que o
+  plano original de 2026-07-25 previa).
+- 126 testes Unit locais passando (up de 122 no início da rodada).
+
+### Disciplina "verificar contra a biblioteca real, não adivinhar" — o achado mais importante desta rodada
+O spec e o plano foram escritos a partir de pesquisa web, **antes** da
+biblioteca estar instalada. Nas tasks de integração real (`MotorNfse`),
+instruí os implementadores a conferir cada suposição contra
+`vendor/nfse-nacional/nfse-php/src/` e os exemplos reais, não transcrever o
+plano cegamente. Isso pagou:
+- Corrigiu um bug real que eu mesmo deixei no plano: `issRetido` invertido.
+- Achou que a tradução CRT→`opSimpNac` (que eu tinha marcado como
+  "defensiva") é na verdade **exigida pelo próprio XSD** (`regTrib` sem
+  `minOccurs`, ou seja, obrigatório) — sem ela nenhuma NFS-e seria
+  validada.
+- Achou cancelamento real (ver acima) onde o plano previa desistir.
+- Descobriu que `consultar()` da biblioteca **engole a exceção e devolve
+  null** em vez de lançar (o plano assumia o contrário).
+
+### Revisão final de branch (opus) — achou 1 Critical real e 5 Important, nenhuma revisão por task isolada teria pego
+Exatamente a classe de bug que a revisão final existe pra capturar —
+propriedades cross-cutting que atravessam várias tasks:
+1. **Critical**: `notas_fiscais.chave_acesso` era `varchar(50)`, curto
+   demais pra chave real de NFS-e nacional (53 caracteres) — uma NFS-e
+   **autorizada de verdade** falharia ao salvar e seria gravada como
+   `REJEITADA`, com a chave perdida. Corrigido com migration
+   (`chave_acesso` → 60, `numero` → `bigint`, mesmo problema por já ser
+   `integer` mas `nNFSe` poder ter 13 dígitos).
+2. **Important**: `NFEPHP` não era selecionável por nenhum caminho de
+   API/UI (só `SPEDY`/`FOCUS` nas validações e nos selects do
+   saas-admin) — a etapa inteira ficaria inacessível sem escrita direta no
+   banco. Corrigido.
+3. **Important**: `MotorNfse::consultar()` sempre devolvia `AUTORIZADA`,
+   mesmo pra uma nota cancelada por essa mesma classe — a NFS-e nacional
+   registra cancelamento como evento separado (101101), não como
+   `cStat`. Corrigido: extrai a lógica de mapeamento pra um método puro e
+   testável, checa evento de cancelamento antes de afirmar autorizada,
+   nunca cai em `AUTORIZADA` por default. **Sem exposição real hoje**
+   (nada chama `consultar()` ainda) — mas corrigido antes que algo passe a
+   chamar.
+4. **Important**: duas fontes de verdade pro ambiente dentro de
+   `MotorNfse` (`montarDps()` lia `Configuracao.ambiente_fiscal` direto,
+   o resto do arquivo usava o parâmetro `$ambiente`) — corrigido pra uma
+   fonte só.
+5. Pill de status `ERRO` faltando no frontend — corrigido.
+
+**Pendência registrada, não bloqueante** (`consultar()` ainda sem nenhum
+caller): quando a checagem de evento de cancelamento falha por
+instabilidade de rede, o código atual trata como "não cancelado" em vez de
+retornar `erro()` — deveria falhar visível em vez de arriscar permitir
+`AUTORIZADA` por baixo de uma falha de rede. Resolver antes de qualquer job
+de sincronização de status vir a chamar `consultar()`.
+
+### O que falta antes de considerar a Etapa C1 pronta pra produção
+- **Merge do worktree pra main** — ainda não feito, aguardando decisão do
+  usuário (`superpowers:finishing-a-development-branch`).
+- **Numeração de DPS hardcoded em `'1'`** — sinalizado desde o plano
+  original como limitação conhecida, mas a revisão final destacou que isso
+  é mais urgente do que parecia: como o `Id` da DPS é composto de
+  CNPJ+município+série+**número**, toda emissão vai gerar o mesmo `Id` —
+  **a segunda emissão, já no teste de homologação, seria rejeitada como
+  duplicata**. Resolver a numeração antes do primeiro teste real, não só
+  "antes de produção".
+- **Endereço do prestador (`prest.end`) nunca preenchido** — confirmado
+  via XSD que é opcional (`minOccurs=0`, não bloqueia emissão), mas
+  `Configuracao` não tem campos de endereço decompostos pra preencher
+  quando quisermos. Fica pra quando isso for adicionado.
+- **`opSimpNac` assume ME/EPP, nunca MEI** — `Configuracao` não distingue.
+  Risco real se a oficina de Ilicínea for MEI (não confirmado).
+- **`cMotivo` do cancelamento hardcoded em `'9'`/Outros** — sem seletor de
+  motivo estruturado ainda.
+- **Feature tests da Etapa C1 nunca executados contra Postgres real** —
+  mesma limitação de sempre.
+- **Validação em homologação de verdade** — nada disso rodou contra a API
+  real da NFS-e nacional ainda; confirmar em especial o comportamento de
+  `listarEventos()` pra "nenhum evento" (array vazio vs. exceção) antes de
+  confiar em `consultar()`.
+- Confirmar adesão de Ilicínea ao ADN e a alíquota real de ISS (pendência
+  antiga, ainda não resolvida).
