@@ -1519,3 +1519,51 @@ regressão sem-endereço, 4 classificação de cMotivo, 2 MEI/ME-EPP,
 - Feature tests da Etapa C1 nunca executados contra Postgres real.
 - Validação em homologação de verdade (bloqueada por confirmar alíquota
   ISS e adesão ao ADN de Ilicínea com a prefeitura).
+
+## Rodada 23 (2026-08-05) — investigação: cálculo automático de imposto pelo provedor (Spedy/Focus)
+
+Usuário pediu pra avaliar usar um endpoint da Spedy que calcula a
+tributação sozinho, aplicando em NF-e e NFS-e se possível, e checar se a
+Focus tem equivalente.
+
+### Achado: não é troca de endpoint, é mudança de arquitetura
+`POST /v1/orders` da Spedy (confirmado via doc oficial) cobre NF-e E
+NFS-e, mas exige produto pré-cadastrado no catálogo deles
+(`POST /v1/products`) + "grupos de tributação e naturezas de operação"
+configurados manualmente no **backoffice web da Spedy** (fora de código,
+sem versionamento). Isso implicaria manter um catálogo duplicado
+sincronizado e ceder a decisão de CFOP/CST/ICMS/ISS pra um sistema
+externo — o oposto da regra central do projeto ("nunca chutar valor
+fiscal", já rendeu bug real 4x quando confundida).
+
+**Contradição real na própria doc da Spedy, não resolvida por leitura**:
+a página "Criar Venda" diz que a Spedy resolve a tributação
+automaticamente a partir da config da empresa; a página "Regimes e
+códigos fiscais" diz o oposto — "a Spedy não decide a tributação por
+você, apenas transporta o que for informado". Não dá pra confiar em
+nenhuma das duas sem teste real.
+
+**Focus NFe**: equivalente se chama "Automations" — produto/configuração
+à parte (fluxo visual, "na maioria dos casos precisa de desenvolvedor pra
+integrar"), não confirmado se já está disponível na conta atual.
+
+### Decisão: usuário vai testar no sandbox antes de qualquer código
+Não existe NENHUMA credencial da Spedy neste sistema — nem local, nem em
+produção (`emissores_fiscais` está com **0 registros** na VPS, nenhuma
+oficina ativou nenhum provedor fiscal de verdade ainda). Usuário vai:
+1. Criar conta sandbox na Spedy (signup self-service em
+   `app.spedy.com.br/signup`) e testar `POST /v1/orders` sem mandar
+   CFOP/CST/ICMS, ver o que volta de verdade.
+2. Verificar o que a conta Focus dele realmente oferece pra cálculo
+   automático ("Automations").
+
+### Design combinado, aguardando confirmação pra implementar
+Se confirmado que funciona sem duplicar catálogo: adicionar um campo em
+`Configuracao` (ex.: `calculo_tributario_modo`: `MANUAL` (default,
+comportamento atual) | `AUTOMATICO_PROVEDOR`), checado em
+`FocusNfeProvider`/`SpedyProvider` antes de montar o payload — em
+`AUTOMATICO_PROVEDOR`, chama o endpoint que deixa o provedor calcular; em
+`MANUAL`, continua como hoje (`CfopSaidaResolver`/
+`TributacaoIcmsSaidaResolver`/alíquota configurada). Toggle na tela de
+Dados da Empresa. **Não implementado ainda** — deliberadamente adiado até
+o teste real confirmar o comportamento de cada provedor.
