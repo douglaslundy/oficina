@@ -1060,38 +1060,45 @@ autocorretor pra "deploy"). Fluxo:
     (`RefreshDatabase` dropa o banco).
 
 ## Próxima tarefa (retomar exatamente aqui)
-- [x] **DEPLOY DA ETAPA A** — feito na rodada 18 (2026-08-02). `git pull`
-  fast-forward `0712887..7eca748` + `bash deploy-vps.sh`. Validado: HEAD na
-  VPS = `7eca748`; as 4 migrations `2026_07_25_*` como `Ran`; domínios
-  públicos `saas`/`stuntmotos`/`oficina-do-lundy`/`oficina` respondendo 200
-  em `/api/health`; `produtos/pendencias-fiscais` e `categorias-fiscais`
-  respondendo 401 sem token (rotas novas existem e estão protegidas).
-- [x] **Feature tests da Etapa A** — `backend/tests/Feature/ProdutoFiscalTest.php`
-  (rodada 18, 13 testes, detalhe acima). `php -l` limpo, **nunca executados**
-  contra Postgres real (limitação de ambiente local, não do teste em si) —
-  falta rodar em CI ou banco de teste dedicado pra fechar 100% a cobertura.
-- [ ] **Validação manual com XML real de fornecedor em produção** — ainda
-  pendente do usuário (os feature tests cobrem a persistência em teoria, mas
-  só um XML real confirma que o parser lê corretamente notas do mundo real,
-  não só o fixture do teste): (a) produto novo nasce com NCM; (b) produto
-  existente com NCM diferente NÃO é sobrescrito e gera divergência; (c) tela
-  de pendências fiscais lista o resíduo.
-1. Próximo: desenhar a **etapa B** (spec ainda não existe) — refactor
-   compartilhado (`NotaFiscalData` com `itens[]`, `EmissaoOrquestrador` da OS
-   mista, emissão em fila) + NF-e no Spedy/Focus + os 5 defeitos registrados
-   na rodada 16. **Merece uma sessão de brainstorming com o usuário antes do
-   spec** (mesmo padrão usado na Etapa A e na rodada 15 do NFePHP) — não
-   pular direto pro código.
-2. Depois: a etapa C (NFePHP), cujo spec já está escrito em
-   `docs/superpowers/specs/2026-07-25-motor-nfephp-design.md`. Aguardando
-   aprovação ou pedidos de mudança.
-3. Verificações de fato que dependem do usuário (não bloqueiam escrever
-   os planos; bloqueiam a validação em homologação das etapas B/C):
-   adesão de Ilicínea ao ADN (`nfse.gov.br`); **alíquota de ISS de
-   Ilicínea — a PREFEITURA informa, o usuário NÃO tem contador**.
-4. Pendências mais antigas, ainda não feitas: usuário validar
-   manualmente rodada 12 (notificações) e rodada 13 (agendador — checar
-   `docker compose logs scheduler` pros horários reais de disparo).
+
+**Ordem explícita pedida pelo usuário (2026-08-05): NFC-e primeiro, depois
+Etapa C2.**
+
+1. **NFC-e (Nota Fiscal de Consumidor Eletrônica, modelo 65)** — EM
+   ANDAMENTO, brainstorming iniciado nesta sessão (ver Rodada 22, acima),
+   ainda sem spec escrito. Alternativa à NF-e (modelo 55) quando o
+   destinatário é consumidor final pessoa física, reaproveitando o mesmo
+   fluxo de Cliente/OS já existente (não é uma tela nova de "venda de
+   balcão" sem cliente). Confirmado: Spedy e Focus têm NFC-e como produto
+   próprio; NFC-e é emitida de forma SÍNCRONA (diferente da NF-e,
+   assíncrona/fila) — isso muda o fluxo de UI. Continuar exatamente de
+   onde parou o brainstorming (perguntas de esclarecimento → 2-3
+   abordagens → design → spec em `docs/superpowers/specs/` → plano →
+   SDD), não pular pra código.
+2. **Depois: Etapa C2 (NF-e via NFePHP `sped-nfe` + contingência EPEC)**
+   — só existe como parte do spec combinado original
+   `docs/superpowers/specs/2026-07-25-motor-nfephp-design.md` (que cobria
+   NF-e+NFS-e juntas); a NFS-e virou Etapa C1 (implementada, em worktree
+   isolado, não mergeada — ver [[project-roadmap-fiscal-3-etapas]] na
+   memória). A parte de NF-e+EPEC nunca ganhou plano nem implementação.
+   Precisa de spec próprio (extraído/revisado do combinado) antes do
+   plano.
+3. Verificações que dependem do usuário (não bloqueiam escrever specs/
+   planos; bloqueiam validação em homologação): confirmar alíquota real
+   de ISS de Ilicínea e adesão ao ADN — a PREFEITURA informa, (35)
+   3854-1319, usuário não tem contador.
+4. Investigação paralela pedida pelo usuário, aguardando ele mesmo testar
+   (ver Rodada 21/23 e memória `project-spedy-focus-calculo-automatico`):
+   conta sandbox da Spedy + testar `/v1/orders` (cálculo automático de
+   imposto); verificar "Automations" na conta Focus. Resultado disso
+   pode desbloquear NF-e via Spedy (Task 7 da Etapa B, pulada
+   originalmente por falta de acesso à doc — doc lida sem problema nesta
+   sessão, reavaliar).
+5. Pendências mais antigas, ainda não feitas: usuário validar
+   manualmente a emissão de NF-e real (Etapa B em produção, nunca usada),
+   a importação de XML real de fornecedor (Etapa A), rodada 12
+   (notificações) e rodada 13 (agendador — checar `docker compose logs
+   scheduler` pros horários reais de disparo).
 
 ## Rodada 19 (2026-08-03) — Etapa B implementada via subagent-driven-development
 
@@ -1335,3 +1342,26 @@ tem `env('APP_TIMEZONE', 'America/Sao_Paulo')`, herdado de commits
 anteriores próprios daquela branch (não relacionados à Etapa C1). Ou seja,
 o motor NFePHP (`MotorNfse::montarDps()`, `dCompet`/`dhEmi` via `now()`)
 nunca esteve exposto a esse bug — nada a corrigir lá.
+
+## Rodada 22 (2026-08-05) — NFC-e: brainstorming EM ANDAMENTO
+
+Usuário pediu suporte a NFC-e (Nota Fiscal de Consumidor Eletrônica,
+modelo 65) como alternativa à NF-e (modelo 55) quando o destinatário é
+consumidor final pessoa física — reaproveitando o fluxo de Cliente/OS já
+existente, só trocando o tipo de documento emitido (não é uma tela nova
+de "venda de balcão" sem cliente).
+
+**Confirmado por pesquisa antes de abrir o brainstorming**: Spedy tem
+endpoints dedicados de NFC-e (criar/cancelar/consultar/PDF/XML/
+inutilização de numeração). Focus também tem NFC-e como produto próprio
+— diferença técnica real: **NFC-e é emitida de forma SÍNCRONA** (resposta
+imediata autorizada/rejeitada), diferente da NF-e que é assíncrona/fila.
+Schemas completos de payload (CFOP de venda a consumidor final, numeração
+própria, contingência offline) ainda não pesquisados — fica pro
+brainstorming/design.
+
+Tratando como uma nova etapa (mesmo processo de design usado nas Etapas
+B/C1: brainstorm → spec em `docs/superpowers/specs/` → plano → SDD), não
+como fix pontual, dado o tamanho real (documento fiscal novo, emissão
+síncrona muda o fluxo de UI, numeração própria). **Nenhuma linha de
+código escrita ainda** — brainstorming em andamento nesta sessão.
