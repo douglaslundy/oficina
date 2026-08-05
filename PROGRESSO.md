@@ -1356,13 +1356,8 @@ de sincronização de status vir a chamar `consultar()`.
 ### O que falta antes de considerar a Etapa C1 pronta pra produção
 - **Merge do worktree pra main** — ainda não feito, aguardando decisão do
   usuário (`superpowers:finishing-a-development-branch`).
-- **Numeração de DPS hardcoded em `'1'`** — sinalizado desde o plano
-  original como limitação conhecida, mas a revisão final destacou que isso
-  é mais urgente do que parecia: como o `Id` da DPS é composto de
-  CNPJ+município+série+**número**, toda emissão vai gerar o mesmo `Id` —
-  **a segunda emissão, já no teste de homologação, seria rejeitada como
-  duplicata**. Resolver a numeração antes do primeiro teste real, não só
-  "antes de produção".
+- ~~Numeração de DPS hardcoded em `'1'`~~ — **CORRIGIDO na Rodada 21**, ver
+  seção abaixo.
 - **Endereço do prestador (`prest.end`) nunca preenchido** — confirmado
   via XSD que é opcional (`minOccurs=0`, não bloqueia emissão), mas
   `Configuracao` não tem campos de endereço decompostos pra preencher
@@ -1379,3 +1374,77 @@ de sincronização de status vir a chamar `consultar()`.
   confiar em `consultar()`.
 - Confirmar adesão de Ilicínea ao ADN e a alíquota real de ISS (pendência
   antiga, ainda não resolvida).
+
+## Rodada 21 (2026-08-04) — fix ad-hoc: numeração da DPS
+
+Usuário confirmou (após eu recomendar como a mais urgente das 3 pendências
+puramente técnicas da Etapa C1) começar por este fix antes de qualquer
+outra coisa. Fix pontual, fora do ciclo formal de SDD (mesmo padrão da
+"Task 7b" da Etapa B): implementado direto nesta sessão, com testes de
+regressão, sem dispatch de subagente — escopo pequeno e mecânico o
+suficiente (mirror de um padrão já existente e aprovado).
+
+### O que foi corrigido
+`MotorNfse::montarDps()` tinha `$numero = '1'` hardcoded, usado tanto no
+`Id` da DPS (`IdGenerator::generateDpsId(cnpj, ibge, serie, numero)`) quanto
+no campo `nDPS` do payload. Como o `Id` é a chave de unicidade do
+documento, toda emissão gerava o mesmo `Id` — a segunda emissão (mesmo em
+homologação) seria rejeitada como duplicata.
+
+**Confirmado antes de implementar**: o número que a SEFIN Nacional
+devolve depois da autorização (`$resultado->infNfse?->numeroNfse`, usado em
+`EmissaoResultado::autorizada()`) é um número **diferente** — atribuído
+pelo sistema nacional, não por nós. Isso já funcionava certo. O bug era
+só do `nDPS` que **nós** submetemos antes da autorização, que precisa ser
+único por (CNPJ, município, série) do nosso lado.
+
+**Solução** (mirror exato de `NfeService::proximoNumeroNf()`, que já faz a
+mesma coisa pra Spedy/Focus — contador dedicado, não reaproveitado, porque
+são dois sistemas fiscais distintos com numerações independentes):
+- Migration `2026_08_04_000001_add_dps_numbering_to_configuracoes_table.php`
+  — `configuracoes.serie_dps` (string, default `'1'`) e
+  `configuracoes.proximo_numero_dps` (integer, default `1`).
+- `NfeService::proximoNumeroDps(): int` — mesma transação com
+  `lockForUpdate()` de `proximoNumeroNf()`, evita corrida em emissões
+  concorrentes.
+- `MotorNfse` ganhou `NfeService` injetado no construtor (default
+  `new NfeService()`, mesmo padrão do `CertificadoStore` já existente).
+  `emitir()` chama `proximoNumeroDps()` **antes** de montar o DPS (dentro
+  do `try`, antes da submissão — um número pode "queimar" se a emissão
+  falhar depois, o que é aceitável/normal em numeração fiscal; o que não
+  pode é duplicar).
+- `montarDps()` ganhou 4º parâmetro explícito `int $numeroDps` (mesmo
+  padrão do `$ambiente` explícito, já documentado no arquivo: mantém o
+  método puro/testável sem precisar de `Configuracao` persistida ou DB).
+  `serie` passou a ler `$cfg->serie_dps` em vez de hardcoded.
+
+### Arquivos alterados
+- `backend/database/migrations/2026_08_04_000001_add_dps_numbering_to_configuracoes_table.php` (novo)
+- `backend/app/Models/Configuracao.php` — `serie_dps`/`proximo_numero_dps` no `$fillable`
+- `backend/app/Services/NfeService.php` — `proximoNumeroDps()`
+- `backend/app/Services/Fiscal/NfePhp/MotorNfse.php` — construtor, `emitir()`, `montarDps()`
+- `backend/tests/Unit/Fiscal/NfePhp/MotorNfseMontarDpsTest.php` — 4 chamadas
+  existentes ajustadas pro novo parâmetro + 2 testes novos (número
+  aparece no `Id` e no `nDPS`; `serie_dps` da config é respeitada)
+
+### Testes
+`./vendor/bin/phpunit --testsuite=Unit` com `OPENSSL_CONF=/mingw64/etc/ssl/openssl.cnf`
+(caminho real do openssl.cnf neste ambiente — o caminho default do PHP,
+`C:\Program Files\Common Files\SSL\openssl.cnf`, não existe aqui; sem a
+env var, 3 testes de `CertificadoStoreTest` falham por causa disso, não
+por regressão real — mesma causa raiz documentada na Rodada 20):
+**128 testes, 327 assertions, 0 falhas.**
+
+Feature test (`tests/Feature/Fiscal/MotorNfseTest.php`) continua
+`markTestSkipped` — precisa de Postgres + certificado real + rede de
+homologação, mesma limitação de sempre; não afetado por este fix.
+
+### Não commitado ainda
+Aguardando decisão do usuário sobre o fluxo (commit direto neste worktree,
+seguindo o padrão da Etapa C1).
+
+### Aside: horário do servidor de produção
+Usuário reportou que o relógio da VPS de produção parece adiantado (~3h) —
+relevante porque `dhEmi` do DPS usa `now()->format('c')`. Não tenho SSH
+configurado nesta sessão pra verificar direto; pedi ao usuário rodar
+`date; timedatectl` na VPS. **Não resolvido, não investigado a fundo.**

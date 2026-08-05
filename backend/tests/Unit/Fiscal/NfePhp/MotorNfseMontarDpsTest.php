@@ -61,7 +61,7 @@ class MotorNfseMontarDpsTest extends TestCase
         $nota = $this->notaServico();
 
         $motor = new MotorNfse();
-        $dps = $motor->montarDps($nota, $cfg, 'HOMOLOGACAO');
+        $dps = $motor->montarDps($nota, $cfg, 'HOMOLOGACAO', 1);
 
         $this->assertSame('1.01', $dps->versao);
         $this->assertNotNull($dps->infDps);
@@ -116,7 +116,7 @@ class MotorNfseMontarDpsTest extends TestCase
             referenciaExterna: 'nfse-2',
         );
 
-        $dps = (new MotorNfse())->montarDps($nota, $cfg, 'HOMOLOGACAO');
+        $dps = (new MotorNfse())->montarDps($nota, $cfg, 'HOMOLOGACAO', 1);
 
         // Regressão da inversão que existia no brief (issRetido true virava
         // "Não Retido" em vez de "Retido pelo Tomador").
@@ -128,7 +128,7 @@ class MotorNfseMontarDpsTest extends TestCase
         $cfg = $this->configuracaoSimplesNacional();
         $cfg->regime_tributario = 'Lucro Presumido';
 
-        $dps = (new MotorNfse())->montarDps($this->notaServico(), $cfg, 'HOMOLOGACAO');
+        $dps = (new MotorNfse())->montarDps($this->notaServico(), $cfg, 'HOMOLOGACAO', 1);
 
         $this->assertSame(OpcaoSimplesNacional::NaoOptante, $dps->infDps->prestador->regimeTributario->opcaoSimplesNacional);
         $this->assertNull($dps->infDps->prestador->regimeTributario->regimeApuracaoTributosSn);
@@ -140,7 +140,7 @@ class MotorNfseMontarDpsTest extends TestCase
 
         // $ambiente agora é um parâmetro explícito de montarDps() (Fix 5 da
         // revisão final) — $cfg->ambiente_fiscal já não é lido para tpAmb.
-        $dps = (new MotorNfse())->montarDps($this->notaServico(), $cfg, 'PRODUCAO');
+        $dps = (new MotorNfse())->montarDps($this->notaServico(), $cfg, 'PRODUCAO', 1);
 
         $this->assertSame(TipoAmbiente::Producao, $dps->infDps->tipoAmbiente);
     }
@@ -153,8 +153,31 @@ class MotorNfseMontarDpsTest extends TestCase
         $cfg = $this->configuracaoSimplesNacional();
         $cfg->ambiente_fiscal = 'PRODUCAO';
 
-        $dps = (new MotorNfse())->montarDps($this->notaServico(), $cfg, 'HOMOLOGACAO');
+        $dps = (new MotorNfse())->montarDps($this->notaServico(), $cfg, 'HOMOLOGACAO', 1);
 
         $this->assertSame(TipoAmbiente::Homologacao, $dps->infDps->tipoAmbiente);
+    }
+
+    public function test_numero_dps_recebido_por_parametro_prevalece_no_id_e_no_ndps(): void
+    {
+        // Regressão do fix de numeração: nDPS não pode mais ser fixo em '1'
+        // — o parâmetro $numeroDps (vindo de NfeService::proximoNumeroDps())
+        // precisa aparecer tanto no atributo Id da DPS quanto no campo nDPS.
+        $cfg = $this->configuracaoSimplesNacional();
+
+        $dps = (new MotorNfse())->montarDps($this->notaServico(), $cfg, 'HOMOLOGACAO', 42);
+
+        $this->assertSame('42', $dps->infDps->numeroDps);
+        $this->assertStringContainsString('42', $dps->infDps->id);
+    }
+
+    public function test_serie_dps_da_configuracao_e_usada_quando_definida(): void
+    {
+        $cfg = $this->configuracaoSimplesNacional();
+        $cfg->serie_dps = '2';
+
+        $dps = (new MotorNfse())->montarDps($this->notaServico(), $cfg, 'HOMOLOGACAO', 1);
+
+        $this->assertSame('2', $dps->infDps->serie);
     }
 }

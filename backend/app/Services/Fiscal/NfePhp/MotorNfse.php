@@ -7,6 +7,7 @@ use App\Models\Configuracao;
 use App\Services\Fiscal\CrtResolver;
 use App\Services\Fiscal\Data\EmissaoResultado;
 use App\Services\Fiscal\Data\NotaFiscalData;
+use App\Services\NfeService;
 use Illuminate\Support\Facades\Log;
 use Nfse\Dto\Nfse\DpsData;
 use Nfse\Dto\Nfse\NfseData;
@@ -31,6 +32,7 @@ class MotorNfse
 {
     public function __construct(
         private readonly CertificadoStore $certificados = new CertificadoStore(),
+        private readonly NfeService $numeracao = new NfeService(),
     ) {}
 
     public function emitir(NotaFiscalData $nota, string $ambiente): EmissaoResultado
@@ -44,7 +46,8 @@ class MotorNfse
             return $this->certificados->comoArquivoTemporario($cfg, function (string $caminhoCertificado, string $senha) use ($nota, $cfg, $ambiente) {
                 $nfse = new Nfse($this->contexto($cfg, $ambiente, $caminhoCertificado, $senha));
 
-                $dps = $this->montarDps($nota, $cfg, $ambiente);
+                $numeroDps = $this->numeracao->proximoNumeroDps();
+                $dps = $this->montarDps($nota, $cfg, $ambiente, $numeroDps);
 
                 // Nfse\Service\ContribuinteService::emitir() já assina o XML,
                 // envia e faz o parse da resposta; lança Nfse\Http\Exceptions\
@@ -96,14 +99,16 @@ class MotorNfse
      * endpoint que de fato vai recebê-lo (contexto(), que já usa o
      * parâmetro, não a config).
      */
-    public function montarDps(NotaFiscalData $nota, Configuracao $cfg, string $ambiente): DpsData
+    public function montarDps(NotaFiscalData $nota, Configuracao $cfg, string $ambiente, int $numeroDps): DpsData
     {
         $docTomador = preg_replace('/\D/', '', $nota->tomador['cpf_cnpj'] ?? '') ?? '';
         $chaveDocTomador = strlen($docTomador) > 11 ? 'CNPJ' : 'CPF';
-        $serie = '1';
-        $numero = '1'; // TODO confirmar: numeração de NFS-e nacional é por competência/prestador — ver se
-                        // precisa de contador próprio antes de ir para produção real, não reaproveitar
-                        // proximo_numero_nf (que é de Spedy/Focus)
+        // $numeroDps vem de NfeService::proximoNumeroDps() (contador próprio,
+        // transacional com lockForUpdate — ver migration 2026_08_04_000001),
+        // nunca mais hardcoded: o Id da DPS repetiria a cada emissão e a
+        // segunda NFS-e nacional emitida seria rejeitada como duplicata.
+        $serie = $cfg->serie_dps ?: '1';
+        $numero = (string) $numeroDps;
 
         $idDps = IdGenerator::generateDpsId($cfg->cnpj ?? '', (string) $cfg->codigo_ibge, $serie, $numero);
 

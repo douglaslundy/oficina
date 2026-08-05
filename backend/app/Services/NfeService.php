@@ -22,6 +22,22 @@ class NfeService
         });
     }
 
+    /**
+     * Numeração própria da DPS (motor NFePHP/NFS-e nacional) — contador
+     * separado de proximo_numero_nf, que pertence à numeração de NFS-e do
+     * Spedy/Focus. Ver migration 2026_08_04_000001.
+     */
+    public function proximoNumeroDps(): int
+    {
+        return DB::transaction(function () {
+            $config = Configuracao::lockForUpdate()->first();
+            if (!$config) throw new \Exception('Configurações da empresa não encontradas.');
+            $numero = $config->proximo_numero_dps;
+            $config->increment('proximo_numero_dps');
+            return $numero;
+        });
+    }
+
     // Quando $nota->modelo === 'NF-e', $nota precisa ter sido carregado com ->load('itens') antes de chamar este método.
     public function montarNotaData(
         NotaFiscal $nota,

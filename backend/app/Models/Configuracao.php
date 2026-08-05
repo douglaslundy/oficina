@@ -25,6 +25,7 @@ class Configuracao extends Model
         'estoque_limite_padrao', 'alertas_email', 'email_alertas', 'certificado_pfx_encrypted',
         'oficina_id', 'markup_padrao_entrada_nf', 'atualizar_custo_entrada_nf',
         'certificado_senha_encrypted', 'certificado_validade', 'certificado_nome', 'certificado_status',
+        'serie_dps', 'proximo_numero_dps',
     ];
 
     protected $casts = [
