@@ -1262,3 +1262,76 @@ rodadas. Cada item cita a rodada de origem.
 
 Etapa B foi commitada e empurrada pro GitHub (`5c47bd2..693629c`) em
 2026-08-03. Deploy ainda não feito — aguardando decisão do usuário.
+
+## Rodada 21 (2026-08-04) — bug de timezone + deploy completo (Etapa A tail-fixes + Etapa B)
+
+### Achado: `now()` retornava hora UTC na aplicação
+Usuário reportou relógio da VPS "adiantado" (~3h). Investigação (SSH real
+na VPS, confirmado ter acesso apesar de tentativa inicial ter falhado por
+usar usuário/chave errados — é `root@144.91.92.70` com
+`~/.ssh/id_ed25519`):
+- SO da VPS: `timedatectl` mostra `America/Sao_Paulo`, NTP sincronizado.
+  **Relógio do host está correto.**
+- Containers `mecanicapro-*`: todos com `TZ=America/Sao_Paulo` corretamente
+  (diferente de `xadrez-essencial-*`, outro projeto na mesma VPS, esse sim
+  preso em UTC — não mexido, fora de escopo).
+- Causa real: `config('app.timezone')` do Laravel estava em `'UTC'`
+  (hardcoded, default do framework, nunca sobrescrito) — **independente**
+  do timezone do SO/container. `now()` dentro do Laravel retornava
+  `2026-08-05T01:33:35+00:00` às 22h33 local.
+- **Achado colateral mais grave que o relógio "errado"**: qualquer campo
+  fiscal calculado com `now()->format('Y-m-d')` (ex.: `dCompet` da DPS no
+  motor NFePHP, ainda no worktree isolado) gravaria a **data errada**
+  (dia seguinte) pra qualquer evento entre ~21h e meia-noite BRT.
+
+### Decisão do usuário: corrigir na raiz, não só localmente
+Troquei `config('app.timezone')` de `'UTC'` pra
+`env('APP_TIMEZONE', 'America/Sao_Paulo')` — investigado antes de mexer:
+nenhum código do projeto dependia de UTC implicitamente (`grep` não achou
+`setTimezone`/`'UTC'` hardcoded em `app/`), o scheduler já forçava
+`->timezone('America/Sao_Paulo')` em cada tarefa (redundante agora, mas
+inofensivo), e `timestamptz` no Postgres preserva o instante absoluto
+independente do timezone de exibição — mudança seguramente aditiva, sem
+risco de corromper dados já gravados.
+
+**Arquivos**: `backend/config/app.php` (timezone), `backend/.env.example`
+(documenta `APP_TIMEZONE`). Testado: 104 testes unitários locais, 0
+falhas. Commit `ed1ee31`.
+
+### Deploy completo pra produção (decisão do usuário)
+A VPS estava rodando `5c47bd2` — bem atrás do `main` (faltavam os últimos
+fixes da Etapa A + feature tests + toda a Etapa B, já prontos no GitHub
+mas nunca deployados). Como um `git pull` normal traria tudo junto com o
+fix de timezone, perguntei ao usuário; escolheu deploy completo.
+
+**Procedimento**: backup do Postgres (`pg_dump -F c`, salvo em
+`/opt/backups/`) → `git pull` (fast-forward `5c47bd2..ed1ee31`,
+preservando a edição local de `docker/nginx/tenant-slugs.map` que registra
+o subdomínio da segunda oficina, `oficina-do-lundy` — não tocado
+upstream, sem conflito) → `APP_TIMEZONE=America/Sao_Paulo` adicionado
+explicitamente no `.env` de produção → `bash deploy-vps.sh` (rebuild
+`--no-cache`, ~7min).
+
+**Resultado**: containers saudáveis, `saas.dlsistemas.com.br/api/health`
+200. Migration nova da Etapa B (`2026_08_02_000001_create_notas_fiscais_
+itens_table`) já rodou sozinha (entrypoint do container faz `migrate
+--force` no start — confirmado via `migrate:status`, sem passo manual
+necessário). Verificado depois do deploy:
+- `config('app.timezone')` = `America/Sao_Paulo`, `now()` =
+  `2026-08-04T22:50:30-03:00` (correto).
+- `stuntmotos.dlsistemas.com.br` e `oficina-do-lundy.dlsistemas.com.br`:
+  ambos respondendo (front 307 pro login, `/api/health` 200 nos dois).
+- Logs do backend sem erro/exceção desde o restart.
+
+**O que isso significa pro roadmap**: Etapa B (emissão de NF-e via
+Spedy/Focus) está **em produção agora**, não só "pronta". Falta validação
+manual do usuário usando o fluxo real (criar uma NF-e de venda de
+mercadoria pra alguma oficina de teste).
+
+### Checado, não é pendência: worktree da Etapa C1 já estava correto
+Antes de assumir que precisava replicar o fix no worktree isolado
+(`worktree-etapa-c1-nfephp-nfse`), conferi: `config/app.php` de lá **já**
+tem `env('APP_TIMEZONE', 'America/Sao_Paulo')`, herdado de commits
+anteriores próprios daquela branch (não relacionados à Etapa C1). Ou seja,
+o motor NFePHP (`MotorNfse::montarDps()`, `dCompet`/`dhEmi` via `now()`)
+nunca esteve exposto a esse bug — nada a corrigir lá.
