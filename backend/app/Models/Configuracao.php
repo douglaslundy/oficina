@@ -26,6 +26,7 @@ class Configuracao extends Model
         'oficina_id', 'markup_padrao_entrada_nf', 'atualizar_custo_entrada_nf',
         'certificado_senha_encrypted', 'certificado_validade', 'certificado_nome', 'certificado_status',
         'serie_dps', 'proximo_numero_dps',
+        'logradouro', 'numero', 'bairro',
     ];
 
     protected $casts = [

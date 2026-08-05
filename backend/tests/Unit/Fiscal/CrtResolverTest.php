@@ -13,6 +13,12 @@ class CrtResolverTest extends TestCase
         $this->assertSame(1, CrtResolver::resolver('Simples Nacional'));
     }
 
+    public function test_mei_sem_a_palavra_simples_ainda_e_crt_1(): void
+    {
+        $this->assertSame(1, CrtResolver::resolver('MEI'));
+        $this->assertSame(1, CrtResolver::resolver('Simples Nacional - MEI'));
+    }
+
     public function test_lucro_presumido_e_crt_3(): void
     {
         $this->assertSame(3, CrtResolver::resolver('Lucro Presumido'));

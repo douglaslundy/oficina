@@ -89,6 +89,9 @@ export default function EmpresaPage() {
     ['email', 'E-mail', ''],
     ['cep', 'CEP', ''],
     ['endereco', 'Endereço', '1 / -1'],
+    ['logradouro', 'Logradouro (rua/av.)', ''],
+    ['numero', 'Número', ''],
+    ['bairro', 'Bairro', ''],
     ['cidade', 'Cidade', ''],
     ['uf', 'UF', ''],
   ]

@@ -123,6 +123,25 @@ class MotorNfseMontarDpsTest extends TestCase
         $this->assertSame(TipoRetencaoIssqn::RetidoTomador, $dps->infDps->valores->tributacao->tipoRetencaoIssqn);
     }
 
+    public function test_mei_classifica_opsimpnac_2_em_vez_de_me_epp(): void
+    {
+        $cfg = $this->configuracaoSimplesNacional();
+        $cfg->regime_tributario = 'Simples Nacional - MEI';
+
+        $dps = (new MotorNfse())->montarDps($this->notaServico(), $cfg, 'HOMOLOGACAO', 1);
+
+        $this->assertSame(OpcaoSimplesNacional::Mei, $dps->infDps->prestador->regimeTributario->opcaoSimplesNacional);
+    }
+
+    public function test_simples_nacional_sem_mei_continua_me_epp(): void
+    {
+        // Regressão: garante que o fix de MEI não alterou o caso comum
+        // (Simples Nacional sem MEI continua opSimpNac=3/ME-EPP).
+        $dps = (new MotorNfse())->montarDps($this->notaServico(), $this->configuracaoSimplesNacional(), 'HOMOLOGACAO', 1);
+
+        $this->assertSame(OpcaoSimplesNacional::MeEpp, $dps->infDps->prestador->regimeTributario->opcaoSimplesNacional);
+    }
+
     public function test_regime_normal_nao_optante_pelo_simples(): void
     {
         $cfg = $this->configuracaoSimplesNacional();
@@ -179,5 +198,48 @@ class MotorNfseMontarDpsTest extends TestCase
         $dps = (new MotorNfse())->montarDps($this->notaServico(), $cfg, 'HOMOLOGACAO', 1);
 
         $this->assertSame('2', $dps->infDps->serie);
+    }
+
+    public function test_sem_endereco_decomposto_prest_end_fica_ausente(): void
+    {
+        // Configuracao padrão do fixture não seta logradouro/numero/bairro —
+        // regressão do comportamento "nunca enviar grupo end incompleto"
+        // (xLgr/nro/xBairro são obrigatórios se end for enviado).
+        $cfg = $this->configuracaoSimplesNacional();
+
+        $dps = (new MotorNfse())->montarDps($this->notaServico(), $cfg, 'HOMOLOGACAO', 1);
+
+        $this->assertNull($dps->infDps->prestador->endereco);
+    }
+
+    public function test_endereco_decomposto_completo_preenche_prest_end(): void
+    {
+        $cfg = $this->configuracaoSimplesNacional();
+        $cfg->logradouro = 'Rua das Oficinas';
+        $cfg->numero = '123';
+        $cfg->bairro = 'Centro';
+        $cfg->cep = '37130-000';
+
+        $dps = (new MotorNfse())->montarDps($this->notaServico(), $cfg, 'HOMOLOGACAO', 1);
+
+        $end = $dps->infDps->prestador->endereco;
+        $this->assertNotNull($end);
+        $this->assertSame('Rua das Oficinas', $end->logradouro);
+        $this->assertSame('123', $end->numero);
+        $this->assertSame('Centro', $end->bairro);
+        $this->assertSame((string) $cfg->codigo_ibge, $end->codigoMunicipio);
+        $this->assertSame('37130000', $end->cep);
+    }
+
+    public function test_endereco_parcial_nao_envia_prest_end(): void
+    {
+        // Só logradouro preenchido, sem numero/bairro — grupo continua
+        // ausente em vez de ir incompleto (rejeitaria no schema).
+        $cfg = $this->configuracaoSimplesNacional();
+        $cfg->logradouro = 'Rua das Oficinas';
+
+        $dps = (new MotorNfse())->montarDps($this->notaServico(), $cfg, 'HOMOLOGACAO', 1);
+
+        $this->assertNull($dps->infDps->prestador->endereco);
     }
 }

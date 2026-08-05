@@ -1439,12 +1439,83 @@ Feature test (`tests/Feature/Fiscal/MotorNfseTest.php`) continua
 `markTestSkipped` — precisa de Postgres + certificado real + rede de
 homologação, mesma limitação de sempre; não afetado por este fix.
 
-### Não commitado ainda
-Aguardando decisão do usuário sobre o fluxo (commit direto neste worktree,
-seguindo o padrão da Etapa C1).
+Commitado como `93fb93d`.
 
-### Aside: horário do servidor de produção
-Usuário reportou que o relógio da VPS de produção parece adiantado (~3h) —
-relevante porque `dhEmi` do DPS usa `now()->format('c')`. Não tenho SSH
-configurado nesta sessão pra verificar direto; pedi ao usuário rodar
-`date; timedatectl` na VPS. **Não resolvido, não investigado a fundo.**
+## Rodada 22 (2026-08-04/05) — timezone (correção de um engano meu) + 3 fixes técnicos da Etapa C1
+
+### Timezone: correção de um erro meu, não "já estava certo"
+Registrei antes (Rodada 21) que este worktree "já tinha o fix de timezone
+herdado de outros commits" — **isso estava errado**. Comparando timestamp
+dos arquivos, o que na real aconteceu: eu tinha editado
+`backend/config/app.php` deste worktree por engano (working tree não
+commitado) na hora de investigar o bug, e confundi essa edição pendente
+com histórico herdado. O commit `93fb93d` (HEAD desta branch antes desta
+rodada) continuava com `'timezone' => 'UTC'`. Corrigido agora de verdade,
+igual ao commit `ed1ee31` da main: `env('APP_TIMEZONE',
+'America/Sao_Paulo')` + `APP_TIMEZONE` no `.env.example`.
+
+### 3 fixes técnicos pendentes da Etapa C1 (endereço, cMotivo, MEI)
+Usuário confirmou seguir pelos 3 itens mais urgentes puramente técnicos,
+dado o prazo real da Resolução CGSN 189/2026 (obrigatoriedade do Emissor
+Nacional NFS-e pra ME/EPP do Simples a partir de 01/09/2026).
+
+**1. `prest.end` (endereço do prestador) — decisão do usuário: campos
+separados, não deixar sem endereço.**
+Verificado direto no XSD (`tiposComplexos_v1.01.xsd`, `TCEndereco`): se o
+grupo `end` for enviado, `xLgr`/`nro`/`xBairro` são OBRIGATÓRIOS (sem
+`minOccurs="0"`) — só `xCpl` é opcional. `Configuracao.endereco` era um
+campo de texto livre único, sem forma segura de decompor via regex (risco
+de dado fiscal errado — proibido pela regra do projeto). Solução:
+- Migration nova: `Configuracao.logradouro`/`numero`/`bairro` (novos,
+  opcionais).
+- Formulário "Dados da Empresa" (frontend) ganhou os 3 campos.
+- `MotorNfse::enderecoPrestador()` (método novo) só popula `prest.end`
+  quando os 3 campos estão preenchidos — do contrário retorna null e o
+  grupo simplesmente não é enviado (continua válido, é opcional no
+  schema).
+- **Achado técnico confirmado contra o vendor, não assumido**: as chaves
+  do array precisam ser os NOMES DE PROPRIEDADE de `EnderecoData`
+  (`codigoMunicipio`, `cep`, `logradouro`, `numero`, `bairro`), não as
+  tags XML — é assim que `Nfse\Dto\Dto::normalizeInput()` expande o
+  `MapFrom` com dot notation (`endNac.cMun`, `endNac.CEP`) pro array
+  aninhado que o schema espera. Verificado com teste real batendo em
+  `$dps->infDps->prestador->endereco->logradouro` etc., não só lendo o
+  código.
+
+**2. `cMotivo` do cancelamento — decisão do usuário: inferir por
+palavra-chave no texto livre, sem mudar UI/interface compartilhada.**
+`MotorNfse::classificarMotivoCancelamento()` (método novo, privado,
+testado via `ReflectionMethod` como `mapearResultadoConsulta()`): texto
+contendo "erro"/"engano"/"equivoco" → cMotivo=1 (Erro na Emissão); contendo
+"nao prestado"/"nao realizado"/"nao executado" → cMotivo=2 (Serviço não
+Prestado); qualquer outra coisa → cMotivo=9 (Outros, default seguro). Usa
+`Str::ascii()` pra normalizar acentuação antes de comparar.
+**Bug pego pelo próprio teste que escrevi**: a ordem original era
+`Str::ascii(strtolower($motivo))` — `strtolower()` do PHP não é
+multibyte-safe, não lida direito com "Ç"/"Ã" maiúsculos, então
+"SERVIÇO NÃO PRESTADO" não batia. Invertido pra `strtolower(Str::ascii(...))`
+— confirmado pelo teste passando depois.
+
+**3. `opSimpNac` sem suporte a MEI — decisão do usuário: mesma convenção
+de string livre.**
+`CrtResolver::resolver()` agora também reconhece "mei" como CRT=1 (MEI é
+juridicamente um regime dentro do Simples Nacional — mesmo sem a palavra
+"Simples" no texto, o CRT correto nunca é 3). `MotorNfse::
+regimeTributarioPrestador()` distingue MEI (`opSimpNac=2`) de ME/EPP
+(`opSimpNac=3`) pela mesma substring "mei" em
+`Configuracao.regime_tributario`. Convenção pro usuário: digitar algo
+como "Simples Nacional - MEI" ou só "MEI" no campo de regime tributário
+(campo de texto livre já existente, sem mudança de UI).
+
+### Testes
+`OPENSSL_CONF=/mingw64/etc/ssl/openssl.cnf ./vendor/bin/phpunit
+--testsuite=Unit`: **138 testes, 347 assertions, 0 falhas** (eram 128
+antes desta rodada — 10 testes novos: 2 endereço completo/parcial + 1
+regressão sem-endereço, 4 classificação de cMotivo, 2 MEI/ME-EPP,
+1 CrtResolver+MEI). Frontend: `npx tsc --noEmit` sem erros.
+
+### Ainda pendente (não mudou nesta rodada)
+- Merge do worktree pra `main` — decisão do usuário ainda em aberto.
+- Feature tests da Etapa C1 nunca executados contra Postgres real.
+- Validação em homologação de verdade (bloqueada por confirmar alíquota
+  ISS e adesão ao ADN de Ilicínea com a prefeitura).

@@ -126,7 +126,7 @@ class MotorNfse
                 'dCompet'  => now()->format('Y-m-d'),
                 'tpEmit'   => 1, // Prestador
                 'cLocEmi'  => (string) $cfg->codigo_ibge,
-                'prest'    => [
+                'prest'    => array_filter([
                     'CNPJ' => preg_replace('/\D/', '', $cfg->cnpj ?? ''),
                     // regTrib: presente no exemplo oficial (examples/contribuinte/emitir.php).
                     // ATENÇÃO: CrtResolver::resolver() devolve a escala do CRT do leiaute
@@ -136,7 +136,8 @@ class MotorNfse
                     // (empresa do Simples reportada como "Não Optante" e vice-versa) — por
                     // isso a tradução explícita em regimeTributarioPrestador().
                     'regTrib' => $this->regimeTributarioPrestador($cfg->regime_tributario ?? ''),
-                ],
+                    'end'     => $this->enderecoPrestador($cfg),
+                ], static fn ($v) => $v !== null),
                 'toma'     => [$chaveDocTomador => $docTomador, 'xNome' => $nota->tomador['nome'] ?? ''],
                 'serv'     => [
                     'locPrest' => ['cLocPrestacao' => (string) $cfg->codigo_ibge],
@@ -165,9 +166,10 @@ class MotorNfse
      * da NFS-e nacional, reaproveitando CrtResolver só para a classificação
      * binária "é Simples Nacional ou não" (não seu valor numérico bruto).
      *
-     * Como Configuracao.regime_tributario só distingue "Simples Nacional" de
-     * outros regimes (não distingue MEI de ME/EPP), assumimos ME/EPP quando
-     * optante — ajustar se um campo dedicado para MEI for adicionado depois.
+     * MEI é detectado pela mesma string livre (substring "mei", igual
+     * CrtResolver::resolver() já faz para decidir CRT=1) — sem campo
+     * dedicado no banco. Convenção: digitar algo como "Simples Nacional -
+     * MEI" ou só "MEI" em Configuracao.regime_tributario.
      *
      * @return array{opSimpNac: int, regApTribSN?: int, regEspTrib: int}
      */
@@ -176,8 +178,10 @@ class MotorNfse
         $crt = CrtResolver::resolver($regimeTributario);
 
         if ($crt === 1) {
+            $ehMei = str_contains(strtolower($regimeTributario), 'mei');
+
             return [
-                'opSimpNac'   => 3, // Optante - ME/EPP (assumido; Configuracao não distingue MEI)
+                'opSimpNac'   => $ehMei ? 2 : 3, // 2=Optante - MEI, 3=Optante - ME/EPP
                 'regApTribSN' => 1, // Regime de apuração dos tributos federais e municipal pelo SN (mais comum)
                 'regEspTrib'  => 0, // Nenhum
             ];
@@ -186,6 +190,43 @@ class MotorNfse
         return [
             'opSimpNac'  => 1, // Não Optante
             'regEspTrib' => 0, // Nenhum
+        ];
+    }
+
+    /**
+     * Monta o grupo prest.end (Nfse\Dto\Nfse\EnderecoData) quando os 3 campos
+     * decompostos exigidos pelo schema estiverem preenchidos — xLgr/nro/
+     * xBairro não têm minOccurs="0" em TCEndereco (references/schemas/
+     * tiposComplexos_v1.01.xsd), ou seja, são obrigatórios SE o grupo end for
+     * enviado. Configuracao.endereco (texto livre único) não é uma fonte
+     * segura pra derivar isso — por isso só populamos quando logradouro,
+     * numero e bairro (campos novos e opcionais) já foram preenchidos; caso
+     * contrário retorna null e prest.end simplesmente não é enviado (o grupo
+     * inteiro é opcional em PrestadorData::$endereco).
+     *
+     * As chaves usadas são os NOMES DE PROPRIEDADE de EnderecoData
+     * (codigoMunicipio, cep, logradouro, numero, bairro), não as tags XML —
+     * é assim que Nfse\Dto\Dto::normalizeInput() expande o MapFrom com dot
+     * notation ('endNac.cMun', 'endNac.CEP') para o array aninhado que o
+     * schema espera. Confirmado lendo o construtor de Dto no vendor, não
+     * assumido.
+     */
+    private function enderecoPrestador(Configuracao $cfg): ?array
+    {
+        $logradouro = trim((string) ($cfg->logradouro ?? ''));
+        $numero = trim((string) ($cfg->numero ?? ''));
+        $bairro = trim((string) ($cfg->bairro ?? ''));
+
+        if ($logradouro === '' || $numero === '' || $bairro === '') {
+            return null;
+        }
+
+        return [
+            'codigoMunicipio' => (string) $cfg->codigo_ibge,
+            'cep'             => preg_replace('/\D/', '', $cfg->cep ?? '') ?: null,
+            'logradouro'      => $logradouro,
+            'numero'          => $numero,
+            'bairro'          => $bairro,
         ];
     }
 
@@ -333,10 +374,11 @@ class MotorNfse
      * de verdade em vez de devolver o placeholder do brief.
      *
      * Nossa assinatura só recebe um $motivo em texto livre (sem código
-     * estruturado), então usamos cMotivo='9' (Outros) e colocamos o texto em
-     * xMotivo — se o chamador precisar dos outros dois motivos (Erro na
-     * Emissão / Serviço não Prestado), a assinatura de cancelar() precisará
-     * de um parâmetro extra no futuro.
+     * estruturado) — cMotivo é inferido do texto por palavra-chave
+     * (classificarMotivoCancelamento()), com '9'/Outros como default seguro
+     * pra qualquer texto que não bata com as outras duas categorias. O texto
+     * original sempre vai integralmente em xMotivo, então a classificação
+     * errada nunca perde informação — só deixa de marcar 1/2 quando poderia.
      */
     public function cancelar(string $referencia, string $motivo, string $ambiente): EmissaoResultado
     {
@@ -362,7 +404,7 @@ class MotorNfse
                         'tipoEvento' => '101101', // Cancelamento — também forçado internamente por ContribuinteService::cancelar()
                         'e101101' => [
                             'xDesc'   => 'Cancelamento de NFS-e', // valor fixo exigido pelo XSD v1.01 (TE101101)
-                            'cMotivo' => '9', // Tabela TSCodJustCanc: "9 - Outros" (nossa interface só tem texto livre)
+                            'cMotivo' => $this->classificarMotivoCancelamento($motivo),
                             'xMotivo' => $motivo,
                         ],
                     ],
@@ -392,6 +434,34 @@ class MotorNfse
 
             return EmissaoResultado::erro('Falha técnica ao cancelar NFS-e via NFePHP: ' . $e->getMessage(), $referencia);
         }
+    }
+
+    /**
+     * Classifica o texto livre de motivo do cancelamento no código oficial
+     * da Tabela TSCodJustCanc (references/schemas/tiposEventos_v1.01.xsd):
+     * 1=Erro na Emissão, 2=Serviço não Prestado, 9=Outros (default seguro —
+     * nunca inventa 1 ou 2 sem uma palavra-chave clara no texto).
+     *
+     * Str::ascii() normaliza acentos antes da comparação (usuário pode
+     * digitar "não prestado" ou "nao prestado" indiferentemente).
+     */
+    private function classificarMotivoCancelamento(string $motivo): string
+    {
+        // Str::ascii() primeiro, strtolower() depois: strtolower() do PHP não
+        // é multibyte-safe (não lida com 'Ç'/'Ã' maiúsculos corretamente),
+        // então rodar na ordem inversa deixava "SERVIÇO NÃO" sem bater com
+        // "servico nao" — achado pelo teste, não hipotético.
+        $m = strtolower(\Illuminate\Support\Str::ascii($motivo));
+
+        if (str_contains($m, 'erro') || str_contains($m, 'engano') || str_contains($m, 'equivoco')) {
+            return '1'; // Erro na Emissão
+        }
+
+        if (str_contains($m, 'nao prestado') || str_contains($m, 'nao realizado') || str_contains($m, 'nao executado')) {
+            return '2'; // Serviço não Prestado
+        }
+
+        return '9'; // Outros
     }
 
     /**

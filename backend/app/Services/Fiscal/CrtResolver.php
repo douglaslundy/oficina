@@ -18,6 +18,10 @@ final class CrtResolver
             throw new \InvalidArgumentException('Regime tributário não pode ser vazio para derivar o CRT.');
         }
 
-        return str_contains(strtolower($regimeTributario), 'simples') ? 1 : 3;
+        $r = strtolower($regimeTributario);
+        // MEI é juridicamente um regime dentro do Simples Nacional — mesmo
+        // que o texto livre diga só "MEI" sem a palavra "Simples", o CRT
+        // correto continua sendo 1, nunca 3 (Regime Normal).
+        return (str_contains($r, 'simples') || str_contains($r, 'mei')) ? 1 : 3;
     }
 }
