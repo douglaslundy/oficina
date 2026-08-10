@@ -209,6 +209,28 @@ class NotaFiscalController extends Controller
         return response()->json(['data' => new NotaFiscalResource($nota->fresh()->load('cliente'))]);
     }
 
+    public function status(string $id): JsonResponse
+    {
+        $nota = NotaFiscal::with(['cliente', 'itens'])->findOrFail($id);
+
+        if ($nota->status !== 'PROCESSANDO') {
+            return response()->json(['data' => new NotaFiscalResource($nota)]);
+        }
+
+        $ambiente = app(\App\Services\Fiscal\FiscalProviderManager::class)->ambienteDaOficina();
+
+        try {
+            $resultado = $this->nfeService->consultarStatus($nota);
+            $nota      = $this->aplicarResultadoEmissao($nota, $resultado, $ambiente);
+        } catch (\Exception $e) {
+            // Falha ao consultar não é erro fatal pro polling — a nota continua
+            // PROCESSANDO, o frontend tenta de novo no próximo tick.
+            return response()->json(['data' => new NotaFiscalResource($nota)]);
+        }
+
+        return response()->json(['data' => new NotaFiscalResource($nota->fresh()->load('cliente'))]);
+    }
+
     /**
      * Aplica o resultado de emitir()/consultarStatus() na nota e dispara billing/
      * alertas quando autorizada em produção. Compartilhado entre emitir() (Task 7)

@@ -211,4 +211,68 @@ class NotaFiscalNfceTest extends TestCase
         $this->assertSame(2, \App\Models\Configuracao::first()->proximo_numero_nf);
         $this->assertSame(3, \App\Models\Configuracao::first()->proximo_numero_nfce);
     }
+
+    public function test_status_consulta_provedor_quando_processando_e_atualiza_para_autorizada(): void
+    {
+        $this->criarConfiguracao(['uf' => 'MG']);
+        $oficina = \App\Models\Oficina::create([
+            'nome' => 'Oficina Spedy NFC-e', 'cnpj' => '11222333000181',
+            'slug' => 'oficina-spedy-nfce-' . uniqid(), 'provedor_fiscal' => 'SPEDY',
+        ]);
+        $token   = $this->loginAdmin();
+        $headers = ['X-Tenant' => $oficina->slug];
+        $cliente = Cliente::create(['nome' => 'Fulano', 'cpf_cnpj' => '87748248800', 'uf' => 'MG']);
+        $produto = $this->criarProduto();
+
+        Http::fake([
+            '*/consumer-invoices' => Http::response(['id' => 'inv-1', 'status' => 'enqueued'], 202),
+            '*/consumer-invoices/*' => Http::response([
+                'status' => 'authorized', 'accessKey' => 'CHAVE-POLL', 'number' => '3',
+            ], 200),
+        ]);
+
+        $criar  = $this->withToken($token)->withHeaders($headers)->postJson('/api/notas-fiscais', $this->payloadVenda($cliente->id, $produto->id));
+        $notaId = $criar->json('data.id');
+        $emitir = $this->withToken($token)->withHeaders($headers)->postJson("/api/notas-fiscais/{$notaId}/emitir");
+        $emitir->assertJsonPath('data.status', 'PROCESSANDO');
+
+        $status = $this->withToken($token)->withHeaders($headers)->getJson("/api/notas-fiscais/{$notaId}/status");
+
+        $status->assertStatus(200)
+            ->assertJsonPath('data.status', 'AUTORIZADA')
+            ->assertJsonPath('data.chave_acesso', 'CHAVE-POLL');
+        $this->assertDatabaseHas('notas_fiscais', ['id' => $notaId, 'status' => 'AUTORIZADA']);
+    }
+
+    public function test_status_nao_consulta_provedor_quando_ja_autorizada(): void
+    {
+        $this->criarConfiguracao(['uf' => 'MG']);
+        $oficina = \App\Models\Oficina::create([
+            'nome' => 'Oficina Focus 2', 'cnpj' => '11222333000181',
+            'slug' => 'oficina-focus2-' . uniqid(), 'provedor_fiscal' => 'FOCUS',
+        ]);
+        $token   = $this->loginAdmin();
+        $headers = ['X-Tenant' => $oficina->slug];
+        $cliente = Cliente::create(['nome' => 'Fulano', 'cpf_cnpj' => '87748248800', 'uf' => 'MG']);
+        $produto = $this->criarProduto();
+
+        Http::fake([
+            '*/v2/nfce?ref=*' => Http::response(['status' => 'autorizado', 'numero' => '1', 'chave_nfe' => 'K1'], 201),
+        ]);
+
+        $criar  = $this->withToken($token)->withHeaders($headers)->postJson('/api/notas-fiscais', $this->payloadVenda($cliente->id, $produto->id));
+        $notaId = $criar->json('data.id');
+        $this->withToken($token)->withHeaders($headers)->postJson("/api/notas-fiscais/{$notaId}/emitir");
+
+        // Nenhum fake registrado pra GET /v2/nfce/{ref} (consulta) — status() só
+        // chama o provedor quando a nota está PROCESSANDO; como ela já está
+        // AUTORIZADA aqui, uma implementação correta nem tenta consultar de novo.
+        // Se status() chamasse o provedor mesmo assim, Http::fake() devolveria uma
+        // resposta vazia (200 sem corpo) pra qualquer URL não mapeada, o que
+        // provavelmente quebraria a leitura de 'status'/'chave_nfe' no resultado —
+        // então uma regressão aqui tende a aparecer como erro, não passar em silêncio.
+        $status = $this->withToken($token)->withHeaders($headers)->getJson("/api/notas-fiscais/{$notaId}/status");
+
+        $status->assertStatus(200)->assertJsonPath('data.status', 'AUTORIZADA');
+    }
 }
