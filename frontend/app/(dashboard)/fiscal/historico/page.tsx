@@ -23,14 +23,15 @@ export default function HistoricoNFPage() {
   const [cancelModal, setCancelModal]   = useState<{ id: string } | null>(null)
   const [motivo, setMotivo]             = useState('')
   const [cancelando, setCancelando]     = useState(false)
+  const [modeloFiltro, setModeloFiltro] = useState('')
 
   const fetchNotas = useCallback(() => {
     setLoading(true)
-    api.get('/notas-fiscais')
+    api.get('/notas-fiscais', { params: modeloFiltro ? { modelo: modeloFiltro } : {} })
       .then(r => { setNotas(r.data.data ?? []); setSelected(new Set()) })
       .catch(() => setNotas([]))
       .finally(() => setLoading(false))
-  }, [])
+  }, [modeloFiltro])
 
   useEffect(fetchNotas, [fetchNotas])
 
@@ -138,23 +139,35 @@ export default function HistoricoNFPage() {
         <h1 className="font-display" style={{ fontSize: 28, fontWeight: 800, color: 'var(--text)', margin: 0 }}>
           Histórico de Notas Fiscais
         </h1>
-        {selected.size > 0 && (
-          <button
-            onClick={baixarZip}
-            disabled={baixandoZip}
-            className="font-display"
-            style={{
-              display: 'flex', alignItems: 'center', gap: 8,
-              padding: '8px 20px', borderRadius: 8, border: 'none',
-              background: baixandoZip ? 'var(--border)' : 'var(--accent)',
-              color: baixandoZip ? 'var(--muted)' : '#000',
-              fontSize: 14, fontWeight: 700,
-              cursor: baixandoZip ? 'not-allowed' : 'pointer',
-            }}
+        <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+          <select
+            value={modeloFiltro}
+            onChange={e => setModeloFiltro(e.target.value)}
+            style={{ padding: '8px 12px', borderRadius: 8, background: 'var(--card)', border: '1px solid var(--border)', color: 'var(--text)', fontSize: 13 }}
           >
-            {baixandoZip ? '⟳ Gerando ZIP...' : `⬇ Baixar ${selected.size} NF(s) em ZIP`}
-          </button>
-        )}
+            <option value="">Todos os modelos</option>
+            <option value="NF-e">NF-e</option>
+            <option value="NFC-e">NFC-e</option>
+            <option value="NFS-e">NFS-e</option>
+          </select>
+          {selected.size > 0 && (
+            <button
+              onClick={baixarZip}
+              disabled={baixandoZip}
+              className="font-display"
+              style={{
+                display: 'flex', alignItems: 'center', gap: 8,
+                padding: '8px 20px', borderRadius: 8, border: 'none',
+                background: baixandoZip ? 'var(--border)' : 'var(--accent)',
+                color: baixandoZip ? 'var(--muted)' : '#000',
+                fontSize: 14, fontWeight: 700,
+                cursor: baixandoZip ? 'not-allowed' : 'pointer',
+              }}
+            >
+              {baixandoZip ? '⟳ Gerando ZIP...' : `⬇ Baixar ${selected.size} NF(s) em ZIP`}
+            </button>
+          )}
+        </div>
       </div>
 
       {/* Table */}
@@ -225,6 +238,7 @@ export default function HistoricoNFPage() {
                       {nota.status === 'AUTORIZADA' && (
                         <button
                           onClick={() => { setCancelModal({ id: nota.id }); setMotivo('') }}
+                          title="Cancelável em até 30 minutos após a emissão — o prazo exato é decidido pela SEFAZ"
                           style={{ background: 'none', border: '1px solid var(--danger)', color: 'var(--danger)', borderRadius: 6, padding: '4px 10px', cursor: 'pointer', fontSize: 13, whiteSpace: 'nowrap' }}
                         >
                           Cancelar

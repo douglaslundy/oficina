@@ -32,6 +32,9 @@ class NotaFiscalController extends Controller
         if ($request->has('cliente_id')) {
             $query->where('cliente_id', $request->cliente_id);
         }
+        if ($request->has('modelo')) {
+            $query->where('modelo', $request->modelo);
+        }
 
         return NotaFiscalResource::collection($query->paginate(20));
     }
