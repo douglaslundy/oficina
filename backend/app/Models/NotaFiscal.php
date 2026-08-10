@@ -25,7 +25,7 @@ class NotaFiscal extends Model
         'numero', 'serie', 'modelo', 'cliente_id', 'os_id',
         'natureza_operacao', 'forma_pagamento', 'subtotal', 'desconto',
         'aliquota_iss', 'valor_iss', 'valor_total', 'status',
-        'chave_acesso', 'protocolo', 'xml_retorno', 'pdf_url', 'observacoes', 'emitido_em',
+        'chave_acesso', 'protocolo', 'xml_retorno', 'pdf_url', 'qrcode_url', 'observacoes', 'emitido_em',
         'oficina_id',
         'provedor', 'ambiente', 'referencia_externa',
     ];

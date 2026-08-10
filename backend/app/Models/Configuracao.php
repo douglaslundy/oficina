@@ -21,7 +21,7 @@ class Configuracao extends Model
         'razao_social', 'nome_fantasia', 'cnpj', 'inscricao_estadual',
         'inscricao_municipal', 'regime_tributario', 'cep', 'endereco',
         'cidade', 'uf', 'telefone', 'email', 'ambiente_fiscal', 'serie_nf',
-        'proximo_numero_nf', 'aliquota_iss', 'cnae', 'codigo_ibge',
+        'serie_nfce', 'proximo_numero_nf', 'proximo_numero_nfce', 'aliquota_iss', 'cnae', 'codigo_ibge',
         'estoque_limite_padrao', 'alertas_email', 'email_alertas', 'certificado_pfx_encrypted',
         'oficina_id', 'markup_padrao_entrada_nf', 'atualizar_custo_entrada_nf',
         'certificado_senha_encrypted', 'certificado_validade', 'certificado_nome', 'certificado_status',
