@@ -1065,12 +1065,17 @@ autocorretor pra "deploy"). Fluxo:
 Etapa C2.**
 
 1. **NFC-e (Nota Fiscal de Consumidor Eletrônica, modelo 65)** — brainstorm
-   CONCLUÍDO, spec escrito e commitado nesta sessão (ver Rodada 24, acima):
-   `docs/superpowers/specs/2026-08-10-nfce-design.md` (commit `f6c970f`).
-   **Próximo passo exato**: pedir ao usuário pra revisar o spec commitado;
-   se aprovar (ou pedir ajustes e reaprovar depois), invocar
-   `superpowers:writing-plans` pra gerar o plano de implementação. Ainda
-   não escrever código nem invocar SDD antes do plano existir.
+   e spec CONCLUÍDOS (Rodada 24), plano de implementação CONCLUÍDO e
+   aprovado implicitamente pelo usuário ("Siga"), ver Rodada 24:
+   `docs/superpowers/specs/2026-08-10-nfce-design.md` (commit `f6c970f`) +
+   `docs/superpowers/plans/2026-08-10-nfce.md` (commit `ae3f870`, 11 tasks).
+   **Próximo passo exato**: escolher execução (subagent-driven-development
+   recomendado, ou executing-plans inline) e rodar as 11 tasks em ordem —
+   cada task já tem testes escritos primeiro (TDD), código, e passo de
+   commit. Tasks 1-9 são backend (PHP/Laravel), 10-11 são frontend
+   (Next.js). Task 9 precisa de `composer require endroid/qr-code` antes
+   de codar. Nenhum código foi escrito ainda além do que já estava em
+   produção antes desta sessão.
 2. **Depois: Etapa C2 (NF-e via NFePHP `sped-nfe` + contingência EPEC)**
    — só existe como parte do spec combinado original
    `docs/superpowers/specs/2026-07-25-motor-nfephp-design.md` (que cobria
@@ -1423,6 +1428,17 @@ payload é hipótese de trabalho baseada no padrão já usado pelo
 - Spec commitado: `docs/superpowers/specs/2026-08-10-nfce-design.md`
   (commit `f6c970f`). Autorevisão de placeholders/consistência/escopo/
   ambiguidade feita, nada pendente encontrado.
-- **Nenhum código escrito ainda.** Próximo passo: usuário revisar o spec
-  commitado; se aprovado, invocar `superpowers:writing-plans` pra gerar o
-  plano de implementação (não pular pra código direto).
+- Usuário aprovou o spec ("Siga"). Plano de implementação escrito e
+  commitado: `docs/superpowers/plans/2026-08-10-nfce.md` (commit `ae3f870`,
+  11 tasks, TDD). Autorevisão do plano corrigiu 2 pontos: uma asserção
+  fraca de teste (Task 7, numeração) virou exata, e um comentário
+  impreciso sobre `Http::fake()` (Task 8) foi corrigido.
+- **Achado durante o planejamento, fora do escopo desta feature**:
+  `NotaFiscalController::cancelar()` nunca chamou de verdade o
+  `FiscalProvider::cancelar()` do provedor — só marca `status='CANCELADA'`
+  local. Afeta NF-e/NFS-e também, não é introduzido pela NFC-e. Registrado
+  no topo do plano como "Achado fora de escopo", não corrigido (fora do
+  que foi aprovado no spec). Vale revisitar depois.
+- **Nenhum código escrito ainda** — só spec e plano. Próximo passo: decidir
+  execução (subagent-driven-development recomendado, ou executing-plans
+  inline) e rodar o plano task a task.
