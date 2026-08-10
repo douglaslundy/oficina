@@ -40,4 +40,9 @@ final class EmissaoResultado
     {
         return new self('ERRO', null, null, null, null, null, $mensagemErro, $ref);
     }
+
+    public static function contingencia(string $xml, ?string $ref = null): self
+    {
+        return new self('CONTINGENCIA', null, null, null, $xml, null, null, $ref);
+    }
 }

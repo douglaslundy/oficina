@@ -78,8 +78,44 @@ class MotorNfeMontarNfeTest extends TestCase
         $xml = $motor->montarNfe($this->notaVenda(), $cfg, 'HOMOLOGACAO', 1, 1);
 
         $this->assertStringContainsString('<CSOSN>102</CSOSN>', $xml);
-        $this->assertStringNotContainsString('<CST>', $xml);
+        // Corrigido (Task 4): a asserção original era `assertStringNotContainsString('<CST>', $xml)`
+        // — testava (corretamente, na época) que o grupo ICMS usa CSOSN em vez de
+        // CST pra CRT=1. Ficou imprecisa demais depois que esta task adicionou os
+        // grupos PIS/COFINS obrigatórios por item (exigidos pelo XSD independente
+        // do CRT — ver test_monta_xml_com_grupos_pis_e_cofins_por_item abaixo),
+        // que legitimamente usam <CST> (PIS/COFINS sempre usam CST, mesmo no
+        // Simples Nacional — CSOSN é específico de ICMS). Restrita ao grupo ICMS
+        // pra preservar a intenção original da asserção.
+        preg_match('/<ICMS>.*?<\/ICMS>/', $xml, $blocoIcms);
+        $this->assertStringNotContainsString('<CST>', $blocoIcms[0] ?? '');
         $this->assertStringContainsString('<CRT>1</CRT>', $xml);
+    }
+
+    /**
+     * Task 4 — achado da revisão da Task 3: Make::addTagDet() só inclui
+     * <PIS>/<COFINS> quando aPIS[item]/aCOFINS[item] são populados por
+     * tagPIS()/tagCOFINS() explícitos (confirmado em Make.php ~743-755); o
+     * XSD da NF-e v4.00 exige os dois grupos por item, independente do CRT.
+     * CST 49 com base/valor zerados é o padrão pra Simples Nacional (CRT=1,
+     * regime real da oficina) — PIS/COFINS é pago via DAS, não calculado
+     * por operação.
+     */
+    public function test_monta_xml_com_grupos_pis_e_cofins_por_item(): void
+    {
+        $cfg = $this->configuracaoSimplesNacional();
+
+        $motor = new MotorNfe();
+        $xml = $motor->montarNfe($this->notaVenda(), $cfg, 'HOMOLOGACAO', 1, 1);
+
+        $this->assertStringContainsString('<PIS>', $xml);
+        $this->assertStringContainsString('<PISOutr>', $xml);
+        $this->assertStringContainsString('<COFINS>', $xml);
+        $this->assertStringContainsString('<COFINSOutr>', $xml);
+        // CST 49 aparece duas vezes (PIS e COFINS) além do CSOSN — checa
+        // via contagem pra não depender de qual aparece primeiro no XML.
+        $this->assertSame(2, substr_count($xml, '<CST>49</CST>'));
+        $this->assertStringContainsString('<vPIS>0.00</vPIS>', $xml);
+        $this->assertStringContainsString('<vCOFINS>0.00</vCOFINS>', $xml);
     }
 
     public function test_uf_diferente_gera_iddest_interestadual(): void
