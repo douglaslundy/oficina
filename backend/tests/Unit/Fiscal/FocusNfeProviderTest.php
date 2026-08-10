@@ -328,4 +328,87 @@ class FocusNfeProviderTest extends TestCase
 
         $this->assertSame('PROCESSANDO', $status);
     }
+
+    private function notaNfce(): NotaFiscalData
+    {
+        return new NotaFiscalData(
+            tipo: 'NFSE',
+            tomador: [
+                'nome' => 'Cliente Balcão', 'cpf_cnpj' => '87748248800',
+                'email' => null, 'cep' => null, 'logradouro' => null,
+                'numero' => null, 'bairro' => null, 'cidade' => 'São Paulo',
+                'uf' => 'SP', 'codigo_ibge' => '3550308',
+            ],
+            descricao: 'Venda de peças',
+            valorServicos: 0.0,
+            aliquotaIss: 0.0,
+            issRetido: false,
+            codigoServicoFederal: '',
+            codigoServicoMunicipal: '',
+            naturezaOperacao: 'Venda de Mercadoria',
+            referenciaExterna: 'os-nfce-1',
+            modelo: 'NFCE',
+            itens: [[
+                'produto_id' => 'prod-1', 'descricao' => 'Filtro de óleo',
+                'ncm' => '84212300', 'cfop' => '5102', 'origem' => 0,
+                'tributacao_icms' => 'NORMAL', 'cst_csosn' => '102',
+                'quantidade' => 2, 'valor_unitario' => 35.50,
+            ]],
+            formaPagamento: 'PIX',
+        );
+    }
+
+    public function test_payload_nfce_monta_itens_destinatario_pf_e_pagamento(): void
+    {
+        $p = new FocusNfeProvider('https://homologacao.focusnfe.com.br', 'master', 'HOMOLOGACAO', 'tok');
+        $payload = $p->montarPayloadNfce($this->notaNfce());
+
+        $this->assertSame('Venda de Mercadoria', $payload['natureza_operacao']);
+        $this->assertSame(1, $payload['presenca_comprador']);
+        $this->assertSame('87748248800', $payload['cpf_destinatario']);
+        $this->assertArrayNotHasKey('cnpj_destinatario', $payload);
+        $this->assertCount(1, $payload['items']);
+        $this->assertSame('5102', $payload['items'][0]['cfop']);
+        $this->assertSame('17', $payload['formas_pagamento'][0]['forma_pagamento']);
+        $this->assertSame(71.0, $payload['formas_pagamento'][0]['valor_pagamento']);
+    }
+
+    public function test_emitir_nfce_autorizada_sincrona(): void
+    {
+        Http::fake([
+            '*/v2/nfce?ref=os-nfce-1' => Http::response([
+                'status' => 'autorizado',
+                'numero' => '55',
+                'chave_nfe' => 'CHAVE-NFCE',
+                'caminho_xml_nota_fiscal' => 'https://focus/xml/nfce-1.xml',
+                'caminho_danfe' => 'https://focus/danfe/nfce-1.pdf',
+                'qrcode_url' => 'https://www.homologacao.nfce.fazenda.sp.gov.br/qrcode?p=CHAVE',
+            ], 201),
+            'https://focus/xml/nfce-1.xml' => Http::response('<xml>nfce real</xml>', 200),
+        ]);
+
+        $p = new FocusNfeProvider('https://homologacao.focusnfe.com.br', 'master', 'HOMOLOGACAO', 'tok');
+        $r = $p->emitir($this->notaNfce());
+
+        $this->assertSame('AUTORIZADA', $r->status);
+        $this->assertSame('55', $r->numero);
+        $this->assertSame('CHAVE-NFCE', $r->chave);
+        $this->assertStringContainsString('<xml>nfce real</xml>', $r->xml);
+        $this->assertSame('https://www.homologacao.nfce.fazenda.sp.gov.br/qrcode?p=CHAVE', $r->qrCodeUrl);
+    }
+
+    public function test_consultar_nfce_usa_recurso_correto(): void
+    {
+        Http::fake([
+            '*/v2/nfce/os-nfce-1' => Http::response([
+                'status' => 'autorizado', 'numero' => '55', 'chave_nfe' => 'CHAVE-NFCE',
+            ], 200),
+        ]);
+
+        $p = new FocusNfeProvider('https://homologacao.focusnfe.com.br', 'master', 'HOMOLOGACAO', 'tok');
+        $r = $p->consultar('os-nfce-1', 'NFCE');
+
+        $this->assertSame('AUTORIZADA', $r->status);
+        Http::assertSent(fn ($req) => str_contains($req->url(), '/v2/nfce/os-nfce-1'));
+    }
 }

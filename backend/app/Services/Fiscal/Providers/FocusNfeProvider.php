@@ -58,7 +58,11 @@ class FocusNfeProvider implements FiscalProvider
 
     public function emitir(NotaFiscalData $nota): EmissaoResultado
     {
-        return $nota->modelo === 'NFE' ? $this->emitirNfe($nota) : $this->emitirNfse($nota);
+        return match ($nota->modelo) {
+            'NFE'  => $this->emitirNfe($nota),
+            'NFCE' => $this->emitirNfce($nota),
+            default => $this->emitirNfse($nota),
+        };
     }
 
     private function emitirNfse(NotaFiscalData $nota): EmissaoResultado
@@ -91,16 +95,128 @@ class FocusNfeProvider implements FiscalProvider
         return $this->resultadoNfeDe($resp->json(), $nota->referenciaExterna);
     }
 
-    public function consultar(string $referencia, string $modelo = 'NFSE'): EmissaoResultado
+    private function emitirNfce(NotaFiscalData $nota): EmissaoResultado
     {
         $resp = Http::withBasicAuth($this->emissorToken ?? $this->masterToken, '')
-            ->get("{$this->baseUrl}/v2/nfse/{$referencia}");
+            ->post("{$this->baseUrl}/v2/nfce?ref={$nota->referenciaExterna}", $this->montarPayloadNfce($nota));
+
+        if ($resp->status() >= 400) {
+            return EmissaoResultado::rejeitada(
+                $resp->json('mensagem') ?? ($resp->json('erros.0.mensagem') ?? 'Erro na emissão de NFC-e (Focus).'),
+                $nota->referenciaExterna,
+            );
+        }
+
+        return $this->resultadoNfceDe($resp->json(), $nota->referenciaExterna);
+    }
+
+    public function montarPayloadNfce(NotaFiscalData $n): array
+    {
+        $docTomador = preg_replace('/\D/', '', $n->tomador['cpf_cnpj']) ?? '';
+        $chaveDoc   = strlen($docTomador) > 11 ? 'cnpj_destinatario' : 'cpf_destinatario';
+        $valorTotal = round(array_sum(array_map(
+            fn ($item) => (float) $item['quantidade'] * (float) $item['valor_unitario'],
+            $n->itens
+        )), 2);
+
+        return [
+            'natureza_operacao'  => $n->naturezaOperacao,
+            'data_emissao'       => date('c'),
+            'presenca_comprador' => 1, // presencial — único cenário coberto na v1
+            'modalidade_frete'   => 9, // sem frete
+            'local_destino'      => 1, // operação interna (mesmo estado); NFC-e interestadual fica pra quando surgir demanda real
+            'indicador_inscricao_estadual_destinatario' => 9, // não contribuinte — sempre verdadeiro em NFC-e
+            'nome_destinatario'  => $n->tomador['nome'],
+            $chaveDoc            => $docTomador,
+            'items' => array_map(fn (int $i, array $item) => [
+                'numero_item'               => $i + 1,
+                'codigo_produto'            => $item['produto_id'],
+                'descricao'                 => $item['descricao'],
+                'cfop'                      => $item['cfop'],
+                'codigo_ncm'                => $item['ncm'],
+                'unidade_comercial'         => 'UN',
+                'quantidade_comercial'      => (float) $item['quantidade'],
+                'unidade_tributavel'        => 'UN',
+                'quantidade_tributavel'     => (float) $item['quantidade'],
+                'valor_unitario_comercial'  => (float) $item['valor_unitario'],
+                'valor_bruto'               => round((float) $item['quantidade'] * (float) $item['valor_unitario'], 2),
+                'icms_origem'               => (int) $item['origem'],
+                'icms_situacao_tributaria'  => $item['cst_csosn'],
+            ], array_keys($n->itens), $n->itens),
+            'formas_pagamento' => [[
+                'forma_pagamento' => $this->codigoFormaPagamento($n->formaPagamento),
+                'valor_pagamento' => $valorTotal,
+            ]],
+        ];
+    }
+
+    // Mapeamento pros códigos SEFAZ de forma de pagamento (tabela tPag). Forma de
+    // pagamento não confirmada/livre cai em "99 - Outros" — campo informativo do
+    // cupom, não afeta cálculo de ICMS/CFOP/CST, então um default aqui é seguro
+    // (diferente de origem/tributacao_icms, que bloqueiam a emissão se ausentes).
+    private function codigoFormaPagamento(string $formaPagamento): string
+    {
+        return match ($formaPagamento) {
+            'Dinheiro'          => '01',
+            'Cartão de Crédito' => '03',
+            'Cartão de Débito'  => '04',
+            'Boleto'            => '15',
+            'PIX'               => '17',
+            default             => '99',
+        };
+    }
+
+    private function resultadoNfceDe(array $json, ?string $ref): EmissaoResultado
+    {
+        $status = $this->mapStatus((string) ($json['status'] ?? 'processando_autorizacao'));
+
+        if ($status === 'REJEITADA') {
+            return EmissaoResultado::rejeitada(
+                $json['mensagem'] ?? ($json['erros'][0]['mensagem'] ?? 'Rejeitada pela SEFAZ.'),
+                $ref,
+            );
+        }
+        if ($status === 'PROCESSANDO') {
+            return EmissaoResultado::processando($ref);
+        }
+        if ($status === 'CANCELADA') {
+            return EmissaoResultado::cancelada($ref);
+        }
+
+        $xmlUrl      = $json['caminho_xml_nota_fiscal'] ?? null;
+        $xmlConteudo = $xmlUrl ? $this->baixarXmlNfe($xmlUrl) : null;
+
+        return EmissaoResultado::autorizada(
+            chave: $json['chave_nfe'] ?? null,
+            protocolo: null,
+            numero: isset($json['numero']) ? (string) $json['numero'] : null,
+            xml: $xmlConteudo,
+            pdfUrl: $json['caminho_danfe'] ?? null,
+            ref: $ref,
+            qrCodeUrl: $json['qrcode_url'] ?? null,
+        );
+    }
+
+    public function consultar(string $referencia, string $modelo = 'NFSE'): EmissaoResultado
+    {
+        $recurso = match ($modelo) {
+            'NFE'  => 'nfe',
+            'NFCE' => 'nfce',
+            default => 'nfse',
+        };
+
+        $resp = Http::withBasicAuth($this->emissorToken ?? $this->masterToken, '')
+            ->get("{$this->baseUrl}/v2/{$recurso}/{$referencia}");
 
         if ($resp->failed()) {
             return EmissaoResultado::rejeitada($resp->json('mensagem') ?? 'Erro ao consultar (Focus).', $referencia);
         }
 
-        return $this->resultadoDe($resp->json(), $referencia);
+        return match ($modelo) {
+            'NFE'  => $this->resultadoNfeDe($resp->json(), $referencia),
+            'NFCE' => $this->resultadoNfceDe($resp->json(), $referencia),
+            default => $this->resultadoDe($resp->json(), $referencia),
+        };
     }
 
     public function cancelar(string $referencia, string $motivo): EmissaoResultado
