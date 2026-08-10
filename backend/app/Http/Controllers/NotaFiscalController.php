@@ -280,13 +280,49 @@ class NotaFiscalController extends Controller
 
     public function pdf(string $id): \Illuminate\Http\Response
     {
-        $nota = NotaFiscal::with('cliente')->findOrFail($id);
+        $nota = NotaFiscal::with(['cliente', 'itens'])->findOrFail($id);
         $empresa = \App\Models\Configuracao::first()?->toArray() ?? [];
+
+        if ($nota->modelo === 'NFC-e') {
+            $qrCodeDataUri = $this->gerarQrCodeDataUri($nota);
+            $pdf = Pdf::loadView('pdf.nota_fiscal_nfce', compact('nota', 'empresa', 'qrCodeDataUri'))
+                ->setPaper([0, 0, 226.77, $this->alturaCupomNfce($nota)], 'portrait');
+
+            return $pdf->download('NFCe-' . ($nota->numero ?? $nota->id) . '.pdf');
+        }
 
         $pdf = Pdf::loadView('pdf.nota_fiscal', compact('nota', 'empresa'))
             ->setPaper('a4', 'portrait');
 
         return $pdf->download('NF-' . ($nota->numero ?? $nota->id) . '.pdf');
+    }
+
+    // ~260pt de cabeçalho/rodapé/totais fixos + ~14pt por item + ~110pt pro QR code
+    // quando presente. Altura dinâmica porque o cupom térmico não tem página de
+    // tamanho fixo como o A4.
+    private function alturaCupomNfce(NotaFiscal $nota): float
+    {
+        return 260.0 + ($nota->itens->count() * 14) + ($nota->qrcode_url ? 110.0 : 0.0);
+    }
+
+    private function gerarQrCodeDataUri(NotaFiscal $nota): ?string
+    {
+        if (empty($nota->qrcode_url)) {
+            return null;
+        }
+
+        // endroid/qr-code 6.x: a API antiga fluente (Builder::create()->writer()->
+        // data()->size()->margin()->build()) foi substituída por argumentos
+        // nomeados no construtor — Builder é uma classe readonly sem factory
+        // estática nem setters encadeáveis nesta major version.
+        $qrCode = (new \Endroid\QrCode\Builder\Builder(
+            writer: new \Endroid\QrCode\Writer\PngWriter(),
+            data: $nota->qrcode_url,
+            size: 200,
+            margin: 0,
+        ))->build();
+
+        return $qrCode->getDataUri();
     }
 
     public function downloadZip(Request $request): \Symfony\Component\HttpFoundation\BinaryFileResponse|JsonResponse

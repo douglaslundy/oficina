@@ -279,4 +279,33 @@ class NotaFiscalNfceTest extends TestCase
         Http::assertNothingSent();
         $status->assertStatus(200)->assertJsonPath('data.status', 'AUTORIZADA');
     }
+
+    public function test_pdf_de_nfce_autorizada_retorna_200(): void
+    {
+        $this->criarConfiguracao(['uf' => 'MG']);
+        $oficina = \App\Models\Oficina::create([
+            'nome' => 'Oficina PDF NFC-e', 'cnpj' => '11222333000181',
+            'slug' => 'oficina-pdf-nfce-' . uniqid(), 'provedor_fiscal' => 'FOCUS',
+        ]);
+        $token   = $this->loginAdmin();
+        $headers = ['X-Tenant' => $oficina->slug];
+        $cliente = Cliente::create(['nome' => 'Fulano', 'cpf_cnpj' => '87748248800', 'uf' => 'MG']);
+        $produto = $this->criarProduto();
+
+        Http::fake([
+            '*/v2/nfce?ref=*' => Http::response([
+                'status' => 'autorizado', 'numero' => '7', 'chave_nfe' => 'CHAVE-PDF',
+                'qrcode_url' => 'https://homologacao.nfce.fazenda.mg.gov.br/qrcode?p=CHAVE',
+            ], 201),
+        ]);
+
+        $criar  = $this->withToken($token)->withHeaders($headers)->postJson('/api/notas-fiscais', $this->payloadVenda($cliente->id, $produto->id));
+        $notaId = $criar->json('data.id');
+        $this->withToken($token)->withHeaders($headers)->postJson("/api/notas-fiscais/{$notaId}/emitir");
+
+        $pdf = $this->withToken($token)->withHeaders($headers)->get("/api/notas-fiscais/{$notaId}/pdf");
+
+        $pdf->assertStatus(200);
+        $this->assertSame('application/pdf', $pdf->headers->get('content-type'));
+    }
 }
