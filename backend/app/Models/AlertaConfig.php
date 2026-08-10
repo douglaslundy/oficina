@@ -67,6 +67,7 @@ class AlertaConfig extends Model
             'PAGAMENTO_RECEBIDO'      => ['nome' => 'Pagamento Recebido',         'template' => '✅ *Pagamento Recebido*: OS #{os_numero} · {cliente} · *{valor}* via {forma_pagamento}. Saldo: {saldo_devedor}.'],
             'PAGAMENTO_PARCIAL'       => ['nome' => 'Pagamento Parcial',          'template' => '⚡ *Pagamento Parcial*: OS #{os_numero} · {cliente} pagou *{valor}*. Saldo devedor: *{saldo_devedor}*.'],
             'NF_AUTORIZADA'           => ['nome' => 'Nota Fiscal Autorizada',     'template' => '🧾 *NF Autorizada*: NF #{nf_numero} emitida para {cliente}. Valor: {valor}. Chave: {chave_acesso}.'],
+            'NF_CONTINGENCIA_PRAZO'   => ['nome' => 'NF-e em Contingência — Prazo Próximo', 'template' => '⚠️ *NF-e em Contingência*: a NF #{nf_numero} está em modo de contingência (EPEC) desde {contingencia_desde} e precisa ser retransmitida à SEFAZ em até {dias_restantes} dia(s), ou a contingência da oficina inteira é bloqueada.'],
             'ORCAMENTO_APROVADO'      => ['nome' => 'Orçamento Aprovado',         'template' => '✅ *Orçamento Aprovado*: O cliente *{cliente}* aprovou o orçamento da OS #{os_numero}. Serviços aprovados: {servicos_aprovados}. Valor aprovado: {valor}.'],
             'ORCAMENTO_RECUSADO'      => ['nome' => 'Orçamento Recusado',         'template' => '❌ *Orçamento Recusado*: O cliente *{cliente}* recusou o orçamento da OS #{os_numero}.'],
         ];

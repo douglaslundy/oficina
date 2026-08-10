@@ -23,6 +23,7 @@ const STATUS_MAP: Record<string, { label: string; cls: string }> = {
   AUTORIZADA:       { label: 'Autorizada',     cls: 'pill-success' },
   REJEITADA:        { label: 'Rejeitada',      cls: 'pill-danger'  },
   ERRO:             { label: 'Erro',           cls: 'pill-danger'  },
+  CONTINGENCIA:     { label: 'Contingência',   cls: 'pill-accent'  },
   PENDENTE:         { label: 'Pendente',       cls: 'pill-accent'  },
   PAGA:             { label: 'Paga',           cls: 'pill-success' },
   VENCIDA:          { label: 'Vencida',        cls: 'pill-danger'  },
