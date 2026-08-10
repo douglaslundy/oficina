@@ -87,7 +87,12 @@ class NotaFiscalController extends Controller
             $cpfCnpjLimpo   = preg_replace('/\D/', '', (string) $cliente->cpf_cnpj);
             $ehPessoaFisica = strlen($cpfCnpjLimpo) === 11;
             $forcarNfe      = (bool) ($validated['forcar_nfe'] ?? false);
-            $modelo         = ($ehPessoaFisica && !$forcarNfe) ? 'NFC-e' : 'NF-e';
+            // NFC-e é legalmente restrita a venda presencial dentro do estado — o
+            // payload da Focus (local_destino) e o CFOP do CfopConsumidorResolver
+            // assumem operação interna. Cliente PF de outra UF cai pra NF-e, mesma
+            // lógica do escape hatch forcar_nfe (achado da revisão final de branch).
+            $mesmoEstado    = strtoupper((string) $cliente->uf) === strtoupper((string) $configuracao->uf);
+            $modelo         = ($ehPessoaFisica && !$forcarNfe && $mesmoEstado) ? 'NFC-e' : 'NF-e';
 
             foreach ($validated['itens'] as $item) {
                 $produto = \App\Models\Produto::findOrFail($item['produto_id']);
@@ -118,7 +123,17 @@ class NotaFiscalController extends Controller
         $valorIss   = $ehVenda ? 0.0 : (($subtotal - $desconto) * $aliquota) / 100;
         $valorTotal = ($subtotal - $desconto) + $valorIss;
 
-        $nota = \Illuminate\Support\Facades\DB::transaction(function () use ($validated, $modelo, $subtotal, $desconto, $aliquota, $valorIss, $valorTotal, $ehVenda, $configuracao, $cliente, $produtosPorId) {
+        // Achado da revisão final de branch: serie_nf/serie_nfce existiam em
+        // Configuracao mas nunca eram aplicados em notas_fiscais.serie (sempre caía
+        // no default '001' da coluna). Só resolve o caminho de venda (NF-e/NFC-e),
+        // onde $configuracao já está carregado — NFS-e mantém o comportamento
+        // anterior (fora de escopo desta correção).
+        $serie = '001';
+        if ($ehVenda) {
+            $serie = $modelo === 'NFC-e' ? ($configuracao->serie_nfce ?: '001') : ($configuracao->serie_nf ?: '001');
+        }
+
+        $nota = \Illuminate\Support\Facades\DB::transaction(function () use ($validated, $modelo, $serie, $subtotal, $desconto, $aliquota, $valorIss, $valorTotal, $ehVenda, $configuracao, $cliente, $produtosPorId) {
             $nota = NotaFiscal::create([
                 'cliente_id'        => $validated['cliente_id'],
                 'os_id'             => $validated['os_id'] ?? null,
@@ -126,6 +141,7 @@ class NotaFiscalController extends Controller
                 'forma_pagamento'   => $validated['forma_pagamento'] ?? null,
                 'observacoes'       => $validated['observacoes'] ?? null,
                 'modelo'            => $modelo,
+                'serie'             => $serie,
                 'subtotal'          => $subtotal,
                 'desconto'          => $desconto,
                 'aliquota_iss'      => $aliquota,
@@ -179,6 +195,9 @@ class NotaFiscalController extends Controller
 
         if ($nota->status === 'AUTORIZADA') {
             return response()->json(['message' => 'NF já foi emitida.'], 400);
+        }
+        if ($nota->status === 'PROCESSANDO') {
+            return response()->json(['message' => 'Emissão já em andamento — consulte GET /notas-fiscais/{id}/status.'], 409);
         }
 
         $provedor = app(\App\Services\Fiscal\FiscalProviderManager::class)->provedorDaOficina(\App\Tenancy\TenancyContext::get() ?? '');
@@ -248,6 +267,7 @@ class NotaFiscalController extends Controller
             'protocolo'    => $resultado['protocolo'],
             'xml_retorno'  => $resultado['xml_retorno'],
             'qrcode_url'   => $resultado['qrcode_url'] ?? null,
+            'mensagem_erro' => $resultado['mensagem_erro'] ?? null,
             // Para NF-e/NFC-e o número que importa legalmente é o atribuído pela
             // Focus/SEFAZ na própria série, não o contador interno gravado antes
             // da emissão. Fallback pro valor já existente se o provedor não
@@ -286,18 +306,32 @@ class NotaFiscalController extends Controller
         $nota = NotaFiscal::with(['cliente', 'itens'])->findOrFail($id);
         $empresa = \App\Models\Configuracao::first()?->toArray() ?? [];
 
+        $arquivo = $this->montarPdfArquivo($nota, $empresa);
+
+        return $arquivo['pdf']->download($arquivo['filename']);
+    }
+
+    /**
+     * Escolhe o template certo (cupom 80mm pra NFC-e, A4 pra NF-e/NFS-e) e monta o
+     * PDF — compartilhado entre pdf() e downloadZip() (achado da revisão final de
+     * branch: downloadZip() usava sempre o template A4, mesmo pra NFC-e).
+     *
+     * @return array{pdf: \Barryvdh\DomPDF\PDF, filename: string}
+     */
+    private function montarPdfArquivo(NotaFiscal $nota, array $empresa): array
+    {
         if ($nota->modelo === 'NFC-e') {
             $qrCodeDataUri = $this->gerarQrCodeDataUri($nota);
             $pdf = Pdf::loadView('pdf.nota_fiscal_nfce', compact('nota', 'empresa', 'qrCodeDataUri'))
                 ->setPaper([0, 0, 226.77, $this->alturaCupomNfce($nota)], 'portrait');
 
-            return $pdf->download('NFCe-' . ($nota->numero ?? $nota->id) . '.pdf');
+            return ['pdf' => $pdf, 'filename' => 'NFCe-' . ($nota->numero ?? $nota->id) . '.pdf'];
         }
 
         $pdf = Pdf::loadView('pdf.nota_fiscal', compact('nota', 'empresa'))
             ->setPaper('a4', 'portrait');
 
-        return $pdf->download('NF-' . ($nota->numero ?? $nota->id) . '.pdf');
+        return ['pdf' => $pdf, 'filename' => 'NF-' . ($nota->numero ?? $nota->id) . '.pdf'];
     }
 
     // ~260pt de cabeçalho/rodapé/totais fixos + ~14pt por item + ~110pt pro QR code
@@ -335,7 +369,7 @@ class NotaFiscalController extends Controller
             'ids.*' => ['required', 'string'],
         ]);
 
-        $notas   = NotaFiscal::with('cliente')->whereIn('id', $request->ids)->get();
+        $notas   = NotaFiscal::with(['cliente', 'itens'])->whereIn('id', $request->ids)->get();
         $empresa = \App\Models\Configuracao::first()?->toArray() ?? [];
 
         if ($notas->isEmpty()) {
@@ -352,9 +386,8 @@ class NotaFiscalController extends Controller
         }
 
         foreach ($notas as $nota) {
-            $pdf      = Pdf::loadView('pdf.nota_fiscal', compact('nota', 'empresa'))->setPaper('a4', 'portrait');
-            $filename = 'NF-' . ($nota->numero ?? $nota->id) . '.pdf';
-            $zip->addFromString($filename, $pdf->output());
+            $arquivo = $this->montarPdfArquivo($nota, $empresa);
+            $zip->addFromString($arquivo['filename'], $arquivo['pdf']->output());
         }
 
         $zip->close();

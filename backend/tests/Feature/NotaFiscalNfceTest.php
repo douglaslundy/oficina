@@ -120,8 +120,11 @@ class NotaFiscalNfceTest extends TestCase
         ]);
     }
 
-    public function test_nfce_fora_do_estado_usa_cfop_6108(): void
+    public function test_pessoa_fisica_fora_do_estado_cai_para_nfe(): void
     {
+        // Venda a consumidor final PF de outra UF: NFC-e é presencial/intrastate por
+        // definição legal, então cai pra NF-e (mesmo escape hatch de forcar_nfe) em
+        // vez de gerar uma NFC-e interestadual com CFOP e local_destino contraditórios.
         $this->criarConfiguracao(['uf' => 'MG']);
         $token   = $this->loginAdmin();
         $cliente = Cliente::create(['nome' => 'Fulano', 'cpf_cnpj' => '87748248800', 'uf' => 'SP']);
@@ -129,9 +132,11 @@ class NotaFiscalNfceTest extends TestCase
 
         $response = $this->withToken($token)->postJson('/api/notas-fiscais', $this->payloadVenda($cliente->id, $produto->id));
 
+        $response->assertStatus(201)->assertJsonPath('data.modelo', 'NF-e');
+
         $notaId = $response->json('data.id');
         $this->assertDatabaseHas('notas_fiscais_itens', [
-            'nota_fiscal_id' => $notaId, 'cfop' => '6108',
+            'nota_fiscal_id' => $notaId, 'cfop' => '6102', 'cst_csosn' => '102',
         ]);
     }
 

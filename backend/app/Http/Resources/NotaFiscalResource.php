@@ -46,6 +46,7 @@ class NotaFiscalResource extends JsonResource
             'valor_total'       => $this->valor_total,
             'status'            => $this->status,
             'chave_acesso'      => $this->chave_acesso,
+            'mensagem_erro'     => $this->mensagem_erro,
             'pdf_url'           => $this->pdf_url,
             'observacoes'       => $this->observacoes,
             'emitido_em'        => $this->emitido_em?->format('d/m/Y H:i'),

@@ -13,6 +13,7 @@ interface NotaFiscal {
   valor_total: number | null
   modelo: string
   status: string
+  mensagem_erro?: string | null
 }
 
 export default function HistoricoNFPage() {
@@ -224,7 +225,9 @@ export default function HistoricoNFPage() {
                   <td style={tdStyle}>
                     <span style={{ color: 'var(--muted)', fontSize: 13 }}>{nota.modelo}</span>
                   </td>
-                  <td style={tdStyle}><StatusPill status={nota.status} /></td>
+                  <td style={tdStyle} title={nota.status === 'REJEITADA' && nota.mensagem_erro ? nota.mensagem_erro : undefined}>
+                    <StatusPill status={nota.status} />
+                  </td>
                   <td style={tdStyle}>
                     <div style={{ display: 'flex', gap: 8 }}>
                       {nota.status === 'AUTORIZADA' && nota.numero && (

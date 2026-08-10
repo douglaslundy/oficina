@@ -120,17 +120,26 @@ export function NotaFiscalForm() {
     setItens(prev => prev.map((item, j) => j === idx ? { ...item, [field]: value } : item))
   }
 
-  function abrirPdf(notaId: string) {
-    const token = localStorage.getItem('auth_token')
-    fetch(`${window.location.origin}/api/notas-fiscais/${notaId}/pdf`, {
-      headers: {
-        Authorization: `Bearer ${token}`,
-        'X-Tenant': localStorage.getItem('oficina_slug') ?? '',
-      },
-    })
-      .then(res => res.blob())
-      .then(blob => window.open(URL.createObjectURL(blob), '_blank'))
-      .catch(() => {})
+  async function abrirPdf(notaId: string, numero?: number | string) {
+    try {
+      const token = localStorage.getItem('auth_token')
+      const res = await fetch(`${window.location.origin}/api/notas-fiscais/${notaId}/pdf`, {
+        headers: {
+          Authorization: `Bearer ${token}`,
+          'X-Tenant': localStorage.getItem('oficina_slug') ?? '',
+        },
+      })
+      if (!res.ok) throw new Error()
+      const blob = await res.blob()
+      const url  = URL.createObjectURL(blob)
+      const a    = document.createElement('a')
+      a.href     = url
+      a.download = `NF-${numero ?? notaId}.pdf`
+      a.click()
+      URL.revokeObjectURL(url)
+    } catch {
+      toast('Nota emitida, mas houve erro ao baixar o PDF — baixe pelo Histórico de NF.', 'danger')
+    }
   }
 
   function limparFormulario() {
@@ -154,7 +163,7 @@ export function NotaFiscalForm() {
           if (pollRef.current) clearInterval(pollRef.current)
           setAguardandoConfirmacao(false)
           toast(`NFC-e #${r.data.data.numero} autorizada!`, 'success')
-          abrirPdf(notaId)
+          abrirPdf(notaId, r.data.data.numero)
           limparFormulario()
           return
         }
@@ -206,7 +215,7 @@ export function NotaFiscalForm() {
 
       if (status === 'AUTORIZADA') {
         toast(`NF #${resultado.data.data.numero} emitida com sucesso!`, 'success')
-        abrirPdf(notaId)
+        abrirPdf(notaId, resultado.data.data.numero)
         limparFormulario()
       } else if (status === 'PROCESSANDO') {
         toast('Aguardando confirmação da SEFAZ...', 'info')
