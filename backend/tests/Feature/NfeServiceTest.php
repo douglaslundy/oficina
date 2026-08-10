@@ -107,7 +107,7 @@ class NfeServiceTest extends TestCase
         $this->assertSame(1, $primeiroNfe);
         $this->assertSame(1, $primeiroNf);
         $this->assertSame(2, $segundoNfe);
-        $this->assertSame(1, Configuracao::first()->proximo_numero_nf);
+        $this->assertSame(2, Configuracao::first()->proximo_numero_nf);
         $this->assertSame(3, Configuracao::first()->proximo_numero_nfe);
     }
 }
