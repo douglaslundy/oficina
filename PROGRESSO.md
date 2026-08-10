@@ -1059,24 +1059,124 @@ autocorretor pra "deploy"). Fluxo:
     coberta. Nunca rodar `php artisan test` na VPS de produção
     (`RefreshDatabase` dropa o banco).
 
+## Rodada 25 (mesma sessão, 2026-08-10) — NFC-e IMPLEMENTADA via SDD, commitada e enviada ao GitHub
+
+Executado com `superpowers:subagent-driven-development`, direto na `main`
+(consentimento explícito do usuário no início da execução). 11 tasks do
+plano `docs/superpowers/plans/2026-08-10-nfce.md`, cada uma com implementador +
+revisor dedicados, mais uma revisão final de branch inteira (modelo mais
+capaz) no fim. Ledger completo (já apagado após a revisão final limpar,
+conforme o processo do SDD) cobria 3 rodadas de fix nas tasks individuais
+e 1 rodada de fix na revisão final.
+
+### O que foi entregue
+- Seleção automática NFC-e (CPF) vs NF-e (CNPJ), com escape hatch
+  `forcar_nfe` — e **regra nova, achada só na revisão final**: cliente PF
+  de outra UF cai pra NF-e automaticamente (NFC-e é presencial/intraestadual
+  por definição legal; a v1 não tenta suportar NFC-e interestadual).
+- Numeração própria (`serie_nfce`/`proximo_numero_nfce`), agora realmente
+  aplicada em `notas_fiscais.serie` (achado da revisão final: a coluna
+  existia mas nunca era lida por nenhuma task — mesmo problema pré-existente
+  que `serie_nf` já tinha silenciosamente pra NF-e, também corrigido junto).
+- `CfopConsumidorResolver` (venda a consumidor final, mais simples que o
+  B2B — 5102/6108, sem distinção de substituição tributária).
+- Focus NFe: emissão síncrona confirmada (`POST /v2/nfce`), consulta
+  (`GET /v2/nfce/{ref}`) — endpoints reais, confirmados por pesquisa na
+  doc oficial durante o brainstorming.
+- Spedy: emissão assíncrona confirmada (`POST /consumer-invoices`,
+  enfileira igual à NFS-e dela) — payload **inferido**, não confirmado em
+  sandbox real (mesma ressalva já registrada pra NF-e-Spedy, que segue
+  bloqueada).
+- Divergência sync/Focus vs async/Spedy unificada num só fluxo: novo
+  endpoint `GET /notas-fiscais/{id}/status` + polling de 3s/até 30s no
+  frontend.
+- Cupom térmico 80mm (DANFCE) com QR code via `endroid/qr-code` (nova
+  dependência — a API real da versão 6.1.3 instalada era diferente da que
+  o plano assumia, corrigido durante a Task 9 com aprovação do
+  coordenador).
+- Frontend: badge de modelo + escape hatch na tela de emissão; filtro por
+  modelo + aviso de prazo de cancelamento (~30min) no histórico.
+
+### Achados da revisão final de branch inteira (coisas que nenhuma revisão de task individual conseguiria ver)
+Revisão final (modelo mais capaz) achou 2 Críticos + 5 Importantes, todos
+corrigidos numa única rodada de fix (commit `6e7a377`):
+1. **Crítico**: NFC-e interestadual gerava CFOP 6108 mas o payload da
+   Focus mandava `local_destino: 1` (intraestadual) fixo — dados
+   contraditórios que a SEFAZ rejeitaria. **Decisão do usuário**: cai pra
+   NF-e quando a UF do cliente diverge da UF da oficina (ver acima).
+2. Caminho assíncrono (Spedy) de rejeição perdia a mensagem de erro da
+   SEFAZ — nova coluna `mensagem_erro`, persistida e exposta (tooltip no
+   histórico).
+3. `downloadZip()` (baixar várias NF em ZIP) sempre usava o template A4,
+   mesmo pra NFC-e — extraído `montarPdfArquivo()` compartilhado com `pdf()`.
+4. `emitir()` era reentrante durante `PROCESSANDO` — uma segunda chamada
+   enquanto a Spedy ainda processava podia gerar nota fiscal duplicada de
+   verdade (Spedy não tem idempotency key nessa integração). Agora
+   responde 409.
+5. Bug de frontend: `abrirPdf()` usava `window.open()` dentro de callback
+   assíncrono (bloqueado por popup blocker, sem erro visível) — reescrito
+   pro mesmo padrão já comprovado do histórico (`<a download>`).
+- **Investigado e revertido**: tentativa de gerar QR code local pra Spedy
+  quando ela não devolve `qrcode_url` — descoberto que um QR válido de
+  NFC-e exige o **CSC** (Código de Segurança do Contribuinte, token que
+  precisa ser cadastrado na SEFAZ-MG e o sistema não tem). Gerar sem isso
+  seria pior que não ter QR (pareceria válido sem ser). **Documentado como
+  limitação conhecida, não implementado** — cupom da Spedy pode sair sem
+  QR até essa infraestrutura existir.
+
+### 3 bugs no meu próprio texto do plano, achados durante a execução (não do implementador)
+Mesmo padrão já visto nas Etapas B/C1: revisões de task pegaram bugs que
+eu introduzi ao escrever o plano, todos confirmados com o usuário antes do
+fix:
+1. Task 6: teste de `forcar_nfe` ignorado pra PJ mandava `forcar_nfe:
+   false` em vez de `true` — não testava o caso perigoso de verdade.
+2. Task 8: teste de idempotência do polling não provava de fato "nenhuma
+   chamada HTTP saiu" — corrigido com `Http::assertNothingSent()`.
+3. Task 9: teste do PDF não conferia se a emissão tinha realmente
+   funcionado antes de baixar o cupom — podia passar sem exercitar o
+   código novo do QR code.
+Também um bug genuíno de sequenciamento entre tasks (Task 3 mudou a
+interface `FiscalProvider::consultar()` antes das Tasks 4/5 implementarem
+os providers — PHP fatala se a assinatura do implementador não bate com a
+da interface, mesmo com parâmetro opcional). Resolvido com um ajuste
+mecânico de assinatura (sem lógica nova) na própria Task 3, aprovado pelo
+coordenador sem precisar perguntar ao usuário (não era decisão de produto).
+
+### Testado e verificado
+- 115 testes Unit passando (nenhuma regressão), `npx tsc --noEmit` e
+  `npm run build` limpos — rodado ao final da sessão inteira, não só por
+  task.
+- Feature tests (todos os novos: `NotaFiscalNfceTest`, mais os ajustes em
+  `NfeServiceTest`) **nunca rodaram contra Postgres real** — mesma
+  limitação de sempre (sem Docker/Postgres local). Escritos e revisados
+  por leitura, precisam rodar em CI/staging antes de considerar 100%
+  coberto.
+- **Commitado e enviado ao GitHub** (`git push origin main`,
+  `53735f3..6e7a377`, 20 commits incluindo spec/plano/11 tasks/fix final).
+  **Deploy na VPS ainda NÃO foi feito** — é um passo separado, só quando o
+  usuário pedir.
+
+### Falta antes de considerar NFC-e pronta pra produção
+- [ ] Deploy na VPS (`git pull` + `bash deploy-vps.sh`).
+- [ ] `php artisan migrate:status` confirmando as 3 migrations novas
+  (`2026_08_10_000001` numeração/qrcode, `2026_08_10_000002` mensagem_erro)
+  — mais a migration que já existia da Etapa A/B.
+- [ ] Validação manual em homologação com Focus (deve autorizar na hora)
+  e, separadamente, com Spedy (confirmar o payload real de
+  `montarPayloadNfce()`, nunca testado contra sandbox de verdade).
+- [ ] Confirmar alíquota de ISS/adesão ao ADN de Ilicínea — pendência
+  antiga, não específica da NFC-e (NFC-e não envolve ISS), mas ainda
+  bloqueia as etapas de NFS-e.
+- [ ] Decidir se/quando implementar o CSC da SEFAZ-MG pra habilitar QR
+  code local no cupom da Spedy (hoje só a Focus devolve QR pronto).
+
 ## Próxima tarefa (retomar exatamente aqui)
 
-**Ordem explícita pedida pelo usuário (2026-08-05): NFC-e primeiro, depois
-Etapa C2.**
+NFC-e concluída (ver Rodada 25, acima) e enviada ao GitHub. Falta o deploy
+na VPS + validação manual (ver checklist da Rodada 25) — perguntar ao
+usuário quando ele quiser fazer isso.
 
-1. **NFC-e (Nota Fiscal de Consumidor Eletrônica, modelo 65)** — brainstorm
-   e spec CONCLUÍDOS (Rodada 24), plano de implementação CONCLUÍDO e
-   aprovado implicitamente pelo usuário ("Siga"), ver Rodada 24:
-   `docs/superpowers/specs/2026-08-10-nfce-design.md` (commit `f6c970f`) +
-   `docs/superpowers/plans/2026-08-10-nfce.md` (commit `ae3f870`, 11 tasks).
-   **Próximo passo exato**: escolher execução (subagent-driven-development
-   recomendado, ou executing-plans inline) e rodar as 11 tasks em ordem —
-   cada task já tem testes escritos primeiro (TDD), código, e passo de
-   commit. Tasks 1-9 são backend (PHP/Laravel), 10-11 são frontend
-   (Next.js). Task 9 precisa de `composer require endroid/qr-code` antes
-   de codar. Nenhum código foi escrito ainda além do que já estava em
-   produção antes desta sessão.
-2. **Depois: Etapa C2 (NF-e via NFePHP `sped-nfe` + contingência EPEC)**
+**Depois: Etapa C2 (NF-e via NFePHP `sped-nfe` + contingência EPEC)**
    — só existe como parte do spec combinado original
    `docs/superpowers/specs/2026-07-25-motor-nfephp-design.md` (que cobria
    NF-e+NFS-e juntas); a NFS-e virou Etapa C1 (implementada, em worktree
