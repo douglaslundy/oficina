@@ -1064,17 +1064,13 @@ autocorretor pra "deploy"). Fluxo:
 **Ordem explícita pedida pelo usuário (2026-08-05): NFC-e primeiro, depois
 Etapa C2.**
 
-1. **NFC-e (Nota Fiscal de Consumidor Eletrônica, modelo 65)** — EM
-   ANDAMENTO, brainstorming iniciado nesta sessão (ver Rodada 22, acima),
-   ainda sem spec escrito. Alternativa à NF-e (modelo 55) quando o
-   destinatário é consumidor final pessoa física, reaproveitando o mesmo
-   fluxo de Cliente/OS já existente (não é uma tela nova de "venda de
-   balcão" sem cliente). Confirmado: Spedy e Focus têm NFC-e como produto
-   próprio; NFC-e é emitida de forma SÍNCRONA (diferente da NF-e,
-   assíncrona/fila) — isso muda o fluxo de UI. Continuar exatamente de
-   onde parou o brainstorming (perguntas de esclarecimento → 2-3
-   abordagens → design → spec em `docs/superpowers/specs/` → plano →
-   SDD), não pular pra código.
+1. **NFC-e (Nota Fiscal de Consumidor Eletrônica, modelo 65)** — brainstorm
+   CONCLUÍDO, spec escrito e commitado nesta sessão (ver Rodada 24, acima):
+   `docs/superpowers/specs/2026-08-10-nfce-design.md` (commit `f6c970f`).
+   **Próximo passo exato**: pedir ao usuário pra revisar o spec commitado;
+   se aprovar (ou pedir ajustes e reaprovar depois), invocar
+   `superpowers:writing-plans` pra gerar o plano de implementação. Ainda
+   não escrever código nem invocar SDD antes do plano existir.
 2. **Depois: Etapa C2 (NF-e via NFePHP `sped-nfe` + contingência EPEC)**
    — só existe como parte do spec combinado original
    `docs/superpowers/specs/2026-07-25-motor-nfephp-design.md` (que cobria
@@ -1365,3 +1361,68 @@ B/C1: brainstorm → spec em `docs/superpowers/specs/` → plano → SDD), não
 como fix pontual, dado o tamanho real (documento fiscal novo, emissão
 síncrona muda o fluxo de UI, numeração própria). **Nenhuma linha de
 código escrita ainda** — brainstorming em andamento nesta sessão.
+
+## Rodada 24 (nova sessão, 2026-08-10) — NFC-e: brainstorming CONCLUÍDO, spec commitado
+
+Retomou exatamente do ponto da Rodada 22 (usuário confirmou seguir a ordem
+sugerida: NFC-e primeiro, depois Etapa C2). Brainstorming terminado,
+design aprovado seção por seção, spec escrito e commitado.
+
+**Correção de um achado da Rodada 22**: a pesquisa superficial anterior
+tinha concluído "NFC-e é sempre síncrona". Pesquisa real na documentação
+(`doc.focusnfe.com.br` + `docs.spedy.com.br`, ambas acessíveis nesta sessão
+— a Spedy não bloqueou desta vez) mostrou que isso só vale pra Focus. A
+**Spedy processa NFC-e de forma assíncrona** (`POST /v1/consumer-invoices`
+responde `enqueued`, mesmo padrão `enqueued`/`processing`/`authorized` já
+usado pela NFS-e dela). Design resolve isso com um único fluxo de UI:
+polling curto (3s, até 30s) reusando o padrão já usado no checkout do
+Mercado Pago (`PagamentoTransparenteModal`) — se a Focus já responder
+autorizado na mesma request, pula direto pro resultado; se a Spedy
+responder "processando", a tela espera com spinner antes de liberar.
+
+**Decisões fechadas no brainstorming** (todas com aprovação seção-por-seção):
+- **Seleção de modelo**: automática por tipo de documento do cliente
+  (CPF → NFC-e, CNPJ → NF-e), com escape hatch manual "emitir como NF-e
+  mesmo assim" pro caso raro de pessoa física que precise de NF-e (opção 3
+  das 3 propostas — usuário mudou de ideia da opção 1 pra opção 3 durante a
+  conversa).
+- **Contingência**: bloquear e avisar na v1, sem modo offline (mesma
+  decisão já usada como base pra Etapa C2/EPEC, que também não existe
+  ainda).
+- **Numeração**: par de campos dedicado `serie_nfce`/`proximo_numero_nfce`
+  em `configuracoes`, espelhando `serie_nf`/`proximo_numero_nf` — não uma
+  tabela genérica de séries (YAGNI).
+- **CFOP**: `CfopConsumidorResolver` novo e mais simples que o
+  `CfopSaidaResolver` B2B da Etapa B (consumidor final nunca é
+  contribuinte, só compara UF oficina x UF cliente: 5102 dentro do estado,
+  6108 fora).
+- **PDF**: cupom térmico 80mm real (DANFCE) via DomPDF, template novo
+  separado do A4 de NF-e/NFS-e, com QR code (da Focus vem pronto; da Spedy,
+  gerar localmente se necessário via `endroid/qr-code`, a confirmar).
+- **Pós-emissão**: abre o PDF automaticamente em nova aba (sem clique
+  extra) quando autorizado.
+- **Cancelamento**: aviso de prazo "até 30 minutos" na UI (regra
+  confirmada da Focus; a Spedy não documenta o prazo exato, varia por UF),
+  mas não bloqueia o clique — quem decide de fato é a SEFAZ.
+- **Abordagem de implementação**: estender o padrão já existente (mesmo
+  `NotaFiscalController`/`NfeService`/`FiscalProvider` da Etapa B), não um
+  módulo separado nem uma refatoração genérica por strategy — usuário
+  escolheu a opção recomendada.
+
+**Endpoints reais confirmados nesta sessão** (Focus, via
+`doc.focusnfe.com.br/reference/emitir_nfce.md` e páginas irmãs): emissão
+`POST /v2/nfce?ref=...` (síncrona), consulta `GET /v2/nfce/{ref}`,
+cancelamento `DELETE /v2/nfce/{ref}` com prazo de 30min documentado
+explicitamente. Spedy (`docs.spedy.com.br/api-reference/nfc-e/...`):
+emissão `POST /v1/consumer-invoices` (assíncrona, confirmado no texto da
+doc), só `isFinalCustomer` documentado como campo obrigatório — resto do
+payload é hipótese de trabalho baseada no padrão já usado pelo
+`SpedyProvider`, mesma ressalva já registrada pra NF-e-Spedy na Etapa B
+(nunca confirmado em sandbox real).
+
+- Spec commitado: `docs/superpowers/specs/2026-08-10-nfce-design.md`
+  (commit `f6c970f`). Autorevisão de placeholders/consistência/escopo/
+  ambiguidade feita, nada pendente encontrado.
+- **Nenhum código escrito ainda.** Próximo passo: usuário revisar o spec
+  commitado; se aprovado, invocar `superpowers:writing-plans` pra gerar o
+  plano de implementação (não pular pra código direto).
