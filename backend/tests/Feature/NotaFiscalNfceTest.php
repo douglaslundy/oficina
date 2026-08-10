@@ -99,7 +99,7 @@ class NotaFiscalNfceTest extends TestCase
         $cliente = Cliente::create(['nome' => 'Oficina Cliente LTDA', 'cpf_cnpj' => '11222333000181', 'uf' => 'MG']);
         $produto = $this->criarProduto();
 
-        $response = $this->withToken($token)->postJson('/api/notas-fiscais', $this->payloadVenda($cliente->id, $produto->id, ['forcar_nfe' => false]));
+        $response = $this->withToken($token)->postJson('/api/notas-fiscais', $this->payloadVenda($cliente->id, $produto->id, ['forcar_nfe' => true]));
 
         $response->assertStatus(201)->assertJsonPath('data.modelo', 'NF-e');
     }
