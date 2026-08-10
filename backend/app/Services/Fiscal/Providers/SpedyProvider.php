@@ -56,6 +56,10 @@ class SpedyProvider implements FiscalProvider
             );
         }
 
+        if ($nota->modelo === 'NFCE') {
+            return $this->emitirNfce($nota);
+        }
+
         $resp = Http::withHeaders(['X-Api-Key' => $this->emissorToken ?? $this->masterKey])
             ->post("{$this->baseUrl}/service-invoices", $this->montarPayloadNfse($nota));
 
@@ -71,14 +75,18 @@ class SpedyProvider implements FiscalProvider
 
     public function consultar(string $referencia, string $modelo = 'NFSE'): EmissaoResultado
     {
+        $recurso = $modelo === 'NFCE' ? 'consumer-invoices' : 'service-invoices';
+
         $resp = Http::withHeaders(['X-Api-Key' => $this->emissorToken ?? $this->masterKey])
-            ->get("{$this->baseUrl}/service-invoices/{$referencia}");
+            ->get("{$this->baseUrl}/{$recurso}/{$referencia}");
 
         if ($resp->failed()) {
             return EmissaoResultado::rejeitada($resp->json('message') ?? 'Erro ao consultar (Spedy).', $referencia);
         }
 
-        return $this->resultadoDe($resp->json(), $referencia);
+        return $modelo === 'NFCE'
+            ? $this->resultadoNfceDe($resp->json(), $referencia)
+            : $this->resultadoDe($resp->json(), $referencia);
     }
 
     public function cancelar(string $referencia, string $motivo): EmissaoResultado
@@ -157,6 +165,87 @@ class SpedyProvider implements FiscalProvider
                 'issWithheld'   => $n->issRetido,
             ],
         ];
+    }
+
+    // Payload inferido a partir do padrão camelCase já usado por montarPayloadNfse()/
+    // montarPayloadEmpresa() — a doc pública da Spedy só confirma `isFinalCustomer`
+    // como campo obrigatório. Precisa ser validado contra sandbox real antes de
+    // confiar em produção (mesma ressalva já registrada pra NF-e-Spedy no projeto).
+    public function montarPayloadNfce(NotaFiscalData $n): array
+    {
+        $docTomador     = preg_replace('/\D/', '', $n->tomador['cpf_cnpj']) ?? '';
+        $ehPessoaFisica = strlen($docTomador) <= 11;
+        $valorTotal     = round(array_sum(array_map(
+            fn ($item) => (float) $item['quantidade'] * (float) $item['valor_unitario'],
+            $n->itens
+        )), 2);
+
+        return [
+            'isFinalCustomer' => true,
+            'operationNature' => $n->naturezaOperacao,
+            'receiver' => array_merge(
+                ['name' => $n->tomador['nome']],
+                [$ehPessoaFisica ? 'individualTaxNumber' : 'federalTaxNumber' => $docTomador],
+            ),
+            'items' => array_map(fn (int $i, array $item) => [
+                'itemNumber'       => $i + 1,
+                'productCode'      => $item['produto_id'],
+                'description'      => $item['descricao'],
+                'ncm'              => $item['ncm'],
+                'cfop'             => $item['cfop'],
+                'commercialUnit'   => 'UN',
+                'quantity'         => (float) $item['quantidade'],
+                'unitValue'        => (float) $item['valor_unitario'],
+                'grossValue'       => round((float) $item['quantidade'] * (float) $item['valor_unitario'], 2),
+                'icmsOrigin'       => (int) $item['origem'],
+                'icmsTaxSituation' => $item['cst_csosn'],
+            ], array_keys($n->itens), $n->itens),
+            'payments' => [[
+                'method' => 'cash',
+                'value'  => $valorTotal,
+            ]],
+        ];
+    }
+
+    private function emitirNfce(NotaFiscalData $nota): EmissaoResultado
+    {
+        $resp = Http::withHeaders(['X-Api-Key' => $this->emissorToken ?? $this->masterKey])
+            ->post("{$this->baseUrl}/consumer-invoices", $this->montarPayloadNfce($nota));
+
+        if ($resp->failed()) {
+            return EmissaoResultado::rejeitada(
+                $resp->json('message') ?? 'Erro na emissão de NFC-e (Spedy).',
+                $nota->referenciaExterna,
+            );
+        }
+
+        return $this->resultadoNfceDe($resp->json(), $nota->referenciaExterna);
+    }
+
+    private function resultadoNfceDe(array $json, ?string $ref): EmissaoResultado
+    {
+        $status = $this->mapStatus((string) ($json['status'] ?? 'enqueued'));
+
+        if ($status === 'REJEITADA') {
+            $msg = $json['processingDetail']['message'] ?? ($json['message'] ?? 'Rejeitada pela SEFAZ.');
+            return EmissaoResultado::rejeitada($msg, $ref);
+        }
+        if ($status === 'PROCESSANDO') {
+            return EmissaoResultado::processando($ref);
+        }
+        if ($status === 'CANCELADA') {
+            return EmissaoResultado::cancelada($ref);
+        }
+
+        return EmissaoResultado::autorizada(
+            chave: $json['accessKey'] ?? null,
+            protocolo: null,
+            numero: isset($json['number']) ? (string) $json['number'] : null,
+            xml: $json['xml'] ?? null,
+            pdfUrl: $json['pdfUrl'] ?? null,
+            ref: $ref,
+            qrCodeUrl: $json['qrCodeUrl'] ?? ($json['qrcodeUrl'] ?? null),
+        );
     }
 
     public function mapStatus(string $spedyStatus): string

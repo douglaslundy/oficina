@@ -156,4 +156,71 @@ class SpedyProviderTest extends TestCase
         $this->assertSame('REJEITADA', $r->status);
         $this->assertSame('os-999', $r->referenciaExterna);
     }
+
+    private function notaNfce(): NotaFiscalData
+    {
+        return new NotaFiscalData(
+            tipo: 'NFSE',
+            tomador: ['nome' => 'Cliente Balcão', 'cpf_cnpj' => '87748248800'],
+            descricao: 'Venda de peças',
+            valorServicos: 0.0,
+            aliquotaIss: 0.0,
+            issRetido: false,
+            codigoServicoFederal: '',
+            codigoServicoMunicipal: '',
+            naturezaOperacao: 'Venda de Mercadoria',
+            referenciaExterna: 'os-nfce-1',
+            modelo: 'NFCE',
+            itens: [[
+                'produto_id' => 'prod-1', 'descricao' => 'Filtro de óleo',
+                'ncm' => '84212300', 'cfop' => '5102', 'origem' => 0,
+                'tributacao_icms' => 'NORMAL', 'cst_csosn' => '102',
+                'quantidade' => 2, 'valor_unitario' => 35.50,
+            ]],
+            formaPagamento: 'Dinheiro',
+        );
+    }
+
+    public function test_payload_nfce_usa_campos_spedy_inferidos(): void
+    {
+        $p = new SpedyProvider('https://sandbox-api.spedy.com.br/v1', 'master', 'tok', 'emp-1');
+        $payload = $p->montarPayloadNfce($this->notaNfce());
+
+        $this->assertTrue($payload['isFinalCustomer']);
+        $this->assertSame('87748248800', $payload['receiver']['individualTaxNumber']);
+        $this->assertCount(1, $payload['items']);
+        $this->assertSame('5102', $payload['items'][0]['cfop']);
+        $this->assertSame(71.0, $payload['payments'][0]['value']);
+    }
+
+    public function test_emitir_nfce_enfileirada_retorna_processando(): void
+    {
+        Http::fake([
+            '*/consumer-invoices' => Http::response([
+                'id' => 'inv-nfce-1', 'status' => 'enqueued',
+            ], 202),
+        ]);
+
+        $p = new SpedyProvider('https://sandbox-api.spedy.com.br/v1', 'master', 'tok', 'emp-1');
+        $r = $p->emitir($this->notaNfce());
+
+        $this->assertSame('PROCESSANDO', $r->status);
+        Http::assertSent(fn ($req) => str_contains($req->url(), '/consumer-invoices'));
+    }
+
+    public function test_consultar_nfce_usa_recurso_correto(): void
+    {
+        Http::fake([
+            '*/consumer-invoices/inv-nfce-1' => Http::response([
+                'status' => 'authorized', 'accessKey' => 'CHAVE-NFCE-SP', 'number' => '9',
+            ], 200),
+        ]);
+
+        $p = new SpedyProvider('https://sandbox-api.spedy.com.br/v1', 'master', 'tok', 'emp-1');
+        $r = $p->consultar('inv-nfce-1', 'NFCE');
+
+        $this->assertSame('AUTORIZADA', $r->status);
+        $this->assertSame('CHAVE-NFCE-SP', $r->chave);
+        Http::assertSent(fn ($req) => str_contains($req->url(), '/consumer-invoices/inv-nfce-1'));
+    }
 }
