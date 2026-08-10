@@ -1,5 +1,5 @@
 'use client'
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import api from '@/lib/api'
 import { toast } from '@/hooks/useToast'
 import { formatarMoeda } from '@/lib/formatters'
@@ -79,6 +79,11 @@ export function NotaFiscalForm() {
   const [empresa, setEmpresa] = useState<Empresa | null>(null)
   const [planInfo, setPlanInfo] = useState<PlanInfo | null>(null)
   const [produtos, setProdutos] = useState<ProdutoOpt[]>([])
+  const [forcarNfe, setForcarNfe] = useState(false)
+  const [aguardandoConfirmacao, setAguardandoConfirmacao] = useState(false)
+  const pollRef = useRef<ReturnType<typeof setInterval> | null>(null)
+
+  useEffect(() => () => { if (pollRef.current) clearInterval(pollRef.current) }, [])
 
   useEffect(() => {
     Promise.all([
@@ -101,6 +106,8 @@ export function NotaFiscalForm() {
 
   const clienteSelecionado = clientes.find(c => c.id === clienteId)
   const ehVenda = natureza === 'Venda de Mercadoria'
+  const ehPessoaFisica = !!clienteSelecionado && clienteSelecionado.cpf_cnpj.replace(/\D/g, '').length === 11
+  const modeloExibido = !ehVenda ? 'NFS-e' : (ehPessoaFisica && !forcarNfe ? 'NFC-e' : 'NF-e')
   const subtotal = itens.reduce((acc, i) => acc + i.quantidade * i.valor_unitario, 0)
   // Venda de Mercadoria não tem desconto/ISS no backend (emitir() só envia `itens`
   // nesse caso — NotaFiscalController::store() calcula desconto: 0, valor_iss: 0,
@@ -111,6 +118,61 @@ export function NotaFiscalForm() {
 
   function updateItem(idx: number, field: keyof ItemNF, value: string | number) {
     setItens(prev => prev.map((item, j) => j === idx ? { ...item, [field]: value } : item))
+  }
+
+  function abrirPdf(notaId: string) {
+    const token = localStorage.getItem('auth_token')
+    fetch(`${window.location.origin}/api/notas-fiscais/${notaId}/pdf`, {
+      headers: {
+        Authorization: `Bearer ${token}`,
+        'X-Tenant': localStorage.getItem('oficina_slug') ?? '',
+      },
+    })
+      .then(res => res.blob())
+      .then(blob => window.open(URL.createObjectURL(blob), '_blank'))
+      .catch(() => {})
+  }
+
+  function limparFormulario() {
+    setClienteId('')
+    setItens([{ descricao: '', quantidade: 1, valor_unitario: 0 }])
+    setDesconto(0)
+    setObs('')
+    setForcarNfe(false)
+  }
+
+  function aguardarConfirmacao(notaId: string) {
+    setAguardandoConfirmacao(true)
+    let tentativas = 0
+    if (pollRef.current) clearInterval(pollRef.current)
+    pollRef.current = setInterval(async () => {
+      tentativas++
+      try {
+        const r = await api.get(`/notas-fiscais/${notaId}/status`)
+        const status = r.data.data.status
+        if (status === 'AUTORIZADA') {
+          if (pollRef.current) clearInterval(pollRef.current)
+          setAguardandoConfirmacao(false)
+          toast(`NFC-e #${r.data.data.numero} autorizada!`, 'success')
+          abrirPdf(notaId)
+          limparFormulario()
+          return
+        }
+        if (status === 'REJEITADA') {
+          if (pollRef.current) clearInterval(pollRef.current)
+          setAguardandoConfirmacao(false)
+          toast('NFC-e rejeitada pela SEFAZ. Confira o Histórico de NF.', 'danger')
+          return
+        }
+      } catch {
+        // tenta de novo no próximo tick
+      }
+      if (tentativas >= 10) {
+        if (pollRef.current) clearInterval(pollRef.current)
+        setAguardandoConfirmacao(false)
+        toast('Ainda processando — acompanhe pelo Histórico de NF.', 'info')
+      }
+    }, 3000)
   }
 
   async function emitir() {
@@ -131,18 +193,25 @@ export function NotaFiscalForm() {
           .map(i => ({
             produto_id: i.produto_id, quantidade: i.quantidade, valor_unitario: i.valor_unitario,
           }))
+        payload.forcar_nfe = forcarNfe
       } else {
         payload.subtotal = subtotal
         payload.desconto = desconto
         payload.aliquota_iss = aliquota
       }
       const nf = await api.post('/notas-fiscais', payload)
-      const resultado = await api.post(`/notas-fiscais/${nf.data.data.id}/emitir`)
-      toast(`NF #${resultado.data.data.numero} emitida com sucesso!`, 'success')
-      setClienteId('')
-      setItens([{ descricao: '', quantidade: 1, valor_unitario: 0 }])
-      setDesconto(0)
-      setObs('')
+      const notaId = nf.data.data.id
+      const resultado = await api.post(`/notas-fiscais/${notaId}/emitir`)
+      const status = resultado.data.data.status
+
+      if (status === 'AUTORIZADA') {
+        toast(`NF #${resultado.data.data.numero} emitida com sucesso!`, 'success')
+        abrirPdf(notaId)
+        limparFormulario()
+      } else if (status === 'PROCESSANDO') {
+        toast('Aguardando confirmação da SEFAZ...', 'info')
+        aguardarConfirmacao(notaId)
+      }
     } catch (err: unknown) {
       const e = err as { response?: { data?: { message?: string } } }
       toast(e.response?.data?.message ?? 'Erro ao emitir NF.', 'danger')
@@ -185,6 +254,27 @@ export function NotaFiscalForm() {
             </select>
           </div>
         </div>
+
+        {ehVenda && clienteSelecionado && (
+          <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 20 }}>
+            <span style={{
+              padding: '4px 12px', borderRadius: 999, fontSize: 12, fontWeight: 700,
+              background: modeloExibido === 'NFC-e' ? 'rgba(30,136,229,0.15)' : 'rgba(245,166,35,0.15)',
+              color: modeloExibido === 'NFC-e' ? 'var(--info)' : 'var(--accent)',
+            }}>
+              {modeloExibido}
+            </span>
+            {ehPessoaFisica && (
+              <button
+                type="button"
+                onClick={() => setForcarNfe(f => !f)}
+                style={{ background: 'none', border: 'none', color: 'var(--muted)', fontSize: 12, textDecoration: 'underline', cursor: 'pointer', padding: 0 }}
+              >
+                {forcarNfe ? 'voltar para NFC-e (automático)' : 'emitir como NF-e mesmo assim'}
+              </button>
+            )}
+          </div>
+        )}
 
         {/* Itens */}
         <div style={{ marginBottom: 20 }}>
@@ -406,21 +496,21 @@ export function NotaFiscalForm() {
 
         <button
           onClick={emitir}
-          disabled={loading}
+          disabled={loading || aguardandoConfirmacao}
           className="font-display"
           style={{
             width: '100%',
             padding: 14,
             borderRadius: 10,
-            background: loading ? 'var(--muted)' : 'var(--success)',
+            background: (loading || aguardandoConfirmacao) ? 'var(--muted)' : 'var(--success)',
             color: '#fff',
             border: 'none',
             fontWeight: 800,
             fontSize: 18,
-            cursor: loading ? 'not-allowed' : 'pointer',
+            cursor: (loading || aguardandoConfirmacao) ? 'not-allowed' : 'pointer',
           }}
         >
-          {loading ? '⟳ Processando...' : 'EMITIR NOTA FISCAL'}
+          {loading ? '⟳ Processando...' : aguardandoConfirmacao ? '⟳ Aguardando confirmação...' : 'EMITIR NOTA FISCAL'}
         </button>
       </div>
     </div>
