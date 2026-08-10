@@ -21,9 +21,14 @@ use Tests\TestCase;
  *
  * Corrigido: o brief não incluía 'cnpj' na Configuracao de teste. Sem CNPJ
  * (nem CPF) no emitente, Make::render() -> checkNFeKey() acessa
- * ->nodeValue num node inexistente (CPF/CNPJ) e quebra com \Error fatal,
- * não capturado pelo catch(\Exception) interno da Make — achado rodando o
- * teste, não hipotético (ver task-3-report.md).
+ * ->nodeValue num node inexistente (CPF/CNPJ). Achado inicialmente rodando
+ * o teste sob PHPUnit, que converteu o E_WARNING resultante numa exceção
+ * catchável — mas revisão posterior confirmou que em PHP puro (produção)
+ * isso NÃO lança nada: a chave de acesso é montada em silêncio a partir de
+ * um CNPJ vazio. MotorNfe::montarNfe() agora tem uma guarda explícita
+ * (InvalidArgumentException) pra não depender desse comportamento
+ * inconsistente entre ambientes — ver test_lanca_excecao_quando_cnpj_ausente()
+ * abaixo e task-3-report.md ("Fix report").
  */
 class MotorNfeMontarNfeTest extends TestCase
 {
@@ -95,5 +100,31 @@ class MotorNfeMontarNfeTest extends TestCase
         $xml = $motor->montarNfe($notaInterestadual, $cfg, 'HOMOLOGACAO', 1, 1);
 
         $this->assertStringContainsString('<idDest>2</idDest>', $xml);
+    }
+
+    /**
+     * Guarda contra "chutar" a chave de acesso da NF-e com um CNPJ vazio.
+     * Sem essa guarda explícita, em PHP puro (fora do conversor de
+     * E_WARNING->exceção do PHPUnit) a Make/sped-nfe monta a chave em
+     * silêncio a partir de um CNPJ zero-padded, sem lançar nada e sem
+     * popular getErrors() — corrompendo um valor fiscal legalmente
+     * significativo sem avisar ninguém.
+     */
+    public function test_lanca_excecao_quando_cnpj_ausente(): void
+    {
+        $cfg = new Configuracao([
+            'razao_social' => 'Oficina Teste', 'regime_tributario' => 'Simples Nacional',
+            // 'cnpj' deliberadamente ausente
+            'uf' => 'MG', 'codigo_ibge' => '3132404', 'cidade' => 'Ilicínea',
+            'logradouro' => 'Av Central', 'numero' => '100', 'bairro' => 'Centro', 'cep' => '37275000',
+            'inscricao_estadual' => '1234567',
+        ]);
+
+        $motor = new MotorNfe();
+
+        $this->expectException(\InvalidArgumentException::class);
+        $this->expectExceptionMessage('CNPJ da empresa não configurado');
+
+        $motor->montarNfe($this->notaVenda(), $cfg, 'HOMOLOGACAO', 1, 1);
     }
 }

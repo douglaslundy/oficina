@@ -34,6 +34,25 @@ class MotorNfe
     ): string {
         $crt = CrtResolver::resolver($cfg->regime_tributario ?? '');
 
+        // Guarda explícita — não confiar na Make/sped-nfe pra falhar sozinha
+        // aqui. Fora do PHPUnit (que converte E_WARNING em exceção
+        // catchável via seu error handler), acessar ->nodeValue num node
+        // CNPJ/CPF ausente NÃO lança nada em PHP puro: getXML() retorna uma
+        // string "bem-sucedida", getErrors() fica vazio, e
+        // sped-common\Keys::build() monta a chave de acesso a partir de um
+        // CNPJ zero-padded (vazio -> "00000000000000") sem avisar ninguém.
+        // Isso corromperia silenciosamente a chave de acesso — um valor
+        // fiscal legalmente significativo — exatamente o tipo de "chutar"
+        // que este projeto proíbe (mesma disciplina já aplicada a
+        // origem/tributacao_icms noutros pontos do código fiscal). Por isso
+        // falhamos alto e explicitamente aqui, antes de chamar tagemit()/
+        // getXML(), em vez de depender do comportamento inconsistente da
+        // biblioteca entre ambiente de teste e produção.
+        $cnpjLimpo = preg_replace('/\D/', '', $cfg->cnpj ?? '') ?? '';
+        if ($cnpjLimpo === '') {
+            throw new \InvalidArgumentException('CNPJ da empresa não configurado — não é possível montar a chave de acesso da NF-e sem ele.');
+        }
+
         $make = new Make();
 
         $make->taginfNFe((object) [
@@ -66,13 +85,18 @@ class MotorNfe
         // Traits/TraitCalculations::checkNFeKey() (chamado por render(), que
         // getXML() chama implicitamente) faz
         // $emit->getElementsByTagName('CPF')->item(0)->nodeValue — item(0)
-        // retorna null quando nenhum CNPJ/CPF foi adicionado, e acessar
-        // ->nodeValue em null é um \Error (TypeError) em PHP 8, NÃO uma
-        // \Exception — o catch(\Exception) dentro de render() não pega isso,
-        // e a chamada quebra com erro fatal não tratado. Confirmado lendo o
-        // método real, não hipotético.
+        // retorna null quando nenhum CNPJ/CPF foi adicionado. Em PHP puro
+        // (produção), acessar ->nodeValue em null é só um E_WARNING, não uma
+        // \Exception — render() segue adiante, getXML() retorna uma string
+        // "bem-sucedida" e getErrors() fica vazio, com a chave de acesso
+        // montada a partir de um CNPJ vazio/zero-padded (corrompida em
+        // silêncio). Só sob PHPUnit esse E_WARNING vira exceção catchável
+        // (conversor de erros do PHPUnit) e aparece em getErrors() — o que
+        // mascarava o problema real ao rodar só os testes. A guarda contra
+        // CNPJ vazio no início de montarNfe() é o que garante a falha alta
+        // de verdade; isto aqui só usa o valor já validado.
         $make->tagemit((object) [
-            'CNPJ'  => preg_replace('/\D/', '', $cfg->cnpj ?? ''),
+            'CNPJ'  => $cnpjLimpo,
             'xNome' => $cfg->razao_social,
             'xFant' => $cfg->nome_fantasia,
             'IE'    => preg_replace('/\D/', '', $cfg->inscricao_estadual ?? ''),
