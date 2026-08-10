@@ -1059,39 +1059,58 @@ autocorretor pra "deploy"). Fluxo:
     coberta. Nunca rodar `php artisan test` na VPS de produção
     (`RefreshDatabase` dropa o banco).
 
+## Rodada 24 (2026-08-10) — Etapa C2 (NF-e via sped-nfe + EPEC): brainstorm e plano CONCLUÍDOS
+
+Retomado na mesma sessão em que a feature NFC-e foi implementada e
+deployada direto na `main` (worktree separado — ver histórico daquela
+sessão no `PROGRESSO.md` da raiz do repo principal, não deste worktree).
+Usuário decidiu continuar a Etapa C2 **neste mesmo worktree** (não um novo),
+já que ela estende exatamente as classes que a Etapa C1 construiu aqui
+(`NfePhpProvider`, `CertificadoStore`, `CrtResolver`,
+`EmissaoResultado::erro()`).
+
+**Decisão registrada, não resolvida**: pesquisa fiscal (reforma
+tributária/NTs) foi **reusada** da rodada 15 (não repetida) — decisão do
+usuário, dado que já cobre o cenário real da oficina (Simples Nacional,
+CRT=1, dispensado de IBS/CBS até 04/01/2027).
+
+- Spec: `docs/superpowers/specs/2026-08-10-etapa-c2-nfe-epec-design.md`
+  (commit `ab39512`) — extrai e adapta as seções B-F do spec combinado
+  original (`2026-07-25-motor-nfephp-design.md`) pro que falta *adicionar*
+  ao que a C1 já construiu (numeração própria, `MotorNfe`, `DanfeRenderer`,
+  comando de reconciliação, endpoint de inutilização). Autorevisão corrigiu
+  um trecho incompleto (código com `...`) e uma imprecisão de nomenclatura.
+- Plano: `docs/superpowers/plans/2026-08-10-etapa-c2-nfe-epec.md` (commit
+  `515a6e2`, 9 tasks, TDD). Assinaturas reais dos métodos de `Tools`
+  (`sefazEnviaLote`, `sefazConsultaRecibo`, `sefazConsultaChave`,
+  `sefazInutiliza`, `sefazCancela`, `sefazEPEC`) e de
+  `Certificate::readPfx()` **confirmadas lendo o código-fonte real do
+  `sped-nfe`/`sped-common`** nesta sessão de brainstorming — não são
+  suposição. A montagem exata do XML via `Make` e o parsing da resposta
+  SOAP **não foram verificados** (documentação do pacote é rasa nesses
+  pontos) — cada task correspondente instrui explicitamente o implementador
+  a verificar contra `vendor/nfephp-org/sped-nfe/` antes de finalizar,
+  mesmo padrão que `MotorNfse` já usou com sucesso neste worktree (rodada
+  20/21/22 abaixo).
+- **Nenhum código escrito ainda** — só spec e plano. Risco de divergência
+  entre este worktree e a `main` registrado explicitamente no spec (Risco
+  #4) — a `main` recebeu as Etapas A/B completas mais a feature NFC-e
+  inteira desde que este worktree foi criado; o merge final vai precisar
+  reconciliar isso, não bloqueia o desenvolvimento agora.
+
 ## Próxima tarefa (retomar exatamente aqui)
-- [x] **DEPLOY DA ETAPA A** — feito na rodada 18 (2026-08-02). `git pull`
-  fast-forward `0712887..7eca748` + `bash deploy-vps.sh`. Validado: HEAD na
-  VPS = `7eca748`; as 4 migrations `2026_07_25_*` como `Ran`; domínios
-  públicos `saas`/`stuntmotos`/`oficina-do-lundy`/`oficina` respondendo 200
-  em `/api/health`; `produtos/pendencias-fiscais` e `categorias-fiscais`
-  respondendo 401 sem token (rotas novas existem e estão protegidas).
-- [x] **Feature tests da Etapa A** — `backend/tests/Feature/ProdutoFiscalTest.php`
-  (rodada 18, 13 testes, detalhe acima). `php -l` limpo, **nunca executados**
-  contra Postgres real (limitação de ambiente local, não do teste em si) —
-  falta rodar em CI ou banco de teste dedicado pra fechar 100% a cobertura.
-- [ ] **Validação manual com XML real de fornecedor em produção** — ainda
-  pendente do usuário (os feature tests cobrem a persistência em teoria, mas
-  só um XML real confirma que o parser lê corretamente notas do mundo real,
-  não só o fixture do teste): (a) produto novo nasce com NCM; (b) produto
-  existente com NCM diferente NÃO é sobrescrito e gera divergência; (c) tela
-  de pendências fiscais lista o resíduo.
-1. Próximo: desenhar a **etapa B** (spec ainda não existe) — refactor
-   compartilhado (`NotaFiscalData` com `itens[]`, `EmissaoOrquestrador` da OS
-   mista, emissão em fila) + NF-e no Spedy/Focus + os 5 defeitos registrados
-   na rodada 16. **Merece uma sessão de brainstorming com o usuário antes do
-   spec** (mesmo padrão usado na Etapa A e na rodada 15 do NFePHP) — não
-   pular direto pro código.
-2. Depois: a etapa C (NFePHP), cujo spec já está escrito em
-   `docs/superpowers/specs/2026-07-25-motor-nfephp-design.md`. Aguardando
-   aprovação ou pedidos de mudança.
-3. Verificações de fato que dependem do usuário (não bloqueiam escrever
-   os planos; bloqueiam a validação em homologação das etapas B/C):
-   adesão de Ilicínea ao ADN (`nfse.gov.br`); **alíquota de ISS de
-   Ilicínea — a PREFEITURA informa, o usuário NÃO tem contador**.
-4. Pendências mais antigas, ainda não feitas: usuário validar
-   manualmente rodada 12 (notificações) e rodada 13 (agendador — checar
-   `docker compose logs scheduler` pros horários reais de disparo).
+
+**Etapa C2**: spec e plano concluídos (Rodada 24, acima). Próximo passo
+exato: escolher execução (`subagent-driven-development` recomendado,
+mesmo processo usado nas Etapas A/B/NFC-e) e rodar as 9 tasks do plano em
+ordem, **direto neste worktree** (`worktree-etapa-c1-nfephp-nfse`), nunca
+na `main`. Task 3 precisa de `composer require nfephp-org/sped-nfe` antes
+de codar (pode precisar de `--ignore-platform-reqs`, mesma situação já
+documentada neste projeto pra outras dependências). Verificações que
+dependem do usuário, não bloqueiam o desenvolvimento mas bloqueiam a
+validação em homologação: adesão de Ilicínea ao ADN (não é NF-e, é
+NFS-e/C1 — lembrete cruzado); nenhuma credencial real de SEFAZ-MG/homolog
+foi usada ainda em nenhuma etapa.
 
 ## Rodada 19 (2026-08-03) — Etapa B implementada via subagent-driven-development
 
