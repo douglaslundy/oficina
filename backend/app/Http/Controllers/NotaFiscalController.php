@@ -47,6 +47,7 @@ class NotaFiscalController extends Controller
             'desconto'          => ['nullable', 'numeric', 'min:0'],
             'aliquota_iss'      => ['nullable', 'numeric', 'min:0', 'max:100'],
             'observacoes'       => ['nullable', 'string'],
+            'forcar_nfe'             => ['nullable', 'boolean'],
             'itens'                  => ['required_if:natureza_operacao,Venda de Mercadoria', 'array'],
             'itens.*.produto_id'     => ['required_with:itens', 'uuid', 'exists:produtos,id'],
             'itens.*.quantidade'     => ['required_with:itens', 'numeric', 'min:0.01'],
@@ -54,12 +55,12 @@ class NotaFiscalController extends Controller
         ]);
 
         $ehVenda = $validated['natureza_operacao'] === 'Venda de Mercadoria';
-        $modelo  = $ehVenda ? 'NF-e' : 'NFS-e';
+        $modelo  = 'NFS-e';
 
-        // Dados fiscais que alimentam CfopSaidaResolver/TributacaoIcmsSaidaResolver
-        // precisam estar completos ANTES de abrir a transação — nunca cair num
-        // default/fallback silencioso em decisão fiscal (gera CFOP/CST-CSOSN
-        // errado num documento fiscal real, sem erro visível em lugar nenhum).
+        // Dados fiscais que alimentam os resolvers de CFOP/CST-CSOSN precisam estar
+        // completos ANTES de abrir a transação — nunca cair num default/fallback
+        // silencioso em decisão fiscal (gera CFOP/CST-CSOSN errado num documento
+        // fiscal real, sem erro visível em lugar nenhum).
         $configuracao  = null;
         $cliente       = null;
         $produtosPorId = [];
@@ -74,6 +75,16 @@ class NotaFiscalController extends Controller
             if (!$cliente || empty($cliente->uf)) {
                 return response()->json(['message' => 'Complete a UF do cliente antes de emitir NF-e.'], 422);
             }
+
+            // Seleção automática NFC-e/NF-e: consumidor final pessoa física (CPF, 11
+            // dígitos) recebe NFC-e por padrão — só existe NFC-e pra pessoa física.
+            // "forcar_nfe" é o escape hatch pro caso raro de PF que precise de NF-e
+            // mesmo assim; ignorado quando o cliente já é pessoa jurídica (CNPJ
+            // sempre gera NF-e, não existe NFC-e pra CNPJ).
+            $cpfCnpjLimpo   = preg_replace('/\D/', '', (string) $cliente->cpf_cnpj);
+            $ehPessoaFisica = strlen($cpfCnpjLimpo) === 11;
+            $forcarNfe      = (bool) ($validated['forcar_nfe'] ?? false);
+            $modelo         = ($ehPessoaFisica && !$forcarNfe) ? 'NFC-e' : 'NF-e';
 
             foreach ($validated['itens'] as $item) {
                 $produto = \App\Models\Produto::findOrFail($item['produto_id']);
@@ -128,11 +139,9 @@ class NotaFiscalController extends Controller
                     $produto    = $produtosPorId[$item['produto_id']];
                     $tributacao = $produto->tributacao_icms;
 
-                    $cfop = \App\Services\Fiscal\CfopSaidaResolver::resolver(
-                        $oficinaUf,
-                        $cliente->uf,
-                        $tributacao === 'ST',
-                    );
+                    $cfop = $modelo === 'NFC-e'
+                        ? \App\Services\Fiscal\CfopConsumidorResolver::resolver($oficinaUf, $cliente->uf)
+                        : \App\Services\Fiscal\CfopSaidaResolver::resolver($oficinaUf, $cliente->uf, $tributacao === 'ST');
                     $cstCsosn = \App\Services\Fiscal\TributacaoIcmsSaidaResolver::resolver($regime, $tributacao);
 
                     \App\Models\NotaFiscalItem::create([
