@@ -9,6 +9,7 @@ use App\Models\Produto;
 use App\Models\Usuario;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\Hash;
+use Illuminate\Support\Facades\Http;
 use Tests\TestCase;
 
 class NotaFiscalNfceTest extends TestCase
@@ -132,5 +133,82 @@ class NotaFiscalNfceTest extends TestCase
         $this->assertDatabaseHas('notas_fiscais_itens', [
             'nota_fiscal_id' => $notaId, 'cfop' => '6108',
         ]);
+    }
+
+    public function test_emitir_nfce_autorizada_sincrona_fim_a_fim_via_focus(): void
+    {
+        $this->criarConfiguracao(['uf' => 'MG']);
+        $oficina = \App\Models\Oficina::create([
+            'nome' => 'Oficina Focus NFC-e', 'cnpj' => '11222333000181',
+            'slug' => 'oficina-nfce-' . uniqid(), 'provedor_fiscal' => 'FOCUS',
+        ]);
+        $token   = $this->loginAdmin();
+        $cliente = Cliente::create(['nome' => 'Fulano', 'cpf_cnpj' => '87748248800', 'uf' => 'MG']);
+        $produto = $this->criarProduto();
+
+        Http::fake([
+            '*/v2/nfce?ref=*' => Http::response([
+                'status' => 'autorizado', 'numero' => '10', 'chave_nfe' => 'CHAVE-NFCE-E2E',
+                'caminho_xml_nota_fiscal' => 'https://focus/xml/nfce-e2e.xml',
+                'caminho_danfe' => 'https://focus/danfe/nfce-e2e.pdf',
+                'qrcode_url' => 'https://homologacao.nfce.fazenda.mg.gov.br/qrcode?p=CHAVE',
+            ], 201),
+            'https://focus/xml/nfce-e2e.xml' => Http::response('<xml>nfce e2e</xml>', 200),
+        ]);
+
+        $headers = ['X-Tenant' => $oficina->slug];
+        $criar = $this->withToken($token)->withHeaders($headers)
+            ->postJson('/api/notas-fiscais', $this->payloadVenda($cliente->id, $produto->id));
+        $notaId = $criar->json('data.id');
+
+        $emitir = $this->withToken($token)->withHeaders($headers)
+            ->postJson("/api/notas-fiscais/{$notaId}/emitir");
+
+        $emitir->assertStatus(200)
+            ->assertJsonPath('data.status', 'AUTORIZADA')
+            ->assertJsonPath('data.numero', 10)
+            ->assertJsonPath('data.chave_acesso', 'CHAVE-NFCE-E2E');
+
+        $this->assertDatabaseHas('notas_fiscais', [
+            'id' => $notaId, 'status' => 'AUTORIZADA', 'numero' => 10, 'qrcode_url' => 'https://homologacao.nfce.fazenda.mg.gov.br/qrcode?p=CHAVE',
+        ]);
+    }
+
+    public function test_numeracao_nfce_nao_compartilha_contador_com_nfe(): void
+    {
+        $this->criarConfiguracao(['uf' => 'MG']);
+        $oficina = \App\Models\Oficina::create([
+            'nome' => 'Oficina Numeracao', 'cnpj' => '11222333000181',
+            'slug' => 'oficina-num-' . uniqid(), 'provedor_fiscal' => 'FOCUS',
+        ]);
+        $token = $this->loginAdmin();
+        $headers = ['X-Tenant' => $oficina->slug];
+
+        Http::fake([
+            '*/v2/nfce?ref=*' => Http::response(['status' => 'autorizado', 'numero' => '1', 'chave_nfe' => 'K1'], 201),
+            '*/v2/nfe?ref=*'  => Http::response(['status' => 'autorizado', 'numero' => '500', 'chave_nfe' => 'K2'], 201),
+        ]);
+
+        $clientePf = Cliente::create(['nome' => 'PF', 'cpf_cnpj' => '87748248800', 'uf' => 'MG']);
+        $clientePj = Cliente::create(['nome' => 'PJ', 'cpf_cnpj' => '11222333000181', 'uf' => 'MG']);
+        $produto   = $this->criarProduto();
+
+        $nfce1 = $this->withToken($token)->withHeaders($headers)->postJson('/api/notas-fiscais', $this->payloadVenda($clientePf->id, $produto->id));
+        $this->withToken($token)->withHeaders($headers)->postJson("/api/notas-fiscais/{$nfce1->json('data.id')}/emitir");
+
+        $nfe1 = $this->withToken($token)->withHeaders($headers)->postJson('/api/notas-fiscais', $this->payloadVenda($clientePj->id, $produto->id));
+        $this->withToken($token)->withHeaders($headers)->postJson("/api/notas-fiscais/{$nfe1->json('data.id')}/emitir");
+
+        $nfce2 = $this->withToken($token)->withHeaders($headers)->postJson('/api/notas-fiscais', $this->payloadVenda($clientePf->id, $produto->id));
+        $emitirNfce2 = $this->withToken($token)->withHeaders($headers)->postJson("/api/notas-fiscais/{$nfce2->json('data.id')}/emitir");
+
+        // Sequência: emite NFC-e (consome proximo_numero_nfce: 1->2), emite NF-e
+        // (consome proximo_numero_nf: 1->2), emite outra NFC-e (consome
+        // proximo_numero_nfce: 2->3). Se os contadores fossem compartilhados por
+        // engano, proximo_numero_nf teria avançado pra 3 também — a asserção exata
+        // (não só "diferentes") é o que realmente prova o isolamento.
+        $emitirNfce2->assertStatus(200);
+        $this->assertSame(2, \App\Models\Configuracao::first()->proximo_numero_nf);
+        $this->assertSame(3, \App\Models\Configuracao::first()->proximo_numero_nfce);
     }
 }

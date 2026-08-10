@@ -182,9 +182,13 @@ class NotaFiscalController extends Controller
         $ambiente = \App\Models\Configuracao::first()?->ambiente_fiscal ?? 'HOMOLOGACAO';
         $ref      = $nota->referencia_externa ?: ('nf-' . $nota->id);
 
+        $numero = $nota->modelo === 'NFC-e'
+            ? $this->nfeService->proximoNumeroNfce()
+            : $this->nfeService->proximoNumeroNf();
+
         $nota->update([
             'status'             => 'PROCESSANDO',
-            'numero'             => $this->nfeService->proximoNumeroNf(),
+            'numero'             => $numero,
             'provedor'           => $provedor,
             'ambiente'           => $ambiente,
             'referencia_externa' => $ref,
@@ -192,32 +196,7 @@ class NotaFiscalController extends Controller
 
         try {
             $resultado = $this->nfeService->emitir($nota);
-            $nota->update([
-                'status'       => $resultado['status'],
-                'chave_acesso' => $resultado['chave'],
-                'protocolo'    => $resultado['protocolo'],
-                'xml_retorno'  => $resultado['xml_retorno'],
-                // Para NF-e o número que importa legalmente é o atribuído pela
-                // Focus/SEFAZ na própria série, não o contador interno gravado antes
-                // da emissão. Fallback pro valor já existente se o provedor não
-                // retornar um número (mantém o comportamento atual pra NFS-e).
-                'numero'       => isset($resultado['numero']) ? (int) $resultado['numero'] : $nota->numero,
-                'emitido_em'   => $resultado['status'] === 'AUTORIZADA' ? now() : null,
-            ]);
-
-            // Billing e alertas só em PRODUCAO e quando AUTORIZADA.
-            if ($resultado['status'] === 'AUTORIZADA' && $ambiente === 'PRODUCAO') {
-                $notaFresh = $nota->fresh()->loadMissing('cliente');
-                $this->planLimit->registrarNotaSeExcedente($notaFresh);
-                $this->alertas->dispatch('NF_AUTORIZADA', [
-                    'nf_numero'    => $notaFresh->numero,
-                    'cliente'      => $notaFresh->cliente?->nome ?? '-',
-                    'valor'        => 'R$ ' . number_format((float)$notaFresh->valor_total, 2, ',', '.'),
-                    'chave_acesso' => $notaFresh->chave_acesso ?? '-',
-                    '_telefone_cliente' => $notaFresh->cliente?->telefone ?? '',
-                    '_email_cliente'    => $notaFresh->cliente?->email ?? '',
-                ]);
-            }
+            $nota      = $this->aplicarResultadoEmissao($nota, $resultado, $ambiente);
 
             if ($resultado['status'] === 'REJEITADA') {
                 return response()->json(['message' => $resultado['mensagem_erro'] ?? 'Nota rejeitada.'], 422);
@@ -228,6 +207,45 @@ class NotaFiscalController extends Controller
         }
 
         return response()->json(['data' => new NotaFiscalResource($nota->fresh()->load('cliente'))]);
+    }
+
+    /**
+     * Aplica o resultado de emitir()/consultarStatus() na nota e dispara billing/
+     * alertas quando autorizada em produção. Compartilhado entre emitir() (Task 7)
+     * e status() (Task 8) — os dois pontos que recebem um EmissaoResultado do
+     * provedor e precisam persistir e reagir da mesma forma.
+     */
+    private function aplicarResultadoEmissao(NotaFiscal $nota, array $resultado, string $ambiente): NotaFiscal
+    {
+        $nota->update([
+            'status'       => $resultado['status'],
+            'chave_acesso' => $resultado['chave'],
+            'protocolo'    => $resultado['protocolo'],
+            'xml_retorno'  => $resultado['xml_retorno'],
+            'qrcode_url'   => $resultado['qrcode_url'] ?? null,
+            // Para NF-e/NFC-e o número que importa legalmente é o atribuído pela
+            // Focus/SEFAZ na própria série, não o contador interno gravado antes
+            // da emissão. Fallback pro valor já existente se o provedor não
+            // retornar um número (mantém o comportamento atual pra NFS-e).
+            'numero'       => isset($resultado['numero']) ? (int) $resultado['numero'] : $nota->numero,
+            'emitido_em'   => $resultado['status'] === 'AUTORIZADA' ? now() : null,
+        ]);
+
+        // Billing e alertas só em PRODUCAO e quando AUTORIZADA.
+        if ($resultado['status'] === 'AUTORIZADA' && $ambiente === 'PRODUCAO') {
+            $notaFresh = $nota->fresh()->loadMissing('cliente');
+            $this->planLimit->registrarNotaSeExcedente($notaFresh);
+            $this->alertas->dispatch('NF_AUTORIZADA', [
+                'nf_numero'    => $notaFresh->numero,
+                'cliente'      => $notaFresh->cliente?->nome ?? '-',
+                'valor'        => 'R$ ' . number_format((float)$notaFresh->valor_total, 2, ',', '.'),
+                'chave_acesso' => $notaFresh->chave_acesso ?? '-',
+                '_telefone_cliente' => $notaFresh->cliente?->telefone ?? '',
+                '_email_cliente'    => $notaFresh->cliente?->email ?? '',
+            ]);
+        }
+
+        return $nota->fresh();
     }
 
     public function cancelar(Request $request, string $id): JsonResponse
