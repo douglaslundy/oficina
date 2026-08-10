@@ -97,4 +97,17 @@ class NfeServiceTest extends TestCase
         $this->assertCount(1, $data->itens);
         $this->assertSame('84212300', $data->itens[0]['ncm']);
     }
+
+    public function test_proximo_numero_nfce_incrementa_independente_do_numero_nf(): void
+    {
+        $primeiroNfce = $this->service->proximoNumeroNfce();
+        $primeiroNfe  = $this->service->proximoNumeroNf();
+        $segundoNfce  = $this->service->proximoNumeroNfce();
+
+        $this->assertSame(1, $primeiroNfce);
+        $this->assertSame(1, $primeiroNfe);
+        $this->assertSame(2, $segundoNfce);
+        $this->assertSame(1, Configuracao::first()->proximo_numero_nf);
+        $this->assertSame(3, Configuracao::first()->proximo_numero_nfce);
+    }
 }

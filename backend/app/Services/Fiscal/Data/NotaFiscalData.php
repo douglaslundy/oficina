@@ -10,7 +10,7 @@ final class NotaFiscalData
      *   produto_id: string, descricao: string, ncm: string, cfop: string,
      *   origem: int, tributacao_icms: string, cst_csosn: string,
      *   quantidade: float, valor_unitario: float,
-     * }> $itens Só populado quando $modelo === 'NFE'.
+     * }> $itens Só populado quando $modelo === 'NFE'|'NFCE'.
      */
     public function __construct(
         public readonly string $tipo,                  // NFSE (Fase 1)
@@ -25,5 +25,6 @@ final class NotaFiscalData
         public readonly string $referenciaExterna,
         public readonly string $modelo = 'NFSE',
         public readonly array $itens = [],
+        public readonly string $formaPagamento = '',
     ) {}
 }

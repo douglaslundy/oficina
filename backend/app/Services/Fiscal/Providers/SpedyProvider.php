@@ -69,7 +69,7 @@ class SpedyProvider implements FiscalProvider
         return $this->resultadoDe($resp->json(), $nota->referenciaExterna);
     }
 
-    public function consultar(string $referencia): EmissaoResultado
+    public function consultar(string $referencia, string $modelo = 'NFSE'): EmissaoResultado
     {
         $resp = Http::withHeaders(['X-Api-Key' => $this->emissorToken ?? $this->masterKey])
             ->get("{$this->baseUrl}/service-invoices/{$referencia}");

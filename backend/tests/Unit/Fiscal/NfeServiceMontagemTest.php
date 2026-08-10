@@ -33,4 +33,28 @@ class NfeServiceMontagemTest extends TestCase
         $this->assertSame('nf-abc', $data->referenciaExterna);
         $this->assertSame('12345678000199', $data->tomador['cpf_cnpj']);
     }
+
+    public function test_monta_nota_data_nfce_usa_modelo_interno_nfce_e_inclui_itens(): void
+    {
+        $cliente = new Cliente(['nome' => 'Fulano', 'cpf_cnpj' => '87748248800']);
+        $nota = new NotaFiscal([
+            'modelo' => 'NFC-e', 'valor_total' => 90.0,
+            'natureza_operacao' => 'Venda de Mercadoria',
+            'forma_pagamento' => 'PIX', 'referencia_externa' => 'nfce-abc',
+        ]);
+        $nota->setRelation('cliente', $cliente);
+        $item = new \App\Models\NotaFiscalItem([
+            'descricao' => 'Filtro', 'ncm' => '84212300', 'cfop' => '5102',
+            'origem' => 0, 'tributacao_icms' => 'NORMAL', 'cst_csosn' => '102',
+            'quantidade' => 2, 'valor_unitario' => 45,
+        ]);
+        $nota->setRelation('itens', collect([$item]));
+
+        $service = new NfeService();
+        $data = $service->montarNotaData($nota);
+
+        $this->assertSame('NFCE', $data->modelo);
+        $this->assertCount(1, $data->itens);
+        $this->assertSame('PIX', $data->formaPagamento);
+    }
 }

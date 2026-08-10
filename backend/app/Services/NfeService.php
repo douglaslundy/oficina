@@ -13,16 +13,26 @@ class NfeService
 {
     public function proximoNumeroNf(): int
     {
-        return DB::transaction(function () {
+        return $this->proximoNumeroPorContador('proximo_numero_nf');
+    }
+
+    public function proximoNumeroNfce(): int
+    {
+        return $this->proximoNumeroPorContador('proximo_numero_nfce');
+    }
+
+    private function proximoNumeroPorContador(string $coluna): int
+    {
+        return DB::transaction(function () use ($coluna) {
             $config = Configuracao::lockForUpdate()->first();
             if (!$config) throw new \Exception('Configurações da empresa não encontradas.');
-            $numero = $config->proximo_numero_nf;
-            $config->increment('proximo_numero_nf');
+            $numero = $config->{$coluna};
+            $config->increment($coluna);
             return $numero;
         });
     }
 
-    // Quando $nota->modelo === 'NF-e', $nota precisa ter sido carregado com ->load('itens') antes de chamar este método.
+    // Quando $nota->modelo === 'NF-e'|'NFC-e', $nota precisa ter sido carregado com ->load('itens') antes de chamar este método.
     public function montarNotaData(
         NotaFiscal $nota,
         string $codigoServicoFederal = '14.01',
@@ -32,7 +42,12 @@ class NfeService
         $cliente = $nota->cliente;
         $aliquota = (float) ($nota->aliquota_iss ?? 5.0);
 
-        $ehNfe = $nota->modelo === 'NF-e';
+        $modeloInterno = match ($nota->modelo) {
+            'NF-e'  => 'NFE',
+            'NFC-e' => 'NFCE',
+            default => 'NFSE',
+        };
+        $temItens = in_array($modeloInterno, ['NFE', 'NFCE'], true);
 
         return new NotaFiscalData(
             tipo: 'NFSE',
@@ -56,8 +71,8 @@ class NfeService
             codigoServicoMunicipal: $codigoServicoMunicipal,
             naturezaOperacao: $nota->natureza_operacao ?? 'Prestação de Serviços',
             referenciaExterna: $nota->referencia_externa ?? ('nf-' . $nota->id),
-            modelo: $ehNfe ? 'NFE' : 'NFSE',
-            itens: $ehNfe ? $nota->itens->map(fn ($item) => [
+            modelo: $modeloInterno,
+            itens: $temItens ? $nota->itens->map(fn ($item) => [
                 'produto_id'      => $item->produto_id,
                 'descricao'       => $item->descricao,
                 'ncm'             => $item->ncm,
@@ -68,6 +83,7 @@ class NfeService
                 'quantidade'      => $item->quantidade,
                 'valor_unitario'  => $item->valor_unitario,
             ])->all() : [],
+            formaPagamento: $nota->forma_pagamento ?? '',
         );
     }
 
@@ -96,6 +112,33 @@ class NfeService
             'numero'             => $resultado->numero,
             'xml_retorno'        => $resultado->xml ?? '',
             'pdf_url'            => $resultado->pdfUrl,
+            'qrcode_url'         => $resultado->qrCodeUrl,
+            'mensagem_erro'      => $resultado->mensagemErro,
+            'referencia_externa' => $resultado->referenciaExterna,
+        ];
+    }
+
+    public function consultarStatus(NotaFiscal $nota): array
+    {
+        $manager  = app(FiscalProviderManager::class);
+        $provider = $manager->forTenant();
+
+        $modeloInterno = match ($nota->modelo) {
+            'NF-e'  => 'NFE',
+            'NFC-e' => 'NFCE',
+            default => 'NFSE',
+        };
+
+        $resultado = $provider->consultar($nota->referencia_externa ?? ('nf-' . $nota->id), $modeloInterno);
+
+        return [
+            'status'             => $resultado->status,
+            'chave'              => $resultado->chave ?? '',
+            'protocolo'          => $resultado->protocolo ?? '',
+            'numero'             => $resultado->numero,
+            'xml_retorno'        => $resultado->xml ?? '',
+            'pdf_url'            => $resultado->pdfUrl,
+            'qrcode_url'         => $resultado->qrCodeUrl,
             'mensagem_erro'      => $resultado->mensagemErro,
             'referencia_externa' => $resultado->referenciaExterna,
         ];

@@ -91,7 +91,7 @@ class FocusNfeProvider implements FiscalProvider
         return $this->resultadoNfeDe($resp->json(), $nota->referenciaExterna);
     }
 
-    public function consultar(string $referencia): EmissaoResultado
+    public function consultar(string $referencia, string $modelo = 'NFSE'): EmissaoResultado
     {
         $resp = Http::withBasicAuth($this->emissorToken ?? $this->masterToken, '')
             ->get("{$this->baseUrl}/v2/nfse/{$referencia}");

@@ -19,8 +19,8 @@ interface FiscalProvider
     /** Emite uma nota (NFS-e na Fase 1). Pode retornar PROCESSANDO (assíncrono). */
     public function emitir(NotaFiscalData $nota): EmissaoResultado;
 
-    /** Consulta o status atual de uma nota pela referência. */
-    public function consultar(string $referencia): EmissaoResultado;
+    /** Consulta o status atual de uma nota pela referência. $modelo ('NFSE'|'NFE'|'NFCE') decide o endpoint/caminho quando o provedor distingue por tipo de documento. */
+    public function consultar(string $referencia, string $modelo = 'NFSE'): EmissaoResultado;
 
     /** Cancela uma nota autorizada. */
     public function cancelar(string $referencia, string $motivo): EmissaoResultado;

@@ -14,11 +14,12 @@ final class EmissaoResultado
         public readonly ?string $pdfUrl = null,
         public readonly ?string $mensagemErro = null,
         public readonly ?string $referenciaExterna = null,
+        public readonly ?string $qrCodeUrl = null,
     ) {}
 
-    public static function autorizada(?string $chave, ?string $protocolo, ?string $numero, ?string $xml, ?string $pdfUrl, ?string $ref = null): self
+    public static function autorizada(?string $chave, ?string $protocolo, ?string $numero, ?string $xml, ?string $pdfUrl, ?string $ref = null, ?string $qrCodeUrl = null): self
     {
-        return new self('AUTORIZADA', $chave, $protocolo, $numero, $xml, $pdfUrl, null, $ref);
+        return new self('AUTORIZADA', $chave, $protocolo, $numero, $xml, $pdfUrl, null, $ref, $qrCodeUrl);
     }
 
     public static function processando(?string $ref = null): self
