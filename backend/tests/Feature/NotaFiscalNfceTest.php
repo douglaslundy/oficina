@@ -264,15 +264,19 @@ class NotaFiscalNfceTest extends TestCase
         $notaId = $criar->json('data.id');
         $this->withToken($token)->withHeaders($headers)->postJson("/api/notas-fiscais/{$notaId}/emitir");
 
-        // Nenhum fake registrado pra GET /v2/nfce/{ref} (consulta) — status() só
-        // chama o provedor quando a nota está PROCESSANDO; como ela já está
-        // AUTORIZADA aqui, uma implementação correta nem tenta consultar de novo.
-        // Se status() chamasse o provedor mesmo assim, Http::fake() devolveria uma
-        // resposta vazia (200 sem corpo) pra qualquer URL não mapeada, o que
-        // provavelmente quebraria a leitura de 'status'/'chave_nfe' no resultado —
-        // então uma regressão aqui tende a aparecer como erro, não passar em silêncio.
+        // Http::fake() acumula o histórico de requests em Http::$recorded até a
+        // próxima chamada a fake() (que o zera) — o emitir() acima já disparou uma
+        // request real pro fake da SEFAZ, então resetamos aqui pra isolar só o que
+        // o status() faz a seguir. status() só chama o provedor quando a nota está
+        // PROCESSANDO; como ela já está AUTORIZADA aqui, uma implementação correta
+        // nem tenta consultar de novo. Http::assertNothingSent() abaixo prova
+        // diretamente que nenhuma chamada HTTP saiu — não dependemos de como um
+        // Http::fake() sem rota registrada se comportaria.
+        Http::fake();
+
         $status = $this->withToken($token)->withHeaders($headers)->getJson("/api/notas-fiscais/{$notaId}/status");
 
+        Http::assertNothingSent();
         $status->assertStatus(200)->assertJsonPath('data.status', 'AUTORIZADA');
     }
 }
