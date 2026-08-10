@@ -118,6 +118,46 @@ class MotorNfeMontarNfeTest extends TestCase
         $this->assertStringContainsString('<vCOFINS>0.00</vCOFINS>', $xml);
     }
 
+    /**
+     * Achado do review da Task 4: nenhum teste validava o XML gerado contra
+     * o XSD real do vendor — exatamente por isso o defeito de PIS/COFINS
+     * (vBC/pPIS e vBC/pCOFINS ausentes, exigidos pelo <xs:choice> obrigatório
+     * de PISOutr/COFINSOutr) passou pelos testes de string-matching sem ser
+     * detectado. Este teste roda schemaValidate() de verdade contra
+     * schemes/PL_009_V4/nfe_v4.00.xsd e garante que o ÚNICO erro restante é
+     * a assinatura ausente — montarNfe() nunca assina (isso é
+     * responsabilidade de emitir(), que chama Tools::signNFe() depois).
+     * Qualquer outro erro de schema (PIS/COFINS, ICMS, etc.) faz este teste
+     * falhar, protegendo também as Tasks 5/6 que dependem deste XML.
+     */
+    public function test_xml_gerado_e_valido_contra_xsd_oficial_exceto_assinatura_ausente(): void
+    {
+        $cfg = $this->configuracaoSimplesNacional();
+
+        $motor = new MotorNfe();
+        $xml = $motor->montarNfe($this->notaVenda(), $cfg, 'HOMOLOGACAO', 1, 1);
+
+        $schema = base_path('vendor/nfephp-org/sped-nfe/schemes/PL_009_V4/nfe_v4.00.xsd');
+        $this->assertFileExists($schema);
+
+        libxml_use_internal_errors(true);
+        libxml_clear_errors();
+        $dom = new \DOMDocument('1.0', 'UTF-8');
+        $dom->loadXML($xml);
+        $valido = $dom->schemaValidate($schema);
+
+        if (!$valido) {
+            $erros = array_map(static fn ($e) => trim($e->message), libxml_get_errors());
+            // Único erro esperado: falta de <Signature> (montarNfe() não
+            // assina). Qualquer outro erro de schema deve reprovar o teste.
+            $this->assertCount(1, $erros, 'Erros de schema inesperados: ' . implode(' | ', $erros));
+            $this->assertStringContainsString('Signature', $erros[0]);
+        } else {
+            $this->fail('XML validou 100% sem assinatura — inesperado, montarNfe() não deveria produzir um XML já assinável pelo schema completo sem Signature.');
+        }
+        libxml_clear_errors();
+    }
+
     public function test_uf_diferente_gera_iddest_interestadual(): void
     {
         $cfg = $this->configuracaoSimplesNacional();

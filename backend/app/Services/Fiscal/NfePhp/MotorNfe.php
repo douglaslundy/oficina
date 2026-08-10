@@ -10,6 +10,7 @@ use App\Services\Fiscal\Data\NotaFiscalData;
 use App\Services\NfeService;
 use Illuminate\Support\Facades\Log;
 use NFePHP\Common\Certificate;
+use NFePHP\Common\Exception\SoapException;
 use NFePHP\NFe\Factories\Contingency;
 use NFePHP\NFe\Make;
 use NFePHP\NFe\Tools;
@@ -242,12 +243,26 @@ class MotorNfe
             // universal e não controverso pra Simples Nacional (CRT=1): o
             // PIS/COFINS de empresas do Simples é pago via DAS unificado,
             // não calculado por operação na NF-e. CST 49 cai no branch
-            // PISOutr/COFINSOutr de tagPIS()/tagCOFINS() — vBC/pPIS ficam
-            // null (omitidos, não obrigatórios nesse branch) e vPIS/vCOFINS
-            // vão como "0.00" (conditionalNumberFormatting(0) formata pra
+            // PISOutr/COFINSOutr de tagPIS()/tagCOFINS() — vPIS/vCOFINS vão
+            // como "0.00" (conditionalNumberFormatting(0) formata pra
             // string, não é tratado como ausente).
             //
-            // CRT=3 (Regime Normal) usa o mesmo CST 49 / valor zero por
+            // CORRIGIDO — achado do review desta task, validado rodando
+            // schemaValidate() contra o XSD real
+            // (schemes/PL_009_V4/leiauteNFe_v4.00.xsd): o comentário
+            // original dizia que vBC/pPIS (e vBC/pCOFINS) eram "não
+            // obrigatórios nesse branch" — ERRADO. O XSD define PISOutr/
+            // COFINSOutr com um <xs:choice> OBRIGATÓRIO logo depois do CST:
+            // (vBC + pPIS) OU (qBCProd + vAliqProd), sem minOccurs="0" no
+            // choice em si — omitir os dois pares gera erro de validação
+            // real ("Element 'vPIS': This element is not expected. Expected
+            // is one of ( vBC, qBCProd )"), rejeitado pela SEFAZ por schema
+            // em TODA emissão. Corrigido incluindo vBC/pPIS e vBC/pCOFINS
+            // como zero — mesma disciplina de "nunca chutar uma alíquota
+            // real": são só os campos zero que o schema exige pra Simples
+            // Nacional, não um valor fiscal inventado.
+            //
+            // CRT=3 (Regime Normal) usa o mesmo CST 49 / valores zero por
             // enquanto — a oficina real deste projeto nunca é CRT=3 (mesma
             // ressalva já aplicada ao bloco IBS/CBS acima), então calcular a
             // alíquota real de PIS/COFINS do Regime Normal é escopo fora
@@ -255,11 +270,15 @@ class MotorNfe
             $make->tagPIS((object) [
                 'item' => $nItem,
                 'CST'  => '49',
+                'vBC'  => 0,
+                'pPIS' => 0,
                 'vPIS' => 0,
             ]);
             $make->tagCOFINS((object) [
                 'item'    => $nItem,
                 'CST'     => '49',
+                'vBC'     => 0,
+                'pCOFINS' => 0,
                 'vCOFINS' => 0,
             ]);
         }
@@ -381,13 +400,28 @@ class MotorNfe
                 $resp = $tools->sefazEnviaLote([$xmlAssinado], (string) $numeroNfe, 1);
 
                 return $this->processarRespostaAutorizacao($resp, $nota->referenciaExterna, $xmlAssinado);
-            } catch (\Throwable $eTransmissao) {
-                // Falha de COMUNICAÇÃO (timeout/conexão) — nunca decisão
-                // antecipada (não consultamos sefazStatus() antes, ver spec).
-                // Cai pra EPEC. Passamos o XML NÃO assinado — tentarEpec()
-                // precisa reassiná-lo com os ajustes de contingência
-                // (tpEmis=4 etc), então reaproveitar o já assinado pra modo
-                // normal (tpEmis=1) seria descartado de qualquer forma.
+            } catch (SoapException $eTransmissao) {
+                // CORRIGIDO — achado do review desta task: o brief original
+                // capturava `\Throwable` aqui, o que faria QUALQUER erro
+                // (schema inválido do signNFe(), URL de serviço mal
+                // configurada, InvalidArgumentException de entrada ruim,
+                // etc.) cair pra EPEC — registrando um evento de
+                // contingência real, legalmente vinculante, na SEFAZ por um
+                // motivo que nunca foi de comunicação. O spec é explícito:
+                // EPEC só entra por falha de COMUNICAÇÃO (timeout/conexão),
+                // nunca como reação a qualquer outro tipo de erro. Restrito
+                // a SoapException — confirmado em
+                // sped-common/src/Soap/SoapCurl.php que é essa a classe
+                // lançada pela camada HTTP (SoapCurl::send()) pra timeout,
+                // conexão recusada, resposta não-200, corpo vazio/não-XML —
+                // ou seja, exatamente "falha de comunicação". Qualquer outro
+                // \Throwable (ex.: ValidatorException de schema) propaga pro
+                // catch externo e retorna ERRO direto, sem tentar EPEC.
+                //
+                // Passamos o XML NÃO assinado — tentarEpec() precisa
+                // reassiná-lo com os ajustes de contingência (tpEmis=4
+                // etc), então reaproveitar o já assinado pra modo normal
+                // (tpEmis=1) seria descartado de qualquer forma.
                 Log::warning(
                     'MotorNfe: falha na transmissão normal, tentando EPEC.',
                     ['erro' => $eTransmissao->getMessage(), 'ref' => $nota->referenciaExterna],
@@ -570,6 +604,24 @@ class MotorNfe
             // acesso (já recalculada acima por ContingencyNFe::adjust() com
             // tpEmis=4).
             $chNFe = substr($infNFe->getAttribute('Id'), 3, 44);
+
+            // Cópia fiel de Tools::sefazEPEC() (Tools.php ~1023-1026): recusa
+            // enviar o evento EPEC se a UF do emitente (cOrgaoAutor, derivado
+            // de configJson()->siglaUF = $cfg->uf) não bater com a UF
+            // codificada na própria chave de acesso (os 2 primeiros dígitos,
+            // recalculados acima a partir de <ide><cUF>, fixo em 31/MG via
+            // cUfMg()). Achado do review desta task: esse guard existe no
+            // vendor original e não tinha equivalente aqui — sem ele, uma
+            // oficina mal configurada com $cfg->uf !== 'MG' produziria e
+            // enviaria um evento EPEC com dados fiscais internamente
+            // contraditórios (UF do autor != UF da chave) em vez de falhar
+            // alto. cUF já vem em texto com 2 dígitos (ex. "31"); comparação
+            // como string, igual ao vendor (`!=`, frouxa, mas ambos os lados
+            // já são strings de 2 dígitos aqui).
+            $ufChave = substr($chNFe, 0, 2);
+            if ((string) $tools->cUF !== $ufChave) {
+                throw new \RuntimeException("O autor [{$tools->cUF}] não é da mesma UF que a NF-e [{$ufChave}] — configuração de UF da oficina inconsistente com o cUF fixo desta etapa (MG/31).");
+            }
 
             $verAplic = config('app.version', '1.0.0');
             $dhEmi    = $dom->getElementsByTagName('dhEmi')->item(0)->nodeValue ?? '';
