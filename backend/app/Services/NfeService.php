@@ -38,6 +38,22 @@ class NfeService
         });
     }
 
+    /**
+     * Numeração própria da NF-e via NFePHP/sped-nfe — contador separado de
+     * proximo_numero_nf (Spedy/Focus) e proximo_numero_dps (NFS-e nacional).
+     * Ver migration 2026_08_10_000003.
+     */
+    public function proximoNumeroNfe(): int
+    {
+        return DB::transaction(function () {
+            $config = Configuracao::lockForUpdate()->first();
+            if (!$config) throw new \Exception('Configurações da empresa não encontradas.');
+            $numero = $config->proximo_numero_nfe;
+            $config->increment('proximo_numero_nfe');
+            return $numero;
+        });
+    }
+
     // Quando $nota->modelo === 'NF-e', $nota precisa ter sido carregado com ->load('itens') antes de chamar este método.
     public function montarNotaData(
         NotaFiscal $nota,
