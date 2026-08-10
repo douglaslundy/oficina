@@ -1176,14 +1176,17 @@ NFC-e concluída (ver Rodada 25, acima) e enviada ao GitHub. Falta o deploy
 na VPS + validação manual (ver checklist da Rodada 25) — perguntar ao
 usuário quando ele quiser fazer isso.
 
-**Depois: Etapa C2 (NF-e via NFePHP `sped-nfe` + contingência EPEC)**
-   — só existe como parte do spec combinado original
-   `docs/superpowers/specs/2026-07-25-motor-nfephp-design.md` (que cobria
-   NF-e+NFS-e juntas); a NFS-e virou Etapa C1 (implementada, em worktree
-   isolado, não mergeada — ver [[project-roadmap-fiscal-3-etapas]] na
-   memória). A parte de NF-e+EPEC nunca ganhou plano nem implementação.
-   Precisa de spec próprio (extraído/revisado do combinado) antes do
-   plano.
+**Etapa C2 (NF-e via NFePHP `sped-nfe` + contingência EPEC)** — spec e
+plano CONCLUÍDOS nesta mesma sessão (2026-08-10), mas registrados e
+commitados **no worktree `worktree-etapa-c1-nfephp-nfse`**, não aqui na
+`main` (decisão do usuário: continuar no mesmo worktree da Etapa C1, já
+que a C2 estende as mesmas classes). Ver
+`.claude/worktrees/etapa-c1-nfephp-nfse/PROGRESSO.md` (Rodada 24) pro
+detalhe completo — spec `docs/superpowers/specs/2026-08-10-etapa-c2-nfe-epec-design.md`
+(commit `ab39512` nesse worktree) + plano
+`docs/superpowers/plans/2026-08-10-etapa-c2-nfe-epec.md` (commit `515a6e2`,
+9 tasks). Próximo passo: executar as 9 tasks via SDD, direto no worktree,
+nunca na `main`. **Nenhum código escrito ainda.**
 3. Verificações que dependem do usuário (não bloqueiam escrever specs/
    planos; bloqueiam validação em homologação): confirmar alíquota real
    de ISS de Ilicínea e adesão ao ADN — a PREFEITURA informa, (35)
