@@ -301,7 +301,9 @@ class NotaFiscalNfceTest extends TestCase
 
         $criar  = $this->withToken($token)->withHeaders($headers)->postJson('/api/notas-fiscais', $this->payloadVenda($cliente->id, $produto->id));
         $notaId = $criar->json('data.id');
-        $this->withToken($token)->withHeaders($headers)->postJson("/api/notas-fiscais/{$notaId}/emitir");
+        $emitir = $this->withToken($token)->withHeaders($headers)->postJson("/api/notas-fiscais/{$notaId}/emitir");
+        $emitir->assertStatus(200);
+        $this->assertDatabaseHas('notas_fiscais', ['id' => $notaId, 'qrcode_url' => 'https://homologacao.nfce.fazenda.mg.gov.br/qrcode?p=CHAVE']);
 
         $pdf = $this->withToken($token)->withHeaders($headers)->get("/api/notas-fiscais/{$notaId}/pdf");
 
