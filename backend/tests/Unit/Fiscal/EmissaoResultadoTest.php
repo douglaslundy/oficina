@@ -25,6 +25,16 @@ class EmissaoResultadoTest extends TestCase
         $this->assertSame('CNPJ inválido', $r->mensagemErro);
     }
 
+    public function test_erro_tem_status_distinto_de_rejeitada(): void
+    {
+        $r = EmissaoResultado::erro('Falha técnica ao processar certificado.', 'ref-1');
+
+        $this->assertSame('ERRO', $r->status);
+        $this->assertSame('Falha técnica ao processar certificado.', $r->mensagemErro);
+        $this->assertSame('ref-1', $r->referenciaExterna);
+        $this->assertNotSame(EmissaoResultado::rejeitada('x')->status, $r->status);
+    }
+
     public function test_registro_ok_e_erro(): void
     {
         $ok = RegistroResultado::ok('emp-123', 'tok-abc');

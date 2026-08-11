@@ -30,7 +30,7 @@ interface Oficina {
   criado_em: string
   asaas_customer_id?: string | null
   asaas_subscription_id?: string | null
-  provedor_fiscal?: 'SPEDY' | 'FOCUS' | null
+  provedor_fiscal?: 'SPEDY' | 'FOCUS' | 'NFEPHP' | null
   emissao_fiscal_modo?: 'MANUAL' | 'AUTOMATICO' | null
   ciclo_cobranca?: 'MENSAL' | 'ANUAL'
   proximo_vencimento?: string | null
@@ -693,6 +693,7 @@ export default function OficinaDetailPage() {
                 <option value="">Padrão da plataforma</option>
                 <option value="SPEDY">Spedy</option>
                 <option value="FOCUS">Focus NFe</option>
+                <option value="NFEPHP">NFePHP (gratuito, próprio)</option>
               </select>
             </div>
             <div>

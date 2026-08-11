@@ -133,7 +133,7 @@ class SaasConfigController extends Controller
     public function updateProvedorFiscal(Request $request): JsonResponse
     {
         $validated = $request->validate([
-            'provedor_fiscal_padrao'     => ['required', 'in:SPEDY,FOCUS'],
+            'provedor_fiscal_padrao'     => ['required', 'in:SPEDY,FOCUS,NFEPHP'],
             'emissao_fiscal_modo_padrao' => ['required', 'in:MANUAL,AUTOMATICO'],
         ]);
         SaasConfig::get()->update($validated);

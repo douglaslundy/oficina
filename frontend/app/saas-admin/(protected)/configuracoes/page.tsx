@@ -643,6 +643,7 @@ export default function SaasConfigPage() {
           {[
             { value: 'SPEDY', label: 'Spedy', desc: 'Emissão via API Spedy (NFS-e/NF-e). Sandbox e produção.' },
             { value: 'FOCUS', label: 'Focus NFe', desc: 'Emissão via API Focus NFe (assíncrona). Homologação e produção.' },
+            { value: 'NFEPHP', label: 'NFePHP (gratuito, próprio)', desc: 'Emissão direta via biblioteca NFePHP, sem conta em provedor terceiro. Homologação e produção.' },
           ].map(opt => (
             <label key={opt.value} style={{
               display: 'flex', alignItems: 'flex-start', gap: 12,

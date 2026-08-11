@@ -27,12 +27,13 @@ class NotaFiscal extends Model
         'aliquota_iss', 'valor_iss', 'valor_total', 'status',
         'chave_acesso', 'protocolo', 'xml_retorno', 'pdf_url', 'qrcode_url', 'mensagem_erro', 'observacoes', 'emitido_em',
         'oficina_id',
-        'provedor', 'ambiente', 'referencia_externa',
+        'provedor', 'ambiente', 'referencia_externa', 'contingencia_desde',
     ];
 
     protected $casts = [
         'emitido_em' => 'datetime',
         'criado_em'  => 'datetime',
+        'contingencia_desde' => 'datetime',
     ];
 
     public function getActivitylogOptions(): LogOptions

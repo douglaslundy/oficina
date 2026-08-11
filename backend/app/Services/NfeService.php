@@ -32,6 +32,38 @@ class NfeService
         });
     }
 
+    /**
+     * Numeração própria da DPS (motor NFePHP/NFS-e nacional) — contador
+     * separado de proximo_numero_nf, que pertence à numeração de NFS-e do
+     * Spedy/Focus. Ver migration 2026_08_04_000001.
+     */
+    public function proximoNumeroDps(): int
+    {
+        return DB::transaction(function () {
+            $config = Configuracao::lockForUpdate()->first();
+            if (!$config) throw new \Exception('Configurações da empresa não encontradas.');
+            $numero = $config->proximo_numero_dps;
+            $config->increment('proximo_numero_dps');
+            return $numero;
+        });
+    }
+
+    /**
+     * Numeração própria da NF-e via NFePHP/sped-nfe — contador separado de
+     * proximo_numero_nf (Spedy/Focus) e proximo_numero_dps (NFS-e nacional).
+     * Ver migration 2026_08_10_000003.
+     */
+    public function proximoNumeroNfe(): int
+    {
+        return DB::transaction(function () {
+            $config = Configuracao::lockForUpdate()->first();
+            if (!$config) throw new \Exception('Configurações da empresa não encontradas.');
+            $numero = $config->proximo_numero_nfe;
+            $config->increment('proximo_numero_nfe');
+            return $numero;
+        });
+    }
+
     // Quando $nota->modelo === 'NF-e'|'NFC-e', $nota precisa ter sido carregado com ->load('itens') antes de chamar este método.
     public function montarNotaData(
         NotaFiscal $nota,
@@ -48,6 +80,19 @@ class NfeService
             default => 'NFSE',
         };
         $temItens = in_array($modeloInterno, ['NFE', 'NFCE'], true);
+
+        // Finding 4 do fix wave pós-revisão da Etapa C2 (2026-08-11): se
+        // esta NotaFiscal já tem um `numero` persistido (uma tentativa
+        // anterior via NFePHP alocou e o controller salvou, mesmo que
+        // rejeitada — ver NotaFiscalController::emitir()), essa é uma
+        // retentativa, não uma primeira emissão. MotorNfe::emitir() reusa
+        // esse número em vez de queimar um novo (spec Seção B). Restrito a
+        // NFEPHP porque Spedy/Focus atribuem o número deles mesmos — um
+        // `$nota->numero` vindo desses provedores não significa "reservado
+        // pra reenviar", significa "já emitido por eles".
+        $numeroJaReservado = ($modeloInterno === 'NFE' && $nota->provedor === 'NFEPHP' && $nota->numero !== null)
+            ? (string) $nota->numero
+            : null;
 
         return new NotaFiscalData(
             tipo: 'NFSE',
@@ -84,6 +129,7 @@ class NfeService
                 'valor_unitario'  => $item->valor_unitario,
             ])->all() : [],
             formaPagamento: $nota->forma_pagamento ?? '',
+            numeroReservado: $numeroJaReservado,
         );
     }
 

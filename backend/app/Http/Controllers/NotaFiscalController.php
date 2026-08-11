@@ -204,13 +204,32 @@ class NotaFiscalController extends Controller
         $ambiente = \App\Models\Configuracao::first()?->ambiente_fiscal ?? 'HOMOLOGACAO';
         $ref      = $nota->referencia_externa ?: ('nf-' . $nota->id);
 
-        $numero = $nota->modelo === 'NFC-e'
-            ? $this->nfeService->proximoNumeroNfce()
-            : $this->nfeService->proximoNumeroNf();
+        // Finding 3 do fix wave pós-revisão da Etapa C2 (2026-08-11): NF-e via
+        // NFEPHP tem numeração PRÓPRIA (Configuracao::proximo_numero_nfe, via
+        // MotorNfe::proximoNumeroNfe()), independente do contador Spedy/Focus
+        // (NfeService::proximoNumeroNf()) e do contador de NFC-e
+        // (proximoNumeroNfce()). Pra NFEPHP + NF-e, preservamos $nota->numero
+        // existente (permite retry reutilizar número reservado em tentativa
+        // anterior). NFC-e aloca do contador próprio dela. Demais combinações
+        // provedor/modelo alocam novo número via proximoNumeroNf().
+        // Fix round 3: a checagem de "mesmo provedor" tem que usar
+        // $nota->provedor (o provedor de QUANDO o número foi reservado, lido
+        // aqui ANTES do update() abaixo sobrescrever) e não $provedor (o
+        // provedor recém-resolvido pra ESTA tentativa). Sem isso, uma nota
+        // rejeitada sob Spedy/Focus e reenviada após o admin trocar o
+        // provedor pra NFEPHP reaproveitava o número alocado pelo contador
+        // errado.
+        if ($provedor === 'NFEPHP' && $nota->modelo === 'NF-e') {
+            $numeroInicial = ($nota->provedor === 'NFEPHP') ? $nota->numero : null;
+        } elseif ($nota->modelo === 'NFC-e') {
+            $numeroInicial = $this->nfeService->proximoNumeroNfce();
+        } else {
+            $numeroInicial = $this->nfeService->proximoNumeroNf();
+        }
 
         $nota->update([
             'status'             => 'PROCESSANDO',
-            'numero'             => $numero,
+            'numero'             => $numeroInicial,
             'provedor'           => $provedor,
             'ambiente'           => $ambiente,
             'referencia_externa' => $ref,
@@ -222,6 +241,10 @@ class NotaFiscalController extends Controller
 
             if ($resultado['status'] === 'REJEITADA') {
                 return response()->json(['message' => $resultado['mensagem_erro'] ?? 'Nota rejeitada.'], 422);
+            }
+
+            if ($resultado['status'] === 'ERRO') {
+                return response()->json(['message' => $resultado['mensagem_erro'] ?? 'Falha técnica ao emitir a nota. Tente novamente ou contate o suporte.'], 500);
             }
         } catch (\Exception $e) {
             $nota->update(['status' => 'REJEITADA']);
@@ -269,10 +292,19 @@ class NotaFiscalController extends Controller
             'qrcode_url'   => $resultado['qrcode_url'] ?? null,
             'mensagem_erro' => $resultado['mensagem_erro'] ?? null,
             // Para NF-e/NFC-e o número que importa legalmente é o atribuído pela
-            // Focus/SEFAZ na própria série, não o contador interno gravado antes
-            // da emissão. Fallback pro valor já existente se o provedor não
-            // retornar um número (mantém o comportamento atual pra NFS-e).
+            // Focus/SEFAZ (ou alocado por MotorNfe, no caso NFEPHP) na própria
+            // série, não o contador interno gravado antes da emissão. Fallback
+            // pro valor já existente se o provedor não retornar um número
+            // (mantém o comportamento atual pra NFS-e).
             'numero'       => isset($resultado['numero']) ? (int) $resultado['numero'] : $nota->numero,
+            // Finding 1 do fix wave pós-revisão da Etapa C2 (2026-08-11):
+            // contingência EPEC produz uma NF-e legalmente válida a partir do
+            // momento em que o evento é registrado — a reconciliação agendada
+            // (Task 8, ReconciliarContingenciaNfe) precisa saber DESDE QUANDO
+            // a nota está em contingência pra decidir quando alertar/tentar
+            // transmitir de novo. Compartilhado com status() (polling): se uma
+            // nota sai de CONTINGENCIA por essa via, limpa o campo também.
+            'contingencia_desde' => $resultado['status'] === 'CONTINGENCIA' ? now() : null,
             'emitido_em'   => $resultado['status'] === 'AUTORIZADA' ? now() : null,
         ]);
 
@@ -297,6 +329,21 @@ class NotaFiscalController extends Controller
     {
         $nota = NotaFiscal::findOrFail($id);
         $request->validate(['motivo' => ['required', 'string', 'min:10']]);
+
+        if ($nota->provedor === 'NFEPHP' && $nota->modelo === 'NF-e' && $nota->status === 'AUTORIZADA') {
+            if (empty($nota->chave_acesso) || empty($nota->protocolo)) {
+                return response()->json(['message' => 'NF-e sem chave de acesso ou protocolo — não é possível cancelar via NFePHP.'], 422);
+            }
+
+            $ambiente  = $nota->ambiente ?? 'HOMOLOGACAO';
+            $resultado = app(\App\Services\Fiscal\NfePhp\MotorNfe::class)
+                ->cancelar($nota->chave_acesso, $request->motivo, $nota->protocolo, $ambiente);
+
+            if ($resultado->status !== 'CANCELADA') {
+                return response()->json(['message' => $resultado->mensagemErro ?? 'Falha ao cancelar NF-e.'], 422);
+            }
+        }
+
         $nota->update(['status' => 'CANCELADA']);
         return response()->json(['message' => 'NF cancelada com sucesso.']);
     }
@@ -304,6 +351,42 @@ class NotaFiscalController extends Controller
     public function pdf(string $id): \Illuminate\Http\Response
     {
         $nota = NotaFiscal::with(['cliente', 'itens'])->findOrFail($id);
+
+        // NF-e emitida via NFePHP: o DANFE é montado localmente a partir do
+        // XML já autorizado (DanfeRenderer), diferente da NFS-e abaixo, que
+        // busca o PDF pronto direto da API oficial do ambiente nacional —
+        // NF-e via NFePHP não tem um endpoint equivalente pra isso, então
+        // renderizamos nós mesmos.
+        if ($nota->provedor === 'NFEPHP' && in_array($nota->modelo, ['NF-e', 'NFC-e'], true) && in_array($nota->status, ['AUTORIZADA', 'CONTINGENCIA'], true)) {
+            $dados = app(\App\Services\Fiscal\Pdf\DanfeRenderer::class)->dadosParaTemplate($nota);
+            $pdf = Pdf::loadView('pdf.danfe', $dados)->setPaper('a4', 'portrait');
+
+            return $pdf->download('DANFE-' . ($nota->numero ?? $nota->id) . '.pdf');
+        }
+
+        // NFS-e emitida via NFePHP: o PDF (DANFSe) é obtido pronto direto da
+        // API oficial do ambiente nacional (Motor::baixarDanfse()), em vez de
+        // renderizar o template local pdf.nota_fiscal — que só reflete os
+        // dados salvos localmente, não o layout oficial assinado. Guard
+        // inclui 'modelo' === 'NFS-e' porque o branch de NF-e acima já
+        // intercepta antes o caso NF-e/NFC-e via NFePHP, então este só
+        // é alcançado para NFS-e — mas o check aqui permanece
+        // defensivo/explícito em vez de depender só da ordem dos branches.
+        if ($nota->provedor === 'NFEPHP' && $nota->modelo === 'NFS-e' && $nota->status === 'AUTORIZADA' && $nota->chave_acesso) {
+            try {
+                $pdfBinario = app(\App\Services\Fiscal\NfePhp\MotorNfse::class)
+                    ->baixarDanfse($nota->chave_acesso, $nota->ambiente ?? 'HOMOLOGACAO');
+
+                return response($pdfBinario, 200, [
+                    'Content-Type' => 'application/pdf',
+                    'Content-Disposition' => 'attachment; filename="NFSe-' . ($nota->numero ?? $nota->id) . '.pdf"',
+                ]);
+            } catch (\Throwable $e) {
+                \Illuminate\Support\Facades\Log::warning('Falha ao baixar DANFSe da biblioteca NFePHP, caindo para erro explícito.', ['erro' => $e->getMessage(), 'nota_id' => $nota->id]);
+                abort(502, 'Não foi possível obter o PDF da NFS-e no momento. Tente novamente em instantes.');
+            }
+        }
+
         $empresa = \App\Models\Configuracao::first()?->toArray() ?? [];
 
         $arquivo = $this->montarPdfArquivo($nota, $empresa);
@@ -393,5 +476,35 @@ class NotaFiscalController extends Controller
         $zip->close();
 
         return response()->download($zipPath, 'notas_fiscais.zip')->deleteFileAfterSend(true);
+    }
+
+    /**
+     * Inutiliza uma faixa de numeração de NF-e não usada (queda de processo
+     * entre alocar o número e transmitir). Ação administrativa pontual — não
+     * cria/atualiza uma NotaFiscal, não faz parte do fluxo normal de
+     * emissão. Ver MotorNfe::inutilizar() pro cStat de sucesso e a
+     * verificação contra o vendor.
+     */
+    public function inutilizarNumeracao(Request $request): JsonResponse
+    {
+        $validated = $request->validate([
+            'serie'          => ['required', 'integer', 'min:1'],
+            'numero_inicial' => ['required', 'integer', 'min:1'],
+            'numero_final'   => ['required', 'integer', 'gte:numero_inicial'],
+            'justificativa'  => ['required', 'string', 'min:15'],
+        ]);
+
+        $ambiente = \App\Models\Configuracao::first()?->ambiente_fiscal ?? 'HOMOLOGACAO';
+
+        $resultado = app(\App\Services\Fiscal\NfePhp\MotorNfe::class)->inutilizar(
+            $validated['serie'], $validated['numero_inicial'], $validated['numero_final'],
+            $validated['justificativa'], $ambiente,
+        );
+
+        if ($resultado->status !== 'CANCELADA') {
+            return response()->json(['message' => $resultado->mensagemErro ?? 'Falha ao inutilizar numeração.'], 422);
+        }
+
+        return response()->json(['message' => 'Faixa de numeração inutilizada com sucesso.']);
     }
 }

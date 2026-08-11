@@ -89,7 +89,7 @@ class SpedyProvider implements FiscalProvider
             : $this->resultadoDe($resp->json(), $referencia);
     }
 
-    public function cancelar(string $referencia, string $motivo): EmissaoResultado
+    public function cancelar(string $referencia, string $motivo, string $modelo = 'NFSE'): EmissaoResultado
     {
         $resp = Http::withHeaders(['X-Api-Key' => $this->emissorToken ?? $this->masterKey])
             ->delete("{$this->baseUrl}/service-invoices/{$referencia}", [

@@ -22,6 +22,6 @@ interface FiscalProvider
     /** Consulta o status atual de uma nota pela referência. $modelo ('NFSE'|'NFE'|'NFCE') decide o endpoint/caminho quando o provedor distingue por tipo de documento. */
     public function consultar(string $referencia, string $modelo = 'NFSE'): EmissaoResultado;
 
-    /** Cancela uma nota autorizada. */
-    public function cancelar(string $referencia, string $motivo): EmissaoResultado;
+    /** $modelo ('NFSE'|'NFE'|'NFCE') decide o motor/endpoint quando o provedor distingue por tipo de documento. */
+    public function cancelar(string $referencia, string $motivo, string $modelo = 'NFSE'): EmissaoResultado;
 }

@@ -58,7 +58,7 @@ class RegistrarEmissorService
         }
 
         // Decifra o certificado armazenado (padrão openssl do ConfiguracaoController).
-        $pfxBinary = $this->decifrarCertificado($cfg->certificado_pfx_encrypted);
+        $pfxBinary = self::decifrarPfx($cfg->certificado_pfx_encrypted);
         if ($pfxBinary === '') {
             return ['ok' => false, 'mensagem' => 'Não foi possível decifrar o certificado armazenado. Reenvie o certificado.'];
         }
@@ -112,7 +112,7 @@ class RegistrarEmissorService
         return ['ok' => true, 'mensagem' => 'Emissor registrado com sucesso.'];
     }
 
-    private function decifrarCertificado(string $stored): string
+    public static function decifrarPfx(string $stored): string
     {
         $raw = base64_decode($stored);
         $iv  = substr($raw, 0, 16);

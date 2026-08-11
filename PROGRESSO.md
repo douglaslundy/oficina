@@ -1204,6 +1204,59 @@ nunca na `main`. **Nenhum código escrito ainda.**
    (notificações) e rodada 13 (agendador — checar `docker compose logs
    scheduler` pros horários reais de disparo).
 
+## Rodada 24 (2026-08-10) — Etapa C2 (NF-e via sped-nfe + EPEC): brainstorm e plano CONCLUÍDOS
+
+Retomado na mesma sessão em que a feature NFC-e foi implementada e
+deployada direto na `main` (worktree separado — ver histórico daquela
+sessão no `PROGRESSO.md` da raiz do repo principal, não deste worktree).
+Usuário decidiu continuar a Etapa C2 **neste mesmo worktree** (não um novo),
+já que ela estende exatamente as classes que a Etapa C1 construiu aqui
+(`NfePhpProvider`, `CertificadoStore`, `CrtResolver`,
+`EmissaoResultado::erro()`).
+
+**Decisão registrada, não resolvida**: pesquisa fiscal (reforma
+tributária/NTs) foi **reusada** da rodada 15 (não repetida) — decisão do
+usuário, dado que já cobre o cenário real da oficina (Simples Nacional,
+CRT=1, dispensado de IBS/CBS até 04/01/2027).
+
+- Spec: `docs/superpowers/specs/2026-08-10-etapa-c2-nfe-epec-design.md`
+  (commit `ab39512`) — extrai e adapta as seções B-F do spec combinado
+  original (`2026-07-25-motor-nfephp-design.md`) pro que falta *adicionar*
+  ao que a C1 já construiu (numeração própria, `MotorNfe`, `DanfeRenderer`,
+  comando de reconciliação, endpoint de inutilização). Autorevisão corrigiu
+  um trecho incompleto (código com `...`) e uma imprecisão de nomenclatura.
+- Plano: `docs/superpowers/plans/2026-08-10-etapa-c2-nfe-epec.md` (commit
+  `515a6e2`, 9 tasks, TDD). Assinaturas reais dos métodos de `Tools`
+  (`sefazEnviaLote`, `sefazConsultaRecibo`, `sefazConsultaChave`,
+  `sefazInutiliza`, `sefazCancela`, `sefazEPEC`) e de
+  `Certificate::readPfx()` **confirmadas lendo o código-fonte real do
+  `sped-nfe`/`sped-common`** nesta sessão de brainstorming — não são
+  suposição. A montagem exata do XML via `Make` e o parsing da resposta
+  SOAP **não foram verificados** (documentação do pacote é rasa nesses
+  pontos) — cada task correspondente instrui explicitamente o implementador
+  a verificar contra `vendor/nfephp-org/sped-nfe/` antes de finalizar,
+  mesmo padrão que `MotorNfse` já usou com sucesso neste worktree (rodada
+  20/21/22 abaixo).
+- **Nenhum código escrito ainda** — só spec e plano. Risco de divergência
+  entre este worktree e a `main` registrado explicitamente no spec (Risco
+  #4) — a `main` recebeu as Etapas A/B completas mais a feature NFC-e
+  inteira desde que este worktree foi criado; o merge final vai precisar
+  reconciliar isso, não bloqueia o desenvolvimento agora.
+
+## Próxima tarefa (retomar exatamente aqui)
+
+**Etapa C2**: spec e plano concluídos (Rodada 24, acima). Próximo passo
+exato: escolher execução (`subagent-driven-development` recomendado,
+mesmo processo usado nas Etapas A/B/NFC-e) e rodar as 9 tasks do plano em
+ordem, **direto neste worktree** (`worktree-etapa-c1-nfephp-nfse`), nunca
+na `main`. Task 3 precisa de `composer require nfephp-org/sped-nfe` antes
+de codar (pode precisar de `--ignore-platform-reqs`, mesma situação já
+documentada neste projeto pra outras dependências). Verificações que
+dependem do usuário, não bloqueiam o desenvolvimento mas bloqueiam a
+validação em homologação: adesão de Ilicínea ao ADN (não é NF-e, é
+NFS-e/C1 — lembrete cruzado); nenhuma credencial real de SEFAZ-MG/homolog
+foi usada ainda em nenhuma etapa.
+
 ## Rodada 19 (2026-08-03) — Etapa B implementada via subagent-driven-development
 
 Brainstorming da Etapa B (5 seções, todas aprovadas) → spec commitado em
@@ -1545,3 +1598,308 @@ payload é hipótese de trabalho baseada no padrão já usado pelo
 - **Nenhum código escrito ainda** — só spec e plano. Próximo passo: decidir
   execução (subagent-driven-development recomendado, ou executing-plans
   inline) e rodar o plano task a task.
+
+## Rodada 20 (2026-08-03) — Etapa C1 (motor NFePHP, NFS-e) implementada em worktree isolado
+
+Spec do NFePHP (rodada 15/16) revisado à luz do que a Etapa B realmente
+entregou → plano de 8 tasks (`docs/superpowers/plans/2026-08-03-etapa-c1-nfephp-nfse.md`)
+→ executado com `superpowers:subagent-driven-development` num **worktree
+isolado** (`.claude/worktrees/etapa-c1-nfephp-nfse`, branch
+`worktree-etapa-c1-nfephp-nfse`) — primeira vez nesta sessão usando
+isolamento em vez de commitar direto na main, por envolver uma dependência
+externa nova/experimental. Ledger completo no próprio worktree.
+
+### Decisão de escopo confirmada ao retomar (2026-08-03)
+NFePHP fica **no mesmo nível da Etapa B**: emissão manual e síncrona, sem
+`EmissaoOrquestrador` de OS mista, sem fila. Motor NFePHP cobre só **NFS-e**
+nesta etapa (via `nfse-nacional/nfse-php`) — NF-e via `sped-nfe` + EPEC
+fica pra um plano C2 separado, ainda não escrito.
+
+### O que foi entregue
+- `nfse-nacional/nfse-php` instalado (pacote **beta-only**, `^1.21@beta`,
+  com dependência transitiva `spatie/data-transfer-object` marcada
+  "abandoned" — risco de supply-chain já catalogado no spec, reforçado
+  aqui).
+- `CrtResolver` (deriva CRT de `regime_tributario`) e `CertificadoStore`
+  (decifra o `.pfx` sob demanda; certificado nunca fica em disco além de
+  um arquivo temporário efêmero, 0600, apagado em `finally` mesmo se a
+  chamada falhar).
+- `EmissaoResultado::erro()` — status novo, distingue falha técnica
+  (`ERRO`, HTTP 500) de rejeição do fisco (`REJEITADA`, HTTP 422).
+- `NfePhpProvider` implementa `FiscalProvider` sem mudar a interface —
+  `registrarEmissor()`/`enviarCertificado()` viram validação local (nunca
+  chamam nada externo); NF-e retorna rejeição clara (motor NFePHP de NF-e
+  é o plano C2, ainda não existe).
+- `MotorNfse` emite/consulta/cancela NFS-e de verdade via
+  `nfse-nacional/nfse-php`. **Cancelamento real implementado** (evento
+  101101) — o plano original achava que isso não seria confirmável e
+  previa um placeholder; o implementador encontrou o payload completo no
+  próprio exemplo da biblioteca instalada.
+- PDF da DANFSe usa `downloadDanfse()` da própria biblioteca em vez de um
+  template DomPDF próprio (decisão tomada nesta sessão, mais simples que o
+  plano original de 2026-07-25 previa).
+- 126 testes Unit locais passando (up de 122 no início da rodada).
+
+### Disciplina "verificar contra a biblioteca real, não adivinhar" — o achado mais importante desta rodada
+O spec e o plano foram escritos a partir de pesquisa web, **antes** da
+biblioteca estar instalada. Nas tasks de integração real (`MotorNfse`),
+instruí os implementadores a conferir cada suposição contra
+`vendor/nfse-nacional/nfse-php/src/` e os exemplos reais, não transcrever o
+plano cegamente. Isso pagou:
+- Corrigiu um bug real que eu mesmo deixei no plano: `issRetido` invertido.
+- Achou que a tradução CRT→`opSimpNac` (que eu tinha marcado como
+  "defensiva") é na verdade **exigida pelo próprio XSD** (`regTrib` sem
+  `minOccurs`, ou seja, obrigatório) — sem ela nenhuma NFS-e seria
+  validada.
+- Achou cancelamento real (ver acima) onde o plano previa desistir.
+- Descobriu que `consultar()` da biblioteca **engole a exceção e devolve
+  null** em vez de lançar (o plano assumia o contrário).
+
+### Revisão final de branch (opus) — achou 1 Critical real e 5 Important, nenhuma revisão por task isolada teria pego
+Exatamente a classe de bug que a revisão final existe pra capturar —
+propriedades cross-cutting que atravessam várias tasks:
+1. **Critical**: `notas_fiscais.chave_acesso` era `varchar(50)`, curto
+   demais pra chave real de NFS-e nacional (53 caracteres) — uma NFS-e
+   **autorizada de verdade** falharia ao salvar e seria gravada como
+   `REJEITADA`, com a chave perdida. Corrigido com migration
+   (`chave_acesso` → 60, `numero` → `bigint`, mesmo problema por já ser
+   `integer` mas `nNFSe` poder ter 13 dígitos).
+2. **Important**: `NFEPHP` não era selecionável por nenhum caminho de
+   API/UI (só `SPEDY`/`FOCUS` nas validações e nos selects do
+   saas-admin) — a etapa inteira ficaria inacessível sem escrita direta no
+   banco. Corrigido.
+3. **Important**: `MotorNfse::consultar()` sempre devolvia `AUTORIZADA`,
+   mesmo pra uma nota cancelada por essa mesma classe — a NFS-e nacional
+   registra cancelamento como evento separado (101101), não como
+   `cStat`. Corrigido: extrai a lógica de mapeamento pra um método puro e
+   testável, checa evento de cancelamento antes de afirmar autorizada,
+   nunca cai em `AUTORIZADA` por default. **Sem exposição real hoje**
+   (nada chama `consultar()` ainda) — mas corrigido antes que algo passe a
+   chamar.
+4. **Important**: duas fontes de verdade pro ambiente dentro de
+   `MotorNfse` (`montarDps()` lia `Configuracao.ambiente_fiscal` direto,
+   o resto do arquivo usava o parâmetro `$ambiente`) — corrigido pra uma
+   fonte só.
+5. Pill de status `ERRO` faltando no frontend — corrigido.
+
+**Pendência registrada, não bloqueante** (`consultar()` ainda sem nenhum
+caller): quando a checagem de evento de cancelamento falha por
+instabilidade de rede, o código atual trata como "não cancelado" em vez de
+retornar `erro()` — deveria falhar visível em vez de arriscar permitir
+`AUTORIZADA` por baixo de uma falha de rede. Resolver antes de qualquer job
+de sincronização de status vir a chamar `consultar()`.
+
+### O que falta antes de considerar a Etapa C1 pronta pra produção
+- **Merge do worktree pra main** — ainda não feito, aguardando decisão do
+  usuário (`superpowers:finishing-a-development-branch`).
+- ~~Numeração de DPS hardcoded em `'1'`~~ — **CORRIGIDO na Rodada 21**, ver
+  seção abaixo.
+- **Endereço do prestador (`prest.end`) nunca preenchido** — confirmado
+  via XSD que é opcional (`minOccurs=0`, não bloqueia emissão), mas
+  `Configuracao` não tem campos de endereço decompostos pra preencher
+  quando quisermos. Fica pra quando isso for adicionado.
+- **`opSimpNac` assume ME/EPP, nunca MEI** — `Configuracao` não distingue.
+  Risco real se a oficina de Ilicínea for MEI (não confirmado).
+- **`cMotivo` do cancelamento hardcoded em `'9'`/Outros** — sem seletor de
+  motivo estruturado ainda.
+- **Feature tests da Etapa C1 nunca executados contra Postgres real** —
+  mesma limitação de sempre.
+- **Validação em homologação de verdade** — nada disso rodou contra a API
+  real da NFS-e nacional ainda; confirmar em especial o comportamento de
+  `listarEventos()` pra "nenhum evento" (array vazio vs. exceção) antes de
+  confiar em `consultar()`.
+- Confirmar adesão de Ilicínea ao ADN e a alíquota real de ISS (pendência
+  antiga, ainda não resolvida).
+
+## Rodada 21 (2026-08-04) — fix ad-hoc: numeração da DPS
+
+Usuário confirmou (após eu recomendar como a mais urgente das 3 pendências
+puramente técnicas da Etapa C1) começar por este fix antes de qualquer
+outra coisa. Fix pontual, fora do ciclo formal de SDD (mesmo padrão da
+"Task 7b" da Etapa B): implementado direto nesta sessão, com testes de
+regressão, sem dispatch de subagente — escopo pequeno e mecânico o
+suficiente (mirror de um padrão já existente e aprovado).
+
+### O que foi corrigido
+`MotorNfse::montarDps()` tinha `$numero = '1'` hardcoded, usado tanto no
+`Id` da DPS (`IdGenerator::generateDpsId(cnpj, ibge, serie, numero)`) quanto
+no campo `nDPS` do payload. Como o `Id` é a chave de unicidade do
+documento, toda emissão gerava o mesmo `Id` — a segunda emissão (mesmo em
+homologação) seria rejeitada como duplicata.
+
+**Confirmado antes de implementar**: o número que a SEFIN Nacional
+devolve depois da autorização (`$resultado->infNfse?->numeroNfse`, usado em
+`EmissaoResultado::autorizada()`) é um número **diferente** — atribuído
+pelo sistema nacional, não por nós. Isso já funcionava certo. O bug era
+só do `nDPS` que **nós** submetemos antes da autorização, que precisa ser
+único por (CNPJ, município, série) do nosso lado.
+
+**Solução** (mirror exato de `NfeService::proximoNumeroNf()`, que já faz a
+mesma coisa pra Spedy/Focus — contador dedicado, não reaproveitado, porque
+são dois sistemas fiscais distintos com numerações independentes):
+- Migration `2026_08_04_000001_add_dps_numbering_to_configuracoes_table.php`
+  — `configuracoes.serie_dps` (string, default `'1'`) e
+  `configuracoes.proximo_numero_dps` (integer, default `1`).
+- `NfeService::proximoNumeroDps(): int` — mesma transação com
+  `lockForUpdate()` de `proximoNumeroNf()`, evita corrida em emissões
+  concorrentes.
+- `MotorNfse` ganhou `NfeService` injetado no construtor (default
+  `new NfeService()`, mesmo padrão do `CertificadoStore` já existente).
+  `emitir()` chama `proximoNumeroDps()` **antes** de montar o DPS (dentro
+  do `try`, antes da submissão — um número pode "queimar" se a emissão
+  falhar depois, o que é aceitável/normal em numeração fiscal; o que não
+  pode é duplicar).
+- `montarDps()` ganhou 4º parâmetro explícito `int $numeroDps` (mesmo
+  padrão do `$ambiente` explícito, já documentado no arquivo: mantém o
+  método puro/testável sem precisar de `Configuracao` persistida ou DB).
+  `serie` passou a ler `$cfg->serie_dps` em vez de hardcoded.
+
+### Arquivos alterados
+- `backend/database/migrations/2026_08_04_000001_add_dps_numbering_to_configuracoes_table.php` (novo)
+- `backend/app/Models/Configuracao.php` — `serie_dps`/`proximo_numero_dps` no `$fillable`
+- `backend/app/Services/NfeService.php` — `proximoNumeroDps()`
+- `backend/app/Services/Fiscal/NfePhp/MotorNfse.php` — construtor, `emitir()`, `montarDps()`
+- `backend/tests/Unit/Fiscal/NfePhp/MotorNfseMontarDpsTest.php` — 4 chamadas
+  existentes ajustadas pro novo parâmetro + 2 testes novos (número
+  aparece no `Id` e no `nDPS`; `serie_dps` da config é respeitada)
+
+### Testes
+`./vendor/bin/phpunit --testsuite=Unit` com `OPENSSL_CONF=/mingw64/etc/ssl/openssl.cnf`
+(caminho real do openssl.cnf neste ambiente — o caminho default do PHP,
+`C:\Program Files\Common Files\SSL\openssl.cnf`, não existe aqui; sem a
+env var, 3 testes de `CertificadoStoreTest` falham por causa disso, não
+por regressão real — mesma causa raiz documentada na Rodada 20):
+**128 testes, 327 assertions, 0 falhas.**
+
+Feature test (`tests/Feature/Fiscal/MotorNfseTest.php`) continua
+`markTestSkipped` — precisa de Postgres + certificado real + rede de
+homologação, mesma limitação de sempre; não afetado por este fix.
+
+Commitado como `93fb93d`.
+
+## Rodada 22 (2026-08-04/05) — timezone (correção de um engano meu) + 3 fixes técnicos da Etapa C1
+
+### Timezone: correção de um erro meu, não "já estava certo"
+Registrei antes (Rodada 21) que este worktree "já tinha o fix de timezone
+herdado de outros commits" — **isso estava errado**. Comparando timestamp
+dos arquivos, o que na real aconteceu: eu tinha editado
+`backend/config/app.php` deste worktree por engano (working tree não
+commitado) na hora de investigar o bug, e confundi essa edição pendente
+com histórico herdado. O commit `93fb93d` (HEAD desta branch antes desta
+rodada) continuava com `'timezone' => 'UTC'`. Corrigido agora de verdade,
+igual ao commit `ed1ee31` da main: `env('APP_TIMEZONE',
+'America/Sao_Paulo')` + `APP_TIMEZONE` no `.env.example`.
+
+### 3 fixes técnicos pendentes da Etapa C1 (endereço, cMotivo, MEI)
+Usuário confirmou seguir pelos 3 itens mais urgentes puramente técnicos,
+dado o prazo real da Resolução CGSN 189/2026 (obrigatoriedade do Emissor
+Nacional NFS-e pra ME/EPP do Simples a partir de 01/09/2026).
+
+**1. `prest.end` (endereço do prestador) — decisão do usuário: campos
+separados, não deixar sem endereço.**
+Verificado direto no XSD (`tiposComplexos_v1.01.xsd`, `TCEndereco`): se o
+grupo `end` for enviado, `xLgr`/`nro`/`xBairro` são OBRIGATÓRIOS (sem
+`minOccurs="0"`) — só `xCpl` é opcional. `Configuracao.endereco` era um
+campo de texto livre único, sem forma segura de decompor via regex (risco
+de dado fiscal errado — proibido pela regra do projeto). Solução:
+- Migration nova: `Configuracao.logradouro`/`numero`/`bairro` (novos,
+  opcionais).
+- Formulário "Dados da Empresa" (frontend) ganhou os 3 campos.
+- `MotorNfse::enderecoPrestador()` (método novo) só popula `prest.end`
+  quando os 3 campos estão preenchidos — do contrário retorna null e o
+  grupo simplesmente não é enviado (continua válido, é opcional no
+  schema).
+- **Achado técnico confirmado contra o vendor, não assumido**: as chaves
+  do array precisam ser os NOMES DE PROPRIEDADE de `EnderecoData`
+  (`codigoMunicipio`, `cep`, `logradouro`, `numero`, `bairro`), não as
+  tags XML — é assim que `Nfse\Dto\Dto::normalizeInput()` expande o
+  `MapFrom` com dot notation (`endNac.cMun`, `endNac.CEP`) pro array
+  aninhado que o schema espera. Verificado com teste real batendo em
+  `$dps->infDps->prestador->endereco->logradouro` etc., não só lendo o
+  código.
+
+**2. `cMotivo` do cancelamento — decisão do usuário: inferir por
+palavra-chave no texto livre, sem mudar UI/interface compartilhada.**
+`MotorNfse::classificarMotivoCancelamento()` (método novo, privado,
+testado via `ReflectionMethod` como `mapearResultadoConsulta()`): texto
+contendo "erro"/"engano"/"equivoco" → cMotivo=1 (Erro na Emissão); contendo
+"nao prestado"/"nao realizado"/"nao executado" → cMotivo=2 (Serviço não
+Prestado); qualquer outra coisa → cMotivo=9 (Outros, default seguro). Usa
+`Str::ascii()` pra normalizar acentuação antes de comparar.
+**Bug pego pelo próprio teste que escrevi**: a ordem original era
+`Str::ascii(strtolower($motivo))` — `strtolower()` do PHP não é
+multibyte-safe, não lida direito com "Ç"/"Ã" maiúsculos, então
+"SERVIÇO NÃO PRESTADO" não batia. Invertido pra `strtolower(Str::ascii(...))`
+— confirmado pelo teste passando depois.
+
+**3. `opSimpNac` sem suporte a MEI — decisão do usuário: mesma convenção
+de string livre.**
+`CrtResolver::resolver()` agora também reconhece "mei" como CRT=1 (MEI é
+juridicamente um regime dentro do Simples Nacional — mesmo sem a palavra
+"Simples" no texto, o CRT correto nunca é 3). `MotorNfse::
+regimeTributarioPrestador()` distingue MEI (`opSimpNac=2`) de ME/EPP
+(`opSimpNac=3`) pela mesma substring "mei" em
+`Configuracao.regime_tributario`. Convenção pro usuário: digitar algo
+como "Simples Nacional - MEI" ou só "MEI" no campo de regime tributário
+(campo de texto livre já existente, sem mudança de UI).
+
+### Testes
+`OPENSSL_CONF=/mingw64/etc/ssl/openssl.cnf ./vendor/bin/phpunit
+--testsuite=Unit`: **138 testes, 347 assertions, 0 falhas** (eram 128
+antes desta rodada — 10 testes novos: 2 endereço completo/parcial + 1
+regressão sem-endereço, 4 classificação de cMotivo, 2 MEI/ME-EPP,
+1 CrtResolver+MEI). Frontend: `npx tsc --noEmit` sem erros.
+
+### Ainda pendente (não mudou nesta rodada)
+- Merge do worktree pra `main` — decisão do usuário ainda em aberto.
+- Feature tests da Etapa C1 nunca executados contra Postgres real.
+- Validação em homologação de verdade (bloqueada por confirmar alíquota
+  ISS e adesão ao ADN de Ilicínea com a prefeitura).
+
+## Rodada 23 (2026-08-05) — investigação: cálculo automático de imposto pelo provedor (Spedy/Focus)
+
+Usuário pediu pra avaliar usar um endpoint da Spedy que calcula a
+tributação sozinho, aplicando em NF-e e NFS-e se possível, e checar se a
+Focus tem equivalente.
+
+### Achado: não é troca de endpoint, é mudança de arquitetura
+`POST /v1/orders` da Spedy (confirmado via doc oficial) cobre NF-e E
+NFS-e, mas exige produto pré-cadastrado no catálogo deles
+(`POST /v1/products`) + "grupos de tributação e naturezas de operação"
+configurados manualmente no **backoffice web da Spedy** (fora de código,
+sem versionamento). Isso implicaria manter um catálogo duplicado
+sincronizado e ceder a decisão de CFOP/CST/ICMS/ISS pra um sistema
+externo — o oposto da regra central do projeto ("nunca chutar valor
+fiscal", já rendeu bug real 4x quando confundida).
+
+**Contradição real na própria doc da Spedy, não resolvida por leitura**:
+a página "Criar Venda" diz que a Spedy resolve a tributação
+automaticamente a partir da config da empresa; a página "Regimes e
+códigos fiscais" diz o oposto — "a Spedy não decide a tributação por
+você, apenas transporta o que for informado". Não dá pra confiar em
+nenhuma das duas sem teste real.
+
+**Focus NFe**: equivalente se chama "Automations" — produto/configuração
+à parte (fluxo visual, "na maioria dos casos precisa de desenvolvedor pra
+integrar"), não confirmado se já está disponível na conta atual.
+
+### Decisão: usuário vai testar no sandbox antes de qualquer código
+Não existe NENHUMA credencial da Spedy neste sistema — nem local, nem em
+produção (`emissores_fiscais` está com **0 registros** na VPS, nenhuma
+oficina ativou nenhum provedor fiscal de verdade ainda). Usuário vai:
+1. Criar conta sandbox na Spedy (signup self-service em
+   `app.spedy.com.br/signup`) e testar `POST /v1/orders` sem mandar
+   CFOP/CST/ICMS, ver o que volta de verdade.
+2. Verificar o que a conta Focus dele realmente oferece pra cálculo
+   automático ("Automations").
+
+### Design combinado, aguardando confirmação pra implementar
+Se confirmado que funciona sem duplicar catálogo: adicionar um campo em
+`Configuracao` (ex.: `calculo_tributario_modo`: `MANUAL` (default,
+comportamento atual) | `AUTOMATICO_PROVEDOR`), checado em
+`FocusNfeProvider`/`SpedyProvider` antes de montar o payload — em
+`AUTOMATICO_PROVEDOR`, chama o endpoint que deixa o provedor calcular; em
+`MANUAL`, continua como hoje (`CfopSaidaResolver`/
+`TributacaoIcmsSaidaResolver`/alíquota configurada). Toggle na tela de
+Dados da Empresa. **Não implementado ainda** — deliberadamente adiado até
+o teste real confirmar o comportamento de cada provedor.

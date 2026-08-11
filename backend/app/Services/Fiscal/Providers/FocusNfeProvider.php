@@ -219,7 +219,7 @@ class FocusNfeProvider implements FiscalProvider
         };
     }
 
-    public function cancelar(string $referencia, string $motivo): EmissaoResultado
+    public function cancelar(string $referencia, string $motivo, string $modelo = 'NFSE'): EmissaoResultado
     {
         $resp = Http::withBasicAuth($this->emissorToken ?? $this->masterToken, '')
             ->delete("{$this->baseUrl}/v2/nfse/{$referencia}", [

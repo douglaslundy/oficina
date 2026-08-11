@@ -15,3 +15,4 @@ Artisan::command('inspire', function () {
 Schedule::command('oficina:recalcular-status-clientes')->dailyAt('02:00')->timezone('America/Sao_Paulo');
 Schedule::command('alertas:verificar')->dailyAt('07:00')->timezone('America/Sao_Paulo');
 Schedule::command('cobrancas:gerar')->dailyAt('06:00')->timezone('America/Sao_Paulo');
+Schedule::command('nfe:reconciliar-contingencia')->hourly()->timezone('America/Sao_Paulo');
