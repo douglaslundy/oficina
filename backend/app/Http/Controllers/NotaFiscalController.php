@@ -229,6 +229,21 @@ class NotaFiscalController extends Controller
     {
         $nota = NotaFiscal::findOrFail($id);
         $request->validate(['motivo' => ['required', 'string', 'min:10']]);
+
+        if ($nota->provedor === 'NFEPHP' && $nota->modelo === 'NF-e' && $nota->status === 'AUTORIZADA') {
+            if (empty($nota->chave_acesso) || empty($nota->protocolo)) {
+                return response()->json(['message' => 'NF-e sem chave de acesso ou protocolo — não é possível cancelar via NFePHP.'], 422);
+            }
+
+            $ambiente  = $nota->ambiente ?? 'HOMOLOGACAO';
+            $resultado = app(\App\Services\Fiscal\NfePhp\MotorNfe::class)
+                ->cancelar($nota->chave_acesso, $request->motivo, $nota->protocolo, $ambiente);
+
+            if ($resultado->status !== 'CANCELADA') {
+                return response()->json(['message' => $resultado->mensagemErro ?? 'Falha ao cancelar NF-e.'], 422);
+            }
+        }
+
         $nota->update(['status' => 'CANCELADA']);
         return response()->json(['message' => 'NF cancelada com sucesso.']);
     }
@@ -237,14 +252,27 @@ class NotaFiscalController extends Controller
     {
         $nota = NotaFiscal::with('cliente')->findOrFail($id);
 
+        // NF-e emitida via NFePHP: o DANFE é montado localmente a partir do
+        // XML já autorizado (DanfeRenderer), diferente da NFS-e abaixo, que
+        // busca o PDF pronto direto da API oficial do ambiente nacional —
+        // NF-e via NFePHP não tem um endpoint equivalente pra isso, então
+        // renderizamos nós mesmos.
+        if ($nota->provedor === 'NFEPHP' && in_array($nota->modelo, ['NF-e', 'NFC-e'], true) && in_array($nota->status, ['AUTORIZADA', 'CONTINGENCIA'], true)) {
+            $nota->loadMissing(['cliente', 'itens']);
+            $dados = app(\App\Services\Fiscal\Pdf\DanfeRenderer::class)->dadosParaTemplate($nota);
+            $pdf = Pdf::loadView('pdf.danfe', $dados)->setPaper('a4', 'portrait');
+
+            return $pdf->download('DANFE-' . ($nota->numero ?? $nota->id) . '.pdf');
+        }
+
         // NFS-e emitida via NFePHP: o PDF (DANFSe) é obtido pronto direto da
         // API oficial do ambiente nacional (Motor::baixarDanfse()), em vez de
         // renderizar o template local pdf.nota_fiscal — que só reflete os
         // dados salvos localmente, não o layout oficial assinado. Guard
-        // inclui 'modelo' === 'NFS-e' porque NfePhpProvider::emitir() rejeita
-        // NF-e (modelo NFE) antes de chegar a AUTORIZADA (ver
-        // NfePhpProvider::emitir()), mas o check aqui é defensivo/explícito
-        // em vez de depender só dessa invariante de outra classe.
+        // inclui 'modelo' === 'NFS-e' porque o branch de NF-e acima já
+        // intercepta antes o caso NF-e/NFC-e via NFePHP, então este só
+        // é alcançado para NFS-e — mas o check aqui permanece
+        // defensivo/explícito em vez de depender só da ordem dos branches.
         if ($nota->provedor === 'NFEPHP' && $nota->modelo === 'NFS-e' && $nota->status === 'AUTORIZADA' && $nota->chave_acesso) {
             try {
                 $pdfBinario = app(\App\Services\Fiscal\NfePhp\MotorNfse::class)
