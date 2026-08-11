@@ -382,11 +382,36 @@ class MotorNfe
             return EmissaoResultado::erro('Configurações da empresa não encontradas.', $nota->referenciaExterna);
         }
 
+        // FINDING 5 do fix wave pós-revisão da Etapa C2 (2026-08-11),
+        // parked desde a review de uma task anterior: cUfMg() (abaixo, em
+        // montarNfe()) hardcoda MG (31) em <ide><cUF> incondicionalmente,
+        // enquanto configJson() deriva siglaUF de $cfg->uf — uma oficina mal
+        // configurada (uf != 'MG') assinaria e transmitiria (ou queimaria
+        // um número real tentando) uma NF-e com UF internamente
+        // contraditória, falhando só remotamente na SEFAZ em vez de local e
+        // de graça. Guard colocado ANTES da alocação de número (early
+        // return), mesmo espírito do guard de CNPJ vazio em montarNfe().
+        if (strtoupper((string) ($cfg->uf ?? '')) !== 'MG') {
+            return EmissaoResultado::erro(
+                'Etapa C2 do NFePHP só emite NF-e para oficinas em MG — cUfMg() está fixo em 31/MG (ver spec, Seção A).',
+                $nota->referenciaExterna,
+            );
+        }
+
         try {
             $dados       = $this->certificados->obter($cfg);
             $certificate = Certificate::readPfx($dados['pfx'], $dados['senha']);
 
-            $numeroNfe = $this->numeracao->proximoNumeroNfe();
+            // FINDING 4 do fix wave: se $nota->numeroReservado veio populado
+            // (NfeService::montarNotaData() só populada isso quando esta
+            // NotaFiscal JÁ tem um numero persistido de uma tentativa
+            // NFEPHP anterior — ver lá), esta é uma retentativa após
+            // rejeição/erro, não uma primeira emissão — reusa o mesmo nNF em
+            // vez de queimar um novo (spec Seção B, "nota rejeitada não
+            // queima o número").
+            $numeroNfe = $nota->numeroReservado !== null
+                ? (int) $nota->numeroReservado
+                : $this->numeracao->proximoNumeroNfe();
             $serieNfe  = (int) ($cfg->serie_nfe ?: 1);
 
             $tools = new Tools($this->configJson($cfg, $ambiente), $certificate);
@@ -419,7 +444,7 @@ class MotorNfe
                 // Spedy/Focus/NFS-e já usam (ver Global Constraints do spec).
                 $resp = $tools->sefazEnviaLote([$xmlAssinado], (string) $numeroNfe, 1);
 
-                return $this->processarRespostaAutorizacao($resp, $nota->referenciaExterna, $xmlAssinado);
+                return $this->processarRespostaAutorizacao($resp, $nota->referenciaExterna, $xmlAssinado, (string) $numeroNfe);
             } catch (SoapException $eTransmissao) {
                 // CORRIGIDO — achado do review desta task: o brief original
                 // capturava `\Throwable` aqui, o que faria QUALQUER erro
@@ -447,11 +472,24 @@ class MotorNfe
                     ['erro' => $eTransmissao->getMessage(), 'ref' => $nota->referenciaExterna],
                 );
 
-                return $this->tentarEpec($tools, $xml, $nota->referenciaExterna);
+                return $this->tentarEpec($tools, $xml, $nota->referenciaExterna, (string) $numeroNfe);
             }
         } catch (\Throwable $e) {
             Log::warning('MotorNfe: falha ao emitir.', ['erro' => $e->getMessage(), 'ref' => $nota->referenciaExterna]);
-            return EmissaoResultado::erro('Falha técnica ao emitir NF-e via NFePHP: ' . $e->getMessage(), $nota->referenciaExterna);
+            // FINDING 4 do fix wave: se a exceção aconteceu DEPOIS de
+            // $numeroNfe ser alocado (variável ainda em escopo — try/catch
+            // no PHP compartilha o escopo da função), o número foi
+            // realmente queimado e precisa ser reportado pro controller
+            // persistir, senão a retentativa (via
+            // NfeService::montarNotaData()) nunca o encontra e queima outro.
+            // Se a exceção veio de ANTES da alocação (ex.: certificado
+            // inválido), isset() é false e não inventamos um número que
+            // nunca existiu.
+            return EmissaoResultado::erro(
+                'Falha técnica ao emitir NF-e via NFePHP: ' . $e->getMessage(),
+                $nota->referenciaExterna,
+                isset($numeroNfe) ? (string) $numeroNfe : null,
+            );
         }
     }
 
@@ -508,12 +546,28 @@ class MotorNfe
      * a nota sempre caía no branch de REJEITADA em vez de reconhecer
      * autorização real). Corrigido registrando o namespace de novo em
      * `$protNFe` antes das buscas aninhadas.
+     *
+     * CORRIGIDO — Finding 3 do fix wave pós-revisão da Etapa C2
+     * (2026-08-11): `numero` na chamada de `autorizada()` era hardcoded
+     * `null` com um comentário dizendo "controller mantém o valor
+     * existente" — mas o "valor existente" no controller vinha de
+     * `NfeService::proximoNumeroNf()` (contador do Spedy/Focus!), chamado
+     * ANTES mesmo de saber que o NFePHP ia processar esta nota. Resultado:
+     * toda emissão de NF-e via NFePHP queimava DOIS números de DOIS
+     * contadores diferentes e persistia o ERRADO. `$numeroReal` agora é
+     * obrigatório (não opcional — método privado, único chamador é
+     * `emitir()`, que sempre tem o valor de `$numeroNfe` alocado antes de
+     * transmitir; um parâmetro sem default força esse dado nunca ser
+     * esquecido silenciosamente numa chamada futura). Passado também pros
+     * ramos de `rejeitada()` — o número já foi alocado e queimado mesmo
+     * quando a SEFAZ rejeita (ver Finding 4, `EmissaoResultado::
+     * rejeitada()`/`NotaFiscalData::numeroReservado`).
      */
-    private function processarRespostaAutorizacao(string $respostaXml, ?string $ref, string $xmlEnviado): EmissaoResultado
+    private function processarRespostaAutorizacao(string $respostaXml, ?string $ref, string $xmlEnviado, string $numeroReal): EmissaoResultado
     {
         $sxml = @simplexml_load_string($respostaXml);
         if ($sxml === false) {
-            return EmissaoResultado::erro('Resposta da SEFAZ não pôde ser interpretada.', $ref);
+            return EmissaoResultado::erro('Resposta da SEFAZ não pôde ser interpretada.', $ref, $numeroReal);
         }
         $sxml->registerXPathNamespace('nfe', 'http://www.portalfiscal.inf.br/nfe');
 
@@ -531,7 +585,7 @@ class MotorNfe
                 return EmissaoResultado::autorizada(
                     chave: $chNFe,
                     protocolo: $nProt,
-                    numero: null, // número já é conhecido (alocado antes de transmitir), controller mantém o valor existente
+                    numero: $numeroReal,
                     xml: $xmlEnviado,
                     pdfUrl: null,
                     ref: $ref,
@@ -539,12 +593,12 @@ class MotorNfe
             }
 
             $xMotivo = (string) ($protNFe->xpath('.//nfe:xMotivo')[0] ?? 'Rejeitada pela SEFAZ.');
-            return EmissaoResultado::rejeitada("cStat={$cStat}: {$xMotivo}", $ref);
+            return EmissaoResultado::rejeitada("cStat={$cStat}: {$xMotivo}", $ref, $numeroReal);
         }
 
         // Sem protNFe — lote rejeitado antes mesmo de processar a nota
         // individual (erro de schema, duplicidade, etc.).
-        return EmissaoResultado::rejeitada("Lote rejeitado (cStat={$cStatLote}).", $ref);
+        return EmissaoResultado::rejeitada("Lote rejeitado (cStat={$cStatLote}).", $ref, $numeroReal);
     }
 
     /**
@@ -583,8 +637,15 @@ class MotorNfe
      * nfephp-org/sped-nfe corrigir `checkContingencyForWebServices()` pra
      * aceitar 'EPEC', este bloco pode voltar a ser uma chamada direta a
      * `$tools->sefazEPEC($xml, $verAplic)`.
+     *
+     * CORRIGIDO — Finding 2/3 do fix wave pós-revisão da Etapa C2
+     * (2026-08-11): `$numeroNfe` agora chega como parâmetro (alocado por
+     * `emitir()` antes de tentar a transmissão normal) pra ser repassado a
+     * `EmissaoResultado::contingencia()` — sem isso o número real da nota
+     * em contingência nunca era persistido (mesma classe de bug do
+     * `numero: null` de `processarRespostaAutorizacao()`, ver lá).
      */
-    private function tentarEpec(Tools $tools, string $xml, ?string $ref): EmissaoResultado
+    private function tentarEpec(Tools $tools, string $xml, ?string $ref, string $numeroNfe): EmissaoResultado
     {
         try {
             $contingency = new Contingency();
@@ -696,7 +757,11 @@ class MotorNfe
 
             $cStat = $this->extrairCStatEvento($respEpec);
             if ($cStat === null) {
-                return EmissaoResultado::erro('Resposta do evento EPEC não pôde ser interpretada.', $ref);
+                // Finding 4 do fix wave: $numeroNfe já foi alocado e queimado
+                // por emitir() antes de chegar aqui — reportar pro controller
+                // persistir, senão a retentativa queima outro (mesmo
+                // raciocínio do catch externo de emitir()).
+                return EmissaoResultado::erro('Resposta do evento EPEC não pôde ser interpretada.', $ref, $numeroNfe);
             }
 
             // 135/136 = Evento registrado e vinculado (ou não) à NF-e —
@@ -707,13 +772,17 @@ class MotorNfe
             // CONTINGENCIA se reconhecer um desses cStat, senão ERRO (nunca
             // "chuta" sucesso).
             if (in_array($cStat, ['135', '136'], true)) {
-                return EmissaoResultado::contingencia($xmlContingencia, $ref);
+                // Finding 2 do fix wave: contingencia() agora exige a chave
+                // de acesso e o número real como 1º/2º args — $chNFe já foi
+                // calculada acima (recalculada por ContingencyNFe::adjust()
+                // com tpEmis=4) e $numeroNfe veio como parâmetro do método.
+                return EmissaoResultado::contingencia($chNFe, $numeroNfe, $xmlContingencia, $ref);
             }
 
-            return EmissaoResultado::erro("EPEC não autorizado (cStat={$cStat}). SEFAZ e EPEC ambos indisponíveis ou rejeitaram.", $ref);
+            return EmissaoResultado::erro("EPEC não autorizado (cStat={$cStat}). SEFAZ e EPEC ambos indisponíveis ou rejeitaram.", $ref, $numeroNfe);
         } catch (\Throwable $e) {
             Log::warning('MotorNfe: falha também no EPEC.', ['erro' => $e->getMessage(), 'ref' => $ref]);
-            return EmissaoResultado::erro('SEFAZ indisponível e contingência EPEC também falhou: ' . $e->getMessage(), $ref);
+            return EmissaoResultado::erro('SEFAZ indisponível e contingência EPEC também falhou: ' . $e->getMessage(), $ref, $numeroNfe);
         }
     }
 

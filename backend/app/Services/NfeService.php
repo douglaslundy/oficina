@@ -66,6 +66,19 @@ class NfeService
 
         $ehNfe = $nota->modelo === 'NF-e';
 
+        // Finding 4 do fix wave pós-revisão da Etapa C2 (2026-08-11): se
+        // esta NotaFiscal já tem um `numero` persistido (uma tentativa
+        // anterior via NFePHP alocou e o controller salvou, mesmo que
+        // rejeitada — ver NotaFiscalController::emitir()), essa é uma
+        // retentativa, não uma primeira emissão. MotorNfe::emitir() reusa
+        // esse número em vez de queimar um novo (spec Seção B). Restrito a
+        // NFEPHP porque Spedy/Focus atribuem o número deles mesmos — um
+        // `$nota->numero` vindo desses provedores não significa "reservado
+        // pra reenviar", significa "já emitido por eles".
+        $numeroJaReservado = ($ehNfe && $nota->provedor === 'NFEPHP' && $nota->numero !== null)
+            ? (string) $nota->numero
+            : null;
+
         return new NotaFiscalData(
             tipo: 'NFSE',
             tomador: [
@@ -100,6 +113,7 @@ class NfeService
                 'quantidade'      => $item->quantidade,
                 'valor_unitario'  => $item->valor_unitario,
             ])->all() : [],
+            numeroReservado: $numeroJaReservado,
         );
     }
 

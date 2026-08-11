@@ -33,9 +33,16 @@ class MotorNfeEmitirTest extends TestCase
 {
     public function test_emissao_resultado_contingencia(): void
     {
-        $r = EmissaoResultado::contingencia('<xml/>', 'ref-1');
+        // Assinatura atualizada pelo fix wave pós-revisão da Etapa C2
+        // (Finding 2): contingencia() agora exige chave de acesso e número
+        // como 1º/2º args, antes de $xml — sem eles, MotorNfe::retransmitir()
+        // e o DANFE de contingência não têm chave pra trabalhar (ver
+        // docblock de EmissaoResultado::contingencia()).
+        $r = EmissaoResultado::contingencia('31260800000000000000550010000000011234567890', '11', '<xml/>', 'ref-1');
 
         $this->assertSame('CONTINGENCIA', $r->status);
+        $this->assertSame('31260800000000000000550010000000011234567890', $r->chave);
+        $this->assertSame('11', $r->numero);
         $this->assertSame('<xml/>', $r->xml);
         $this->assertSame('ref-1', $r->referenciaExterna);
     }
@@ -59,11 +66,15 @@ XML;
         $motor  = new MotorNfe();
         $metodo = new \ReflectionMethod($motor, 'processarRespostaAutorizacao');
         $metodo->setAccessible(true);
-        $resultado = $metodo->invoke($motor, $respostaXml, 'ref-1', '<xml-enviado/>');
+        // 4º arg $numeroReal — Finding 3 do fix wave: agora obrigatório,
+        // é o nNF alocado por emitir() antes de transmitir; threading
+        // provado pela asserção de $resultado->numero abaixo.
+        $resultado = $metodo->invoke($motor, $respostaXml, 'ref-1', '<xml-enviado/>', '42');
 
         $this->assertSame('AUTORIZADA', $resultado->status);
         $this->assertSame('31260800000000000000550010000000011234567890', $resultado->chave);
         $this->assertSame('135260000000000', $resultado->protocolo);
+        $this->assertSame('42', $resultado->numero);
     }
 
     public function test_processar_resposta_autorizacao_rejeitada_nao_vira_autorizada(): void
@@ -83,10 +94,15 @@ XML;
         $motor  = new MotorNfe();
         $metodo = new \ReflectionMethod($motor, 'processarRespostaAutorizacao');
         $metodo->setAccessible(true);
-        $resultado = $metodo->invoke($motor, $respostaXml, 'ref-1', '<xml-enviado/>');
+        $resultado = $metodo->invoke($motor, $respostaXml, 'ref-1', '<xml-enviado/>', '43');
 
         $this->assertSame('REJEITADA', $resultado->status);
         $this->assertStringContainsString('Duplicidade', $resultado->mensagemErro);
+        // Finding 4 do fix wave: número já alocado/queimado antes da
+        // transmissão precisa sobreviver mesmo quando a SEFAZ rejeita, senão
+        // a retentativa (NfeService::montarNotaData() -> numeroReservado)
+        // nunca o encontra e queima outro.
+        $this->assertSame('43', $resultado->numero);
     }
 
     /**
@@ -133,11 +149,12 @@ XML;
         $motor  = new MotorNfe();
         $metodo = new \ReflectionMethod($motor, 'processarRespostaAutorizacao');
         $metodo->setAccessible(true);
-        $resultado = $metodo->invoke($motor, $respostaXml, 'ref-2', '<xml-enviado/>');
+        $resultado = $metodo->invoke($motor, $respostaXml, 'ref-2', '<xml-enviado/>', '44');
 
         $this->assertSame('AUTORIZADA', $resultado->status);
         $this->assertSame('31260800000000000000550010000000011234567890', $resultado->chave);
         $this->assertSame('135260000000001', $resultado->protocolo);
+        $this->assertSame('44', $resultado->numero);
     }
 
     public function test_processar_resposta_autorizacao_sem_protnfe_retorna_rejeitada_com_cstat_de_lote(): void
@@ -152,10 +169,11 @@ XML;
         $motor  = new MotorNfe();
         $metodo = new \ReflectionMethod($motor, 'processarRespostaAutorizacao');
         $metodo->setAccessible(true);
-        $resultado = $metodo->invoke($motor, $respostaXml, 'ref-3', '<xml-enviado/>');
+        $resultado = $metodo->invoke($motor, $respostaXml, 'ref-3', '<xml-enviado/>', '45');
 
         $this->assertSame('REJEITADA', $resultado->status);
         $this->assertStringContainsString('225', $resultado->mensagemErro);
+        $this->assertSame('45', $resultado->numero);
     }
 
     /**
