@@ -4,6 +4,7 @@ declare(strict_types=1);
 namespace App\Services\Fiscal\NfePhp;
 
 use App\Models\Configuracao;
+use App\Models\NotaFiscal;
 use App\Services\Fiscal\CrtResolver;
 use App\Services\Fiscal\Data\EmissaoResultado;
 use App\Services\Fiscal\Data\NotaFiscalData;
@@ -38,6 +39,25 @@ use NFePHP\NFe\Tools;
  * (Tools::sefazEPEC() inalcançável — ver comentário em tentarEpec()) foi
  * REPRODUZIDA empiricamente com um certificado de teste antes de decidir a
  * correção — não é só leitura de código. Ver task-4-report.md.
+ *
+ * Task 5 (consultar()/cancelar()/retransmitir()): confirmado lendo
+ * vendor/nfephp-org/sped-nfe/src/Tools.php (sefazConsultaChave(),
+ * sefazCancela()) e os XSDs oficiais em schemes/PL_009_V4/
+ * (leiauteConsSitNFe_v4.00.xsd, leiauteEvento_v1.00.xsd). Achado principal:
+ * Tools::sefazCancela() é sefazEvento() por baixo (só monta o tagAdic de
+ * nProt/xJust e delega) — a resposta tem exatamente o mesmo formato
+ * retEnvEvento (cStat de LOTE antes de retEvento/infEvento/cStat, o cStat
+ * real do registro do evento) já tratado por extrairCStatEvento() na Task 4.
+ * O brief original de cancelar() fazia um xpath plano (`//nfe:cStat`) que
+ * pegaria o cStat de LOTE em vez do cStat do evento — o mesmo bug já
+ * corrigido (e testado) em extrairCStatEvento(); corrigido aqui reutilizando
+ * esse método em vez de duplicar o parsing errado. Já consultar()
+ * (retConsSitNFe) NÃO tem esse problema: confirmado no XSD
+ * (leiauteConsSitNFe_v4.00.xsd, TRetConsSitNFe) que o cStat de topo é um
+ * campo direto da resposta — representa a SITUAÇÃO ATUAL da NF-e
+ * (100/101/151/205/217/218, Tabela de Status da Consulta Protocolo) e não um
+ * "cStat de lote" concorrente com outro cStat de mesmo peso semântico; o
+ * xpath plano do brief já estava correto aí, só documentado/confirmado.
  */
 class MotorNfe
 {
@@ -738,5 +758,231 @@ class MotorNfe
         }
         $retEvento->registerXPathNamespace('nfe', 'http://www.portalfiscal.inf.br/nfe');
         return (string) ($retEvento->xpath('.//nfe:cStat')[0] ?? '');
+    }
+
+    /**
+     * Consulta a situação atual de uma NF-e pela chave de acesso
+     * (sefazConsultaChave() / NfeConsultaProtocolo) — nunca decide
+     * autorizada/cancelada sem essa confirmação explícita da SEFAZ. Usado
+     * por retransmitir() (abaixo) antes de qualquer reenvio, e pela Task 6
+     * (NfePhpProvider) para reconciliação manual/consulta avulsa.
+     */
+    public function consultar(string $chave, string $ambiente): EmissaoResultado
+    {
+        // CORRIGIDO vs. o brief: `Configuracao::first()` ficava FORA do
+        // try/catch (mesmo padrão que emitir() já tem — não mexido aqui,
+        // fora do escopo desta task, mas achado documentado no report).
+        // Sem conexão de banco disponível (ambiente de teste sem DB, ver
+        // MotorNfeConsultarTest), `Model::resolveConnection()` lança um
+        // \Error fatal ("Call to a member function connection() on null"),
+        // não uma \Exception — escapa incapturado e quebra o teste do
+        // próprio brief pra retransmitir(), que depende de consultar()
+        // falhar graciosamente aqui. Todo o corpo (incluindo a busca da
+        // Configuracao) agora está dentro do try/catch, igual ao resto
+        // deste método já fazia pra falhas de certificado/rede.
+        try {
+            $cfg = Configuracao::first();
+            if (! $cfg) {
+                return EmissaoResultado::erro('Configurações da empresa não encontradas.', $chave);
+            }
+
+            $dados       = $this->certificados->obter($cfg);
+            $certificate = Certificate::readPfx($dados['pfx'], $dados['senha']);
+            $tools       = new Tools($this->configJson($cfg, $ambiente), $certificate);
+            $tools->model(55);
+
+            $resp = $tools->sefazConsultaChave($chave);
+
+            return $this->processarRespostaConsulta($resp, $chave);
+        } catch (\Throwable $e) {
+            return EmissaoResultado::erro('Falha ao consultar NF-e: ' . $e->getMessage(), $chave);
+        }
+    }
+
+    /**
+     * Parsing puro (sem I/O) da resposta de sefazConsultaChave() —
+     * separado do método público pra ser testável via reflection, mesmo
+     * padrão de processarRespostaAutorizacao().
+     *
+     * Confirmado contra schemes/PL_009_V4/leiauteConsSitNFe_v4.00.xsd
+     * (TRetConsSitNFe): cStat é um campo DIRETO da resposta (aparece antes
+     * de protNFe/retCancNFe/procEventoNFe na sequência do XSD) — representa
+     * a SITUAÇÃO ATUAL da NF-e segundo a Tabela de Status da Consulta
+     * Protocolo (100 = Autorizado; 101/151 = Cancelamento homologado
+     * dentro/fora do prazo; 217/218 = NF-e não consta / já cancelada na
+     * base da SEFAZ), e não um "cStat de lote" que precede um cStat de
+     * evento com peso semântico diferente (como em retEnvEvento — ver
+     * processarRespostaCancelamento() abaixo). `//nfe:cStat` já pega o
+     * campo certo porque é o primeiro cStat em ordem de documento; nProt só
+     * existe aninhado em protNFe/infProt (ou retCancNFe/infCanc), então
+     * `//nfe:nProt` também resolve sem ambiguidade quando presente.
+     */
+    private function processarRespostaConsulta(string $respostaXml, string $chave): EmissaoResultado
+    {
+        $sxml = @simplexml_load_string($respostaXml);
+        if ($sxml === false) {
+            return EmissaoResultado::erro('Resposta da consulta não pôde ser interpretada.', $chave);
+        }
+        $sxml->registerXPathNamespace('nfe', 'http://www.portalfiscal.inf.br/nfe');
+
+        $cStat = (string) ($sxml->xpath('//nfe:cStat')[0] ?? '');
+
+        return match (true) {
+            $cStat === '100' => EmissaoResultado::autorizada(
+                chave: $chave,
+                protocolo: (string) ($sxml->xpath('//nfe:nProt')[0] ?? ''),
+                numero: null,
+                xml: null,
+                pdfUrl: null,
+                ref: $chave,
+            ),
+            in_array($cStat, ['101', '151'], true) => EmissaoResultado::cancelada($chave),
+            default => EmissaoResultado::erro(
+                "NF-e em status não reconhecido (cStat={$cStat}); não classificamos como autorizada sem confirmação.",
+                $chave,
+            ),
+        };
+    }
+
+    /**
+     * Cancela uma NF-e (evento de cancelamento) — exige o protocolo da
+     * autorização original, não só a chave (assinatura de
+     * Tools::sefazCancela(string $chave, string $xJust, string $nProt,
+     * ...), confirmada em Tools.php). NfePhpProvider::cancelar() (Task 6)
+     * precisa carregar a NotaFiscal e passar $nota->protocolo aqui.
+     */
+    public function cancelar(string $chave, string $motivo, string $protocolo, string $ambiente): EmissaoResultado
+    {
+        // CORRIGIDO vs. o brief — mesmo achado documentado em consultar():
+        // Configuracao::first() precisa estar DENTRO do try/catch, senão um
+        // \Error de conexão de banco ausente escapa incapturado.
+        try {
+            $cfg = Configuracao::first();
+            if (! $cfg) {
+                return EmissaoResultado::erro('Configurações da empresa não encontradas.', $chave);
+            }
+
+            $dados       = $this->certificados->obter($cfg);
+            $certificate = Certificate::readPfx($dados['pfx'], $dados['senha']);
+            $tools       = new Tools($this->configJson($cfg, $ambiente), $certificate);
+            $tools->model(55);
+
+            $resp = $tools->sefazCancela($chave, $motivo, $protocolo);
+
+            return $this->processarRespostaCancelamento($resp, $chave);
+        } catch (\Throwable $e) {
+            return EmissaoResultado::erro('Falha ao cancelar NF-e: ' . $e->getMessage(), $chave);
+        }
+    }
+
+    /**
+     * Parsing puro (sem I/O) da resposta de sefazCancela() — separado do
+     * método público pra ser testável via reflection.
+     *
+     * CORRIGIDO vs. o brief: confirmado em Tools::sefazCancela() (Tools.php
+     * ~600-615) que ele só monta o tagAdic de <nProt>/<xJust> e DELEGA pra
+     * sefazEvento() — mesmo transporte que tentarEpec() já usa pro evento
+     * EPEC (Tools::EVT_CANCELA vs Tools::EVT_EPEC, mesmo método por baixo).
+     * A resposta é portanto um retEnvEvento, com o MESMO formato de dois
+     * cStat (um de LOTE, outro aninhado em retEvento/infEvento) que
+     * extrairCStatEvento() já existe pra tratar corretamente — confirmado
+     * contra schemes/PL_009_V4/leiauteEvento_v1.00.xsd (TRetEnvEvento tem
+     * cStat próprio, "status da registro do Evento" a nível de lote, ANTES
+     * de retEvento na sequência) e contra o próprio uso interno do vendor
+     * (Complements::addEnvEventoProtocol(), que explicitamente extrai o
+     * cStat de DENTRO de retEvento, nunca um xpath genérico). O brief
+     * original fazia um xpath plano `//nfe:cStat` direto na resposta —
+     * exatamente o bug já corrigido (e coberto por teste,
+     * MotorNfeEmitirTest::test_extrair_cstat_evento_ignora_cstat_de_lote_
+     * usa_cstat_do_evento) em extrairCStatEvento(). Sem essa correção,
+     * cancelar() reportaria "não confirmado" mesmo em cancelamentos
+     * registrados com sucesso, porque o cStat de lote (tipicamente ~128,
+     * "Lote de Evento Processado") nunca bate com os códigos de sucesso do
+     * EVENTO. Corrigido reutilizando extrairCStatEvento() em vez de
+     * duplicar o parsing.
+     *
+     * Códigos de sucesso 135/136 = evento registrado (vinculado ou não) —
+     * mesma tabela usada por tentarEpec(). 155 = específico de
+     * EVT_CANCELA, confirmado no próprio vendor: Complements::
+     * addEnvEventoProtocol() monta $cStatValids = ['135','136'] e só
+     * adiciona '155' quando $tpEvento == Tools::EVT_CANCELA
+     * (Complements.php ~314-317) — a hipótese do brief pros 3 códigos já
+     * batia com o vendor real.
+     */
+    private function processarRespostaCancelamento(string $respostaXml, string $chave): EmissaoResultado
+    {
+        $cStat = $this->extrairCStatEvento($respostaXml);
+        if ($cStat === null) {
+            return EmissaoResultado::erro('Resposta do cancelamento não pôde ser interpretada.', $chave);
+        }
+
+        if (in_array($cStat, ['135', '136', '155'], true)) {
+            return EmissaoResultado::cancelada($chave);
+        }
+
+        return EmissaoResultado::erro("Cancelamento não confirmado (cStat={$cStat}).", $chave);
+    }
+
+    /**
+     * Retransmite uma NF-e em CONTINGENCIA — usada pela reconciliação
+     * agendada (Task 8) e por um reenvio manual futuro. [decisão do spec]
+     * Consulta sefazConsultaChave() PRIMEIRO: se já está autorizada (a
+     * transmissão pode ter chegado apesar do timeout que causou o EPEC),
+     * apenas concilia localmente em vez de reenviar às cegas — mesma lição
+     * das rodadas 7/8 do fluxo de pagamento (ack perdido não significa que o
+     * efeito não aconteceu).
+     */
+    public function retransmitir(NotaFiscal $nota, string $ambiente): EmissaoResultado
+    {
+        if (empty($nota->chave_acesso)) {
+            return EmissaoResultado::erro(
+                'NF-e em contingência sem chave de acesso — não é possível retransmitir.',
+                $nota->referencia_externa,
+            );
+        }
+
+        $statusAtual = $this->consultar($nota->chave_acesso, $ambiente);
+        if ($statusAtual->status === 'AUTORIZADA') {
+            return $statusAtual; // já autorizada de verdade — só concilia, não reenvia.
+        }
+
+        if (empty($nota->xml_retorno)) {
+            return EmissaoResultado::erro(
+                'NF-e em contingência sem XML salvo — não é possível retransmitir.',
+                $nota->referencia_externa,
+            );
+        }
+
+        // CORRIGIDO vs. o brief — mesmo achado documentado em consultar():
+        // Configuracao::first() precisa estar DENTRO do try/catch. Aqui
+        // não é exercido pelos testes desta task (o teste "sem xml salvo"
+        // retorna antes de chegar aqui), mas é a mesma classe de bug —
+        // corrigido por consistência, já que este bloco é código novo desta
+        // task, não o emitir() já aprovado.
+        try {
+            $cfg = Configuracao::first();
+            if (! $cfg) {
+                return EmissaoResultado::erro('Configurações da empresa não encontradas.', $nota->referencia_externa);
+            }
+
+            $dados       = $this->certificados->obter($cfg);
+            $certificate = Certificate::readPfx($dados['pfx'], $dados['senha']);
+            $tools       = new Tools($this->configJson($cfg, $ambiente), $certificate);
+            $tools->model(55);
+
+            // Reenvia o MESMO xml salvo (com tpEmis=4 já embutido pelo EPEC
+            // original) — nunca remontamos o XML aqui. A chave de acesso
+            // codifica o tipo de emissão; remontar mudaria a chave já
+            // impressa no DANFE de contingência entregue ao cliente.
+            $resp = $tools->sefazEnviaLote([$nota->xml_retorno], (string) $nota->numero, 1);
+
+            return $this->processarRespostaAutorizacao($resp, $nota->referencia_externa, $nota->xml_retorno);
+        } catch (\Throwable $e) {
+            Log::warning(
+                'MotorNfe: falha ao retransmitir NF-e em contingência.',
+                ['erro' => $e->getMessage(), 'nota_id' => $nota->id],
+            );
+            return EmissaoResultado::erro('Falha ao retransmitir: ' . $e->getMessage(), $nota->referencia_externa);
+        }
     }
 }
