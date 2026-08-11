@@ -15,6 +15,12 @@ export default function EmpresaPage() {
   const [uploadingCert, setUploadingCert] = useState(false)
   const [ativando, setAtivando] = useState(false)
 
+  const [inutSerie, setInutSerie] = useState('')
+  const [inutInicial, setInutInicial] = useState('')
+  const [inutFinal, setInutFinal] = useState('')
+  const [inutJustificativa, setInutJustificativa] = useState('')
+  const [inutilizando, setInutilizando] = useState(false)
+
   useEffect(() => {
     api.get('/configuracoes').then(r => {
       setForm(r.data)
@@ -68,6 +74,32 @@ export default function EmpresaPage() {
       toast(msg ?? 'Erro ao ativar emissão.', 'danger')
     } finally {
       setAtivando(false)
+    }
+  }
+
+  async function inutilizarNumeracao() {
+    if (!inutSerie || !inutInicial || !inutFinal) { toast('Preencha série, número inicial e número final.', 'danger'); return }
+    if (Number(inutFinal) < Number(inutInicial)) { toast('Número final não pode ser menor que o inicial.', 'danger'); return }
+    if (inutJustificativa.trim().length < 15) { toast('Justificativa precisa ter pelo menos 15 caracteres.', 'danger'); return }
+
+    setInutilizando(true)
+    try {
+      const r = await api.post('/notas-fiscais/inutilizar-numeracao', {
+        serie: Number(inutSerie),
+        numero_inicial: Number(inutInicial),
+        numero_final: Number(inutFinal),
+        justificativa: inutJustificativa,
+      })
+      toast(r.data.message ?? 'Faixa de numeração inutilizada com sucesso!', 'success')
+      setInutSerie('')
+      setInutInicial('')
+      setInutFinal('')
+      setInutJustificativa('')
+    } catch (e: unknown) {
+      const msg = (e as { response?: { data?: { message?: string } } })?.response?.data?.message
+      toast(msg ?? 'Erro ao inutilizar numeração.', 'danger')
+    } finally {
+      setInutilizando(false)
     }
   }
 
@@ -206,6 +238,44 @@ export default function EmpresaPage() {
         <button onClick={salvar} disabled={saving} className="font-display"
           style={{ marginTop: 24, padding: '10px 28px', background: saving ? 'var(--muted)' : 'var(--accent)', color: '#000', borderRadius: 8, border: 'none', fontWeight: 800, fontSize: 16, cursor: saving ? 'not-allowed' : 'pointer' }}>
           {saving ? 'Salvando...' : 'Salvar Empresa'}
+        </button>
+      </div>
+
+      {/* Ação administrativa pontual, uso raro: fecha uma faixa de numeração
+          de NF-e que ficou sem uso (ex.: queda de processo entre alocar o
+          número e transmitir). Deliberadamente separada do card principal —
+          não é dado cadastral da empresa. */}
+      <div style={{ background: 'var(--card)', borderRadius: 12, border: '1px solid var(--border)', padding: 28, marginTop: 24 }}>
+        <p style={{ color: 'var(--muted)', fontSize: 12, fontWeight: 600, textTransform: 'uppercase' as const, letterSpacing: '0.06em', margin: '0 0 4px' }}>
+          Ação administrativa · NF-e
+        </p>
+        <h2 className="font-display" style={{ fontSize: 20, fontWeight: 800, color: 'var(--text)', margin: '0 0 6px' }}>
+          Inutilização de Numeração
+        </h2>
+        <p style={{ color: 'var(--muted)', fontSize: 13, margin: '0 0 16px' }}>
+          Fecha junto à SEFAZ uma faixa de números de NF-e que nunca chegou a ser transmitida (ex.: falha do sistema entre alocar o número e enviar). Use apenas quando tiver certeza de que os números da faixa não serão reaproveitados.
+        </p>
+        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 16 }}>
+          <div>
+            <label style={lStyle}>Série</label>
+            <input type="number" min={1} value={inutSerie} onChange={e => setInutSerie(e.target.value)} style={iStyle} placeholder="1" />
+          </div>
+          <div>
+            <label style={lStyle}>Número inicial</label>
+            <input type="number" min={1} value={inutInicial} onChange={e => setInutInicial(e.target.value)} style={iStyle} />
+          </div>
+          <div>
+            <label style={lStyle}>Número final</label>
+            <input type="number" min={1} value={inutFinal} onChange={e => setInutFinal(e.target.value)} style={iStyle} />
+          </div>
+          <div style={{ gridColumn: '1 / -1' }}>
+            <label style={lStyle}>Justificativa (mínimo 15 caracteres)</label>
+            <textarea value={inutJustificativa} onChange={e => setInutJustificativa(e.target.value)} style={{ ...iStyle, minHeight: 70, resize: 'vertical' as const, fontFamily: 'inherit' }} />
+          </div>
+        </div>
+        <button type="button" onClick={inutilizarNumeracao} disabled={inutilizando} className="font-display"
+          style={{ marginTop: 16, padding: '10px 24px', background: inutilizando ? 'var(--muted)' : 'var(--danger)', color: '#fff', borderRadius: 8, border: 'none', fontWeight: 800, fontSize: 14, cursor: inutilizando ? 'not-allowed' : 'pointer' }}>
+          {inutilizando ? 'Inutilizando…' : 'Inutilizar faixa'}
         </button>
       </div>
     </div>

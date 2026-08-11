@@ -996,4 +996,90 @@ class MotorNfe
             return EmissaoResultado::erro('Falha ao retransmitir: ' . $e->getMessage(), $nota->referencia_externa);
         }
     }
+
+    /**
+     * Inutiliza uma faixa de numeração não usada (queda de processo entre
+     * alocar o número e transmitir, ver spec Seção B). Ação administrativa
+     * pontual, não parte do fluxo normal de emissão — não persiste como
+     * `NotaFiscal` (ver NotaFiscalController::inutilizarNumeracao()).
+     *
+     * cStat de sucesso VERIFICADO CONTRA O VENDOR REAL, não só a hipótese do
+     * brief: vendor/nfephp-org/sped-nfe/src/Complements.php::
+     * addInutNFeProtocol() — o próprio método do pacote que processa esse
+     * retorno internamente — faz `if ($cStat != 102) { throw ...; }`
+     * (Complements.php ~182). 102 é exatamente o cStat que o pacote
+     * instalado neste projeto trata como sucesso de inutilização, não uma
+     * suposição não verificada. Confirmado também no XSD
+     * (schemes/PL_009_V4/leiauteInutNFe_v4.00.xsd, TRetInutNFe): `cStat` é
+     * um campo DIRETO de `infInut` — ao contrário de cancelar()/tentarEpec()
+     * (retEnvEvento, cStat de LOTE antes de retEvento/infEvento/cStat), aqui
+     * não existe "cStat de lote" concorrente, então o xpath plano
+     * `//nfe:cStat` já pega o campo certo sem ambiguidade (mesma situação de
+     * consultar()/processarRespostaConsulta(), documentada lá).
+     *
+     * Assinatura real de `Tools::sefazInutiliza()` (Tools.php ~194) é
+     * `(int $nSerie, int $nIni, int $nFin, string $xJust, ?int $tpAmb = null,
+     * ?string $ano = null): string` — os 4 primeiros parâmetros batem com o
+     * brief; `$tpAmb`/`$ano` ficam null (default), porque `$tpAmb` já vem do
+     * `configJson($cfg, $ambiente)` passado ao construtor de `Tools`
+     * (`$this->tpAmb` interno), mesmo padrão que os outros métodos deste
+     * arquivo já usam pra não duplicar a decisão de ambiente.
+     */
+    public function inutilizar(int $serie, int $numeroInicial, int $numeroFinal, string $justificativa, string $ambiente): EmissaoResultado
+    {
+        // Defensivo: o controller já valida numero_final >= numero_inicial
+        // (regra `gte:numero_inicial`), mas este método público pode ser
+        // chamado por qualquer outro caller futuro (console command, job)
+        // sem passar pelo controller — falhar local e rápido aqui é melhor
+        // que gastar uma chamada real à SEFAZ com uma faixa sem sentido.
+        if ($numeroFinal < $numeroInicial) {
+            return EmissaoResultado::erro('Número final não pode ser menor que o número inicial.');
+        }
+
+        // CORRIGIDO vs. o brief — mesmo achado já documentado em
+        // consultar()/cancelar()/retransmitir(): `Configuracao::first()`
+        // precisa estar DENTRO do try/catch. Sem conexão de banco disponível
+        // (ambiente de teste sem DB, ver MotorNfeInutilizarTest),
+        // `Model::resolveConnection()` lança um `\Error` fatal, não uma
+        // `\Exception` — escaparia incapturado se ficasse fora do try, como
+        // o brief original propunha.
+        try {
+            $cfg = Configuracao::first();
+            if (! $cfg) {
+                return EmissaoResultado::erro('Configurações da empresa não encontradas.');
+            }
+
+            $dados       = $this->certificados->obter($cfg);
+            $certificate = Certificate::readPfx($dados['pfx'], $dados['senha']);
+            $tools       = new Tools($this->configJson($cfg, $ambiente), $certificate);
+            $tools->model(55);
+
+            $resp = $tools->sefazInutiliza($serie, $numeroInicial, $numeroFinal, $justificativa);
+
+            $sxml = @simplexml_load_string($resp);
+            if ($sxml === false) {
+                return EmissaoResultado::erro('Resposta da SEFAZ não pôde ser interpretada.');
+            }
+            $sxml->registerXPathNamespace('nfe', 'http://www.portalfiscal.inf.br/nfe');
+            $cStat = (string) ($sxml->xpath('//nfe:cStat')[0] ?? '');
+
+            // 102 = Inutilização homologada — confirmado contra o vendor
+            // real (ver docblock do método).
+            if ($cStat === '102') {
+                // [decisão do brief, preservada] reusa o status "efeito
+                // concluído" de cancelada() pra sinalizar sucesso —
+                // inutilização não é bem "nota cancelada", mas criar um
+                // status novo só pra essa ação administrativa pontual (que
+                // não persiste como NotaFiscal) seria over-engineering; o
+                // controller só precisa saber "deu certo" ou "erro com
+                // mensagem X", que os dois status já cobrem.
+                return EmissaoResultado::cancelada();
+            }
+
+            $xMotivo = (string) ($sxml->xpath('//nfe:xMotivo')[0] ?? '');
+            return EmissaoResultado::erro("Inutilização não homologada (cStat={$cStat}): {$xMotivo}");
+        } catch (\Throwable $e) {
+            return EmissaoResultado::erro('Falha ao inutilizar numeração: ' . $e->getMessage());
+        }
+    }
 }

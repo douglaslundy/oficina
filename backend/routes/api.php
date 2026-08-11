@@ -290,6 +290,7 @@ Route::middleware(['tenant', 'auth:sanctum', 'role:ADMIN,FINANCEIRO'])->group(fu
     Route::post('notas-fiscais/{id}/emitir',   [NotaFiscalController::class, 'emitir']);
     Route::post('notas-fiscais/{id}/cancelar', [NotaFiscalController::class, 'cancelar']);
     Route::post('notas-fiscais/download-zip',  [NotaFiscalController::class, 'downloadZip']);
+    Route::post('notas-fiscais/inutilizar-numeracao', [NotaFiscalController::class, 'inutilizarNumeracao']);
 });
 
 // ─── Relatórios — ADMIN e FINANCEIRO ─────────────────────────────────────────

@@ -329,4 +329,34 @@ class NotaFiscalController extends Controller
 
         return response()->download($zipPath, 'notas_fiscais.zip')->deleteFileAfterSend(true);
     }
+
+    /**
+     * Inutiliza uma faixa de numeração de NF-e não usada (queda de processo
+     * entre alocar o número e transmitir). Ação administrativa pontual — não
+     * cria/atualiza uma NotaFiscal, não faz parte do fluxo normal de
+     * emissão. Ver MotorNfe::inutilizar() pro cStat de sucesso e a
+     * verificação contra o vendor.
+     */
+    public function inutilizarNumeracao(Request $request): JsonResponse
+    {
+        $validated = $request->validate([
+            'serie'          => ['required', 'integer', 'min:1'],
+            'numero_inicial' => ['required', 'integer', 'min:1'],
+            'numero_final'   => ['required', 'integer', 'gte:numero_inicial'],
+            'justificativa'  => ['required', 'string', 'min:15'],
+        ]);
+
+        $ambiente = \App\Models\Configuracao::first()?->ambiente_fiscal ?? 'HOMOLOGACAO';
+
+        $resultado = app(\App\Services\Fiscal\NfePhp\MotorNfe::class)->inutilizar(
+            $validated['serie'], $validated['numero_inicial'], $validated['numero_final'],
+            $validated['justificativa'], $ambiente,
+        );
+
+        if ($resultado->status !== 'CANCELADA') {
+            return response()->json(['message' => $resultado->mensagemErro ?? 'Falha ao inutilizar numeração.'], 422);
+        }
+
+        return response()->json(['message' => 'Faixa de numeração inutilizada com sucesso.']);
+    }
 }
