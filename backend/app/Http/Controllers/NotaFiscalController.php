@@ -173,9 +173,26 @@ class NotaFiscalController extends Controller
         $ambiente = \App\Models\Configuracao::first()?->ambiente_fiscal ?? 'HOMOLOGACAO';
         $ref      = $nota->referencia_externa ?: ('nf-' . $nota->id);
 
+        // Finding 3 do fix wave pós-revisão da Etapa C2 (2026-08-11): NF-e via
+        // NFEPHP tem numeração PRÓPRIA (Configuracao::proximo_numero_nfe, via
+        // MotorNfe::proximoNumeroNfe()), independente do contador Spedy/Focus
+        // (NfeService::proximoNumeroNf()). Chamar proximoNumeroNf() aqui
+        // incondicionalmente queimava um número do contador ERRADO pra toda
+        // NF-e NFEPHP, além do número real que MotorNfe::emitir() aloca por
+        // conta própria — dois contadores, dois números, só um dos dois
+        // (o errado) ficava persistido nesta chamada inicial. Pra
+        // NFEPHP + NF-e, não alocamos nada aqui: `numero` fica null até o
+        // resultado de fato voltar (MotorNfe já aloca e agora repassa o
+        // número real via EmissaoResultado::numero — Finding 3/4 em
+        // MotorNfe.php/EmissaoResultado.php). Demais combinações provedor/
+        // modelo mantêm o comportamento anterior.
+        $numeroInicial = ($provedor === 'NFEPHP' && $nota->modelo === 'NF-e')
+            ? null
+            : $this->nfeService->proximoNumeroNf();
+
         $nota->update([
             'status'             => 'PROCESSANDO',
-            'numero'             => $this->nfeService->proximoNumeroNf(),
+            'numero'             => $numeroInicial,
             'provedor'           => $provedor,
             'ambiente'           => $ambiente,
             'referencia_externa' => $ref,
@@ -184,16 +201,29 @@ class NotaFiscalController extends Controller
         try {
             $resultado = $this->nfeService->emitir($nota);
             $nota->update([
-                'status'       => $resultado['status'],
-                'chave_acesso' => $resultado['chave'],
-                'protocolo'    => $resultado['protocolo'],
-                'xml_retorno'  => $resultado['xml_retorno'],
+                'status'             => $resultado['status'],
+                'chave_acesso'       => $resultado['chave'],
+                'protocolo'          => $resultado['protocolo'],
+                'xml_retorno'        => $resultado['xml_retorno'],
                 // Para NF-e o número que importa legalmente é o atribuído pela
-                // Focus/SEFAZ na própria série, não o contador interno gravado antes
-                // da emissão. Fallback pro valor já existente se o provedor não
+                // Focus/SEFAZ (ou alocado por MotorNfe, no caso NFEPHP) na
+                // própria série, não o contador interno gravado antes da
+                // emissão. Fallback pro valor já existente se o provedor não
                 // retornar um número (mantém o comportamento atual pra NFS-e).
-                'numero'       => isset($resultado['numero']) ? (int) $resultado['numero'] : $nota->numero,
-                'emitido_em'   => $resultado['status'] === 'AUTORIZADA' ? now() : null,
+                // Checagem explícita `!== null` (não `isset()`) — este
+                // codebase já reincidiu na confusão "0 é valor ausente"
+                // várias vezes; embora um `numero` legítimo nunca seja 0,
+                // fica inequívoco.
+                'numero'             => $resultado['numero'] !== null ? (int) $resultado['numero'] : $nota->numero,
+                // Finding 1 do fix wave: contingência EPEC produz uma NF-e
+                // legalmente válida a partir do momento em que o evento é
+                // registrado — a reconciliação agendada (Task 8) precisa
+                // saber DESDE QUANDO a nota está em contingência pra decidir
+                // quando alertar/tentar transmitir de novo. Sem persistir
+                // isso aqui, contingencia_desde nunca é setado e a janela de
+                // 7 dias (RNF da spec) não tem de onde contar.
+                'contingencia_desde' => $resultado['status'] === 'CONTINGENCIA' ? now() : null,
+                'emitido_em'         => $resultado['status'] === 'AUTORIZADA' ? now() : null,
             ]);
 
             // Billing e alertas só em PRODUCAO e quando AUTORIZADA.
