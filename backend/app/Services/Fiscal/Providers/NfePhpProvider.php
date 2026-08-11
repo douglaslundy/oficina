@@ -9,6 +9,7 @@ use App\Services\Fiscal\Data\EmissaoResultado;
 use App\Services\Fiscal\Data\EmissorData;
 use App\Services\Fiscal\Data\NotaFiscalData;
 use App\Services\Fiscal\Data\RegistroResultado;
+use App\Services\Fiscal\NfePhp\MotorNfe;
 use App\Services\Fiscal\NfePhp\MotorNfse;
 
 class NfePhpProvider implements FiscalProvider
@@ -53,23 +54,30 @@ class NfePhpProvider implements FiscalProvider
 
     public function emitir(NotaFiscalData $nota): EmissaoResultado
     {
-        if ($nota->modelo === 'NFE') {
-            return EmissaoResultado::rejeitada(
-                'Emissão de NF-e pelo motor NFePHP ainda não disponível neste sistema. Use Focus NFe ou aguarde uma etapa futura.',
-                $nota->referenciaExterna,
-            );
+        return $nota->modelo === 'NFE'
+            ? app(MotorNfe::class)->emitir($nota, $this->ambiente)
+            : app(MotorNfse::class)->emitir($nota, $this->ambiente);
+    }
+
+    public function consultar(string $referencia, string $modelo = 'NFSE'): EmissaoResultado
+    {
+        return $modelo === 'NFE'
+            ? app(MotorNfe::class)->consultar($referencia, $this->ambiente)
+            : app(MotorNfse::class)->consultar($referencia, $this->ambiente);
+    }
+
+    public function cancelar(string $referencia, string $motivo, string $modelo = 'NFSE'): EmissaoResultado
+    {
+        if ($modelo === 'NFE') {
+            // MotorNfe::cancelar() exige o protocolo original (sefazCancela()
+            // não aceita só a chave) — NfePhpProvider não tem acesso à
+            // NotaFiscal aqui (só à referência/motivo, mesma limitação da
+            // interface genérica). O controller precisa buscar o protocolo
+            // e usar uma via alternativa — ver Task 7 pra como isso é
+            // resolvido no NotaFiscalController::cancelar().
+            throw new \RuntimeException('Cancelamento de NF-e via NfePHP requer o protocolo original — chame MotorNfe::cancelar() diretamente a partir do controller, não via FiscalProvider::cancelar().');
         }
 
-        return app(MotorNfse::class)->emitir($nota, $this->ambiente);
-    }
-
-    public function consultar(string $referencia): EmissaoResultado
-    {
-        return app(MotorNfse::class)->consultar($referencia, $this->ambiente);
-    }
-
-    public function cancelar(string $referencia, string $motivo): EmissaoResultado
-    {
         return app(MotorNfse::class)->cancelar($referencia, $motivo, $this->ambiente);
     }
 }

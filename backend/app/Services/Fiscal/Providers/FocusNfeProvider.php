@@ -91,7 +91,7 @@ class FocusNfeProvider implements FiscalProvider
         return $this->resultadoNfeDe($resp->json(), $nota->referenciaExterna);
     }
 
-    public function consultar(string $referencia): EmissaoResultado
+    public function consultar(string $referencia, string $modelo = 'NFSE'): EmissaoResultado
     {
         $resp = Http::withBasicAuth($this->emissorToken ?? $this->masterToken, '')
             ->get("{$this->baseUrl}/v2/nfse/{$referencia}");
@@ -103,7 +103,7 @@ class FocusNfeProvider implements FiscalProvider
         return $this->resultadoDe($resp->json(), $referencia);
     }
 
-    public function cancelar(string $referencia, string $motivo): EmissaoResultado
+    public function cancelar(string $referencia, string $motivo, string $modelo = 'NFSE'): EmissaoResultado
     {
         $resp = Http::withBasicAuth($this->emissorToken ?? $this->masterToken, '')
             ->delete("{$this->baseUrl}/v2/nfse/{$referencia}", [
