@@ -20,6 +20,15 @@ export default function EmpresaPage() {
   const [inutFinal, setInutFinal] = useState('')
   const [inutJustificativa, setInutJustificativa] = useState('')
   const [inutilizando, setInutilizando] = useState(false)
+  // Finding 6 do fix wave pós-revisão da Etapa C2 (2026-08-11): inutilização
+  // é irreversível junto à SEFAZ (fecha a faixa de números pra sempre) —
+  // mesma classe de ação do cancelamento de NF em fiscal/historico/page.tsx,
+  // que já usa um modal de confirmação em vez de disparar a chamada direto
+  // no clique do botão. Replicado aqui: `inutModal` só guarda um booleano
+  // "há uma confirmação pendente" (os valores em si já vivem nos estados
+  // inutSerie/inutInicial/inutFinal/inutJustificativa acima, únicos também
+  // usados na chamada real).
+  const [inutModal, setInutModal] = useState(false)
 
   useEffect(() => {
     api.get('/configuracoes').then(r => {
@@ -77,11 +86,17 @@ export default function EmpresaPage() {
     }
   }
 
-  async function inutilizarNumeracao() {
+  // Valida os campos e abre o modal de confirmação — a chamada real fica em
+  // confirmarInutilizacao(), disparada só pelo botão "Confirmar" do modal.
+  function inutilizarNumeracao() {
     if (!inutSerie || !inutInicial || !inutFinal) { toast('Preencha série, número inicial e número final.', 'danger'); return }
     if (Number(inutFinal) < Number(inutInicial)) { toast('Número final não pode ser menor que o inicial.', 'danger'); return }
     if (inutJustificativa.trim().length < 15) { toast('Justificativa precisa ter pelo menos 15 caracteres.', 'danger'); return }
 
+    setInutModal(true)
+  }
+
+  async function confirmarInutilizacao() {
     setInutilizando(true)
     try {
       const r = await api.post('/notas-fiscais/inutilizar-numeracao', {
@@ -91,6 +106,7 @@ export default function EmpresaPage() {
         justificativa: inutJustificativa,
       })
       toast(r.data.message ?? 'Faixa de numeração inutilizada com sucesso!', 'success')
+      setInutModal(false)
       setInutSerie('')
       setInutInicial('')
       setInutFinal('')
@@ -278,6 +294,52 @@ export default function EmpresaPage() {
           {inutilizando ? 'Inutilizando…' : 'Inutilizar faixa'}
         </button>
       </div>
+
+      {/* Modal de confirmação de inutilização — mesmo padrão do modal de
+          cancelamento de NF em fiscal/historico/page.tsx (Finding 6 do fix
+          wave): ação irreversível junto à SEFAZ, não dispara direto no
+          clique do botão. */}
+      {inutModal && (
+        <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.6)', zIndex: 1000, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+          <div style={{ background: 'var(--card)', border: '1px solid var(--border)', borderRadius: 12, padding: 32, width: 440, maxWidth: '90vw' }}>
+            <h3 className="font-display" style={{ fontSize: 20, fontWeight: 800, color: 'var(--text)', marginBottom: 8 }}>
+              Confirmar Inutilização de Numeração
+            </h3>
+            <p style={{ color: 'var(--muted)', fontSize: 14, marginBottom: 20 }}>
+              Esta ação fecha a faixa junto à SEFAZ e não pode ser desfeita. Confira os dados antes de continuar.
+            </p>
+            <div style={{ background: 'var(--bg)', border: '1px solid var(--border)', borderRadius: 8, padding: '12px 16px', marginBottom: 20 }}>
+              <p style={{ color: 'var(--text)', fontSize: 14, margin: '0 0 6px' }}>
+                Série <strong>{inutSerie}</strong> · Números <strong>{inutInicial}</strong> a <strong>{inutFinal}</strong>
+              </p>
+              <p style={{ color: 'var(--muted)', fontSize: 13, margin: 0 }}>
+                {inutJustificativa}
+              </p>
+            </div>
+            <div style={{ display: 'flex', gap: 12, marginTop: 24, justifyContent: 'flex-end' }}>
+              <button
+                onClick={() => setInutModal(false)}
+                disabled={inutilizando}
+                style={{ background: 'none', border: '1px solid var(--border)', color: 'var(--muted)', borderRadius: 8, padding: '8px 20px', cursor: 'pointer', fontSize: 14 }}
+              >
+                Voltar
+              </button>
+              <button
+                onClick={confirmarInutilizacao}
+                disabled={inutilizando}
+                style={{
+                  background: 'var(--danger)', color: '#fff', border: 'none', borderRadius: 8,
+                  padding: '8px 20px', fontSize: 14,
+                  cursor: inutilizando ? 'not-allowed' : 'pointer',
+                  opacity: inutilizando ? 0.6 : 1,
+                }}
+              >
+                {inutilizando ? 'Inutilizando...' : 'Confirmar Inutilização'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   )
 }
