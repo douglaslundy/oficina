@@ -931,6 +931,17 @@ class MotorNfe
      * apenas concilia localmente em vez de reenviar às cegas — mesma lição
      * das rodadas 7/8 do fluxo de pagamento (ack perdido não significa que o
      * efeito não aconteceu).
+     *
+     * AJUSTADO na Task 8: o mesmo raciocínio vale para CANCELADA — se a
+     * consulta prévia mostra que a SEFAZ já homologou o cancelamento
+     * (cStat 101/151, ver processarRespostaConsulta()), a nota foi
+     * cancelada por fora (ex.: admin cancelou manualmente enquanto ela
+     * estava em contingência) e reenviar o lote de qualquer forma só
+     * gastaria uma chamada à SEFAZ para, na prática, ser rejeitado — sem
+     * este guard, o comando de reconciliação hourly (Task 8) reenviaria a
+     * mesma nota cancelada todo hour, indefinidamente, até o prazo de 7
+     * dias estourar. Achado da revisão da Task 5, endereçado aqui porque é
+     * o único lugar que chama retransmitir() em loop.
      */
     public function retransmitir(NotaFiscal $nota, string $ambiente): EmissaoResultado
     {
@@ -942,8 +953,8 @@ class MotorNfe
         }
 
         $statusAtual = $this->consultar($nota->chave_acesso, $ambiente);
-        if ($statusAtual->status === 'AUTORIZADA') {
-            return $statusAtual; // já autorizada de verdade — só concilia, não reenvia.
+        if ($statusAtual->status === 'AUTORIZADA' || $statusAtual->status === 'CANCELADA') {
+            return $statusAtual; // já autorizada ou cancelada de verdade — só concilia, não reenvia.
         }
 
         if (empty($nota->xml_retorno)) {

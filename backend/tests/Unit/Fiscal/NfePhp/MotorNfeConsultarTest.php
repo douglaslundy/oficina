@@ -4,6 +4,7 @@ declare(strict_types=1);
 namespace Tests\Unit\Fiscal\NfePhp;
 
 use App\Models\NotaFiscal;
+use App\Services\Fiscal\Data\EmissaoResultado;
 use App\Services\Fiscal\NfePhp\MotorNfe;
 use PHPUnit\Framework\TestCase;
 
@@ -43,6 +44,32 @@ class MotorNfeConsultarTest extends TestCase
         $resultado = $motor->retransmitir($nota, 'HOMOLOGACAO');
 
         $this->assertContains($resultado->status, ['ERRO']);
+    }
+
+    /**
+     * Task 8: se a consulta prévia mostra que a nota já foi cancelada na
+     * SEFAZ (ex.: admin cancelou manualmente enquanto ela estava em
+     * contingência), retransmitir() precisa parar aí — não pode cair no
+     * sefazEnviaLote() de novo. Sem este guard, o comando de reconciliação
+     * hourly reenviaria a mesma nota cancelada indefinidamente. Mocka só
+     * consultar() (I/O real de SEFAZ) e mantém retransmitir() real.
+     */
+    public function test_retransmitir_com_consulta_cancelada_nao_reenvia(): void
+    {
+        $nota = new NotaFiscal([
+            'referencia_externa' => 'nfe-cancelada',
+            'chave_acesso'       => str_repeat('1', 44),
+            'xml_retorno'        => '<xml>ja teria sido reenviado se chegasse aqui</xml>',
+        ]);
+
+        $motor = $this->getMockBuilder(MotorNfe::class)
+            ->onlyMethods(['consultar'])
+            ->getMock();
+        $motor->method('consultar')->willReturn(EmissaoResultado::cancelada($nota->chave_acesso));
+
+        $resultado = $motor->retransmitir($nota, 'HOMOLOGACAO');
+
+        $this->assertSame('CANCELADA', $resultado->status);
     }
 
     public function test_processar_resposta_consulta_reconhece_cstat_100_autorizada(): void
