@@ -176,18 +176,12 @@ class NotaFiscalController extends Controller
         // Finding 3 do fix wave pós-revisão da Etapa C2 (2026-08-11): NF-e via
         // NFEPHP tem numeração PRÓPRIA (Configuracao::proximo_numero_nfe, via
         // MotorNfe::proximoNumeroNfe()), independente do contador Spedy/Focus
-        // (NfeService::proximoNumeroNf()). Chamar proximoNumeroNf() aqui
-        // incondicionalmente queimava um número do contador ERRADO pra toda
-        // NF-e NFEPHP, além do número real que MotorNfe::emitir() aloca por
-        // conta própria — dois contadores, dois números, só um dos dois
-        // (o errado) ficava persistido nesta chamada inicial. Pra
-        // NFEPHP + NF-e, não alocamos nada aqui: `numero` fica null até o
-        // resultado de fato voltar (MotorNfe já aloca e agora repassa o
-        // número real via EmissaoResultado::numero — Finding 3/4 em
-        // MotorNfe.php/EmissaoResultado.php). Demais combinações provedor/
-        // modelo mantêm o comportamento anterior.
+        // (NfeService::proximoNumeroNf()). Pra NFEPHP + NF-e, preservamos
+        // $nota->numero existente (permite retry reutilizar número reservado
+        // em tentativa anterior). Demais combinações provedor/modelo alocam
+        // novo número via proximoNumeroNf().
         $numeroInicial = ($provedor === 'NFEPHP' && $nota->modelo === 'NF-e')
-            ? null
+            ? $nota->numero
             : $this->nfeService->proximoNumeroNf();
 
         $nota->update([

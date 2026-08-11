@@ -1056,7 +1056,7 @@ class MotorNfe
             // impressa no DANFE de contingência entregue ao cliente.
             $resp = $tools->sefazEnviaLote([$nota->xml_retorno], (string) $nota->numero, 1);
 
-            return $this->processarRespostaAutorizacao($resp, $nota->referencia_externa, $nota->xml_retorno);
+            return $this->processarRespostaAutorizacao($resp, $nota->referencia_externa, $nota->xml_retorno, (string) $nota->numero);
         } catch (\Throwable $e) {
             Log::warning(
                 'MotorNfe: falha ao retransmitir NF-e em contingência.',
