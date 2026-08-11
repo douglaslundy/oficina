@@ -20,4 +20,16 @@ class DanfeRendererTest extends TestCase
         $this->assertSame([], $dados['itens']);
         $this->assertSame($nota, $dados['nota']);
     }
+
+    public function test_dados_para_template_com_xml_malformado_cai_no_fallback_sem_lancar(): void
+    {
+        $nota = new NotaFiscal(['numero' => 1, 'valor_total' => 100, 'xml_retorno' => '<<<not valid xml']);
+        $nota->setRelation('itens', collect());
+
+        $renderer = new DanfeRenderer();
+        $dados = $renderer->dadosParaTemplate($nota);
+
+        $this->assertSame([], $dados['itens']);
+        $this->assertSame($nota, $dados['nota']);
+    }
 }

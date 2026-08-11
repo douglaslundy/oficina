@@ -20,14 +20,26 @@ class DanfeRenderer
 {
     public function dadosParaTemplate(NotaFiscal $nota): array
     {
+        // simplexml_load_string() retorna `false` (não `null`) quando o XML
+        // é inválido/malformado — o operador nullsafe (?->) só faz
+        // short-circuit em `null`, então chamar ->registerXPathNamespace()
+        // direto num `false` lançaria um \Error fatal ("Call to a member
+        // function ... on bool"), derrubando a request inteira em vez de
+        // cair no fallback pra notas_fiscais_itens que este método promete.
+        // Checagem explícita `=== false` ANTES de qualquer chamada de
+        // método — mesmo padrão já usado (e corrigido pelo mesmo motivo) em
+        // MotorNfe::processarRespostaAutorizacao()/extrairCStatEvento().
         $sxml = null;
         if (!empty($nota->xml_retorno)) {
-            $sxml = @simplexml_load_string($nota->xml_retorno);
-            $sxml?->registerXPathNamespace('nfe', 'http://www.portalfiscal.inf.br/nfe');
+            $sxmlCarregado = @simplexml_load_string($nota->xml_retorno);
+            if ($sxmlCarregado !== false) {
+                $sxml = $sxmlCarregado;
+                $sxml->registerXPathNamespace('nfe', 'http://www.portalfiscal.inf.br/nfe');
+            }
         }
 
         $itens = [];
-        if ($sxml !== null && $sxml !== false) {
+        if ($sxml !== null) {
             foreach ($sxml->xpath('//nfe:det') as $det) {
                 $prod = $det->prod;
                 $itens[] = [
