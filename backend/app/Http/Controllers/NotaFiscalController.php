@@ -180,9 +180,18 @@ class NotaFiscalController extends Controller
         // $nota->numero existente (permite retry reutilizar número reservado
         // em tentativa anterior). Demais combinações provedor/modelo alocam
         // novo número via proximoNumeroNf().
-        $numeroInicial = ($provedor === 'NFEPHP' && $nota->modelo === 'NF-e')
-            ? $nota->numero
-            : $this->nfeService->proximoNumeroNf();
+        // Fix round 3: a checagem de "mesmo provedor" tem que usar
+        // $nota->provedor (o provedor de QUANDO o número foi reservado, lido
+        // aqui ANTES do update() abaixo sobrescrever) e não $provedor (o
+        // provedor recém-resolvido pra ESTA tentativa). Sem isso, uma nota
+        // rejeitada sob Spedy/Focus e reenviada após o admin trocar o
+        // provedor pra NFEPHP reaproveitava o número alocado pelo contador
+        // errado.
+        if ($provedor === 'NFEPHP' && $nota->modelo === 'NF-e') {
+            $numeroInicial = ($nota->provedor === 'NFEPHP') ? $nota->numero : null;
+        } else {
+            $numeroInicial = $this->nfeService->proximoNumeroNf();
+        }
 
         $nota->update([
             'status'             => 'PROCESSANDO',
