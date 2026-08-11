@@ -1,13 +1,27 @@
 # Progresso do Projeto
 
 ## Última atualização
-2026-07-24
+2026-08-11
 
 ## Tarefa em andamento
-Correções pós-deploy reportadas pelo usuário em produção — código pronto,
-commitado (`45019f0`), **deployado na VPS e verificado** (domínios
-`stuntmotos` e `oficina-do-lundy` respondendo 200, containers saudáveis).
-Falta o usuário validar manualmente na tela da oficina.
+**Etapa C2 (NF-e via NFePHP/sped-nfe + contingência EPEC) CONCLUÍDA e
+MERGEADA na `main`** (commit `4da0f3a`). SDD completo: 9 tasks + revisão
+final de branch inteira (3 Críticos + achados Importantes mais graves) +
+3 rodadas de fix pós-revisão (2 achados residuais Críticos + 1 achado
+Importante novo, todos corrigidos e re-revisados) + merge manual cuidadoso
+com a `main` (que havia recebido a feature NFC-e inteira nesse meio-tempo,
+exatamente o "Risco #4" documentado no spec — 8 arquivos em conflito,
+resolvidos um a um, incluindo 2 conflitos semânticos que o merge automático
+do git teria resolvido errado silenciosamente: uma variável `$ehNfe`
+descartada em `NfeService::montarNotaData()` e um método `consultar()`
+duplicado em `FocusNfeProvider`). Testes: 182 passando (só as 3 falhas
+pré-existentes de ambiente local em `CertificadoStoreTest`, sem Postgres).
+Worktree e branch `worktree-etapa-c1-nfephp-nfse` removidos após o merge.
+
+**Falta**: `git push` pra `origin/main` (40 commits locais à frente,
+aguardando decisão do usuário) e validação manual em homologação real
+contra a SEFAZ-MG (nunca testado com credencial real em nenhuma etapa
+fiscal deste projeto).
 
 ## Contexto necessário
 - Itens reportados pelo usuário (todos em `oficinas/[id]` do saas-admin):
@@ -1058,6 +1072,64 @@ autocorretor pra "deploy"). Fluxo:
     CI ou banco de teste dedicado antes de considerar a Etapa A 100%
     coberta. Nunca rodar `php artisan test` na VPS de produção
     (`RefreshDatabase` dropa o banco).
+
+## Rodada 26 (2026-08-11) — Etapa C2 CONCLUÍDA (9 tasks + 3 rodadas de fix pós-revisão) e MERGEADA na `main`
+
+Continuação direta da Rodada 24 (spec/plano) no worktree
+`worktree-etapa-c1-nfephp-nfse`, via `superpowers:subagent-driven-development`.
+
+- 9 tasks implementadas (numeração própria da NF-e, schema de contingência,
+  `MotorNfe::montarNfe()`/`emitir()`+EPEC/`consultar()`/`cancelar()`/
+  `retransmitir()`/`inutilizar()`, dispatch por modelo em `NfePhpProvider`,
+  `DanfeRenderer`, comando `ReconciliarContingenciaNfe` — reconciliação
+  horária do prazo de 7 dias da contingência EPEC —, inutilização de
+  numeração). Vários bugs reais da biblioteca vendor `nfephp-org/sped-nfe`
+  encontrados e contornados (o mais grave: `Tools::sefazEPEC()` da v5.2.8
+  instalada é inalcançável por uma contradição interna do próprio pacote —
+  reimplementado à mão com os métodos públicos do vendor).
+- Revisão final de branch inteira: 3 Críticos + Importantes. Usuário
+  escolheu corrigir os 3 Críticos + os Importantes mais graves (achados
+  4/5/6). Onda de fix + re-revisão encontraram 2 NOVOS Críticos introduzidos
+  pela própria onda (argumento faltante em `retransmitir()`; fix de um
+  achado anulando o fix de outro) — corrigidos em fix round 2. A re-revisão
+  do round 2 achou mais 1 Importante novo (reaproveitamento de número entre
+  troca de provedor fiscal) — corrigido no fix round 3. Ledger completo
+  (`.superpowers/sdd/2026-08-10-etapa-c2-nfe-epec/progress.md`) apagado após
+  a revisão final fechar limpa, por decisão do usuário a cada achado
+  residual (nunca um loop automático silencioso).
+- **Merge manual pra `main`** (commit `4da0f3a`) — o "Risco #4" do spec se
+  concretizou: a `main` tinha recebido a NFC-e inteira desde que o worktree
+  foi criado (39 commits vs. 24 commits de divergência mútua). 8 arquivos em
+  conflito, resolvidos um a um. Dois eram conflitos SEMÂNTICOS que o
+  merge automático do git escondeu (nenhum marcador `<<<<<<<` neles, mas o
+  resultado quebraria em runtime se aceito sem revisão):
+  1. `NfeService::montarNotaData()` — a `main` reescreveu o trecho ao redor
+     pra suportar NFC-e (`$modeloInterno`/`$temItens`) exatamente onde a
+     Etapa C2 definia `$ehNfe`; o git descartou a linha de `$ehNfe` sem
+     marcar conflito, deixando uma variável indefinida (fatal em runtime).
+     Corrigido: `$numeroJaReservado` agora usa `$modeloInterno === 'NFE'`.
+  2. `FocusNfeProvider.php` — o algoritmo de diff do git alinhou o método
+     `emitirNfce()` (da `main`) com um header duplicado de `consultar()` (da
+     Etapa C2) que colidiria com o `consultar()` completo já existente mais
+     abaixo no arquivo (`Cannot redeclare`). Corrigido removendo o header
+     duplicado.
+  Outros 2 conflitos exigiram reconciliação de lógica (não só escolher um
+  lado): `NotaFiscalController::emitir()` precisou combinar a alocação de
+  número da NFC-e (contador próprio) com a alocação NF-e/NFEPHP
+  (preserva-em-retry, contador próprio, guarda contra troca de provedor); o
+  helper `aplicarResultadoEmissao()` (extraído pela `main` pra
+  NFC-e/`status()`) precisou ganhar a persistência de `contingencia_desde`
+  que a Etapa C2 exigia, sem perder `qrcode_url`/billing que a `main` já
+  fazia. `composer.lock` regenerado via `composer update --lock
+  --ignore-platform-reqs` (mesma limitação de ambiente já documentada —
+  extensões `pcntl`/`soap` ausentes localmente).
+- Testes após o merge: 182 passando, só as 3 falhas pré-existentes de
+  ambiente local (`CertificadoStoreTest`, sem OpenSSL compatível — não
+  relacionado a este trabalho). `tsc --noEmit` limpo no frontend.
+- Worktree e branch `worktree-etapa-c1-nfephp-nfse` removidos após o merge
+  confirmado limpo (usuário escolheu "merge local", não PR).
+- **Não empurrado pro GitHub ainda** — `main` local está 40 commits à
+  frente de `origin/main`, aguardando decisão do usuário sobre o push.
 
 ## Rodada 25 (mesma sessão, 2026-08-10) — NFC-e IMPLEMENTADA via SDD, commitada e enviada ao GitHub
 
