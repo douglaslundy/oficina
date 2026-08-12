@@ -26,6 +26,7 @@ interface ItemPreview {
   tributacao_icms: string | null
   unidade_xml: string | null
   fiscal_pendente: boolean
+  sera_atualizado: boolean
 }
 
 interface NotaPreview {
@@ -37,6 +38,7 @@ interface NotaPreview {
   fornecedor_cnpj: string | null
   valor_total: number
   ja_lancada: boolean
+  atualizacao_fiscal_disponivel: boolean
   itens: ItemPreview[]
   xml_original: string
 }
@@ -123,8 +125,36 @@ export default function EntradaNfPage() {
     }
   }
 
+  async function handleAtualizarFiscal() {
+    if (!preview) return
+    setConfirming(true)
+    try {
+      const res = await api.post<{ produtos_atualizados: number }>('/entradas-nf/atualizar-fiscal', {
+        chave_acesso: preview.chave_acesso,
+        itens: itens
+          .filter(i => i.matched && i.produto_id)
+          .map(i => ({
+            produto_id: i.produto_id,
+            ncm: i.ncm,
+            cest: i.cest,
+            origem: i.origem,
+            tributacao_icms: i.tributacao_icms,
+          })),
+      })
+      toast(`${res.data.produtos_atualizados} produto(s) atualizado(s).`, 'success')
+      router.push('/produtos')
+    } catch (err: unknown) {
+      const e = err as { response?: { data?: { message?: string } } }
+      toast(e.response?.data?.message ?? 'Erro ao atualizar dados fiscais.', 'danger')
+    } finally {
+      setConfirming(false)
+    }
+  }
+
   const totalCalculado = itens.reduce((acc, i) => acc + i.quantidade * i.valor_unitario, 0)
-  const podeConfirmar = !!preview && !preview.ja_lancada && itens.length > 0 && !confirming
+  const modoAtualizacaoFiscal = !!preview && preview.ja_lancada && preview.atualizacao_fiscal_disponivel
+  const podeConfirmar = !!preview && !confirming && itens.length > 0
+    && (modoAtualizacaoFiscal || !preview.ja_lancada)
 
   return (
     <div style={{ maxWidth: 1100, margin: '0 auto' }}>
@@ -177,9 +207,16 @@ export default function EntradaNfPage() {
                 </p>
               </div>
             </div>
-            {preview.ja_lancada && (
+            {preview.ja_lancada && !modoAtualizacaoFiscal && (
               <p style={{ color: 'var(--danger)', fontSize: 13, marginTop: 16, marginBottom: 0 }}>
                 Esta nota fiscal já foi lançada anteriormente. Não é possível confirmar de novo.
+              </p>
+            )}
+            {modoAtualizacaoFiscal && (
+              <p style={{ color: 'var(--accent)', fontSize: 13, marginTop: 16, marginBottom: 0 }}>
+                Esta nota já foi lançada. {itens.filter(i => i.sera_atualizado).length} produto(s) têm dados
+                fiscais pendentes que serão atualizados a partir deste XML. Nenhum estoque ou produto novo
+                será alterado.
               </p>
             )}
           </div>
@@ -189,7 +226,10 @@ export default function EntradaNfPage() {
               <table style={{ width: '100%', borderCollapse: 'collapse' }}>
                 <thead>
                   <tr>
-                    {['Cód. barras', 'Descrição', 'Status', 'Categoria', 'Qtd', 'Custo', 'Venda', 'Fiscal', ''].map(h => (
+                    {(modoAtualizacaoFiscal
+                      ? ['Cód. barras', 'Descrição', 'Fiscal (XML)']
+                      : ['Cód. barras', 'Descrição', 'Status', 'Categoria', 'Qtd', 'Custo', 'Venda', 'Fiscal', '']
+                    ).map(h => (
                       <th key={h} style={{ padding: '10px 12px', textAlign: 'left', fontSize: 12, fontWeight: 600, color: 'var(--muted)', textTransform: 'uppercase', borderBottom: '1px solid var(--border)' }}>{h}</th>
                     ))}
                   </tr>
@@ -204,36 +244,46 @@ export default function EntradaNfPage() {
                         <input style={inputStyle} value={item.nome} disabled={item.matched}
                           onChange={e => updateItem(idx, 'nome', e.target.value)} />
                       </td>
-                      <td style={{ padding: '8px 12px', borderBottom: '1px solid var(--border)' }}>
-                        <span style={{
-                          padding: '3px 8px', borderRadius: 6, fontSize: 11, fontWeight: 700,
-                          background: item.matched ? 'rgba(67,160,71,0.15)' : 'rgba(245,166,35,0.15)',
-                          color: item.matched ? 'var(--success)' : 'var(--accent)',
-                        }}>
-                          {item.matched ? 'Existente' : 'Novo'}
-                        </span>
-                      </td>
-                      <td style={{ padding: '8px 12px', borderBottom: '1px solid var(--border)' }}>
-                        {item.matched ? (
-                          <span style={{ color: 'var(--muted)', fontSize: 13 }}>{item.categoria}</span>
-                        ) : (
-                          <select style={inputStyle} value={item.categoria} onChange={e => updateItem(idx, 'categoria', e.target.value)}>
-                            {CATEGORIAS.map(c => <option key={c} value={c}>{c}</option>)}
-                          </select>
-                        )}
-                      </td>
-                      <td style={{ padding: '8px 12px', borderBottom: '1px solid var(--border)', width: 80 }}>
-                        <input type="number" min={0.01} step="0.01" style={inputStyle} value={item.quantidade}
-                          onChange={e => updateItem(idx, 'quantidade', Math.max(0.01, parseFloat(e.target.value) || 0))} />
-                      </td>
-                      <td style={{ padding: '8px 12px', borderBottom: '1px solid var(--border)', width: 100 }}>
-                        <input type="number" min={0} step="0.01" style={inputStyle} value={item.valor_unitario}
-                          onChange={e => updateItem(idx, 'valor_unitario', Math.max(0, parseFloat(e.target.value) || 0))} />
-                      </td>
-                      <td style={{ padding: '8px 12px', borderBottom: '1px solid var(--border)', width: 100 }}>
-                        <input type="number" min={0} step="0.01" style={inputStyle} value={item.preco_venda} disabled={item.matched}
-                          onChange={e => updateItem(idx, 'preco_venda', Math.max(0, parseFloat(e.target.value) || 0))} />
-                      </td>
+                      {!modoAtualizacaoFiscal && (
+                        <td style={{ padding: '8px 12px', borderBottom: '1px solid var(--border)' }}>
+                          <span style={{
+                            padding: '3px 8px', borderRadius: 6, fontSize: 11, fontWeight: 700,
+                            background: item.matched ? 'rgba(67,160,71,0.15)' : 'rgba(245,166,35,0.15)',
+                            color: item.matched ? 'var(--success)' : 'var(--accent)',
+                          }}>
+                            {item.matched ? 'Existente' : 'Novo'}
+                          </span>
+                        </td>
+                      )}
+                      {!modoAtualizacaoFiscal && (
+                        <td style={{ padding: '8px 12px', borderBottom: '1px solid var(--border)' }}>
+                          {item.matched ? (
+                            <span style={{ color: 'var(--muted)', fontSize: 13 }}>{item.categoria}</span>
+                          ) : (
+                            <select style={inputStyle} value={item.categoria} onChange={e => updateItem(idx, 'categoria', e.target.value)}>
+                              {CATEGORIAS.map(c => <option key={c} value={c}>{c}</option>)}
+                            </select>
+                          )}
+                        </td>
+                      )}
+                      {!modoAtualizacaoFiscal && (
+                        <td style={{ padding: '8px 12px', borderBottom: '1px solid var(--border)', width: 80 }}>
+                          <input type="number" min={0.01} step="0.01" style={inputStyle} value={item.quantidade}
+                            onChange={e => updateItem(idx, 'quantidade', Math.max(0.01, parseFloat(e.target.value) || 0))} />
+                        </td>
+                      )}
+                      {!modoAtualizacaoFiscal && (
+                        <td style={{ padding: '8px 12px', borderBottom: '1px solid var(--border)', width: 100 }}>
+                          <input type="number" min={0} step="0.01" style={inputStyle} value={item.valor_unitario}
+                            onChange={e => updateItem(idx, 'valor_unitario', Math.max(0, parseFloat(e.target.value) || 0))} />
+                        </td>
+                      )}
+                      {!modoAtualizacaoFiscal && (
+                        <td style={{ padding: '8px 12px', borderBottom: '1px solid var(--border)', width: 100 }}>
+                          <input type="number" min={0} step="0.01" style={inputStyle} value={item.preco_venda} disabled={item.matched}
+                            onChange={e => updateItem(idx, 'preco_venda', Math.max(0, parseFloat(e.target.value) || 0))} />
+                        </td>
+                      )}
                       <td style={{ padding: '8px 12px', borderBottom: '1px solid var(--border)', fontSize: 12 }}>
                         {item.fiscal_pendente ? (
                           <span style={{ color: 'var(--accent)' }} title="Faltou NCM ou situação tributária no XML — o produto entrará com pendência fiscal">
@@ -248,15 +298,17 @@ export default function EntradaNfPage() {
                           </span>
                         )}
                       </td>
-                      <td style={{ padding: '8px 12px', borderBottom: '1px solid var(--border)' }}>
-                        <button type="button" onClick={() => removeItem(idx)}
-                          style={{ background: 'none', border: 'none', color: 'var(--danger)', cursor: 'pointer', fontSize: 16 }}
-                          title="Remover item">✕</button>
-                      </td>
+                      {!modoAtualizacaoFiscal && (
+                        <td style={{ padding: '8px 12px', borderBottom: '1px solid var(--border)' }}>
+                          <button type="button" onClick={() => removeItem(idx)}
+                            style={{ background: 'none', border: 'none', color: 'var(--danger)', cursor: 'pointer', fontSize: 16 }}
+                            title="Remover item">✕</button>
+                        </td>
+                      )}
                     </tr>
                   ))}
                   {itens.length === 0 && (
-                    <tr><td colSpan={9} style={{ padding: 24, textAlign: 'center', color: 'var(--muted)' }}>Nenhum item na nota.</td></tr>
+                    <tr><td colSpan={modoAtualizacaoFiscal ? 3 : 9} style={{ padding: 24, textAlign: 'center', color: 'var(--muted)' }}>Nenhum item na nota.</td></tr>
                   )}
                 </tbody>
               </table>
@@ -268,13 +320,14 @@ export default function EntradaNfPage() {
               style={{ padding: '10px 20px', borderRadius: 8, background: 'transparent', border: '1px solid var(--border)', color: 'var(--muted)', cursor: 'pointer' }}>
               Cancelar
             </button>
-            <button type="button" onClick={handleConfirmar} disabled={!podeConfirmar} className="font-display"
+            <button type="button" onClick={modoAtualizacaoFiscal ? handleAtualizarFiscal : handleConfirmar}
+              disabled={!podeConfirmar} className="font-display"
               style={{
                 padding: '10px 28px', borderRadius: 8, border: 'none', fontWeight: 800, fontSize: 16,
                 background: podeConfirmar ? 'var(--accent)' : 'var(--muted)', color: '#000',
                 cursor: podeConfirmar ? 'pointer' : 'not-allowed',
               }}>
-              {confirming ? 'Confirmando...' : 'Confirmar Entrada'}
+              {confirming ? 'Confirmando...' : modoAtualizacaoFiscal ? 'Atualizar dados fiscais' : 'Confirmar Entrada'}
             </button>
           </div>
         </>
