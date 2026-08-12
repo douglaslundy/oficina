@@ -22,11 +22,26 @@ sem servidor de dev/DB local.
 Anterior a isso: **Etapa C2 (NF-e via NFePHP/sped-nfe + contingência
 EPEC) CONCLUÍDA e MERGEADA na `main`** (commit `4da0f3a`, ver Rodada 26).
 
-**Falta**: `git push` pra `origin/main` (commits locais à frente,
-aguardando decisão do usuário), validação manual em homologação real
-contra a SEFAZ-MG (nunca testado com credencial real em nenhuma etapa
-fiscal deste projeto), e validação manual do fluxo de atualização fiscal
-descrito acima.
+**DEPLOY FEITO em 2026-08-12** (`git push` + `git pull` + `bash
+deploy-vps.sh` na VPS 144.91.92.70, commit `346db5c`, confirmado com
+`https://saas.dlsistemas.com.br/api/health` → 200 e as 7 migrations
+pendentes rodadas). **Achado real durante o deploy** (não era timeout, era
+bug de verdade): `backend/Dockerfile.prod` nunca instalava `ext-soap`, e
+`sped-nfe`/`sped-common`/`sped-gtin` (Etapa C1/C2, NFePHP) exigem essa
+extensão — o `composer install` falhava no build da imagem prod (mesmo
+Dockerfile compartilhado por `backend`/`worker`/`scheduler`). Nunca foi
+pego antes porque o backend local roda nativo, sem Docker — este foi o
+primeiro deploy real desde que essas dependências entraram. Corrigido
+(commit `346db5c`, adiciona `soap` no `docker-php-ext-install`) e
+redeploy bem-sucedido. Confirmado antes de deployar: nenhuma oficina em
+produção usa o provedor NFEPHP ainda (motor dormente, sem risco de
+emissão real quebrada).
+
+**Ainda falta**: validação manual em homologação real contra a SEFAZ-MG
+(nunca testado com credencial real em nenhuma etapa fiscal deste
+projeto — o código está no ar, mas ninguém o usa de verdade ainda), e
+validação manual do fluxo de atualização fiscal via nota duplicada
+(Task 3, roteiro de 5 passos do plano, nunca rodado no browser).
 
 ## Próxima tarefa (retomar exatamente aqui)
 Investigação Spedy `/v1/orders` (Rodada 23) — releitura da doc via WebFetch
