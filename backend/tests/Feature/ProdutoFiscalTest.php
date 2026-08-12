@@ -187,6 +187,68 @@ class ProdutoFiscalTest extends TestCase
         $this->assertSame('XML', $produto->fiscal_fonte);
     }
 
+    // ── haveriaMudanca(): checagem seca, sem escrever nada ──────────────
+
+    public function test_haveria_mudanca_true_quando_campo_vazio_seria_preenchido(): void
+    {
+        [$oficina] = $this->criarOficinaComAdmin();
+        $produto = Produto::create([
+            'nome' => 'Correia', 'sku' => 'COR-02', 'categoria' => 'Motor', 'oficina_id' => $oficina->id,
+        ]);
+
+        $service = new \App\Services\Fiscal\ProdutoFiscalService();
+        $resultado = $service->haveriaMudanca($produto, ['ncm' => '84212300']);
+
+        $this->assertTrue($resultado);
+        $this->assertNull($produto->fresh()->ncm); // confirma que NÃO escreveu nada
+    }
+
+    public function test_haveria_mudanca_false_quando_valores_ja_batem(): void
+    {
+        [$oficina] = $this->criarOficinaComAdmin();
+        $produto = Produto::create([
+            'nome' => 'Correia', 'sku' => 'COR-03', 'categoria' => 'Motor', 'oficina_id' => $oficina->id,
+            'ncm' => '84212300', 'fiscal_fonte' => 'MANUAL', 'fiscal_revisado_em' => now(),
+        ]);
+
+        $service = new \App\Services\Fiscal\ProdutoFiscalService();
+        $resultado = $service->haveriaMudanca($produto, ['ncm' => '84212300']);
+
+        $this->assertFalse($resultado);
+    }
+
+    public function test_haveria_mudanca_true_quando_diverge_e_nao_ha_divergencia_aberta(): void
+    {
+        [$oficina] = $this->criarOficinaComAdmin();
+        $produto = Produto::create([
+            'nome' => 'Correia', 'sku' => 'COR-04', 'categoria' => 'Motor', 'oficina_id' => $oficina->id,
+            'ncm' => '11111111', 'fiscal_fonte' => 'MANUAL', 'fiscal_revisado_em' => now(),
+        ]);
+
+        $service = new \App\Services\Fiscal\ProdutoFiscalService();
+        $resultado = $service->haveriaMudanca($produto, ['ncm' => '22222222']);
+
+        $this->assertTrue($resultado);
+    }
+
+    public function test_haveria_mudanca_false_quando_mesma_divergencia_ja_esta_aberta(): void
+    {
+        [$oficina] = $this->criarOficinaComAdmin();
+        $produto = Produto::create([
+            'nome' => 'Correia', 'sku' => 'COR-05', 'categoria' => 'Motor', 'oficina_id' => $oficina->id,
+            'ncm' => '11111111', 'fiscal_fonte' => 'MANUAL', 'fiscal_revisado_em' => now(),
+        ]);
+        \App\Models\ProdutoFiscalDivergencia::create([
+            'oficina_id' => $oficina->id, 'produto_id' => $produto->id,
+            'campo' => 'ncm', 'valor_atual' => '11111111', 'valor_xml' => '22222222',
+        ]);
+
+        $service = new \App\Services\Fiscal\ProdutoFiscalService();
+        $resultado = $service->haveriaMudanca($produto, ['ncm' => '22222222']);
+
+        $this->assertFalse($resultado);
+    }
+
     // ── Endpoint de pendências fiscais ───────────────────────────────────
 
     public function test_pendencias_fiscais_lista_produto_sem_ncm_e_divergencia_aberta(): void

@@ -58,6 +58,32 @@ class ProdutoFiscalService
     }
 
     /**
+     * Diz se aplicarDoXml() mudaria algo neste produto — sem escrever
+     * nada. Usado pra decidir se uma nota já lançada tem algo de fato pra
+     * reportar (ver EntradaNfController::atualizarFiscal()).
+     */
+    public function haveriaMudanca(Produto $produto, array $fiscalXml): bool
+    {
+        foreach (self::CAMPOS as $campo) {
+            $doXml = $this->sanitizar($campo, $fiscalXml[self::ORIGEM_XML[$campo]] ?? null);
+            $atual = $produto->{$campo};
+
+            switch (PoliticaConflitoFiscal::decidir($atual, $doXml)) {
+                case PoliticaConflitoFiscal::PREENCHER:
+                    return true;
+
+                case PoliticaConflitoFiscal::DIVERGENCIA:
+                    if (!$this->divergenciaJaAberta($produto, $campo, $doXml)) {
+                        return true;
+                    }
+                    break;
+            }
+        }
+
+        return false;
+    }
+
+    /**
      * Preenche os campos ainda vazios do produto com o padrão da categoria.
      * Marca a fonte como PADRAO — é um chute assistido, não um dado
      * conferido, e a tela de pendências precisa saber a diferença.
@@ -128,6 +154,15 @@ class ProdutoFiscalService
         return is_string($valor) ? $valor : (string) $valor;
     }
 
+    private function divergenciaJaAberta(Produto $produto, string $campo, mixed $doXml): bool
+    {
+        return ProdutoFiscalDivergencia::where('produto_id', $produto->id)
+            ->where('campo', $campo)
+            ->whereNull('resolvido_em')
+            ->where('valor_xml', (string) $doXml)
+            ->exists();
+    }
+
     private function registrarDivergencia(
         Produto $produto,
         string $campo,
@@ -135,13 +170,7 @@ class ProdutoFiscalService
         mixed $doXml,
         ?string $notaEntradaId,
     ): void {
-        $jaAberta = ProdutoFiscalDivergencia::where('produto_id', $produto->id)
-            ->where('campo', $campo)
-            ->whereNull('resolvido_em')
-            ->where('valor_xml', (string) $doXml)
-            ->exists();
-
-        if ($jaAberta) {
+        if ($this->divergenciaJaAberta($produto, $campo, $doXml)) {
             return;
         }
 
