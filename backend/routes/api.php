@@ -245,6 +245,7 @@ Route::middleware(['tenant', 'auth:sanctum', 'role:ADMIN,ATENDENTE'])->group(fun
     Route::post('produtos/{produto}/marcar-revisado', [ProdutoFiscalController::class, 'marcarRevisado']);
     Route::post('entradas-nf/parse', [EntradaNfController::class, 'parse']);
     Route::post('entradas-nf', [EntradaNfController::class, 'store']);
+    Route::post('entradas-nf/atualizar-fiscal', [EntradaNfController::class, 'atualizarFiscal']);
     Route::put('categorias-fiscais', [CategoriaPadraoFiscalController::class, 'update']);
 });
 

@@ -20,7 +20,7 @@ use Illuminate\Support\Str;
 
 class EntradaNfController extends Controller
 {
-    public function parse(Request $request, NotaEntradaXmlParser $parser): JsonResponse
+    public function parse(Request $request, NotaEntradaXmlParser $parser, ProdutoFiscalService $fiscalService): JsonResponse
     {
         $request->validate([
             'arquivo' => ['required', 'file', 'max:2048'],
@@ -38,7 +38,11 @@ class EntradaNfController extends Controller
         $markup          = (float) ($config?->markup_padrao_entrada_nf ?? 40);
         $qtyMinimaPadrao = (int) ($config?->estoque_limite_padrao ?? 5);
 
-        $itens = array_map(function (array $item) use ($markup, $qtyMinimaPadrao) {
+        $jaLancada = $dados['chave_acesso']
+            ? NotaEntrada::where('chave_acesso', $dados['chave_acesso'])->exists()
+            : false;
+
+        $itens = array_values(array_filter(array_map(function (array $item) use ($markup, $qtyMinimaPadrao, $jaLancada, $fiscalService) {
             $produto = $item['codigo_barras']
                 ? Produto::where('codigo_barras', $item['codigo_barras'])->first()
                 : null;
@@ -65,7 +69,14 @@ class EntradaNfController extends Controller
                     'cst_csosn'       => $item['cst_csosn'],
                     'tributacao_icms' => $item['tributacao_icms'],
                     'fiscal_pendente' => $item['ncm'] === null || $item['tributacao_icms'] === null,
+                    'sera_atualizado' => $jaLancada ? $fiscalService->haveriaMudanca($produto, $item) : false,
                 ];
+            }
+
+            // Nota já lançada: item sem produto correspondente não tem o
+            // que atualizar (este fluxo nunca cria produto novo) — descarta.
+            if ($jaLancada) {
+                return null;
             }
 
             $custo = $item['valor_unitario'];
@@ -91,12 +102,9 @@ class EntradaNfController extends Controller
                 'cst_csosn'       => $item['cst_csosn'],
                 'tributacao_icms' => $item['tributacao_icms'],
                 'fiscal_pendente' => $item['ncm'] === null || $item['tributacao_icms'] === null,
+                'sera_atualizado' => false,
             ];
-        }, $dados['itens']);
-
-        $jaLancada = $dados['chave_acesso']
-            ? NotaEntrada::where('chave_acesso', $dados['chave_acesso'])->exists()
-            : false;
+        }, $dados['itens']), fn ($item) => $item !== null));
 
         return response()->json([
             'numero_nf'       => $dados['numero_nf'],
@@ -107,6 +115,7 @@ class EntradaNfController extends Controller
             'fornecedor_cnpj' => $dados['fornecedor_cnpj'],
             'valor_total'     => $dados['valor_total'],
             'ja_lancada'      => $jaLancada,
+            'atualizacao_fiscal_disponivel' => $jaLancada && collect($itens)->contains('sera_atualizado', true),
             'itens'           => $itens,
             'xml_original'    => $conteudo,
         ]);
@@ -271,6 +280,50 @@ class EntradaNfController extends Controller
         }
 
         return (new NotaEntradaResource($nota->load('itens')))->response()->setStatusCode(201);
+    }
+
+    public function atualizarFiscal(Request $request, ProdutoFiscalService $fiscalService): JsonResponse
+    {
+        $validated = $request->validate([
+            'chave_acesso'            => ['required', 'string', 'max:44'],
+            'itens'                   => ['required', 'array', 'min:1'],
+            'itens.*.produto_id'      => ['required', 'uuid', 'exists:produtos,id'],
+            'itens.*.ncm'             => ['nullable', 'string', 'max:8'],
+            'itens.*.cest'            => ['nullable', 'string', 'max:7'],
+            'itens.*.origem'          => ['nullable', 'integer', 'min:0', 'max:8'],
+            'itens.*.tributacao_icms' => ['nullable', 'string', 'in:NORMAL,ST'],
+        ]);
+
+        $notaExistente = NotaEntrada::where('chave_acesso', $validated['chave_acesso'])->first();
+        if (!$notaExistente) {
+            return response()->json([
+                'message' => 'Esta nota ainda não foi lançada — use a importação normal.',
+            ], 422);
+        }
+
+        $produtosAtualizados = 0;
+        foreach ($validated['itens'] as $item) {
+            $produto = Produto::find($item['produto_id']);
+            if (!$produto) {
+                continue;
+            }
+
+            if ($fiscalService->haveriaMudanca($produto, $item)) {
+                $fiscalService->aplicarDoXml($produto, $item, $notaExistente->id);
+                $produtosAtualizados++;
+            }
+        }
+
+        if ($produtosAtualizados === 0) {
+            return response()->json([
+                'message' => 'Esta nota fiscal já foi lançada anteriormente.',
+            ], 422);
+        }
+
+        return response()->json([
+            'message'              => 'Dados fiscais atualizados.',
+            'produtos_atualizados' => $produtosAtualizados,
+        ]);
     }
 
     public function index(): AnonymousResourceCollection
