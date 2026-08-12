@@ -1,27 +1,42 @@
 # Progresso do Projeto
 
 ## Última atualização
-2026-08-11
+2026-08-12
 
 ## Tarefa em andamento
-**Etapa C2 (NF-e via NFePHP/sped-nfe + contingência EPEC) CONCLUÍDA e
-MERGEADA na `main`** (commit `4da0f3a`). SDD completo: 9 tasks + revisão
-final de branch inteira (3 Críticos + achados Importantes mais graves) +
-3 rodadas de fix pós-revisão (2 achados residuais Críticos + 1 achado
-Importante novo, todos corrigidos e re-revisados) + merge manual cuidadoso
-com a `main` (que havia recebido a feature NFC-e inteira nesse meio-tempo,
-exatamente o "Risco #4" documentado no spec — 8 arquivos em conflito,
-resolvidos um a um, incluindo 2 conflitos semânticos que o merge automático
-do git teria resolvido errado silenciosamente: uma variável `$ehNfe`
-descartada em `NfeService::montarNotaData()` e um método `consultar()`
-duplicado em `FocusNfeProvider`). Testes: 182 passando (só as 3 falhas
-pré-existentes de ambiente local em `CertificadoStoreTest`, sem Postgres).
-Worktree e branch `worktree-etapa-c1-nfephp-nfse` removidos após o merge.
+**Plano "atualização fiscal via nota de entrada duplicada" (spec
+2026-08-11, `.superpowers/sdd/2026-08-11-atualizacao-fiscal-nota-duplicada/`)
+CONCLUÍDO — 3/3 tasks feitas e commitadas na `main`:**
+- Task 1: `ProdutoFiscalService::haveriaMudanca()` (commit `93b4edf`)
+- Task 2: `EntradaNfController::atualizarFiscal()` + `parse()` estendido +
+  rota (commit `c8c40b0`)
+- Task 3: frontend `entrada-nf/page.tsx` reagindo aos campos novos
+  (`atualizacao_fiscal_disponivel`/`sera_atualizado`), botão "Atualizar
+  dados fiscais" (commit `d046d29`)
 
-**Falta**: `git push` pra `origin/main` (40 commits locais à frente,
-aguardando decisão do usuário) e validação manual em homologação real
+`tsc --noEmit` limpo. Testes de feature da Task 2 não rodaram contra
+Postgres real (sem DB local, limitação já documentada). Verificação manual
+no browser (roteiro de 5 passos do plano) não executada neste ambiente —
+sem servidor de dev/DB local.
+
+Anterior a isso: **Etapa C2 (NF-e via NFePHP/sped-nfe + contingência
+EPEC) CONCLUÍDA e MERGEADA na `main`** (commit `4da0f3a`, ver Rodada 26).
+
+**Falta**: `git push` pra `origin/main` (commits locais à frente,
+aguardando decisão do usuário), validação manual em homologação real
 contra a SEFAZ-MG (nunca testado com credencial real em nenhuma etapa
-fiscal deste projeto).
+fiscal deste projeto), e validação manual do fluxo de atualização fiscal
+descrito acima.
+
+## Próxima tarefa (retomar exatamente aqui)
+Usuário pediu pra seguir com a investigação Spedy `/v1/orders` (cálculo
+automático de imposto) registrada na Rodada 23 (linha ~1931). Essa
+investigação foi deixada como "aguardando usuário testar em sandbox" —
+ela depende de criar conta sandbox na Spedy e rodar `/v1/orders` sem CFOP/
+CST/ICMS pra ver o que volta de verdade, e checar o que a conta Focus
+oferece em "Automations". Sem essas credenciais/testes, não há como
+avançar por código — perguntar ao usuário se ele já tem resultado do teste
+sandbox antes de tentar implementar qualquer coisa.
 
 ## Contexto necessário
 - Itens reportados pelo usuário (todos em `oficinas/[id]` do saas-admin):
