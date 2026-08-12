@@ -29,14 +29,21 @@ fiscal deste projeto), e validação manual do fluxo de atualização fiscal
 descrito acima.
 
 ## Próxima tarefa (retomar exatamente aqui)
-Usuário pediu pra seguir com a investigação Spedy `/v1/orders` (cálculo
-automático de imposto) registrada na Rodada 23 (linha ~1931). Essa
-investigação foi deixada como "aguardando usuário testar em sandbox" —
-ela depende de criar conta sandbox na Spedy e rodar `/v1/orders` sem CFOP/
-CST/ICMS pra ver o que volta de verdade, e checar o que a conta Focus
-oferece em "Automations". Sem essas credenciais/testes, não há como
-avançar por código — perguntar ao usuário se ele já tem resultado do teste
-sandbox antes de tentar implementar qualquer coisa.
+Investigação Spedy `/v1/orders` (Rodada 23) — releitura da doc via WebFetch
+feita em 2026-08-12 (ver memória `project-spedy-focus-calculo-automatico`,
+seção "Atualização 2026-08-12"): a contradição da doc foi RESOLVIDA por
+leitura (a exceção "emissão por venda via /orders" está explícita na
+própria doc) e o receio de "catálogo duplicado" caiu (item de `/v1/orders`
+não exige produto pré-cadastrado). O que falta só teste real resolve: doc
+nunca explica se a "configuração da empresa" que gera a tributação é
+granular por NCM/produto ou um único padrão pra tudo — crítico pra uma
+oficina com peças de NCM muito diferentes.
+
+**Bloqueado, aguardando o usuário**: passar a API key da conta sandbox
+Spedy (Task tracker #1, criada em 2026-08-12) pra eu rodar
+`POST /v1/orders` de verdade e inspecionar a nota gerada. Depois, checar
+"Automations" da conta Focus dele (não confirmado se disponível). Não
+implementar nada de `calculo_tributario_modo`/toggle antes desse teste.
 
 ## Contexto necessário
 - Itens reportados pelo usuário (todos em `oficinas/[id]` do saas-admin):
