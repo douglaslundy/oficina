@@ -57,6 +57,16 @@ if [ "${CONTAINER_ROLE:-web}" = "scheduler" ]; then
     exec php artisan schedule:work
 fi
 
+# Backup antes de migrar — uma migration ruim em produção não tem desfazer
+# automático. Best-effort: se o pg_dump falhar (ex.: primeiro boot, banco
+# ainda vazio), loga e segue. Só o papel "web" faz isso, e no máximo uma vez
+# por hora (evita spam de backup num crash-loop de container).
+if [ -z "$(find storage/backups -name 'backup_*pre-deploy.sql.gz' -mmin -60 2>/dev/null)" ]; then
+    echo "Gerando backup pre-deploy..."
+    php artisan backup:executar --sufixo=pre-deploy --no-interaction \
+        || echo "AVISO: backup pre-deploy falhou — seguindo com o deploy mesmo assim."
+fi
+
 # Run migrations (creates migrations table if needed, then runs all)
 echo "Running migrations..."
 php artisan migrate --force --no-interaction

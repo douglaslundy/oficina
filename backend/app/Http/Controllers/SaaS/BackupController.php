@@ -4,6 +4,7 @@ declare(strict_types=1);
 namespace App\Http\Controllers\SaaS;
 
 use App\Http\Controllers\Controller;
+use App\Services\BackupService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Symfony\Component\HttpFoundation\StreamedResponse;
@@ -12,70 +13,40 @@ class BackupController extends Controller
 {
     private string $backupPath;
 
-    public function __construct()
+    public function __construct(private readonly BackupService $backup)
     {
-        $this->backupPath = storage_path('backups');
-        if (!is_dir($this->backupPath)) {
-            mkdir($this->backupPath, 0755, true);
-        }
+        $this->backupPath = $backup->diretorio();
     }
 
     public function gerar(): JsonResponse
     {
-        $filename = 'backup_' . date('Y-m-d_H-i-s') . '.sql';
-        $filepath = $this->backupPath . '/' . $filename;
-
-        $host     = config('database.connections.pgsql.host');
-        $port     = config('database.connections.pgsql.port', 5432);
-        $database = config('database.connections.pgsql.database');
-        $username = config('database.connections.pgsql.username');
-        $password = config('database.connections.pgsql.password');
-
-        $env = 'PGPASSWORD=' . escapeshellarg((string) $password);
-        $cmd = sprintf(
-            '%s pg_dump -h %s -p %s -U %s -d %s --no-owner --no-acl --clean --if-exists -F p -f %s 2>&1',
-            $env,
-            escapeshellarg((string) $host),
-            escapeshellarg((string) $port),
-            escapeshellarg((string) $username),
-            escapeshellarg((string) $database),
-            escapeshellarg($filepath)
-        );
-
-        exec($cmd, $output, $exitCode);
-
-        if ($exitCode !== 0) {
+        try {
+            $resultado = $this->backup->gerar();
+        } catch (\Throwable $e) {
             return response()->json([
                 'message' => 'Erro ao gerar backup.',
-                'detalhe' => implode("\n", $output),
+                'detalhe' => $e->getMessage(),
             ], 500);
         }
 
-        $gzFilepath = $filepath . '.gz';
-        $source = fopen($filepath, 'rb');
-        $dest   = gzopen($gzFilepath, 'wb9');
-        while (!feof($source)) {
-            gzwrite($dest, (string) fread($source, 65536));
-        }
-        fclose($source);
-        gzclose($dest);
-        unlink($filepath);
+        // Mantém o disco sob controle mesmo com geração manual frequente.
+        $this->backup->podarAntigos((int) config('backup.manter', 14));
 
-        return response()->json([
-            'arquivo'   => $filename . '.gz',
-            'tamanho'   => filesize($gzFilepath),
-            'criado_em' => date('Y-m-d H:i:s'),
-        ]);
+        return response()->json($resultado);
     }
 
     public function listar(): JsonResponse
     {
-        $files = glob($this->backupPath . '/*.sql*') ?: [];
+        // Só .sql.gz — o .sha256 irmão é metadado, não um backup.
+        $files = glob($this->backupPath . '/*.sql.gz') ?: [];
 
         $backups = array_map(function (string $file) {
+            $sha = @file_get_contents($file . '.sha256');
             return [
                 'arquivo'   => basename($file),
                 'tamanho'   => filesize($file),
+                'checksum'  => $sha ? strtok(trim($sha), ' ') : null,
+                'integro'   => $this->backup->verificarGzip($file),
                 'criado_em' => date('Y-m-d H:i:s', (int) filemtime($file)),
             ];
         }, $files);
@@ -85,9 +56,15 @@ class BackupController extends Controller
         return response()->json(['data' => array_values($backups)]);
     }
 
+    /** Só nomes no formato exato que gerar() produz — nada de path, wildcard ou sidecar. */
+    private function nomeValido(string $arquivo): bool
+    {
+        return (bool) preg_match('/^backup_[0-9]{4}-[0-9]{2}-[0-9]{2}_[0-9]{2}-[0-9]{2}-[0-9]{2}[a-z0-9\-]*\.sql\.gz$/i', $arquivo);
+    }
+
     public function download(string $arquivo): StreamedResponse|JsonResponse
     {
-        if (str_contains($arquivo, '..') || str_contains($arquivo, '/')) {
+        if (!$this->nomeValido($arquivo)) {
             return response()->json(['message' => 'Nome de arquivo inválido.'], 422);
         }
 
@@ -113,7 +90,7 @@ class BackupController extends Controller
 
     public function apagar(string $arquivo): JsonResponse
     {
-        if (str_contains($arquivo, '..') || str_contains($arquivo, '/')) {
+        if (!$this->nomeValido($arquivo)) {
             return response()->json(['message' => 'Nome de arquivo inválido.'], 422);
         }
 
@@ -124,6 +101,7 @@ class BackupController extends Controller
         }
 
         unlink($filepath);
+        @unlink($filepath . '.sha256');
 
         return response()->json(['message' => 'Backup apagado com sucesso.']);
     }
@@ -131,7 +109,8 @@ class BackupController extends Controller
     public function importar(Request $request): JsonResponse
     {
         $request->validate([
-            'arquivo' => ['required', 'file', 'max:204800'],
+            // Alinhado com client_max_body_size do nginx (docker/nginx/mecanicapro.conf).
+            'arquivo' => ['required', 'file', 'max:512000'],
         ]);
 
         $file         = $request->file('arquivo');
@@ -149,6 +128,13 @@ class BackupController extends Controller
         $tmpSql  = null;
 
         if (str_ends_with($originalName, '.gz')) {
+            // Rejeita um .gz corrompido/truncado ANTES de mexer no banco.
+            if (!$this->backup->verificarGzip($tmpPath)) {
+                return response()->json([
+                    'message' => 'O arquivo .gz enviado está corrompido ou incompleto. Nenhum dado foi alterado.',
+                ], 422);
+            }
+
             $tmpSql = $tmpPath . '_restore.sql';
             $src    = gzopen($tmpPath, 'rb');
             $dst    = fopen($tmpSql, 'wb');

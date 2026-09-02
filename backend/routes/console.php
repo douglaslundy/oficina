@@ -16,3 +16,11 @@ Schedule::command('oficina:recalcular-status-clientes')->dailyAt('02:00')->timez
 Schedule::command('alertas:verificar')->dailyAt('07:00')->timezone('America/Sao_Paulo');
 Schedule::command('cobrancas:gerar')->dailyAt('06:00')->timezone('America/Sao_Paulo');
 Schedule::command('nfe:reconciliar-contingencia')->hourly()->timezone('America/Sao_Paulo');
+
+// Backup diário do banco. Roda no container `scheduler` (não bloqueia a API).
+// `withoutOverlapping` evita dois pg_dump concorrentes se um deploy reiniciar
+// o scheduler no meio de um backup lento.
+Schedule::command('backup:executar')
+    ->dailyAt((string) config('backup.hora_diaria', '03:00'))
+    ->timezone('America/Sao_Paulo')
+    ->withoutOverlapping(30);

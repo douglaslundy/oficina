@@ -17,7 +17,7 @@ class NotaFiscalCancelamentoProvedorTest extends TestCase
 {
     use RefreshDatabase;
 
-    private function setup(): array
+    private function montarCenario(): array
     {
         $oficina = Oficina::create([
             'nome' => 'Oficina Teste', 'slug' => 'oficina-teste', 'status' => 'ATIVA',
@@ -47,7 +47,7 @@ class NotaFiscalCancelamentoProvedorTest extends TestCase
 
     public function test_cancelamento_de_nfse_focus_chama_a_api_do_provedor(): void
     {
-        [$token, $oficina, $nota] = $this->setup();
+        [$token, $oficina, $nota] = $this->montarCenario();
         Http::fake(['*/v2/nfse/nf-abc' => Http::response([], 200)]);
 
         $this->req($token, $oficina)
@@ -60,7 +60,7 @@ class NotaFiscalCancelamentoProvedorTest extends TestCase
 
     public function test_falha_no_provedor_nao_marca_cancelada_local(): void
     {
-        [$token, $oficina, $nota] = $this->setup();
+        [$token, $oficina, $nota] = $this->montarCenario();
         Http::fake(['*/v2/nfse/nf-abc' => Http::response(['mensagem' => 'Prazo de cancelamento expirado'], 422)]);
 
         $this->req($token, $oficina)

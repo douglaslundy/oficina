@@ -96,12 +96,14 @@ Route::prefix('saas')->group(function () {
         Route::put('auth/profile',  [SaaSAuthController::class, 'updateProfile']);
         Route::put('auth/password', [SaaSAuthController::class, 'updatePassword']);
 
-        // Backup do banco
+        // Backup do banco — throttle baixo: são operações pesadas (pg_dump/psql
+        // síncronos) e raras; sem isso um token vazado enche o disco ou
+        // dispara restores em série.
         Route::get('backup/listar',              [SaaSBackupController::class, 'listar']);
-        Route::post('backup/gerar',              [SaaSBackupController::class, 'gerar']);
+        Route::post('backup/gerar',              [SaaSBackupController::class, 'gerar'])->middleware('throttle:4,60');
         Route::get('backup/{arquivo}/download',  [SaaSBackupController::class, 'download']);
         Route::delete('backup/{arquivo}',        [SaaSBackupController::class, 'apagar']);
-        Route::post('backup/importar',           [SaaSBackupController::class, 'importar']);
+        Route::post('backup/importar',           [SaaSBackupController::class, 'importar'])->middleware('throttle:3,60');
 
         // Monitor VPS
         Route::get('vps/status', [SaaSVpsController::class, 'status']);

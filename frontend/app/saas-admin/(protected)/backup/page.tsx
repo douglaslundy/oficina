@@ -9,7 +9,14 @@ type ToastType = 'success' | 'danger'
 interface Backup {
   arquivo: string
   tamanho: number
+  checksum?: string | null
+  integro?: boolean
   criado_em: string
+}
+
+function idadeEmDias(criadoEm: string): number {
+  const d = new Date(criadoEm.replace(' ', 'T'))
+  return (Date.now() - d.getTime()) / 86400000
 }
 
 function Toast({ msg, type, onClose }: { msg: string; type: ToastType; onClose: () => void }) {
@@ -81,9 +88,9 @@ export default function BackupPage() {
   async function gerarBackup() {
     setGerando(true)
     try {
-      const r = await saasApi.post<{ arquivo: string; tamanho: number }>('/saas/backup/gerar')
+      const r = await saasApi.post<{ arquivo: string; tamanho: number; checksum: string }>('/saas/backup/gerar')
       setUltimoGerado(r.data.arquivo)
-      showToast(`Backup gerado: ${r.data.arquivo}`, 'success')
+      showToast(`Backup gerado e verificado: ${r.data.arquivo}\nsha256: ${r.data.checksum}`, 'success')
       carregarLista()
     } catch (e: unknown) {
       const msg = (e as { response?: { data?: { message?: string } } })?.response?.data?.message
@@ -228,9 +235,25 @@ export default function BackupPage() {
       <div style={{ marginBottom: 24 }}>
         <h1 className="font-display" style={{ fontSize: 26, fontWeight: 800, margin: 0 }}>Backup do Banco</h1>
         <p style={{ color: 'var(--muted)', fontSize: 14, margin: '4px 0 0' }}>
-          Gere, baixe e restaure backups completos do PostgreSQL
+          Backup automático diário às 03:00. Aqui você gera sob demanda, baixa e restaura.
         </p>
       </div>
+
+      {!loadingList && (() => {
+        const maisRecente = backups[0]
+        const dias = maisRecente ? idadeEmDias(maisRecente.criado_em) : Infinity
+        if (dias <= 2) return null
+        return (
+          <div style={{
+            background: 'rgba(229,57,53,.08)', border: '1px solid var(--danger)',
+            borderRadius: 8, padding: '12px 16px', marginBottom: 20, fontSize: 13, color: 'var(--danger)', fontWeight: 600,
+          }}>
+            {maisRecente
+              ? `⚠️ O backup mais recente tem ${Math.floor(dias)} dias. Verifique se o backup automático está rodando (container "scheduler").`
+              : '⚠️ Nenhum backup encontrado no servidor. Gere um agora e verifique o backup automático.'}
+          </div>
+        )
+      })()}
 
       {/* Gerar Backup */}
       <SectionCard title="Gerar Novo Backup" subtitle="Exporta todos os dados de todas as oficinas em formato SQL comprimido (.sql.gz)">
@@ -269,7 +292,7 @@ export default function BackupPage() {
           <table style={{ width: '100%', borderCollapse: 'collapse' }}>
             <thead>
               <tr style={{ borderBottom: '1px solid var(--border)' }}>
-                {['Arquivo', 'Tamanho', 'Data', 'Ações'].map(h => (
+                {['Arquivo', 'Tamanho', 'Integridade', 'Data', 'Ações'].map(h => (
                   <th key={h} style={{
                     textAlign: 'left', padding: '8px 12px', fontSize: 12,
                     fontWeight: 600, color: 'var(--muted)', textTransform: 'uppercase',
@@ -282,9 +305,19 @@ export default function BackupPage() {
                 <tr key={b.arquivo} style={{ borderBottom: '1px solid var(--border)' }}>
                   <td style={{ padding: '10px 12px', fontSize: 13, fontFamily: 'monospace', color: 'var(--text)' }}>
                     {b.arquivo}
+                    {b.checksum && (
+                      <div style={{ fontSize: 11, color: 'var(--muted)' }} title={`sha256: ${b.checksum}`}>
+                        sha256 {b.checksum.slice(0, 16)}…
+                      </div>
+                    )}
                   </td>
                   <td style={{ padding: '10px 12px', fontSize: 13, color: 'var(--muted)' }}>
                     {formatBytes(b.tamanho)}
+                  </td>
+                  <td style={{ padding: '10px 12px', fontSize: 13 }}>
+                    {b.integro === false
+                      ? <span style={{ color: 'var(--danger)', fontWeight: 700 }}>✗ corrompido</span>
+                      : <span style={{ color: 'var(--success)' }}>✓ íntegro</span>}
                   </td>
                   <td style={{ padding: '10px 12px', fontSize: 13, color: 'var(--muted)' }}>
                     {formatarDataHora(b.criado_em)}

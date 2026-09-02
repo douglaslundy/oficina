@@ -3,6 +3,89 @@
 ## Última atualização
 2026-09-02
 
+## Rodada 29 (2026-09-02) — Auditoria + endurecimento do sistema de backup
+
+Usuário pediu revisão minuciosa do algoritmo de backup ("posso confiar no
+arquivo? está completo?"). Auditoria feita (relatório completo no chat).
+Veredito: o `pg_dump` em si é correto e consistente, mas o sistema em volta
+tinha falhas graves. Correções desta rodada:
+
+### Feito
+- **`storage/backups` agora é volume persistente** (`mecanicapro_backups`
+  em `docker-compose.prod.yml`, montado em `backend` e `scheduler`). Antes
+  ficava no filesystem efêmero do container → **todo backup era apagado no
+  próximo `deploy-vps.sh`** (build --no-cache recria o container).
+- **`App\Services\BackupService`** (novo) centraliza dump+compressão+
+  verificação+checksum+poda. `BackupController` delega pra ele.
+  - `pg_dump` ganhou **`-n public`** — sem isso o dump inclui schemas
+    `_restore_backup_*` deixados por restaurações anteriores, e o
+    `importar()` (que só renomeia `public`) não consegue restaurar de
+    volta (o `CREATE SCHEMA` do dump colide → `ON_ERROR_STOP` aborta).
+  - **Verificação de integridade real**: `verificarGzip()` descomprime e
+    confere CRC32 + ISIZE contra o trailer gzip (== `gzip -t`). `gerar()`
+    aborta se o `.gz` sair truncado (disco cheio no meio da compressão),
+    em vez de reportar sucesso. `comprimir()` checa retorno de
+    `gzwrite`/`gzclose`.
+  - **Checksum SHA-256** gravado num `.sha256` irmão e devolvido na
+    resposta; `listar()` expõe `checksum` + flag `integro` (re-verifica
+    cada arquivo).
+  - `pareceUmDump()` valida o cabeçalho `PostgreSQL database dump` antes
+    de comprimir. `.sql` parcial é apagado no caminho de erro.
+- **Backup automático diário** — `php artisan backup:executar`
+  (`ExecutarBackup`), agendado `dailyAt(config('backup.hora_diaria',
+  '03:00'))` + `withoutOverlapping`. Roda no container `scheduler`, **não
+  bloqueia a API**. `config/backup.php` novo (`BACKUP_MANTER=14`,
+  `BACKUP_HORA`).
+- **Retenção**: `podarAntigos(14)` chamado após cada backup (manual e
+  agendado) — mantém os 14 `.sql.gz` mais recentes, apaga o resto + o
+  `.sha256` irmão.
+- **Backup pré-migrate no deploy** — `docker-entrypoint.sh` roda
+  `backup:executar --sufixo=pre-deploy` antes de `migrate --force` (só
+  papel web, dedup de 1h, best-effort). Uma migration ruim em produção
+  não tinha desfazer antes.
+- **`client_max_body_size` do nginx 20M → 550M** — estava menor que o
+  `max:204800` (200M) do `importar()`, então restaurar qualquer `.gz` >
+  20M dava 413 antes de chegar no PHP. `importar()` alinhado pra
+  `max:512000` (500M).
+- **`throttle` nas rotas de backup** (`gerar` 4/h, `importar` 3/h) —
+  eram as únicas rotas SaaS pesadas sem throttle (a auditoria da Rodada 9
+  cobriu pagamento, não backup).
+- **`importar()` rejeita `.gz` corrompido ANTES de tocar no banco**
+  (`verificarGzip` no upload).
+- **Validação de nome de arquivo** em `download`/`apagar` trocada de
+  "sem `..` e `/`" por regex do formato exato de `gerar()` — `apagar()`
+  não dá mais pra remover um arquivo arbitrário do diretório.
+- **Frontend** (`saas-admin/backup`): coluna Integridade (✓ íntegro / ✗
+  corrompido), sha256 visível, banner vermelho se o backup mais recente
+  tem > 2 dias (ou nenhum).
+- **Bug pré-existente corrigido de passagem**: `NotaFiscalCancelamentoProvedorTest`
+  (Rodada 28, commit `23eca46`) tinha um método `setup()` que colide com
+  `setUp()` do PHPUnit (nomes case-insensitive) — **fatal que quebrava a
+  coleção inteira da suíte**. Renomeado pra `montarCenario()`.
+
+### NÃO feito (2ª rodada, depende de decisão sua)
+- **Backup offsite** (S3/Backblaze/rsync pra outro host). Hoje o backup
+  vive só no disco da mesma VPS que roda o banco — VPS morreu, perdeu os
+  dois. Precisa você escolher destino + credencial.
+- **Criptografia do arquivo de backup**. O `.sql.gz` tem todos os
+  segredos (certificado A1, tokens Spedy/Focus/MP, hashes de senha) —
+  gzip não é cifra. Adicionar cifra AES exige gestão de chave e um passo
+  a mais no restore.
+- **Geração manual ainda é síncrona** (bloqueia o `artisan serve`
+  single-thread durante o `pg_dump`). O backup agendado (que é o que
+  importa) não tem esse problema. Mover o manual pra fila muda a UX
+  (polling).
+- **`pg_dump` não inclui roles/globals** — restaurar num Postgres novo
+  exige recriar o usuário `mecanicapro` antes. Documentar no runbook.
+
+### Verificação
+- `php -l` limpo. `phpunit --testsuite=Unit`: **202 testes, 483
+  assertions, 0 falhas** (+5 `BackupServiceTest`, TDD).
+- `tsc --noEmit` + `npm run build` limpos.
+- `bash -n docker-entrypoint.sh` OK.
+- **Não deployado.** No primeiro deploy: o volume `mecanicapro_backups`
+  é criado vazio; o backup pré-deploy roda; o agendado começa às 03:00.
+
 ## Rodada 28 (2026-09-02) — Correções fiscais dos blocos 3/4 (itens 1,2,3,4,6) + sobras do KM
 
 Usuário pediu "resolva todas as pendências que forem possíveis". Feito o
