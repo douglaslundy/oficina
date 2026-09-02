@@ -7,9 +7,9 @@ final class NotaFiscalData
 {
     /**
      * @param array<int, array{
-     *   produto_id: string, descricao: string, ncm: string, cfop: string,
-     *   origem: int, tributacao_icms: string, cst_csosn: string,
-     *   quantidade: float, valor_unitario: float,
+     *   produto_id: string, sku: string, descricao: string, unidade: string,
+     *   ncm: string, cfop: string, origem: int, tributacao_icms: string,
+     *   cst_csosn: string, quantidade: float, valor_unitario: float,
      * }> $itens Só populado quando $modelo === 'NFE'|'NFCE'.
      */
     public function __construct(

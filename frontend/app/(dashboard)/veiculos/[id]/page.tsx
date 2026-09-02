@@ -11,9 +11,10 @@ import api from '@/lib/api'
 
 interface Proprietario { id: string; nome: string; telefone?: string | null }
 interface HistoricoProprietario { cliente_id: string; cliente_nome: string | null; data_inicio: string | null; data_fim: string | null }
-interface OsHistorico { id: string; numero: number; tipo: string; status: string; valor_total: number; valor_pago: number; mecanico: string | null; criado_em: string }
+interface OsHistorico { id: string; numero: number; tipo: string; status: string; km_atual: number | null; valor_total: number; valor_pago: number; mecanico: string | null; criado_em: string }
 interface VeiculoDetalhe {
   id: string; modelo: string; ano: number | null; placa: string | null; chassi: string | null; ativo: boolean
+  km_ultimo: number | null
   proprietario_atual: Proprietario | null
   historico_proprietarios: HistoricoProprietario[]
   historico_os: OsHistorico[]
@@ -77,6 +78,7 @@ export default function VeiculoDetailPage() {
     { key: 'numero', label: '#', render: r => <span className="font-mono">{r.numero}</span> },
     { key: 'criado_em', label: 'Data' },
     { key: 'status', label: 'Status', render: r => <StatusPill status={r.status} /> },
+    { key: 'km_atual', label: 'KM', render: r => <span className="font-mono">{r.km_atual != null ? r.km_atual.toLocaleString('pt-BR') : '-'}</span> },
     { key: 'mecanico', label: 'Mecânico', render: r => r.mecanico ?? '-' },
     { key: 'valor_total', label: 'Valor', render: r => <span className="font-mono">{formatarMoeda(r.valor_total)}</span> },
   ]
@@ -96,10 +98,11 @@ export default function VeiculoDetailPage() {
         )}
       </div>
 
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 16, marginBottom: 24 }}>
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 16, marginBottom: 24 }}>
         <StatCard title="Total de OS" value={veiculo.resumo.total_os} icon="🔧" color="var(--info)" />
         <StatCard title="Valor Total Gasto" value={formatarMoeda(veiculo.resumo.valor_total_gasto)} icon="💰" color="var(--success)" />
         <StatCard title="Última Visita" value={veiculo.resumo.ultima_visita ?? '-'} icon="📅" color="var(--accent)" />
+        <StatCard title="KM (última leitura)" value={veiculo.km_ultimo != null ? veiculo.km_ultimo.toLocaleString('pt-BR') : '-'} icon="🛣️" color="var(--muted)" />
       </div>
 
       <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 20, marginBottom: 24 }}>

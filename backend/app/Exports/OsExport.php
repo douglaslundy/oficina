@@ -23,7 +23,7 @@ class OsExport implements FromQuery, WithHeadings, WithMapping
 
     public function headings(): array
     {
-        return ['#OS', 'Cliente', 'Mecânico', 'Status', 'Valor Total', 'Valor Pago', 'Saldo', 'Data'];
+        return ['#OS', 'Cliente', 'Mecânico', 'KM', 'Status', 'Valor Total', 'Valor Pago', 'Saldo', 'Data'];
     }
 
     public function map($row): array
@@ -32,6 +32,7 @@ class OsExport implements FromQuery, WithHeadings, WithMapping
             $row->numero,
             $row->cliente?->nome ?? '-',
             $row->mecanico?->nome ?? '-',
+            $row->km_atual ?? '-',
             $row->status,
             number_format((float)$row->valor_total, 2, ',', '.'),
             number_format((float)$row->valor_pago, 2, ',', '.'),

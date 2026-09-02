@@ -24,12 +24,16 @@ class RegistrarEmissorService
             nomeFantasia: $cfg->nome_fantasia,
             inscricaoEstadual: $cfg->inscricao_estadual,
             inscricaoMunicipal: $cfg->inscricao_municipal,
-            regimeTributario: $cfg->regime_tributario ?? 'Simples Nacional',
+            // Nunca inventar o regime tributário — é decisão fiscal, não default.
+            // registrar() bloqueia antes de chegar aqui se estiver vazio.
+            regimeTributario: $cfg->regime_tributario ?? '',
             email: $cfg->email ?? '',
             telefone: $cfg->telefone,
             cep: $cfg->cep ?? '',
-            logradouro: $cfg->endereco ?? '',
-            numero: 'S/N',
+            // Campos de endereço estruturados (adicionados na Rodada 22) — não o
+            // campo `endereco` de texto livre, que não é decomponível com segurança.
+            logradouro: $cfg->logradouro ?? '',
+            numero: $cfg->numero ?: 'S/N',
             complemento: null,
             bairro: $cfg->bairro ?? '',
             cidade: $cfg->cidade ?? '',
@@ -39,12 +43,39 @@ class RegistrarEmissorService
         );
     }
 
+    /**
+     * Campos que `montarEmissorData()` precisa e que NÃO podem ser
+     * defaultados/adivinhados (decisão fiscal ou dado estruturado). Retorna a
+     * lista de rótulos faltando — vazia quando está tudo preenchido.
+     *
+     * @return list<string>
+     */
+    public static function camposFiscaisFaltando(Configuracao $cfg): array
+    {
+        $obrigatorios = [
+            'regime tributário'          => $cfg->regime_tributario,
+            'UF'                         => $cfg->uf,
+            'logradouro'                 => $cfg->logradouro,
+            'bairro'                     => $cfg->bairro,
+            'cidade'                     => $cfg->cidade,
+            'CEP'                        => $cfg->cep,
+            'código IBGE do município'   => $cfg->codigo_ibge,
+        ];
+
+        return array_keys(array_filter($obrigatorios, static fn ($v) => blank($v)));
+    }
+
     /** @return array{ok: bool, mensagem: string} */
     public function registrar(string $oficinaId): array
     {
         $cfg = Configuracao::first();
         if (!$cfg || empty($cfg->cnpj) || empty($cfg->certificado_pfx_encrypted) || empty($cfg->certificado_senha_encrypted)) {
             return ['ok' => false, 'mensagem' => 'Preencha os dados da empresa e envie o certificado (com senha) antes de ativar a emissão.'];
+        }
+
+        $faltando = self::camposFiscaisFaltando($cfg);
+        if ($faltando) {
+            return ['ok' => false, 'mensagem' => 'Complete em Configurações › Dados da Empresa antes de ativar a emissão: ' . implode(', ', $faltando) . '.'];
         }
 
         $provedor = $this->manager->provedorDaOficina($oficinaId);

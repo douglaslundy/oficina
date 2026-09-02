@@ -119,7 +119,13 @@ class NfeService
             modelo: $modeloInterno,
             itens: $temItens ? $nota->itens->map(fn ($item) => [
                 'produto_id'      => $item->produto_id,
+                // codigo_produto do provedor: SKU real do produto; cai pro UUID
+                // só quando a nota é anterior a este snapshot (coluna nula).
+                'sku'             => $item->sku ?: $item->produto_id,
                 'descricao'       => $item->descricao,
+                // uCom/unidade_comercial: unidade real do produto (Par, Cx, L…),
+                // não mais 'UN' fixo. Normalizada em caixa alta.
+                'unidade'         => strtoupper((string) ($item->unidade ?: 'UN')),
                 'ncm'             => $item->ncm,
                 'cfop'            => $item->cfop,
                 'origem'          => $item->origem,

@@ -19,7 +19,7 @@ class NotaFiscalItem extends Model
     public $timestamps = false;
 
     protected $fillable = [
-        'nota_fiscal_id', 'produto_id', 'oficina_id', 'descricao',
+        'nota_fiscal_id', 'produto_id', 'sku', 'oficina_id', 'descricao', 'unidade',
         'ncm', 'cfop', 'origem', 'tributacao_icms', 'cst_csosn',
         'quantidade', 'valor_unitario',
     ];

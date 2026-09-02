@@ -3,6 +3,80 @@
 ## Última atualização
 2026-09-02
 
+## Rodada 28 (2026-09-02) — Correções fiscais dos blocos 3/4 (itens 1,2,3,4,6) + sobras do KM
+
+Usuário pediu "resolva todas as pendências que forem possíveis". Feito o
+que dá com segurança; item 5 e cancelamento NF-e/NFC-e Spedy/Focus ficam
+de fora (explicado abaixo).
+
+### Feito
+
+**1+2 — `unidade_comercial`/`uCom`/`commercialUnit` fixo em `'UN'` e
+`codigo_produto` mandando o UUID do produto**
+- Migration `2026_09_02_000003`: `notas_fiscais_itens.sku` + `.unidade`
+  (snapshot no momento da emissão, igual a `descricao`/`ncm`) + índices
+  em `nota_fiscal_id` e `oficina_id` (**item 6** junto).
+- `NotaFiscalController::store()` grava `sku`/`unidade` do produto no item.
+- `NfeService::montarNotaData()` normaliza: `sku` cai pro `produto_id`
+  quando a nota é anterior ao snapshot; `unidade` cai pra `'UN'`, sempre
+  em caixa alta.
+- Os 3 providers (`FocusNfeProvider` NF-e+NFC-e, `SpedyProvider` NFC-e,
+  `MotorNfe` NFEPHP) passaram a usar `$item['sku']`/`$item['unidade']`
+  com fallback defensivo `?? produto_id` / `?? 'UN'`.
+- `NotaFiscalData` PHPDoc do shape de item atualizado.
+- Testes Unit (rodam local): `NfeServiceMontagemTest` (+2),
+  `FocusNfeProviderTest` (+1), `SpedyProviderTest` (+1),
+  `MotorNfeMontarNfeTest` (+1) — TDD real (RED→GREEN).
+
+**3 — fallbacks silenciosos no `RegistrarEmissorService`**
+- `montarEmissorData()`: `regime_tributario` sem o `?? 'Simples Nacional'`
+  (nunca inventar regime); `logradouro`/`numero` dos campos estruturados
+  (`Configuracao.logradouro`/`numero`/`bairro`, Rodada 22) em vez do
+  `endereco` de texto livre.
+- Novo `RegistrarEmissorService::camposFiscaisFaltando(Configuracao):
+  list<string>` (pura, testável) — `registrar()` bloqueia com mensagem
+  clara se faltar regime/UF/logradouro/bairro/cidade/CEP/IBGE, do mesmo
+  jeito que já bloqueava por CNPJ/certificado.
+- Testes Unit: `RegistrarEmissorMontagemTest` (+4), TDD real.
+
+**4 — `NotaFiscalController::cancelar()` só chamava o provider pra NFEPHP
+NF-e**
+- Agora, pra **NFS-e** de Spedy/Focus (status AUTORIZADA), chama
+  `FiscalProviderManager::forTenant()->cancelar($ref, $motivo, 'NFSE')`.
+  Se o provedor não confirmar (`status !== 'CANCELADA'`) → 422 e **não**
+  marca cancelada local.
+- Restrito a NFS-e de propósito: os métodos `cancelar()` de
+  `SpedyProvider`/`FocusNfeProvider` só cobrem os endpoints de NFS-e
+  (`/service-invoices/`, `/v2/nfse/`) — cancelamento de NF-e/NFC-e via
+  esses provedores precisa da doc/sandbox deles (mesmo bloqueio do
+  "NF-e via Spedy nunca implementado").
+- Teste Feature `NotaFiscalCancelamentoProvedorTest` (2 casos, HTTP fake)
+  — **CI** (sem Postgres local).
+
+**Sobras do KM (Rodada 27)**
+- `OsExport` (XLSX de OS): coluna "KM".
+- Tela de detalhe do veículo: StatCard "KM (última leitura)" +
+  coluna KM no histórico de OS. `VeiculoController::show()` já passou a
+  devolver `km_ultimo` e `km_atual` por visita na Rodada 27.
+
+### NÃO feito (deliberado)
+- **Item 5** — `MotorNfse::consultar()` tratar falha de rede como erro.
+  O autor original documentou (comentário de ~20 linhas no método) que a
+  API da NFS-e nacional **pode devolver erro HTTP no caso legítimo de
+  "nenhum evento 101101"**, então falhar-fechado quebraria o caminho
+  normal de `consultar()`. Sem homologação real pra confirmar o
+  comportamento, é troca de um risco por outro. `consultar()` ainda não
+  tem nenhum caller. Fica documentado como estava.
+- **Cancelamento de NF-e/NFC-e via Spedy/Focus** (ver item 4).
+
+### Verificação
+- `php -l` limpo em todos os arquivos tocados.
+- `phpunit --testsuite=Unit`: **197 testes, 474 assertions, 0 falhas**
+  (eram 188 antes — +9 testes novos, TDD).
+- Frontend: `tsc --noEmit` + `npm run build` limpos.
+- **Não deployado.** Migration `2026_09_02_000003` roda no próximo
+  `deploy-vps.sh`.
+
 ## Rodada 27 (2026-09-02) — Campo KM Atual na OS + filtro de período em Contas a Receber
 
 Pedido do usuário: (1) campo obrigatório "KM Atual" ao gerar uma nova OS;

@@ -166,7 +166,9 @@ class NotaFiscalController extends Controller
                     \App\Models\NotaFiscalItem::create([
                         'nota_fiscal_id'  => $nota->id,
                         'produto_id'      => $produto->id,
+                        'sku'             => $produto->sku,
                         'descricao'       => $produto->nome,
+                        'unidade'         => $produto->unidade,
                         'ncm'             => $produto->ncm,
                         'cfop'            => $cfop,
                         'origem'          => $produto->origem,
@@ -341,6 +343,23 @@ class NotaFiscalController extends Controller
 
             if ($resultado->status !== 'CANCELADA') {
                 return response()->json(['message' => $resultado->mensagemErro ?? 'Falha ao cancelar NF-e.'], 422);
+            }
+        }
+
+        // Spedy/Focus + NFS-e: cancelamento real via API do provedor. Os
+        // endpoints de cancelamento de NF-e/NFC-e desses provedores ainda não
+        // estão implementados nos providers (ver backlog) — por isso a condição
+        // fica restrita a NFS-e. Só marca CANCELADA local se o provedor confirmar.
+        if (in_array($nota->provedor, ['SPEDY', 'FOCUS'], true)
+            && $nota->modelo === 'NFS-e'
+            && $nota->status === 'AUTORIZADA') {
+            $ref       = $nota->referencia_externa ?: ('nf-' . $nota->id);
+            $resultado = app(\App\Services\Fiscal\FiscalProviderManager::class)
+                ->forTenant()
+                ->cancelar($ref, $request->motivo, 'NFSE');
+
+            if ($resultado->status !== 'CANCELADA') {
+                return response()->json(['message' => $resultado->mensagemErro ?? 'Falha ao cancelar a NFS-e no provedor.'], 422);
             }
         }
 

@@ -51,8 +51,8 @@ class MotorNfeMontarNfeTest extends TestCase
             referenciaExterna: 'nfe-1',
             modelo: 'NFE',
             itens: [[
-                'produto_id' => 'prod-1', 'descricao' => 'Filtro de óleo',
-                'ncm' => '84212300', 'cfop' => '5102', 'origem' => 0,
+                'produto_id' => 'prod-1', 'sku' => 'FLT-001', 'descricao' => 'Filtro de óleo',
+                'unidade' => 'PC', 'ncm' => '84212300', 'cfop' => '5102', 'origem' => 0,
                 'tributacao_icms' => 'NORMAL', 'cst_csosn' => '102',
                 'quantidade' => 2, 'valor_unitario' => 35.50,
             ]],
@@ -89,6 +89,16 @@ class MotorNfeMontarNfeTest extends TestCase
         preg_match('/<ICMS>.*?<\/ICMS>/', $xml, $blocoIcms);
         $this->assertStringNotContainsString('<CST>', $blocoIcms[0] ?? '');
         $this->assertStringContainsString('<CRT>1</CRT>', $xml);
+    }
+
+    public function test_monta_xml_usa_sku_e_unidade_do_item(): void
+    {
+        $motor = new MotorNfe();
+        $xml = $motor->montarNfe($this->notaVenda(), $this->configuracaoSimplesNacional(), 'HOMOLOGACAO', 1, 1);
+
+        $this->assertStringContainsString('<cProd>FLT-001</cProd>', $xml);
+        $this->assertStringContainsString('<uCom>PC</uCom>', $xml);
+        $this->assertStringContainsString('<uTrib>PC</uTrib>', $xml);
     }
 
     /**

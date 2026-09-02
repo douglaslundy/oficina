@@ -189,11 +189,11 @@ class SpedyProvider implements FiscalProvider
             ),
             'items' => array_map(fn (int $i, array $item) => [
                 'itemNumber'       => $i + 1,
-                'productCode'      => $item['produto_id'],
+                'productCode'      => $item['sku'] ?? $item['produto_id'],
                 'description'      => $item['descricao'],
                 'ncm'              => $item['ncm'],
                 'cfop'             => $item['cfop'],
-                'commercialUnit'   => 'UN',
+                'commercialUnit'   => $item['unidade'] ?? 'UN',
                 'quantity'         => (float) $item['quantidade'],
                 'unitValue'        => (float) $item['valor_unitario'],
                 'grossValue'       => round((float) $item['quantidade'] * (float) $item['valor_unitario'], 2),

@@ -98,6 +98,50 @@ class NfeServiceMontagemTest extends TestCase
         $this->assertNull($data->numeroReservado);
     }
 
+    public function test_monta_nota_data_inclui_sku_e_unidade_do_item(): void
+    {
+        $cliente = new Cliente(['nome' => 'Fulano', 'cpf_cnpj' => '87748248800']);
+        $nota = new NotaFiscal([
+            'modelo' => 'NF-e', 'valor_total' => 90.0,
+            'natureza_operacao' => 'Venda de Mercadoria', 'referencia_externa' => 'nf-x',
+        ]);
+        $nota->setRelation('cliente', $cliente);
+        $item = new \App\Models\NotaFiscalItem([
+            'produto_id' => 'prod-uuid', 'sku' => 'FLT-001', 'descricao' => 'Filtro',
+            'unidade' => 'Par', 'ncm' => '84212300', 'cfop' => '5102',
+            'origem' => 0, 'tributacao_icms' => 'NORMAL', 'cst_csosn' => '102',
+            'quantidade' => 2, 'valor_unitario' => 45,
+        ]);
+        $nota->setRelation('itens', collect([$item]));
+
+        $data = (new NfeService())->montarNotaData($nota);
+
+        $this->assertSame('FLT-001', $data->itens[0]['sku']);
+        $this->assertSame('PAR', $data->itens[0]['unidade']);
+    }
+
+    public function test_monta_nota_data_item_sem_sku_ou_unidade_usa_fallback(): void
+    {
+        $cliente = new Cliente(['nome' => 'Fulano', 'cpf_cnpj' => '87748248800']);
+        $nota = new NotaFiscal([
+            'modelo' => 'NF-e', 'valor_total' => 10.0,
+            'natureza_operacao' => 'Venda de Mercadoria', 'referencia_externa' => 'nf-y',
+        ]);
+        $nota->setRelation('cliente', $cliente);
+        $item = new \App\Models\NotaFiscalItem([
+            'produto_id' => 'prod-uuid', 'descricao' => 'Item sem cadastro completo',
+            'ncm' => '84212300', 'cfop' => '5102', 'origem' => 0,
+            'tributacao_icms' => 'NORMAL', 'cst_csosn' => '102',
+            'quantidade' => 1, 'valor_unitario' => 10,
+        ]);
+        $nota->setRelation('itens', collect([$item]));
+
+        $data = (new NfeService())->montarNotaData($nota);
+
+        $this->assertSame('prod-uuid', $data->itens[0]['sku']);
+        $this->assertSame('UN', $data->itens[0]['unidade']);
+    }
+
     public function test_monta_nota_data_nfce_usa_modelo_interno_nfce_e_inclui_itens(): void
     {
         $cliente = new Cliente(['nome' => 'Fulano', 'cpf_cnpj' => '87748248800']);

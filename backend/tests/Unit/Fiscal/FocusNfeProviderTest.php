@@ -51,12 +51,21 @@ class FocusNfeProviderTest extends TestCase
             referenciaExterna: 'os-456',
             modelo: 'NFE',
             itens: [[
-                'produto_id' => 'prod-1', 'descricao' => 'Filtro de óleo',
-                'ncm' => '84212300', 'cfop' => '6102', 'origem' => 0,
+                'produto_id' => 'prod-1', 'sku' => 'FLT-001', 'descricao' => 'Filtro de óleo',
+                'unidade' => 'PC', 'ncm' => '84212300', 'cfop' => '6102', 'origem' => 0,
                 'tributacao_icms' => 'NORMAL', 'cst_csosn' => '00',
                 'quantidade' => 2, 'valor_unitario' => 35.50,
             ]],
         );
+    }
+
+    public function test_payload_nfe_usa_sku_e_unidade_do_item(): void
+    {
+        $p = new FocusNfeProvider('https://homologacao.focusnfe.com.br', 'master', 'HOMOLOGACAO', 'tok');
+        $payload = $p->montarPayloadNfe($this->notaNfe());
+
+        $this->assertSame('FLT-001', $payload['items'][0]['codigo_produto']);
+        $this->assertSame('PC', $payload['items'][0]['unidade_comercial']);
     }
 
     public function test_payload_nfe_monta_itens_com_dados_fiscais(): void

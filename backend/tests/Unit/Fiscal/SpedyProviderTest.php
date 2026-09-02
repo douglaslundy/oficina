@@ -172,13 +172,22 @@ class SpedyProviderTest extends TestCase
             referenciaExterna: 'os-nfce-1',
             modelo: 'NFCE',
             itens: [[
-                'produto_id' => 'prod-1', 'descricao' => 'Filtro de óleo',
-                'ncm' => '84212300', 'cfop' => '5102', 'origem' => 0,
+                'produto_id' => 'prod-1', 'sku' => 'FLT-001', 'descricao' => 'Filtro de óleo',
+                'unidade' => 'PC', 'ncm' => '84212300', 'cfop' => '5102', 'origem' => 0,
                 'tributacao_icms' => 'NORMAL', 'cst_csosn' => '102',
                 'quantidade' => 2, 'valor_unitario' => 35.50,
             ]],
             formaPagamento: 'Dinheiro',
         );
+    }
+
+    public function test_payload_nfce_usa_sku_e_unidade_do_item(): void
+    {
+        $p = new SpedyProvider('https://sandbox-api.spedy.com.br/v1', 'master', 'tok', 'emp-1');
+        $payload = $p->montarPayloadNfce($this->notaNfce());
+
+        $this->assertSame('FLT-001', $payload['items'][0]['productCode']);
+        $this->assertSame('PC', $payload['items'][0]['commercialUnit']);
     }
 
     public function test_payload_nfce_usa_campos_spedy_inferidos(): void

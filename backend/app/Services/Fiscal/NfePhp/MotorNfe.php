@@ -178,15 +178,15 @@ class MotorNfe
 
             $make->tagprod((object) [
                 'item'    => $nItem,
-                'cProd'   => $item['produto_id'],
+                'cProd'   => $item['sku'] ?? $item['produto_id'],
                 'xProd'   => $item['descricao'],
                 'NCM'     => $item['ncm'],
                 'CFOP'    => $item['cfop'],
-                'uCom'    => 'UN',
+                'uCom'    => $item['unidade'] ?? 'UN',
                 'qCom'    => $item['quantidade'],
                 'vUnCom'  => $item['valor_unitario'],
                 'vProd'   => round((float) $item['quantidade'] * (float) $item['valor_unitario'], 2),
-                'uTrib'   => 'UN',
+                'uTrib'   => $item['unidade'] ?? 'UN',
                 'qTrib'   => $item['quantidade'],
                 'vUnTrib' => $item['valor_unitario'],
                 'indTot'  => 1,
