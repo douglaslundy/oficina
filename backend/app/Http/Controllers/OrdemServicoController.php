@@ -91,6 +91,9 @@ class OrdemServicoController extends Controller
             'veiculo_id'              => ['nullable', 'string', 'max:60'],
             'veiculo_descricao'       => ['nullable', 'string', 'max:100'],
             'veiculo_placa'           => ['nullable', 'string', 'max:10'],
+            // KM do hodômetro é obrigatório ao abrir uma OS; Venda Balcão não
+            // envolve veículo, então o campo não se aplica.
+            'km_atual'                => [$isVendaBalcao ? 'nullable' : 'required', 'integer', 'min:0', 'max:9999999'],
             'problema_relatado'       => ['nullable', 'string'],
             'status'                  => ['nullable', 'string'],
             'forma_pagamento'         => ['nullable', 'string'],
@@ -134,6 +137,15 @@ class OrdemServicoController extends Controller
                 }
 
                 $os = OrdemServico::create($osData);
+
+                // Registra a leitura de hodômetro no veículo quando a OS aponta
+                // para um veículo real (o id sintético "__proprio_" já virou null
+                // acima). km_ultimo sempre segue a leitura mais recente — a
+                // checagem de inconsistência (KM menor que o anterior) é um aviso
+                // não-bloqueante na tela de nova OS.
+                if (!empty($os->veiculo_id) && array_key_exists('km_atual', $validated) && $validated['km_atual'] !== null) {
+                    Veiculo::where('id', $os->veiculo_id)->update(['km_ultimo' => $validated['km_atual']]);
+                }
 
                 $total = 0;
                 foreach ($validated['itens'] ?? [] as $item) {
@@ -222,7 +234,15 @@ class OrdemServicoController extends Controller
             'prazo_entrega'        => ['sometimes', 'nullable', 'date'],
             'venda_a_prazo'        => ['sometimes', 'boolean'],
             'prazo_pagamento_dias' => ['sometimes', 'nullable', 'integer', 'min:1', 'max:365'],
+            // KM só pode ser preenchido quando ainda está vazio (rascunho de OS
+            // vindo de um agendamento, ou OS antiga anterior a este campo). Uma
+            // leitura já registrada não é reescrita por aqui.
+            'km_atual'             => ['sometimes', 'nullable', 'integer', 'min:0', 'max:9999999'],
         ]);
+
+        if (array_key_exists('km_atual', $validated) && $os->km_atual !== null) {
+            unset($validated['km_atual']);
+        }
 
         // Devolução de estoque ao cancelar é opcional (o usuário decide no modal).
         // Ausência do campo mantém o comportamento antigo (devolve) por compatibilidade.

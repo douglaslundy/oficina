@@ -28,6 +28,7 @@ class OrdemServicoResource extends JsonResource
             'veiculo_id'        => $this->veiculo_id,
             'veiculo_descricao' => $this->veiculo_descricao,
             'veiculo_placa'    => $this->veiculo_placa,
+            'km_atual'         => $this->km_atual,
             'problema_relatado' => $this->problema_relatado,
             'status'           => $this->status,
             'forma_pagamento'             => $this->forma_pagamento,

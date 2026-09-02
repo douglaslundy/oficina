@@ -44,6 +44,7 @@ class OrdemServicoVeiculoTest extends TestCase
             'cliente_id' => $cliente->id,
             'veiculo_id' => $veiculoId,
             'status'     => 'ABERTA',
+            'km_atual'   => 50000,
         ]);
 
         $response->assertStatus(201)->assertJsonPath('data.veiculo_id', $veiculoId);
@@ -58,6 +59,7 @@ class OrdemServicoVeiculoTest extends TestCase
             'cliente_id' => $cliente->id,
             'veiculo_id' => "__proprio_{$cliente->id}",
             'status'     => 'ABERTA',
+            'km_atual'   => 50000,
         ]);
 
         $response->assertStatus(201)->assertJsonPath('data.veiculo_id', null);
@@ -75,10 +77,10 @@ class OrdemServicoVeiculoTest extends TestCase
             ->json('id');
 
         $this->withTenant($token, $oficina)->postJson('/api/os', [
-            'cliente_id' => $cliente->id, 'veiculo_id' => $veiculoId, 'status' => 'ABERTA',
+            'cliente_id' => $cliente->id, 'veiculo_id' => $veiculoId, 'status' => 'ABERTA', 'km_atual' => 50000,
         ])->assertStatus(201);
         $this->withTenant($token, $oficina)->postJson('/api/os', [
-            'cliente_id' => $cliente->id, 'veiculo_id' => $outroVeiculoId, 'status' => 'ABERTA',
+            'cliente_id' => $cliente->id, 'veiculo_id' => $outroVeiculoId, 'status' => 'ABERTA', 'km_atual' => 50000,
         ])->assertStatus(201);
 
         $response = $this->withTenant($token, $oficina)->getJson("/api/os?veiculo_id={$veiculoId}");

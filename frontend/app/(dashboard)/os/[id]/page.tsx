@@ -39,6 +39,7 @@ interface OsData {
   mecanico?: { id: string; nome: string }
   veiculo_descricao?: string
   veiculo_placa?: string
+  km_atual?: number | null
   problema_relatado?: string
   forma_pagamento?: string
   prazo_entrega?: string

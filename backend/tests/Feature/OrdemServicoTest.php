@@ -36,6 +36,7 @@ class OrdemServicoTest extends TestCase
             'mecanico_id'       => $mecId,
             'problema_relatado' => 'Troca de óleo',
             'status'            => 'ABERTA',
+            'km_atual'          => 1000,
         ]);
 
         $response->assertStatus(201)
@@ -57,7 +58,7 @@ class OrdemServicoTest extends TestCase
 
         $this->withToken($token)->postJson('/api/os', [
             'cliente_id' => $cliId, 'mecanico_id' => $mecId,
-            'problema_relatado' => 'Troca filtro', 'status' => 'ABERTA',
+            'problema_relatado' => 'Troca filtro', 'status' => 'ABERTA', 'km_atual' => 1000,
             'itens' => [[
                 'tipo' => 'PECA', 'produto_id' => $produto->id,
                 'descricao' => 'Filtro', 'quantidade' => 2, 'valor_unitario' => 50,
@@ -75,7 +76,7 @@ class OrdemServicoTest extends TestCase
 
         $os = $this->withToken($token)->postJson('/api/os', [
             'cliente_id' => $cliId, 'mecanico_id' => $mecId,
-            'status' => 'ABERTA',
+            'status' => 'ABERTA', 'km_atual' => 1000,
             'itens' => [[
                 'tipo' => 'PECA', 'produto_id' => $produto->id,
                 'descricao' => 'Filtro', 'quantidade' => 2, 'valor_unitario' => 50,
@@ -99,7 +100,7 @@ class OrdemServicoTest extends TestCase
         $produto = $this->criarProduto(10);
 
         $os = $this->withToken($token)->postJson('/api/os', [
-            'cliente_id' => $cliId, 'mecanico_id' => $mecId, 'status' => 'ABERTA',
+            'cliente_id' => $cliId, 'mecanico_id' => $mecId, 'status' => 'ABERTA', 'km_atual' => 1000,
         ])->json('data');
 
         $this->withToken($token)->postJson("/api/os/{$os['id']}/itens", [
@@ -116,7 +117,7 @@ class OrdemServicoTest extends TestCase
         $produto = $this->criarProduto(10);
 
         $os = $this->withToken($token)->postJson('/api/os', [
-            'cliente_id' => $cliId, 'mecanico_id' => $mecId, 'status' => 'ABERTA',
+            'cliente_id' => $cliId, 'mecanico_id' => $mecId, 'status' => 'ABERTA', 'km_atual' => 1000,
             'itens' => [[
                 'tipo' => 'PECA', 'produto_id' => $produto->id,
                 'descricao' => 'Filtro', 'quantidade' => 3, 'valor_unitario' => 50,
@@ -139,7 +140,7 @@ class OrdemServicoTest extends TestCase
         $produto = $this->criarProduto(1);
 
         $this->withToken($token)->postJson('/api/os', [
-            'cliente_id' => $cliId, 'mecanico_id' => $mecId, 'status' => 'ABERTA',
+            'cliente_id' => $cliId, 'mecanico_id' => $mecId, 'status' => 'ABERTA', 'km_atual' => 1000,
             'itens' => [[
                 'tipo' => 'PECA', 'produto_id' => $produto->id,
                 'descricao' => 'Filtro', 'quantidade' => 5, 'valor_unitario' => 50,
@@ -159,7 +160,7 @@ class OrdemServicoTest extends TestCase
         $this->app->instance(AlertaDispatchService::class, $spy);
 
         $os = $this->withToken($token)->postJson('/api/os', [
-            'cliente_id' => $cliId, 'mecanico_id' => $mecId, 'status' => 'ABERTA',
+            'cliente_id' => $cliId, 'mecanico_id' => $mecId, 'status' => 'ABERTA', 'km_atual' => 1000,
         ])->json('data');
 
         $this->withToken($token)->putJson("/api/os/{$os['id']}", [
@@ -178,7 +179,7 @@ class OrdemServicoTest extends TestCase
         $produto = $this->criarProduto(10);
 
         $os = $this->withToken($token)->postJson('/api/os', [
-            'cliente_id' => $cliId, 'mecanico_id' => $mecId, 'status' => 'ABERTA',
+            'cliente_id' => $cliId, 'mecanico_id' => $mecId, 'status' => 'ABERTA', 'km_atual' => 1000,
             'itens' => [[
                 'tipo' => 'PECA', 'produto_id' => $produto->id,
                 'descricao' => 'Filtro', 'quantidade' => 2, 'valor_unitario' => 50,
@@ -200,7 +201,7 @@ class OrdemServicoTest extends TestCase
         $produto = $this->criarProduto(10);
 
         $os = $this->withToken($token)->postJson('/api/os', [
-            'cliente_id' => $cliId, 'mecanico_id' => $mecId, 'status' => 'ABERTA',
+            'cliente_id' => $cliId, 'mecanico_id' => $mecId, 'status' => 'ABERTA', 'km_atual' => 1000,
             'itens' => [[
                 'tipo' => 'PECA', 'produto_id' => $produto->id,
                 'descricao' => 'Filtro', 'quantidade' => 2, 'valor_unitario' => 50,
@@ -223,7 +224,7 @@ class OrdemServicoTest extends TestCase
         $produto = $this->criarProduto(10);
 
         $os = $this->withToken($token)->postJson('/api/os', [
-            'cliente_id' => $cliId, 'mecanico_id' => $mecId, 'status' => 'ABERTA',
+            'cliente_id' => $cliId, 'mecanico_id' => $mecId, 'status' => 'ABERTA', 'km_atual' => 1000,
             'itens' => [[
                 'tipo' => 'PECA', 'produto_id' => $produto->id,
                 'descricao' => 'Filtro', 'quantidade' => 2, 'valor_unitario' => 50,
@@ -244,7 +245,7 @@ class OrdemServicoTest extends TestCase
         [$token, $mecId, $cliId] = $this->setupEntities();
 
         $os = $this->withToken($token)->postJson('/api/os', [
-            'cliente_id' => $cliId, 'mecanico_id' => $mecId, 'status' => 'ABERTA',
+            'cliente_id' => $cliId, 'mecanico_id' => $mecId, 'status' => 'ABERTA', 'km_atual' => 1000,
         ])->json('data');
 
         $this->withToken($token)->putJson("/api/os/{$os['id']}", [

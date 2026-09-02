@@ -155,6 +155,7 @@ class VeiculoController extends Controller
                 'numero'      => $os->numero,
                 'tipo'        => $os->tipo,
                 'status'      => $os->status,
+                'km_atual'    => $os->km_atual,
                 'valor_total' => $os->valor_total,
                 'valor_pago'  => $os->valor_pago,
                 'mecanico'    => $os->mecanico?->nome,
@@ -168,6 +169,7 @@ class VeiculoController extends Controller
             'placa'  => $veiculo->placa,
             'chassi' => $veiculo->chassi,
             'ativo'  => $veiculo->ativo,
+            'km_ultimo' => $veiculo->km_ultimo,
             'proprietario_atual' => $clienteAtual ? [
                 'id'       => $clienteAtual->id,
                 'nome'     => $clienteAtual->nome,
@@ -222,6 +224,7 @@ class VeiculoController extends Controller
             'placa'     => $v->placa,
             'chassi'    => $v->chassi,
             'ativo'     => $v->ativo,
+            'km_ultimo' => $v->km_ultimo,
             'criado_em' => $v->criado_em?->format('d/m/Y'),
         ];
     }

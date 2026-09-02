@@ -22,12 +22,13 @@ class Veiculo extends Model
     public $timestamps = false;
 
     protected $fillable = [
-        'cliente_id', 'oficina_id', 'modelo', 'ano', 'placa', 'chassi', 'ativo',
+        'cliente_id', 'oficina_id', 'modelo', 'ano', 'placa', 'chassi', 'ativo', 'km_ultimo',
     ];
 
     protected $casts = [
-        'criado_em' => 'datetime',
-        'ativo'     => 'boolean',
+        'criado_em'  => 'datetime',
+        'ativo'      => 'boolean',
+        'km_ultimo'  => 'integer',
     ];
 
     public function getActivitylogOptions(): LogOptions

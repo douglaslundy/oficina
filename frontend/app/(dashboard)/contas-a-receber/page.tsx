@@ -40,13 +40,20 @@ export default function ContasAReceberPage() {
   const [contas, setContas] = useState<Conta[]>([])
   const [loading, setLoading] = useState(true)
   const [filtro, setFiltro] = useState<Filtro>('todos')
+  // Filtro de período (aba Recebidas) — mês no formato YYYY-MM; vazio = todos.
+  const [mes, setMes] = useState('')
 
   const fetchContas = useCallback(async () => {
     setLoading(true)
     try {
-      const params = modo === 'aberto'
+      const params: Record<string, string | number> = modo === 'aberto'
         ? { em_aberto: 1, tipo: 'OS,VENDA_BALCAO', per_page: 200 }
         : { status: 'CONCLUIDA', tipo: 'OS,VENDA_BALCAO', per_page: 200 }
+      if (modo === 'recebidas' && mes) {
+        const [ano, m] = mes.split('-').map(Number)
+        params.data_inicio = `${mes}-01`
+        params.data_fim = `${mes}-${String(new Date(ano, m, 0).getDate()).padStart(2, '0')}`
+      }
       const r = await api.get<{ data: Conta[] }>('/os', { params })
       let data = r.data.data ?? []
       if (modo === 'recebidas') data = data.filter(c => c.valor_pago > 0)
@@ -56,10 +63,10 @@ export default function ContasAReceberPage() {
     } finally {
       setLoading(false)
     }
-  }, [modo])
+  }, [modo, mes])
 
   useEffect(() => { fetchContas() }, [fetchContas])
-  useEffect(() => { setFiltro('todos') }, [modo])
+  useEffect(() => { setFiltro('todos'); setMes('') }, [modo])
 
   /* --- derivados --- */
   const contasFiltradas = contas.filter(c => {
@@ -227,7 +234,29 @@ export default function ContasAReceberPage() {
         )}
 
         {/* Filtros */}
-        <div style={{ display: 'flex', gap: 8, marginBottom: 14 }}>
+        <div style={{ display: 'flex', gap: 8, marginBottom: 14, alignItems: 'center' }}>
+          {modo === 'recebidas' && (
+            <>
+              <label style={{ ...labelStyle }}>Período</label>
+              <input
+                type="month"
+                value={mes}
+                onChange={e => setMes(e.target.value)}
+                style={{
+                  padding: '7px 12px', borderRadius: 6, fontSize: 13,
+                  background: 'var(--bg)', border: '1px solid var(--border)', color: 'var(--text)',
+                }}
+              />
+              {mes && (
+                <button onClick={() => setMes('')} style={{
+                  padding: '7px 12px', borderRadius: 6, fontSize: 13, cursor: 'pointer',
+                  background: 'transparent', border: '1px solid var(--border)', color: 'var(--muted)',
+                }}>
+                  ✕ Limpar
+                </button>
+              )}
+            </>
+          )}
           {modo === 'aberto' && (['todos', 'vencidas', 'a_vencer'] as Filtro[]).map(f => (
             <button key={f} onClick={() => setFiltro(f)} style={{
               padding: '7px 16px', borderRadius: 6, fontSize: 13, fontWeight: 600, cursor: 'pointer',

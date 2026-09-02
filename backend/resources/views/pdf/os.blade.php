@@ -64,6 +64,9 @@
     <div class="info-item"><label>Telefone</label><span>{{ $os->cliente->telefone ?? '-' }}</span></div>
     <div class="info-item"><label>Veículo</label><span>{{ $os->veiculo_descricao ?? ($os->cliente->veiculo_modelo ?? '-') }}</span></div>
     <div class="info-item"><label>Placa</label><span>{{ $os->veiculo_placa ?? ($os->cliente->veiculo_placa ?? '-') }}</span></div>
+    @if(!is_null($os->km_atual))
+    <div class="info-item"><label>KM na entrada</label><span>{{ number_format((int) $os->km_atual, 0, ',', '.') }} km</span></div>
+    @endif
     @if($os->mecanicoResponsavel)
     <div class="info-item"><label>Mecânico</label><span>{{ $os->mecanicoResponsavel->nome }}</span></div>
     @endif

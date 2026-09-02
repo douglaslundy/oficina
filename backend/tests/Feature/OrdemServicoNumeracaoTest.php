@@ -42,11 +42,11 @@ class OrdemServicoNumeracaoTest extends TestCase
         [$oficinaB, $tokenB, $clienteB] = $this->criarOficinaComAdmin('oficina-num-b', '22222222222222', 'b@numero-test.com', '33333333333', '44444444444');
 
         $respA = $this->withToken($tokenA)->withHeaders(['X-Tenant' => $oficinaA->slug])
-            ->postJson('/api/os', ['cliente_id' => $clienteA->id, 'status' => 'ABERTA']);
+            ->postJson('/api/os', ['cliente_id' => $clienteA->id, 'status' => 'ABERTA', 'km_atual' => 1000]);
         $respA->assertStatus(201)->assertJsonPath('data.numero', 1);
 
         $respB = $this->withToken($tokenB)->withHeaders(['X-Tenant' => $oficinaB->slug])
-            ->postJson('/api/os', ['cliente_id' => $clienteB->id, 'status' => 'ABERTA']);
+            ->postJson('/api/os', ['cliente_id' => $clienteB->id, 'status' => 'ABERTA', 'km_atual' => 1000]);
         $respB->assertStatus(201)->assertJsonPath('data.numero', 1);
     }
 }

@@ -25,6 +25,7 @@ interface Veiculo {
   placa?: string | null
   chassi?: string | null
   ativo: boolean
+  km_ultimo?: number | null
 }
 
 interface OSFormData {
@@ -33,6 +34,7 @@ interface OSFormData {
   mecanico_id?: string
   veiculo_descricao?: string
   veiculo_placa?: string
+  km_atual?: number
   problema_relatado?: string
   status: string
   forma_pagamento?: string
@@ -51,6 +53,7 @@ interface OSFormProps {
     mecanico?: { id: string; nome: string }
     veiculo_descricao?: string
     veiculo_placa?: string
+    km_atual?: number | null
     problema_relatado?: string
     status?: string
     forma_pagamento?: string
@@ -112,13 +115,14 @@ export function OSForm({ initialData, onSuccess, onConcluir, onCancelar }: OSFor
     valor_unitario: i.valor_unitario,
   }))
 
-  const { register, handleSubmit, control, watch, setValue, formState: { isSubmitting } } = useForm<OSFormData>({
+  const { register, handleSubmit, control, watch, setValue, formState: { isSubmitting, errors } } = useForm<OSFormData>({
     defaultValues: {
       status: initialData?.status ?? 'ABERTA',
       cliente_id: initialData?.cliente_id ?? '',
       mecanico_id: initialData?.mecanico_id ?? '',
       veiculo_descricao: initialData?.veiculo_descricao ?? '',
       veiculo_placa: initialData?.veiculo_placa ?? '',
+      km_atual: initialData?.km_atual ?? undefined,
       problema_relatado: initialData?.problema_relatado ?? '',
       forma_pagamento: initialData?.forma_pagamento ?? '',
       prazo_entrega: initialData?.prazo_entrega ?? '',
@@ -137,6 +141,14 @@ export function OSForm({ initialData, onSuccess, onConcluir, onCancelar }: OSFor
   const clienteId = watch('cliente_id')
   const mecanicoId = watch('mecanico_id')
   const veiculo_id = watch('veiculo_id')
+
+  // Aviso não-bloqueante quando o KM informado é menor que a última leitura
+  // registrada para o veículo selecionado (troca de hodômetro, correção etc.).
+  const kmAtualValue = watch('km_atual')
+  const kmUltimoVeiculo = veiculos.find(v => v.id === veiculo_id)?.km_ultimo ?? null
+  const kmInconsistente = kmUltimoVeiculo != null
+    && typeof kmAtualValue === 'number' && !Number.isNaN(kmAtualValue)
+    && kmAtualValue < kmUltimoVeiculo
 
   // Mantém o select de Status sincronizado quando o status persistido muda
   // (ex.: após Concluir/Cancelar a OS pelos botões e modais, o fetch traz o
@@ -292,7 +304,11 @@ export function OSForm({ initialData, onSuccess, onConcluir, onCancelar }: OSFor
   async function onSubmit(data: OSFormData) {
     try {
       if (isEdit) {
-        // Only send editable fields on update
+        // Only send editable fields on update. km_atual só vai quando ainda
+        // estava vazio (rascunho de OS de agendamento / OS antiga) — o backend
+        // ignora tentativa de reescrever uma leitura já registrada.
+        const preencheKm = initialData?.km_atual == null
+          && typeof data.km_atual === 'number' && !Number.isNaN(data.km_atual)
         const payload = {
           status:                data.status,
           mecanico_id:           data.mecanico_id || null,
@@ -301,6 +317,7 @@ export function OSForm({ initialData, onSuccess, onConcluir, onCancelar }: OSFor
           prazo_entrega:         data.prazo_entrega || null,
           venda_a_prazo:         data.venda_a_prazo,
           prazo_pagamento_dias:  data.prazo_pagamento_dias,
+          ...(preencheKm ? { km_atual: data.km_atual } : {}),
         }
         const res = await api.put(`/os/${initialData!.id}`, payload)
         toast('OS atualizada!', 'success')
@@ -389,6 +406,41 @@ export function OSForm({ initialData, onSuccess, onConcluir, onCancelar }: OSFor
             )}
           </>
         )}
+
+        {/* KM atual do veículo */}
+        <div>
+          <label style={L}>
+            KM atual {!isEdit && <span style={{ color: 'var(--danger)' }}>*</span>}
+          </label>
+          {isEdit && initialData?.km_atual != null ? (
+            <div style={RO} className="font-mono">{initialData.km_atual.toLocaleString('pt-BR')} km</div>
+          ) : (
+            <>
+              <input
+                type="number"
+                min={0}
+                max={9999999}
+                step={1}
+                placeholder="Ex: 84500"
+                {...register('km_atual', {
+                  valueAsNumber: true,
+                  validate: v => isEdit
+                    || (typeof v === 'number' && !Number.isNaN(v) && v >= 0)
+                    || 'Informe o KM atual do veículo',
+                })}
+                style={{ ...S, ...(errors.km_atual ? { borderColor: 'var(--danger)' } : {}) }}
+              />
+              {errors.km_atual && (
+                <span style={{ color: 'var(--danger)', fontSize: 12 }}>{errors.km_atual.message}</span>
+              )}
+              {kmInconsistente && !errors.km_atual && (
+                <span style={{ color: 'var(--accent)', fontSize: 12 }}>
+                  ⚠ KM menor que o último registrado para este veículo ({kmUltimoVeiculo!.toLocaleString('pt-BR')} km)
+                </span>
+              )}
+            </>
+          )}
+        </div>
 
         {/* Mecânico responsável — controlado para popular corretamente após carga async */}
         <div>

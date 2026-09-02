@@ -1,7 +1,70 @@
 # Progresso do Projeto
 
 ## Última atualização
-2026-08-12
+2026-09-02
+
+## Rodada 27 (2026-09-02) — Campo KM Atual na OS + filtro de período em Contas a Receber
+
+Pedido do usuário: (1) campo obrigatório "KM Atual" ao gerar uma nova OS;
+(2) resolver as pendências dos blocos 3/4 do levantamento que fossem
+viáveis agora. **Achado importante:** o levantamento veio da memória
+`project-mecanicapro` (40 dias), muito desatualizada — a maior parte dos
+itens dos blocos 3/4 **já estava feita** (edição de itens de OS, filtros
+da lista de OS, activitylog em uso, `HasTenantScope` em todos os models,
+reconciliação de `PROCESSANDO`, veículos múltiplos na tela do cliente,
+histórico de movimentações na UI do produto, `cancelar()` chamando o
+provider para NFEPHP NF-e). Depois de re-triar contra o código real, o
+usuário escolheu levar só **Geral 7 (filtro de período em Contas a
+Receber)** — nada de fiscal nesta rodada.
+
+### O que foi implementado
+
+**A. KM Atual na OS**
+- Migrations `2026_09_02_000001` (`ordens_servico.km_atual`,
+  `unsignedInteger` nullable) e `2026_09_02_000002`
+  (`veiculos.km_ultimo`, idem). Nullable no banco por causa das OS
+  antigas; obrigatoriedade é na validação.
+- `OrdemServicoController::store()`: `km_atual` `required` quando
+  `tipo === 'OS'`, `nullable` para Venda Balcão. Dentro da transação, se
+  a OS aponta para um veículo real (`veiculo_id` — o id sintético
+  `__proprio_` já vira null antes), atualiza `veiculos.km_ultimo` com a
+  leitura (sempre segue a mais recente; a checagem de inconsistência é
+  aviso não-bloqueante no front).
+- **Extensão do escopo aprovado** (era "read-only em edição"): o
+  `confirmar()` do agendamento cria um *rascunho* de OS sem KM (o carro
+  ainda não chegou). Então `update()` passou a aceitar `km_atual`
+  **apenas quando ainda está vazio** — uma leitura já registrada nunca é
+  reescrita por ali. Cobre rascunhos de agendamento e OS anteriores ao
+  campo.
+- `OrdemServicoResource` expõe `km_atual`; `VeiculoController::shape()`/
+  `show()` expõem `km_ultimo` e o KM por visita no `historico_os`.
+- `OSForm.tsx`: input numérico obrigatório (validação via `validate` do
+  RHF, não `required`, por causa do `valueAsNumber`), com erro inline e
+  aviso âmbar quando `km_atual < km_ultimo` do veículo selecionado.
+  Modo edição: read-only quando já preenchido, editável (opcional) quando
+  vazio. PDF `pdf.os` mostra "KM na entrada".
+- Testes: `tests/Feature/OrdemServicoKmAtualTest.php` (5 casos: 422 sem
+  km, 201 + `km_ultimo` atualizado, update preenche km vazio, update não
+  reescreve km existente, Venda Balcão dispensa km). Atualizados os 3
+  arquivos de teste que criam OS via `POST /api/os`
+  (`OrdemServicoTest`, `OrdemServicoVeiculoTest`,
+  `OrdemServicoNumeracaoTest` — ~17 call sites). Feature tests **não
+  rodam local** (sem Postgres, limitação de sempre) — rodar em CI.
+
+**B. Filtro de período em Contas a Receber (aba Recebidas)**
+- Só frontend (`contas-a-receber/page.tsx`). `<input type="month">`;
+  quando preenchido, passa `data_inicio`/`data_fim` (primeiro/último dia
+  do mês) para o `GET /os` — o backend já filtra por `criado_em` com
+  esses params, nenhuma mudança de backend. KPIs e tabela recalculam
+  sobre o resultado filtrado.
+
+### Verificação
+- `php -l` limpo em todos os arquivos PHP tocados.
+- `phpunit --testsuite=Unit`: **188 testes, 453 assertions, 0 falhas**
+  (sem regressão).
+- Frontend: `npx tsc --noEmit` limpo, `npm run build` (produção) limpo.
+- **Não deployado.** Migrations rodam sozinhas no próximo
+  `deploy-vps.sh` (`docker-entrypoint.sh` faz `migrate --force`).
 
 ## Tarefa em andamento
 **Plano "atualização fiscal via nota de entrada duplicada" (spec
