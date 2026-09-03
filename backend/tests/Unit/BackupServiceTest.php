@@ -41,6 +41,21 @@ class BackupServiceTest extends TestCase
         return $path;
     }
 
+    public function test_comprimir_produz_gz_valido_que_descomprime_no_original(): void
+    {
+        $origem = $this->dir . '/dump.sql';
+        $conteudo = str_repeat("CREATE TABLE x (id int);\nINSERT INTO x VALUES (1);\n", 2000);
+        file_put_contents($origem, $conteudo);
+
+        $destino = $this->dir . '/dump.sql.gz';
+        $svc = $this->service();
+        $svc->comprimir($origem, $destino);
+
+        $this->assertFileExists($destino);
+        $this->assertTrue($svc->verificarGzip($destino), 'o .gz gerado deve passar na verificação de integridade');
+        $this->assertSame($conteudo, gzdecode((string) file_get_contents($destino)));
+    }
+
     public function test_verifica_gz_integro(): void
     {
         $path = $this->criarGz('ok.sql.gz', str_repeat('linha de dump;\n', 500), time());

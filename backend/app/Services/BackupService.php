@@ -244,7 +244,8 @@ class BackupService
         return str_contains($head, 'PostgreSQL database dump');
     }
 
-    private function comprimir(string $origem, string $destino): void
+    /** Comprime $origem em gzip nível 9 para $destino, com checagem de erro de I/O. */
+    public function comprimir(string $origem, string $destino): void
     {
         $src = fopen($origem, 'rb');
         $dst = gzopen($destino, 'wb9');
@@ -259,7 +260,9 @@ class BackupService
                 gzclose($dst);
                 throw new RuntimeException('Erro de leitura ao comprimir o backup.');
             }
-            if ($chunk !== '' && gzwrite($dst, $chunk) === 0) {
+            // gzwrite devolve os bytes escritos (>0), ou 0/false em erro. Como
+            // o chunk aqui é sempre não-vazio, um write bem-sucedido é > 0.
+            if ($chunk !== '' && !gzwrite($dst, $chunk)) {
                 fclose($src);
                 gzclose($dst);
                 throw new RuntimeException('Erro de escrita ao comprimir o backup (disco cheio?).');
@@ -267,7 +270,8 @@ class BackupService
         }
 
         fclose($src);
-        if (gzclose($dst) !== 0) {
+        // gzclose devolve bool (true em sucesso) — NÃO 0.
+        if (!gzclose($dst)) {
             throw new RuntimeException('Erro ao finalizar o arquivo comprimido do backup.');
         }
     }
