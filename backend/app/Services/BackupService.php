@@ -68,15 +68,73 @@ class BackupService
             throw new RuntimeException('O arquivo .gz gerado está corrompido/truncado (falha na verificação de integridade).');
         }
 
-        $checksum = hash_file('sha256', $gzPath);
-        file_put_contents($gzPath . '.sha256', $checksum . '  ' . basename($gzPath) . "\n");
+        // Integridade verificada ANTES de cifrar (depois não dá pra checar o
+        // trailer gzip sem a senha). A partir daqui o arquivo final pode ser
+        // o .gz ou o .gz.enc.
+        $final = $gzPath;
+        $senha = $this->passphrase();
+        if ($senha !== null) {
+            $encPath = $gzPath . '.enc';
+            $this->cifrar($gzPath, $encPath, $senha);
+            @unlink($gzPath);
+            $final = $encPath;
+        }
+
+        $checksum = hash_file('sha256', $final);
+        file_put_contents($final . '.sha256', $checksum . '  ' . basename($final) . "\n");
 
         return [
-            'arquivo'   => basename($gzPath),
-            'tamanho'   => (int) filesize($gzPath),
+            'arquivo'   => basename($final),
+            'tamanho'   => (int) filesize($final),
             'checksum'  => $checksum,
+            'cifrado'   => $final !== $gzPath,
             'criado_em' => date('Y-m-d H:i:s'),
         ];
+    }
+
+    public function passphrase(): ?string
+    {
+        $p = config('backup.passphrase');
+        return is_string($p) && $p !== '' ? $p : null;
+    }
+
+    /**
+     * Cifra um arquivo com AES-256-CBC (openssl, PBKDF2 + salt). Formato
+     * padrão do `openssl enc` — decifrável em qualquer máquina com openssl,
+     * sem depender deste sistema.
+     */
+    public function cifrar(string $origem, string $destino, string $senha): void
+    {
+        putenv('BACKUP_OPENSSL_PASS=' . $senha);
+        $cmd = sprintf(
+            'openssl enc -aes-256-cbc -pbkdf2 -salt -in %s -out %s -pass env:BACKUP_OPENSSL_PASS 2>&1',
+            escapeshellarg($origem),
+            escapeshellarg($destino),
+        );
+        exec($cmd, $output, $exitCode);
+        putenv('BACKUP_OPENSSL_PASS');
+
+        if ($exitCode !== 0 || !is_file($destino) || filesize($destino) === 0) {
+            @unlink($destino);
+            throw new RuntimeException('Falha ao cifrar o backup (openssl exit ' . $exitCode . '): ' . implode("\n", array_slice($output, -5)));
+        }
+    }
+
+    public function decifrar(string $origem, string $destino, string $senha): void
+    {
+        putenv('BACKUP_OPENSSL_PASS=' . $senha);
+        $cmd = sprintf(
+            'openssl enc -d -aes-256-cbc -pbkdf2 -in %s -out %s -pass env:BACKUP_OPENSSL_PASS 2>&1',
+            escapeshellarg($origem),
+            escapeshellarg($destino),
+        );
+        exec($cmd, $output, $exitCode);
+        putenv('BACKUP_OPENSSL_PASS');
+
+        if ($exitCode !== 0 || !is_file($destino) || filesize($destino) === 0) {
+            @unlink($destino);
+            throw new RuntimeException('Falha ao decifrar o backup — senha errada ou arquivo corrompido.');
+        }
     }
 
     /**

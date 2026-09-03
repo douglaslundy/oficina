@@ -29,6 +29,10 @@ echo "[2/6] Fazendo build das imagens Docker..."
 docker compose -p $PROJECT -f docker-compose.prod.yml build --no-cache
 
 echo "[3/6] Iniciando containers..."
+# Diretório de backups (bind mount ./backups nos containers backend/worker/
+# scheduler). Criado aqui pra o Docker não criá-lo como root com permissão
+# restrita. É git-ignored — os arquivos ficam só no host.
+mkdir -p "$DEPLOY_DIR/backups"
 docker compose -p $PROJECT -f docker-compose.prod.yml up -d
 
 echo "[4/6] Aguardando sistema ficar saudável (pode levar ~2 min no primeiro deploy)..."

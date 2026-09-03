@@ -10,7 +10,8 @@ interface Backup {
   arquivo: string
   tamanho: number
   checksum?: string | null
-  integro?: boolean
+  integro?: boolean | null
+  cifrado?: boolean
   criado_em: string
 }
 
@@ -75,26 +76,45 @@ export default function BackupPage() {
 
   const showToast = useCallback((msg: string, type: ToastType) => setToast({ msg, type }), [])
 
-  const carregarLista = useCallback(() => {
+  const carregarLista = useCallback(async (): Promise<Backup[]> => {
     setLoadingList(true)
-    saasApi.get<{ data: Backup[] }>('/saas/backup/listar')
-      .then(r => setBackups(r.data.data))
-      .catch(() => showToast('Erro ao carregar lista de backups.', 'danger'))
-      .finally(() => setLoadingList(false))
+    try {
+      const r = await saasApi.get<{ data: Backup[] }>('/saas/backup/listar')
+      setBackups(r.data.data)
+      return r.data.data
+    } catch {
+      showToast('Erro ao carregar lista de backups.', 'danger')
+      return []
+    } finally {
+      setLoadingList(false)
+    }
   }, [showToast])
 
   useEffect(() => { carregarLista() }, [carregarLista])
 
   async function gerarBackup() {
     setGerando(true)
+    const antes = new Set(backups.map(b => b.arquivo))
     try {
-      const r = await saasApi.post<{ arquivo: string; tamanho: number; checksum: string }>('/saas/backup/gerar')
-      setUltimoGerado(r.data.arquivo)
-      showToast(`Backup gerado e verificado: ${r.data.arquivo}\nsha256: ${r.data.checksum}`, 'success')
-      carregarLista()
+      await saasApi.post('/saas/backup/gerar') // 202 — roda em segundo plano
+      // Aguarda um arquivo novo aparecer na lista (polling curto).
+      for (let i = 0; i < 30; i++) {
+        await new Promise(res => setTimeout(res, 4000))
+        const lista = await carregarLista()
+        const novo = lista.find(b => !antes.has(b.arquivo))
+        if (novo) {
+          setUltimoGerado(novo.arquivo)
+          showToast(
+            `Backup pronto: ${novo.arquivo}${novo.checksum ? `\nsha256: ${novo.checksum}` : ''}`,
+            'success',
+          )
+          return
+        }
+      }
+      showToast('O backup ainda está rodando. Atualize a lista em alguns instantes.', 'danger')
     } catch (e: unknown) {
       const msg = (e as { response?: { data?: { message?: string } } })?.response?.data?.message
-      showToast(msg ?? 'Erro ao gerar backup.', 'danger')
+      showToast(msg ?? 'Erro ao iniciar o backup.', 'danger')
     } finally {
       setGerando(false)
     }
@@ -256,7 +276,7 @@ export default function BackupPage() {
       })()}
 
       {/* Gerar Backup */}
-      <SectionCard title="Gerar Novo Backup" subtitle="Exporta todos os dados de todas as oficinas em formato SQL comprimido (.sql.gz)">
+      <SectionCard title="Gerar Novo Backup" subtitle="pg_dump completo, comprimido e verificado (SHA-256). Cifrado se BACKUP_PASSPHRASE estiver configurada.">
         <div style={{ display: 'flex', alignItems: 'center', gap: 16, flexWrap: 'wrap' }}>
           <button onClick={gerarBackup} disabled={gerando} style={{
             padding: '10px 28px', borderRadius: 7, border: 'none',
@@ -265,7 +285,7 @@ export default function BackupPage() {
             fontSize: 14, fontWeight: 700, cursor: gerando ? 'not-allowed' : 'pointer',
             fontFamily: "'Barlow Condensed', sans-serif",
           }}>
-            {gerando ? '⟳ Gerando backup...' : '💾 Gerar Backup Agora'}
+            {gerando ? '⟳ Backup em andamento...' : '💾 Gerar Backup Agora'}
           </button>
           {ultimoGerado && !gerando && (
             <span style={{ fontSize: 13, color: 'var(--success)' }}>
@@ -275,7 +295,7 @@ export default function BackupPage() {
         </div>
         {gerando && (
           <div style={{ marginTop: 14, fontSize: 13, color: 'var(--muted)' }}>
-            ⏳ Executando pg_dump... isso pode levar alguns segundos.
+            ⏳ Backup rodando em segundo plano. A lista atualiza sozinha quando terminar.
           </div>
         )}
       </SectionCard>
@@ -315,9 +335,11 @@ export default function BackupPage() {
                     {formatBytes(b.tamanho)}
                   </td>
                   <td style={{ padding: '10px 12px', fontSize: 13 }}>
-                    {b.integro === false
-                      ? <span style={{ color: 'var(--danger)', fontWeight: 700 }}>✗ corrompido</span>
-                      : <span style={{ color: 'var(--success)' }}>✓ íntegro</span>}
+                    {b.cifrado
+                      ? <span style={{ color: 'var(--info)' }}>🔒 cifrado</span>
+                      : b.integro === false
+                        ? <span style={{ color: 'var(--danger)', fontWeight: 700 }}>✗ corrompido</span>
+                        : <span style={{ color: 'var(--success)' }}>✓ íntegro</span>}
                   </td>
                   <td style={{ padding: '10px 12px', fontSize: 13, color: 'var(--muted)' }}>
                     {formatarDataHora(b.criado_em)}
@@ -346,7 +368,7 @@ export default function BackupPage() {
       {/* Importar Backup */}
       <SectionCard
         title="Importar Backup"
-        subtitle="Restaura um backup .sql ou .sql.gz. ATENÇÃO: operação destrutiva, sobrescreve dados existentes."
+        subtitle="Restaura um backup .sql, .sql.gz ou .sql.gz.enc. ATENÇÃO: operação destrutiva, sobrescreve dados existentes."
       >
         <div style={{
           background: 'rgba(229,57,53,.06)', border: '1px solid rgba(229,57,53,.2)',
@@ -360,11 +382,11 @@ export default function BackupPage() {
               display: 'block', fontSize: 12, fontWeight: 600,
               color: 'var(--muted)', textTransform: 'uppercase',
               letterSpacing: '0.05em', marginBottom: 6,
-            }}>Arquivo de Backup (.sql ou .sql.gz)</label>
+            }}>Arquivo de Backup (.sql, .sql.gz ou .sql.gz.enc)</label>
             <input
               ref={fileRef}
               type="file"
-              accept=".sql,.gz"
+              accept=".sql,.gz,.enc"
               onChange={e => setSelectedFile(e.target.files?.[0] ?? null)}
               style={{
                 padding: '8px 12px', borderRadius: 7, border: '1px solid var(--border)',

@@ -3,6 +3,64 @@
 ## Última atualização
 2026-09-02
 
+## Rodada 30 (2026-09-02) — Backup: 2ª rodada (destino, cifra, fila)
+
+Continuação da Rodada 29. Usuário: "siga por ordem" nos 3 itens que
+faltavam. Respostas dele: (1) destino = **baixar pro PC + guardar num
+diretório na raiz do projeto** (não quer cloud/SFTP); (2) cifra =
+**AES-256 via openssl com passphrase**; (3) fila = sim.
+
+### Item 1 — persistência como diretório do host (não cloud)
+- `docker-compose.prod.yml`: troca do volume Docker nomeado
+  `mecanicapro_backups` por **bind mount `./backups:/var/www/html/storage/backups`**
+  em `backend`, `worker` e `scheduler`. Os arquivos ficam em
+  `<deploy_dir>/backups/` no host — visíveis, fáceis de `scp`, sobrevivem
+  à recriação do container.
+- `deploy-vps.sh`: `mkdir -p "$DEPLOY_DIR/backups"` antes do `up -d`
+  (senão o Docker cria como root com permissão restrita).
+- `.gitignore` (`/backups/`) + `backend/.dockerignore` (`storage/backups/*`).
+- Download pro PC já funcionava (botão na tela). **Não há offsite
+  automático** — a estratégia é o admin baixar/copiar manualmente.
+
+### Item 2 — cifra AES-256 opcional
+- `openssl` adicionado ao `Dockerfile.prod` (apk).
+- `config('backup.passphrase')` (env `BACKUP_PASSPHRASE`). Se preenchida,
+  `BackupService::gerar()` cifra o `.sql.gz` → `.sql.gz.enc` com
+  `openssl enc -aes-256-cbc -pbkdf2 -salt` **depois** da verificação de
+  integridade (não dá pra checar o trailer gzip cifrado). Checksum SHA-256
+  no `.enc`. Formato padrão do openssl — decifrável no PC do admin sem o
+  sistema.
+- `BackupService::cifrar()/decifrar()` (senha por parâmetro, testáveis).
+  `passphrase()` lê a config.
+- `importar()`: upload `.enc` → decifra pra `.gz` temp (com a passphrase
+  do servidor) antes de restaurar; 422 claro se a passphrase não bater ou
+  não estiver configurada.
+- `backup:decifrar {arquivo}` — comando pra decifrar no servidor.
+- `listar()` marca `.enc` como `cifrado: true`, `integro: null` (a
+  integridade foi conferida na geração). Frontend: "🔒 cifrado".
+- `nomeValido()` aceita sufixo `.enc`.
+- **AVISO registrado**: perder a `BACKUP_PASSPHRASE` = backups cifrados
+  irrecuperáveis. Usuário aceitou o risco.
+
+### Item 3 — geração manual sai da thread do request
+- `GerarBackupJob` (queue `default`, roda no `worker`). `BackupController::
+  gerar()` só faz `dispatch()` e retorna **202** — não bloqueia mais o
+  `artisan serve` single-thread do container web.
+- Frontend: ao clicar "Gerar", faz polling de `listar()` a cada 4s (até
+  ~2min) e mostra sucesso quando um arquivo novo aparece.
+- O backup **agendado** (Rodada 29) não usa o job — roda direto no
+  container `scheduler`, sem fila.
+
+### Verificação
+- `php -l` limpo. `php artisan list` mostra `backup:executar` e
+  `backup:decifrar`. `phpunit --testsuite=Unit`: **204 testes, 486
+  assertions, 0 falhas** (+2 round-trip de cifra, TDD; pulam se `openssl`
+  ausente).
+- `tsc` + `npm run build` limpos. `bash -n` em deploy-vps.sh e
+  docker-entrypoint.sh OK.
+- **Não deployado.** Precisa: `.env` da VPS com `BACKUP_PASSPHRASE` (se
+  quiser cifra) e `mkdir backups` (o deploy-vps.sh já faz).
+
 ## Rodada 29 (2026-09-02) — Auditoria + endurecimento do sistema de backup
 
 Usuário pediu revisão minuciosa do algoritmo de backup ("posso confiar no

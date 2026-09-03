@@ -4,6 +4,7 @@ declare(strict_types=1);
 namespace App\Http\Controllers\SaaS;
 
 use App\Http\Controllers\Controller;
+use App\Jobs\GerarBackupJob;
 use App\Services\BackupService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
@@ -20,33 +21,37 @@ class BackupController extends Controller
 
     public function gerar(): JsonResponse
     {
-        try {
-            $resultado = $this->backup->gerar();
-        } catch (\Throwable $e) {
-            return response()->json([
-                'message' => 'Erro ao gerar backup.',
-                'detalhe' => $e->getMessage(),
-            ], 500);
-        }
+        // Enfileira em vez de rodar síncrono: o container web roda
+        // `artisan serve` (single-thread) e um pg_dump longo congelaria a API
+        // inteira. O job roda no worker; o frontend acompanha por polling
+        // de listar() (um arquivo novo aparecendo = backup pronto).
+        GerarBackupJob::dispatch();
 
-        // Mantém o disco sob controle mesmo com geração manual frequente.
-        $this->backup->podarAntigos((int) config('backup.manter', 14));
-
-        return response()->json($resultado);
+        return response()->json([
+            'status'  => 'enfileirado',
+            'message' => 'Backup em andamento em segundo plano. O arquivo aparece na lista quando terminar.',
+        ], 202);
     }
 
     public function listar(): JsonResponse
     {
-        // Só .sql.gz — o .sha256 irmão é metadado, não um backup.
-        $files = glob($this->backupPath . '/*.sql.gz') ?: [];
+        // .sql.gz e .sql.gz.enc — o .sha256 irmão é metadado, não um backup.
+        $files = array_merge(
+            glob($this->backupPath . '/*.sql.gz') ?: [],
+            glob($this->backupPath . '/*.sql.gz.enc') ?: [],
+        );
 
         $backups = array_map(function (string $file) {
-            $sha = @file_get_contents($file . '.sha256');
+            $sha     = @file_get_contents($file . '.sha256');
+            $cifrado = str_ends_with($file, '.enc');
             return [
                 'arquivo'   => basename($file),
                 'tamanho'   => filesize($file),
                 'checksum'  => $sha ? strtok(trim($sha), ' ') : null,
-                'integro'   => $this->backup->verificarGzip($file),
+                'cifrado'   => $cifrado,
+                // Não dá pra verificar o trailer gzip de um arquivo cifrado —
+                // a integridade dele foi conferida na geração, antes de cifrar.
+                'integro'   => $cifrado ? null : $this->backup->verificarGzip($file),
                 'criado_em' => date('Y-m-d H:i:s', (int) filemtime($file)),
             ];
         }, $files);
@@ -59,7 +64,7 @@ class BackupController extends Controller
     /** Só nomes no formato exato que gerar() produz — nada de path, wildcard ou sidecar. */
     private function nomeValido(string $arquivo): bool
     {
-        return (bool) preg_match('/^backup_[0-9]{4}-[0-9]{2}-[0-9]{2}_[0-9]{2}-[0-9]{2}-[0-9]{2}[a-z0-9\-]*\.sql\.gz$/i', $arquivo);
+        return (bool) preg_match('/^backup_[0-9]{4}-[0-9]{2}-[0-9]{2}_[0-9]{2}-[0-9]{2}-[0-9]{2}[a-z0-9\-]*\.sql\.gz(\.enc)?$/i', $arquivo);
     }
 
     public function download(string $arquivo): StreamedResponse|JsonResponse
@@ -126,23 +131,47 @@ class BackupController extends Controller
         $env     = 'PGPASSWORD=' . escapeshellarg((string) $password);
         $sqlPath = $tmpPath;
         $tmpSql  = null;
+        $tmpGz   = null;
+        $gzPath  = $tmpPath;
 
-        if (str_ends_with($originalName, '.gz')) {
-            // Rejeita um .gz corrompido/truncado ANTES de mexer no banco.
-            if (!$this->backup->verificarGzip($tmpPath)) {
+        // Backup cifrado (.sql.gz.enc): decifra pra um .gz temporário primeiro.
+        if (str_ends_with($originalName, '.enc')) {
+            $senha = $this->backup->passphrase();
+            if ($senha === null) {
                 return response()->json([
-                    'message' => 'O arquivo .gz enviado está corrompido ou incompleto. Nenhum dado foi alterado.',
+                    'message' => 'Este backup está cifrado, mas BACKUP_PASSPHRASE não está configurada no servidor. Nenhum dado foi alterado.',
+                ], 422);
+            }
+            $tmpGz = $tmpPath . '_dec.sql.gz';
+            try {
+                $this->backup->decifrar($tmpPath, $tmpGz, $senha);
+            } catch (\Throwable $e) {
+                if (is_file($tmpGz)) { @unlink($tmpGz); }
+                return response()->json([
+                    'message' => 'Não foi possível decifrar o backup (senha do servidor diferente da usada na geração?). Nenhum dado foi alterado.',
+                ], 422);
+            }
+            $gzPath = $tmpGz;
+        }
+
+        if (str_ends_with($originalName, '.gz') || $tmpGz !== null) {
+            // Rejeita um .gz corrompido/truncado ANTES de mexer no banco.
+            if (!$this->backup->verificarGzip($gzPath)) {
+                if ($tmpGz !== null && is_file($tmpGz)) { @unlink($tmpGz); }
+                return response()->json([
+                    'message' => 'O arquivo enviado está corrompido ou incompleto. Nenhum dado foi alterado.',
                 ], 422);
             }
 
             $tmpSql = $tmpPath . '_restore.sql';
-            $src    = gzopen($tmpPath, 'rb');
+            $src    = gzopen($gzPath, 'rb');
             $dst    = fopen($tmpSql, 'wb');
             while (!gzeof($src)) {
                 fwrite($dst, (string) gzread($src, 65536));
             }
             gzclose($src);
             fclose($dst);
+            if ($tmpGz !== null && is_file($tmpGz)) { @unlink($tmpGz); }
             $sqlPath = $tmpSql;
         }
 

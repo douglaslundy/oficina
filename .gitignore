@@ -6,3 +6,5 @@ frontend/.next/
 *.tar.gz
 *.zip
 docker/nginx/logs/
+# Backups do banco (bind mount ./backups no docker-compose.prod.yml).
+/backups/

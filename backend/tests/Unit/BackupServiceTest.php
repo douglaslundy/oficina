@@ -93,4 +93,45 @@ class BackupServiceTest extends TestCase
         $this->assertSame([], $this->service()->podarAntigos(14));
         $this->assertFileExists($this->dir . '/backup_1.sql.gz');
     }
+
+    public function test_cifra_e_decifra_round_trip(): void
+    {
+        exec('openssl version 2>&1', $o, $code);
+        if ($code !== 0) {
+            $this->markTestSkipped('openssl não disponível neste ambiente.');
+        }
+
+        $original = $this->dir . '/dados.sql.gz';
+        $conteudo = random_bytes(4096) . 'CONTEUDO-SENSIVEL' . random_bytes(4096);
+        file_put_contents($original, $conteudo);
+
+        $enc = $this->dir . '/dados.sql.gz.enc';
+        $svc = $this->service();
+        $svc->cifrar($original, $enc, 'senha-secreta-123');
+
+        // O arquivo cifrado não pode conter o texto em claro.
+        $this->assertStringNotContainsString('CONTEUDO-SENSIVEL', (string) file_get_contents($enc));
+
+        $volta = $this->dir . '/volta.sql.gz';
+        $svc->decifrar($enc, $volta, 'senha-secreta-123');
+
+        $this->assertSame($conteudo, file_get_contents($volta));
+    }
+
+    public function test_decifra_com_senha_errada_falha(): void
+    {
+        exec('openssl version 2>&1', $o, $code);
+        if ($code !== 0) {
+            $this->markTestSkipped('openssl não disponível neste ambiente.');
+        }
+
+        $original = $this->dir . '/x.sql.gz';
+        file_put_contents($original, str_repeat('abc', 1000));
+        $enc = $this->dir . '/x.sql.gz.enc';
+        $svc = $this->service();
+        $svc->cifrar($original, $enc, 'senha-certa');
+
+        $this->expectException(\RuntimeException::class);
+        $svc->decifrar($enc, $this->dir . '/nope.sql.gz', 'senha-errada');
+    }
 }

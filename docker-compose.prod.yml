@@ -67,8 +67,10 @@ services:
       TZ: America/Sao_Paulo
     volumes:
       - /etc/localtime:/etc/localtime:ro
-      # Backups persistem entre deploys (o container é recriado no build --no-cache).
-      - mecanicapro_backups:/var/www/html/storage/backups
+      # Backups no diretório ./backups do deploy (host) — visíveis no
+      # filesystem da VPS, sobrevivem à recriação do container, fáceis de
+      # copiar/baixar. Ver docker-entrypoint.sh e BackupService.
+      - ./backups:/var/www/html/storage/backups
     depends_on:
       postgres:
         condition: service_healthy
@@ -94,6 +96,8 @@ services:
       CONTAINER_ROLE: worker
     volumes:
       - /etc/localtime:/etc/localtime:ro
+      # O job de backup manual (GerarBackupJob) roda aqui e grava neste diretório.
+      - ./backups:/var/www/html/storage/backups
     depends_on:
       postgres:
         condition: service_healthy
@@ -117,8 +121,8 @@ services:
       CONTAINER_ROLE: scheduler
     volumes:
       - /etc/localtime:/etc/localtime:ro
-      # Mesmo volume do backend — o backup diário agendado grava aqui.
-      - mecanicapro_backups:/var/www/html/storage/backups
+      # Mesmo diretório do backend — o backup diário agendado grava aqui.
+      - ./backups:/var/www/html/storage/backups
     depends_on:
       postgres:
         condition: service_healthy
@@ -175,4 +179,3 @@ networks:
 
 volumes:
   mecanicapro_pgdata:
-  mecanicapro_backups:
