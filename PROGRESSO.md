@@ -3,6 +3,37 @@
 ## Última atualização
 2026-09-02
 
+## DEPLOY 2026-09-02 (Rodadas 27–30) — CONCLUÍDO
+
+`git push` + `git pull` (stash/ff-merge/pop pra preservar os mods locais do
+nginx da VPS: `set_real_ip_from` + tenant `oficina-do-lundy`) + `bash
+deploy-vps.sh`. Commits `53c947e..87d7579` (5 commits).
+
+**Verificado em produção:**
+- 3 migrations `Ran` (`km_atual`, `km_ultimo`, `sku`/`unidade`/índices) —
+  colunas confirmadas via `psql`.
+- 4 domínios públicos → 200 (`saas`, `oficina`, `stuntmotos`,
+  `oficina-do-lundy`).
+- `schedule:list` mostra `backup:executar` às 03:00; container `scheduler`
+  vivo.
+- `./backups/` criado no host; `php artisan backup:executar` manual →
+  "Backup OK ... 0.19 MB, sha256 855cd3…" + `.sha256` gerado; `gzip -t`
+  OK nos dois `.gz`.
+- **`BACKUP_PASSPHRASE` NÃO foi configurada** — backups saem gzipados sem
+  cifra (decisão de não bloquear o deploy; usuário decide depois).
+
+**Bug achado e corrigido durante o deploy** (commit `87d7579`): o primeiro
+`backup:executar` (pré-deploy) falhou com "Erro ao finalizar o arquivo
+comprimido". Causa: `gzclose()` devolve `bool` (true em sucesso), e o check
+era `gzclose($dst) !== 0` → sempre verdadeiro → `comprimir()` sempre
+lançava exceção. **Quebrava TODO backup** (agendado e manual). Passou
+batido no TDD porque `comprimir()` era `private` sem teste. Fix: `!gzclose()`
++ `!gzwrite()`, método virou `public` com teste de round-trip. Redeploy
+feito, backup manual confirmado funcionando.
+
+Falta: validação manual do usuário na tela (KM na OS, filtro de período,
+tela de backup) e feature tests contra Postgres (CI).
+
 ## Rodada 30 (2026-09-02) — Backup: 2ª rodada (destino, cifra, fila)
 
 Continuação da Rodada 29. Usuário: "siga por ordem" nos 3 itens que
