@@ -43,7 +43,7 @@ class EntradaNfConsultaTest extends TestCase
 
         Http::fake([
             '*/inbound-product-invoices?*' => Http::response([
-                'items' => [['id' => 'inv-1', 'accessKey' => 'CHAVE-QR-1', 'isComplete' => true]],
+                'items' => [['id' => 'inv-1', 'accessKey' => '35260712345678000199550010000012340000000001', 'isComplete' => true]],
             ], 200),
             '*/inbound-product-invoices/inv-1/xml' => Http::response(<<<XML
 <?xml version="1.0" encoding="UTF-8"?>
@@ -58,7 +58,7 @@ XML, 200),
         ]);
 
         $this->withToken($token)->withHeaders(['X-Tenant' => $oficina->slug])
-            ->postJson('/api/entradas-nf/consultar', ['chave_acesso' => 'CHAVE-QR-1'])
+            ->postJson('/api/entradas-nf/consultar', ['chave_acesso' => '35260712345678000199550010000012340000000001'])
             ->assertStatus(200)
             ->assertJsonPath('fornecedor_nome', 'Fornecedor QR')
             ->assertJsonPath('ja_lancada', false);
@@ -70,13 +70,13 @@ XML, 200),
 
         Http::fake([
             '*/inbound-product-invoices?*' => Http::response([
-                'items' => [['id' => 'inv-1', 'accessKey' => 'CHAVE-QR-1', 'isComplete' => false]],
+                'items' => [['id' => 'inv-1', 'accessKey' => '35260712345678000199550010000012340000000001', 'isComplete' => false]],
             ], 200),
             '*/inbound-product-invoices/inv-1/manifest' => Http::response([], 200),
         ]);
 
         $this->withToken($token)->withHeaders(['X-Tenant' => $oficina->slug])
-            ->postJson('/api/entradas-nf/consultar', ['chave_acesso' => 'CHAVE-QR-1'])
+            ->postJson('/api/entradas-nf/consultar', ['chave_acesso' => '35260712345678000199550010000012340000000001'])
             ->assertStatus(202);
     }
 
@@ -87,7 +87,7 @@ XML, 200),
         Http::fake(['*/inbound-product-invoices?*' => Http::response(['items' => []], 200)]);
 
         $this->withToken($token)->withHeaders(['X-Tenant' => $oficina->slug])
-            ->postJson('/api/entradas-nf/consultar', ['chave_acesso' => 'CHAVE-INEXISTENTE'])
+            ->postJson('/api/entradas-nf/consultar', ['chave_acesso' => '99999999999999999999999999999999999999999999'])
             ->assertStatus(404);
     }
 
@@ -101,7 +101,7 @@ XML, 200),
         Http::fake();
 
         $this->withToken($token)->withHeaders(['X-Tenant' => $oficina->slug])
-            ->postJson('/api/entradas-nf/consultar', ['chave_acesso' => 'CHAVE-QR-1'])
+            ->postJson('/api/entradas-nf/consultar', ['chave_acesso' => '35260712345678000199550010000012340000000001'])
             ->assertStatus(422);
 
         Http::assertNothingSent();
@@ -110,11 +110,11 @@ XML, 200),
     public function test_consultar_chave_ja_lancada_retorna_422_sem_consultar_provedor(): void
     {
         [$token, $oficina] = $this->loginAdmin('SPEDY');
-        \App\Models\NotaEntrada::create(['chave_acesso' => 'CHAVE-JA-LANCADA', 'valor_total' => 10]);
+        \App\Models\NotaEntrada::create(['chave_acesso' => '35260712345678000199550010000012340000000001', 'valor_total' => 10]);
         Http::fake();
 
         $this->withToken($token)->withHeaders(['X-Tenant' => $oficina->slug])
-            ->postJson('/api/entradas-nf/consultar', ['chave_acesso' => 'CHAVE-JA-LANCADA'])
+            ->postJson('/api/entradas-nf/consultar', ['chave_acesso' => '35260712345678000199550010000012340000000001'])
             ->assertStatus(422);
 
         Http::assertNothingSent();

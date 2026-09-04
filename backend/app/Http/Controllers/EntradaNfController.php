@@ -332,7 +332,7 @@ class EntradaNfController extends Controller
 
     public function consultar(Request $request, FiscalProviderManager $providerManager, ProdutoFiscalService $fiscalService): JsonResponse
     {
-        $validated = $request->validate(['chave_acesso' => ['required', 'string', 'max:44']]);
+        $validated = $request->validate(['chave_acesso' => ['required', 'string', 'size:44']]);
 
         if (NotaEntrada::where('chave_acesso', $validated['chave_acesso'])->exists()) {
             return response()->json(['message' => 'Esta nota fiscal já foi lançada anteriormente.'], 422);
