@@ -3,15 +3,17 @@ declare(strict_types=1);
 
 namespace App\Services\Fiscal\Providers;
 
+use App\Services\Fiscal\Contracts\ConsultaNotaTerceiroProvider;
 use App\Services\Fiscal\Contracts\FiscalProvider;
 use App\Services\Fiscal\Data\ConsultaNotaTerceiroResultado;
+use App\Services\Fiscal\Data\ConsultaNotaTerceiroResumo;
 use App\Services\Fiscal\Data\EmissaoResultado;
 use App\Services\Fiscal\Data\EmissorData;
 use App\Services\Fiscal\Data\NotaFiscalData;
 use App\Services\Fiscal\Data\RegistroResultado;
 use Illuminate\Support\Facades\Http;
 
-class FocusNfeProvider implements FiscalProvider
+class FocusNfeProvider implements FiscalProvider, ConsultaNotaTerceiroProvider
 {
     public function __construct(
         private readonly string $baseUrl,
@@ -500,5 +502,29 @@ class FocusNfeProvider implements FiscalProvider
         }
 
         return ConsultaNotaTerceiroResultado::completa(FocusNfeRecebidaMapper::paraArray($json));
+    }
+
+    public function listarNotasRecebidas(string $cnpjOficina, ?\DateTimeInterface $desde = null): array
+    {
+        $cnpjLimpo = preg_replace('/\D/', '', $cnpjOficina) ?? '';
+
+        // A Focus não filtra por data — só por "versao" (paginação
+        // incremental). $desde fica sem uso aqui por ora; mantido na
+        // assinatura pra simetria com a interface e com o SpedyProvider.
+        $resp = Http::withBasicAuth($this->emissorToken ?? $this->masterToken, '')
+            ->get("{$this->baseUrl}/v2/nfes_recebidas", ['cnpj' => $cnpjLimpo]);
+
+        if ($resp->failed()) {
+            return [];
+        }
+
+        return array_map(fn (array $item) => new ConsultaNotaTerceiroResumo(
+            chaveAcesso: (string) ($item['chave_nfe'] ?? ''),
+            fornecedorNome: $item['nome_emitente'] ?? null,
+            fornecedorCnpj: $item['documento_emitente'] ?? null,
+            dataEmissao: isset($item['data_emissao']) ? substr((string) $item['data_emissao'], 0, 10) : null,
+            valorTotal: (float) ($item['valor_total'] ?? 0),
+            completa: ($item['nfe_completa'] ?? false) === true,
+        ), $resp->json() ?? []);
     }
 }

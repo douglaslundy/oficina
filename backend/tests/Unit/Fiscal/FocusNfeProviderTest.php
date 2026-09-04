@@ -501,4 +501,23 @@ class FocusNfeProviderTest extends TestCase
         $this->assertSame('ERRO', $r->status);
         $this->assertStringContainsString('Token inválido', (string) $r->mensagemErro);
     }
+
+    public function test_listar_notas_recebidas_mapeia_a_lista(): void
+    {
+        Http::fake([
+            '*/nfes_recebidas?*' => Http::response([
+                ['chave_nfe' => 'CHAVE1', 'nome_emitente' => 'Fornecedor A', 'documento_emitente' => '111', 'valor_total' => '10.00', 'data_emissao' => '2026-09-01T10:00:00-03:00', 'nfe_completa' => true],
+                ['chave_nfe' => 'CHAVE2', 'nome_emitente' => 'Fornecedor B', 'documento_emitente' => '222', 'valor_total' => '20.00', 'data_emissao' => '2026-09-02T10:00:00-03:00', 'nfe_completa' => false],
+            ], 200),
+        ]);
+
+        $p = new FocusNfeProvider('https://homologacao.focusnfe.com.br', 'master', 'HOMOLOGACAO', 'tok');
+        $resumos = $p->listarNotasRecebidas('12.345.678/0001-99');
+
+        $this->assertCount(2, $resumos);
+        $this->assertSame('CHAVE1', $resumos[0]->chaveAcesso);
+        $this->assertTrue($resumos[0]->completa);
+        $this->assertFalse($resumos[1]->completa);
+        Http::assertSent(fn ($req) => str_contains($req->url(), 'cnpj=12345678000199'));
+    }
 }
