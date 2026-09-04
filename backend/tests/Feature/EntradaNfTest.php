@@ -4,6 +4,7 @@ declare(strict_types=1);
 namespace Tests\Feature;
 
 use App\Models\NotaEntrada;
+use App\Models\Oficina;
 use App\Models\Produto;
 use App\Models\Usuario;
 use Illuminate\Foundation\Testing\RefreshDatabase;
@@ -17,9 +18,14 @@ class EntradaNfTest extends TestCase
 
     private function loginAdmin(): string
     {
+        $oficina = Oficina::create([
+            'nome' => 'Oficina Teste', 'slug' => 'oficina-teste',
+            'cnpj' => (string) mt_rand(10000000000000, 99999999999999), 'status' => 'ATIVA',
+        ]);
         $user = Usuario::create([
             'nome' => 'Admin', 'email' => 'admin@test.com', 'cpf' => '52998224725',
             'role' => 'ADMIN', 'status' => 'ATIVO', 'senha_hash' => Hash::make('admin123'),
+            'oficina_id' => $oficina->id,
         ]);
         return $user->createToken('test')->plainTextToken;
     }

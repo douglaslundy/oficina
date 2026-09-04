@@ -48,6 +48,13 @@ class Cobranca extends Model
             if (empty($model->id)) {
                 $model->id = (string) Str::uuid();
             }
+            // mes_referencia é NOT NULL e o código de produção sempre o define
+            // (a partir do vencimento). Default defensivo: 1º dia do mês do
+            // vencimento, ou do mês corrente.
+            if (empty($model->mes_referencia)) {
+                $base = $model->vencimento ? \Illuminate\Support\Carbon::parse($model->vencimento) : now();
+                $model->mes_referencia = $base->copy()->startOfMonth();
+            }
         });
     }
 

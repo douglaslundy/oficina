@@ -64,7 +64,8 @@ class BackupController extends Controller
     /** Só nomes no formato exato que gerar() produz — nada de path, wildcard ou sidecar. */
     private function nomeValido(string $arquivo): bool
     {
-        return (bool) preg_match('/^backup_[0-9]{4}-[0-9]{2}-[0-9]{2}_[0-9]{2}-[0-9]{2}-[0-9]{2}[a-z0-9\-]*\.sql\.gz(\.enc)?$/i', $arquivo);
+        // O sufixo opcional entra como "_pre-deploy" etc. (underscore + [a-z0-9-]).
+        return (bool) preg_match('/^backup_[0-9]{4}-[0-9]{2}-[0-9]{2}_[0-9]{2}-[0-9]{2}-[0-9]{2}(_[a-z0-9\-]+)?\.sql\.gz(\.enc)?$/i', $arquivo);
     }
 
     /**
