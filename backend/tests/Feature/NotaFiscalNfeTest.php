@@ -143,14 +143,19 @@ class NotaFiscalNfeTest extends TestCase
         // (POST /notas-fiscais/{id}/emitir) contra um Http::fake da Focus, provando
         // que o resultado real do provedor (numero, chave, xml) chega até o registro
         // persistido — não só a camada de unit do FocusNfeProvider isoladamente.
-        $this->criarConfiguracao(['uf' => 'SP']);
         $oficina = Oficina::create([
             'nome' => 'Oficina Focus Teste', 'cnpj' => (string) mt_rand(10000000000000, 99999999999999),
             'slug' => 'oficina-focus-' . uniqid(), 'provedor_fiscal' => 'FOCUS',
         ]);
-        $token   = $this->loginAdmin();
+        $token = $this->loginAdmin();
+        // Configuracao/Cliente/Produto precisam pertencer à MESMA oficina das
+        // requisições abaixo (X-Tenant) — o global scope do HasTenantScope
+        // não os encontraria se criados fora de contexto.
+        \App\Tenancy\TenancyContext::set($oficina->id, $oficina->slug);
+        $this->criarConfiguracao(['uf' => 'SP']);
         $cliente = $this->criarCliente(['uf' => 'SP']);
         $produto = $this->criarProduto();
+        \App\Tenancy\TenancyContext::clear();
 
         Http::fake([
             '*/v2/nfe?ref=*' => Http::response([

@@ -42,6 +42,9 @@ class NotificacaoVisualizacaoModelTest extends TestCase
         $this->assertDatabaseHas('notificacao_visualizacoes', ['id' => $visualizacao->id, 'tipo' => 'MANUAL']);
         $this->assertSame($oficina->id, $visualizacao->oficina->id);
         $this->assertSame($usuario->id, $visualizacao->usuario->id);
-        $this->assertNotNull($visualizacao->visualizado_em);
+        // visualizado_em vem do default useCurrent() da coluna (Postgres) —
+        // o INSERT não devolve esse valor pro objeto em memória (só o id via
+        // RETURNING), então precisa de refresh() antes de ler o atributo.
+        $this->assertNotNull($visualizacao->refresh()->visualizado_em);
     }
 }

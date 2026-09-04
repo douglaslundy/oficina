@@ -7,6 +7,7 @@ use App\Models\Cliente;
 use App\Models\Configuracao;
 use App\Models\Produto;
 use App\Models\Usuario;
+use App\Tenancy\TenancyContext;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Facades\Http;
@@ -147,13 +148,15 @@ class NotaFiscalNfceTest extends TestCase
             'slug' => 'oficina-nfce-' . uniqid(), 'provedor_fiscal' => 'FOCUS',
         ]);
         // As requisições abaixo rodam sob o tenant desta oficina (header
-        // X-Tenant) — a Configuracao precisa ser da MESMA oficina, senão o
-        // global scope do HasTenantScope não a encontra (store() rejeita
-        // com "Complete a UF..." e o teste falha rio abaixo com 404 no emitir).
-        $this->criarConfiguracao(['uf' => 'MG', 'oficina_id' => $oficina->id]);
-        $token   = $this->loginAdmin();
+        // X-Tenant) — Configuracao/Cliente/Produto precisam ser da MESMA
+        // oficina, senão o global scope do HasTenantScope não os encontra
+        // (store() 404/422 e o teste falha rio abaixo).
+        $token = $this->loginAdmin();
+        TenancyContext::set($oficina->id, $oficina->slug);
+        $this->criarConfiguracao(['uf' => 'MG']);
         $cliente = Cliente::create(['nome' => 'Fulano', 'cpf_cnpj' => '87748248800', 'uf' => 'MG']);
         $produto = $this->criarProduto();
+        TenancyContext::clear();
 
         Http::fake([
             '*/v2/nfce?ref=*' => Http::response([
@@ -189,18 +192,20 @@ class NotaFiscalNfceTest extends TestCase
             'nome' => 'Oficina Numeracao', 'cnpj' => (string) mt_rand(10000000000000, 99999999999999),
             'slug' => 'oficina-num-' . uniqid(), 'provedor_fiscal' => 'FOCUS',
         ]);
-        $this->criarConfiguracao(['uf' => 'MG', 'oficina_id' => $oficina->id]);
         $token = $this->loginAdmin();
         $headers = ['X-Tenant' => $oficina->slug];
+
+        TenancyContext::set($oficina->id, $oficina->slug);
+        $this->criarConfiguracao(['uf' => 'MG']);
+        $clientePf = Cliente::create(['nome' => 'PF', 'cpf_cnpj' => '87748248800', 'uf' => 'MG']);
+        $clientePj = Cliente::create(['nome' => 'PJ', 'cpf_cnpj' => (string) mt_rand(10000000000000, 99999999999999), 'uf' => 'MG']);
+        $produto   = $this->criarProduto();
+        TenancyContext::clear();
 
         Http::fake([
             '*/v2/nfce?ref=*' => Http::response(['status' => 'autorizado', 'numero' => '1', 'chave_nfe' => 'K1'], 201),
             '*/v2/nfe?ref=*'  => Http::response(['status' => 'autorizado', 'numero' => '500', 'chave_nfe' => 'K2'], 201),
         ]);
-
-        $clientePf = Cliente::create(['nome' => 'PF', 'cpf_cnpj' => '87748248800', 'uf' => 'MG']);
-        $clientePj = Cliente::create(['nome' => 'PJ', 'cpf_cnpj' => (string) mt_rand(10000000000000, 99999999999999), 'uf' => 'MG']);
-        $produto   = $this->criarProduto();
 
         $nfce1 = $this->withToken($token)->withHeaders($headers)->postJson('/api/notas-fiscais', $this->payloadVenda($clientePf->id, $produto->id));
         $this->withToken($token)->withHeaders($headers)->postJson("/api/notas-fiscais/{$nfce1->json('data.id')}/emitir");
@@ -227,11 +232,13 @@ class NotaFiscalNfceTest extends TestCase
             'nome' => 'Oficina Spedy NFC-e', 'cnpj' => (string) mt_rand(10000000000000, 99999999999999),
             'slug' => 'oficina-spedy-nfce-' . uniqid(), 'provedor_fiscal' => 'SPEDY',
         ]);
-        $this->criarConfiguracao(['uf' => 'MG', 'oficina_id' => $oficina->id]);
         $token   = $this->loginAdmin();
         $headers = ['X-Tenant' => $oficina->slug];
+        TenancyContext::set($oficina->id, $oficina->slug);
+        $this->criarConfiguracao(['uf' => 'MG']);
         $cliente = Cliente::create(['nome' => 'Fulano', 'cpf_cnpj' => '87748248800', 'uf' => 'MG']);
         $produto = $this->criarProduto();
+        TenancyContext::clear();
 
         Http::fake([
             '*/consumer-invoices' => Http::response(['id' => 'inv-1', 'status' => 'enqueued'], 202),
@@ -259,11 +266,13 @@ class NotaFiscalNfceTest extends TestCase
             'nome' => 'Oficina Focus 2', 'cnpj' => (string) mt_rand(10000000000000, 99999999999999),
             'slug' => 'oficina-focus2-' . uniqid(), 'provedor_fiscal' => 'FOCUS',
         ]);
-        $this->criarConfiguracao(['uf' => 'MG', 'oficina_id' => $oficina->id]);
         $token   = $this->loginAdmin();
         $headers = ['X-Tenant' => $oficina->slug];
+        TenancyContext::set($oficina->id, $oficina->slug);
+        $this->criarConfiguracao(['uf' => 'MG']);
         $cliente = Cliente::create(['nome' => 'Fulano', 'cpf_cnpj' => '87748248800', 'uf' => 'MG']);
         $produto = $this->criarProduto();
+        TenancyContext::clear();
 
         Http::fake([
             '*/v2/nfce?ref=*' => Http::response(['status' => 'autorizado', 'numero' => '1', 'chave_nfe' => 'K1'], 201),
@@ -295,11 +304,13 @@ class NotaFiscalNfceTest extends TestCase
             'nome' => 'Oficina PDF NFC-e', 'cnpj' => (string) mt_rand(10000000000000, 99999999999999),
             'slug' => 'oficina-pdf-nfce-' . uniqid(), 'provedor_fiscal' => 'FOCUS',
         ]);
-        $this->criarConfiguracao(['uf' => 'MG', 'oficina_id' => $oficina->id]);
         $token   = $this->loginAdmin();
         $headers = ['X-Tenant' => $oficina->slug];
+        TenancyContext::set($oficina->id, $oficina->slug);
+        $this->criarConfiguracao(['uf' => 'MG']);
         $cliente = Cliente::create(['nome' => 'Fulano', 'cpf_cnpj' => '87748248800', 'uf' => 'MG']);
         $produto = $this->criarProduto();
+        TenancyContext::clear();
 
         Http::fake([
             '*/v2/nfce?ref=*' => Http::response([
