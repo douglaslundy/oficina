@@ -3,6 +3,43 @@
 ## Última atualização
 2026-09-02
 
+## TAREFA PENDENTE — validar emissão fiscal ponta a ponta (stuntmotos / Spedy homologação)
+
+Estado em 2026-09-03/04 (verificado direto na produção):
+- **Provedor**: SPEDY, ambiente **HOMOLOGAÇÃO**. Chave sandbox Spedy
+  configurada em SaaS Admin e **testada — válida** (`GET /companies` → 200).
+- A empresa **STUNT MOTOS LTDA** (CNPJ 50388509000121) **já existe na
+  conta Spedy** (id `4491bc77-ca9b-41e6-8382-b4ba00c2a315`), criada direto
+  no painel da Spedy pelo usuário — NÃO pelo nosso "ativar emissão".
+- `emissores_fiscais` na nossa base: **0 registros**.
+- **Ajustes já feitos na `configuracoes` da stuntmotos** (tinker prod,
+  autorizado): `codigo_ibge = 3130507` (Ilicínea/MG, confirmado no
+  ViaCEP), `logradouro = "rua 15 de novembro"` (copiado do campo legado
+  `endereco`). `camposFiscaisFaltando()` agora retorna `[]`.
+
+**Bloqueios restantes para emitir (usuário precisa fazer):**
+1. **Enviar o certificado A1** (.pfx + senha) em Configurações → Dados da
+   Empresa. `RegistrarEmissorService::registrar()` exige
+   `certificado_pfx_encrypted` + `certificado_senha_encrypted` como
+   precondição — hoje ambos vazios. Sem isso não registra nem emite.
+2. **Inscrição Municipal** vazia — obrigatória na prática para **NFS-e**
+   (a única que a Spedy emite neste sistema). Pegar na prefeitura de
+   Ilicínea. NÃO é obrigatória para NF-e, mas NF-e via Spedy não existe
+   (ver abaixo).
+
+**Quando o usuário subir o certificado + IM, retomar:**
+- Rodar o "ativar emissão" (`RegistrarEmissorService::registrar`) para
+  criar/vincular o emissor na Spedy e popular `emissores_fiscais`.
+  ⚠️ A empresa já existe na Spedy — confirmar se `POST /companies` dedupe
+  por CNPJ ou cria duplicata; pode ser preciso vincular o id
+  `4491bc77…` manualmente.
+- Emitir uma **NFS-e de teste em homologação** (a partir de uma OS de
+  serviço da stuntmotos) e verificar: payload aceito, status
+  AUTORIZADA/PROCESSANDO, PDF, consulta de status.
+- **NF-e (peças) via Spedy NÃO está implementada** —
+  `SpedyProvider::emitir()` retorna rejeição explícita. Para testar NF-e
+  de peça precisa da Focus NFe (outra conta/credencial).
+
 ## DEPLOY 2026-09-02 (Rodadas 27–30) — CONCLUÍDO
 
 `git push` + `git pull` (stash/ff-merge/pop pra preservar os mods locais do
