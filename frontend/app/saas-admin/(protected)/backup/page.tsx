@@ -120,24 +120,16 @@ export default function BackupPage() {
     }
   }
 
-  function baixarBackup(arquivo: string) {
-    const token = localStorage.getItem('saas_token')
-    const url = `${window.location.origin}/api/saas/backup/${encodeURIComponent(arquivo)}/download`
-    const a = document.createElement('a')
-    a.href = url
-    a.setAttribute('download', arquivo)
-    // Add auth header via fetch + blob
-    fetch(url, { headers: { Authorization: `Bearer ${token}` } })
-      .then(res => res.blob())
-      .then(blob => {
-        const blobUrl = URL.createObjectURL(blob)
-        a.href = blobUrl
-        document.body.appendChild(a)
-        a.click()
-        document.body.removeChild(a)
-        URL.revokeObjectURL(blobUrl)
-      })
-      .catch(() => showToast('Erro ao baixar backup.', 'danger'))
+  async function baixarBackup(arquivo: string) {
+    try {
+      // Pega uma URL assinada e curta e navega direto pra ela — o browser
+      // faz o streaming pro disco sem carregar o arquivo na memória do JS.
+      const r = await saasApi.get<{ url: string }>(`/saas/backup/${encodeURIComponent(arquivo)}/link`)
+      window.location.href = r.data.url
+    } catch (e: unknown) {
+      const msg = (e as { response?: { data?: { message?: string } } })?.response?.data?.message
+      showToast(msg ?? 'Erro ao baixar backup.', 'danger')
+    }
   }
 
   async function apagarBackup(arquivo: string) {

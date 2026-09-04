@@ -56,6 +56,12 @@ Route::prefix('saas')->group(function () {
     Route::post('/auth/logout', [SaaSAuthController::class, 'logout'])->middleware('auth:saas');
     Route::get('/auth/me',      [SaaSAuthController::class, 'me'])->middleware('auth:saas');
 
+    // Download de backup por URL assinada (a assinatura é a credencial —
+    // permite o browser baixar direto, sem carregar o arquivo na memória do JS).
+    Route::get('backup/{arquivo}/download-assinado', [SaaSBackupController::class, 'downloadAssinado'])
+        ->middleware('signed:relative')
+        ->name('saas.backup.download');
+
     // Protected SaaS routes
     Route::middleware('auth:saas')->group(function () {
         // Oficinas (tenant management)
@@ -101,6 +107,7 @@ Route::prefix('saas')->group(function () {
         // dispara restores em série.
         Route::get('backup/listar',              [SaaSBackupController::class, 'listar']);
         Route::post('backup/gerar',              [SaaSBackupController::class, 'gerar'])->middleware('throttle:4,60');
+        Route::get('backup/{arquivo}/link',      [SaaSBackupController::class, 'gerarLink']);
         Route::get('backup/{arquivo}/download',  [SaaSBackupController::class, 'download']);
         Route::delete('backup/{arquivo}',        [SaaSBackupController::class, 'apagar']);
         Route::post('backup/importar',           [SaaSBackupController::class, 'importar'])->middleware('throttle:3,60');

@@ -67,7 +67,43 @@ class BackupController extends Controller
         return (bool) preg_match('/^backup_[0-9]{4}-[0-9]{2}-[0-9]{2}_[0-9]{2}-[0-9]{2}-[0-9]{2}[a-z0-9\-]*\.sql\.gz(\.enc)?$/i', $arquivo);
     }
 
+    /**
+     * Gera uma URL assinada e curta (3 min) para o download. O frontend
+     * navega direto para ela — o browser faz streaming pro disco, sem
+     * carregar o arquivo inteiro na memória (o fluxo antigo com
+     * fetch()+blob() estourava com backups grandes).
+     */
+    public function gerarLink(string $arquivo): JsonResponse
+    {
+        if (!$this->nomeValido($arquivo)) {
+            return response()->json(['message' => 'Nome de arquivo inválido.'], 422);
+        }
+        if (!file_exists($this->backupPath . '/' . $arquivo)) {
+            return response()->json(['message' => 'Arquivo não encontrado.'], 404);
+        }
+
+        return response()->json([
+            'url' => \Illuminate\Support\Facades\URL::temporarySignedRoute(
+                'saas.backup.download',
+                now()->addMinutes(3),
+                ['arquivo' => $arquivo],
+                absolute: false,
+            ),
+        ]);
+    }
+
     public function download(string $arquivo): StreamedResponse|JsonResponse
+    {
+        return $this->streamArquivo($arquivo);
+    }
+
+    /** Rota assinada (sem auth:saas — a assinatura É a credencial). */
+    public function downloadAssinado(string $arquivo): StreamedResponse|JsonResponse
+    {
+        return $this->streamArquivo($arquivo);
+    }
+
+    private function streamArquivo(string $arquivo): StreamedResponse|JsonResponse
     {
         if (!$this->nomeValido($arquivo)) {
             return response()->json(['message' => 'Nome de arquivo inválido.'], 422);
