@@ -19,10 +19,7 @@ class NotaFiscalCancelamentoProvedorTest extends TestCase
 
     private function montarCenario(): array
     {
-        $oficina = Oficina::create([
-            'nome' => 'Oficina Teste', 'slug' => 'oficina-teste', 'status' => 'ATIVA',
-            'provedor_fiscal' => 'FOCUS',
-        ]);
+        $oficina = $this->criarOficina(['provedor_fiscal' => 'FOCUS']);
         Configuracao::create(['oficina_id' => $oficina->id, 'ambiente_fiscal' => 'HOMOLOGACAO']);
         $admin = Usuario::create([
             'nome' => 'Admin', 'email' => 'a@t.com', 'cpf' => '52998224725',

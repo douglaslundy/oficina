@@ -17,6 +17,13 @@ Schedule::command('alertas:verificar')->dailyAt('07:00')->timezone('America/Sao_
 Schedule::command('cobrancas:gerar')->dailyAt('06:00')->timezone('America/Sao_Paulo');
 Schedule::command('nfe:reconciliar-contingencia')->hourly()->timezone('America/Sao_Paulo');
 
+// Notas presas em PROCESSANDO (Spedy/Focus assíncronos) quando ninguém está
+// com a tela de emissão aberta pra o polling do frontend reconciliar.
+Schedule::command('nfe:reconciliar-processando')
+    ->everyFifteenMinutes()
+    ->timezone('America/Sao_Paulo')
+    ->withoutOverlapping(10);
+
 // Backup diário do banco. Roda no container `scheduler` (não bloqueia a API).
 // `withoutOverlapping` evita dois pg_dump concorrentes se um deploy reiniciar
 // o scheduler no meio de um backup lento.

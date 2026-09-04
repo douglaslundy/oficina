@@ -16,7 +16,7 @@ class OrdemServicoVeiculoTest extends TestCase
 
     private function setupEntities(): array
     {
-        $oficina = Oficina::create(['nome' => 'Oficina Teste', 'slug' => 'oficina-teste', 'status' => 'ATIVA']);
+        $oficina = $this->criarOficina();
         $admin = Usuario::create([
             'nome' => 'Admin', 'email' => 'a@t.com', 'cpf' => '52998224725',
             'role' => 'ADMIN', 'status' => 'ATIVO', 'senha_hash' => Hash::make('pass'),

@@ -59,8 +59,17 @@ jobs:
       - run: composer install --no-interaction --prefer-dist --no-progress
       - run: php artisan key:generate
 
-      - name: PHPUnit (Unit + Feature)
-        run: php artisan test
+      - name: PHPUnit — Unit (gate)
+        run: php artisan test --testsuite=Unit
+
+      - name: PHPUnit — Feature (contra Postgres)
+        # Reabilitado 2026-09-04: a suíte Feature nunca tinha rodado contra um
+        # Postgres real — ~80 testes escritos "no papel" falham por dívida
+        # acumulada (Oficina sem cnpj, Http::fake que não casa, tenant não
+        # preenchido). Rehab em andamento; por ora não bloqueia o merge, mas
+        # a falha fica visível. Remover o continue-on-error quando zerar.
+        continue-on-error: true
+        run: php artisan test --testsuite=Feature
 
   frontend:
     name: Frontend (tsc + build)

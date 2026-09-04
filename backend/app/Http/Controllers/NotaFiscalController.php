@@ -6,6 +6,7 @@ namespace App\Http\Controllers;
 use App\Http\Resources\NotaFiscalResource;
 use App\Models\NotaFiscal;
 use App\Services\AlertaDispatchService;
+use App\Services\Fiscal\AplicarResultadoNotaService;
 use App\Services\NfeService;
 use App\Services\PlanLimitService;
 use Barryvdh\DomPDF\Facade\Pdf;
@@ -20,6 +21,7 @@ class NotaFiscalController extends Controller
         private readonly NfeService $nfeService,
         private readonly PlanLimitService $planLimit,
         private readonly AlertaDispatchService $alertas,
+        private readonly AplicarResultadoNotaService $aplicarResultado,
     ) {}
 
     public function index(Request $request): AnonymousResourceCollection
@@ -278,53 +280,10 @@ class NotaFiscalController extends Controller
         return response()->json(['data' => new NotaFiscalResource($nota->fresh()->load('cliente'))]);
     }
 
-    /**
-     * Aplica o resultado de emitir()/consultarStatus() na nota e dispara billing/
-     * alertas quando autorizada em produção. Compartilhado entre emitir() (Task 7)
-     * e status() (Task 8) — os dois pontos que recebem um EmissaoResultado do
-     * provedor e precisam persistir e reagir da mesma forma.
-     */
+    /** @deprecated fino wrapper — a lógica vive em AplicarResultadoNotaService (reusada pelo comando de reconciliação). */
     private function aplicarResultadoEmissao(NotaFiscal $nota, array $resultado, string $ambiente): NotaFiscal
     {
-        $nota->update([
-            'status'       => $resultado['status'],
-            'chave_acesso' => $resultado['chave'],
-            'protocolo'    => $resultado['protocolo'],
-            'xml_retorno'  => $resultado['xml_retorno'],
-            'qrcode_url'   => $resultado['qrcode_url'] ?? null,
-            'mensagem_erro' => $resultado['mensagem_erro'] ?? null,
-            // Para NF-e/NFC-e o número que importa legalmente é o atribuído pela
-            // Focus/SEFAZ (ou alocado por MotorNfe, no caso NFEPHP) na própria
-            // série, não o contador interno gravado antes da emissão. Fallback
-            // pro valor já existente se o provedor não retornar um número
-            // (mantém o comportamento atual pra NFS-e).
-            'numero'       => isset($resultado['numero']) ? (int) $resultado['numero'] : $nota->numero,
-            // Finding 1 do fix wave pós-revisão da Etapa C2 (2026-08-11):
-            // contingência EPEC produz uma NF-e legalmente válida a partir do
-            // momento em que o evento é registrado — a reconciliação agendada
-            // (Task 8, ReconciliarContingenciaNfe) precisa saber DESDE QUANDO
-            // a nota está em contingência pra decidir quando alertar/tentar
-            // transmitir de novo. Compartilhado com status() (polling): se uma
-            // nota sai de CONTINGENCIA por essa via, limpa o campo também.
-            'contingencia_desde' => $resultado['status'] === 'CONTINGENCIA' ? now() : null,
-            'emitido_em'   => $resultado['status'] === 'AUTORIZADA' ? now() : null,
-        ]);
-
-        // Billing e alertas só em PRODUCAO e quando AUTORIZADA.
-        if ($resultado['status'] === 'AUTORIZADA' && $ambiente === 'PRODUCAO') {
-            $notaFresh = $nota->fresh()->loadMissing('cliente');
-            $this->planLimit->registrarNotaSeExcedente($notaFresh);
-            $this->alertas->dispatch('NF_AUTORIZADA', [
-                'nf_numero'    => $notaFresh->numero,
-                'cliente'      => $notaFresh->cliente?->nome ?? '-',
-                'valor'        => 'R$ ' . number_format((float)$notaFresh->valor_total, 2, ',', '.'),
-                'chave_acesso' => $notaFresh->chave_acesso ?? '-',
-                '_telefone_cliente' => $notaFresh->cliente?->telefone ?? '',
-                '_email_cliente'    => $notaFresh->cliente?->email ?? '',
-            ]);
-        }
-
-        return $nota->fresh();
+        return $this->aplicarResultado->aplicar($nota, $resultado, $ambiente);
     }
 
     public function cancelar(Request $request, string $id): JsonResponse
