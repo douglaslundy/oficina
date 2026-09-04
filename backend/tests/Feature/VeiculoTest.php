@@ -247,6 +247,19 @@ class VeiculoTest extends TestCase
         ]);
         $mecToken = $mecanico->createToken('t')->plainTextToken;
 
+        // Illuminate\Auth\RequestGuard memoiza o usuário resolvido na primeira
+        // chamada a auth()->user() (é assim que evita re-resolver em toda
+        // checagem de auth() dentro do MESMO request de verdade). Só que o
+        // AuthManager também cacheia o guard 'sanctum' por nome pra vida
+        // inteira do container — e o container do teste NÃO é recriado entre
+        // dois postJson() no mesmo método. Sem isso, a 2ª chamada com o token
+        // do mecânico reusa o guard já resolvido pro admin (achado depurando
+        // contra um Postgres real: os dois logs de auth()->user() mostravam o
+        // MESMO usuário ADMIN, mesmo mandando o bearer token do mecânico).
+        // Em produção isso nunca acontece — cada request HTTP real recria o
+        // container do zero.
+        \Illuminate\Support\Facades\Auth::forgetGuards();
+
         $response = $this->withToken($mecToken)->withHeaders(['X-Tenant' => $oficina->slug])
             ->postJson("/api/veiculos/{$veiculoId}/transferir", ['novo_cliente_id' => $outroCliente->id]);
 
