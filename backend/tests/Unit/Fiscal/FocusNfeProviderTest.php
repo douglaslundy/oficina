@@ -318,6 +318,29 @@ class FocusNfeProviderTest extends TestCase
         $this->assertSame('CANCELADA', $r->status);
     }
 
+    public function test_cancelar_nfe_usa_recurso_nfe_nao_nfse(): void
+    {
+        Http::fake(['*/v2/nfe/nfe-1' => Http::response([], 200)]);
+
+        $p = new FocusNfeProvider('https://homologacao.focusnfe.com.br', 'master', 'HOMOLOGACAO', 'tok');
+        $r = $p->cancelar('nfe-1', 'Erro na emissão da nota fiscal', 'NFE');
+
+        $this->assertSame('CANCELADA', $r->status);
+        Http::assertSent(fn ($req) => str_contains($req->url(), '/v2/nfe/nfe-1')
+            && !str_contains($req->url(), '/v2/nfse/'));
+    }
+
+    public function test_cancelar_nfce_usa_recurso_nfce(): void
+    {
+        Http::fake(['*/v2/nfce/nfce-1' => Http::response([], 200)]);
+
+        $p = new FocusNfeProvider('https://homologacao.focusnfe.com.br', 'master', 'HOMOLOGACAO', 'tok');
+        $r = $p->cancelar('nfce-1', 'Erro na emissão da nota fiscal', 'NFCE');
+
+        $this->assertSame('CANCELADA', $r->status);
+        Http::assertSent(fn ($req) => str_contains($req->url(), '/v2/nfce/nfce-1'));
+    }
+
     public function test_ambiente_e_explicito_nao_inferido_por_url(): void
     {
         // URL de homologação, mas ambiente PRODUCAO passado explicitamente —

@@ -50,10 +50,7 @@ class SpedyProvider implements FiscalProvider
     public function emitir(NotaFiscalData $nota): EmissaoResultado
     {
         if ($nota->modelo === 'NFE') {
-            return EmissaoResultado::rejeitada(
-                'Emissão de NF-e ainda não disponível para o provedor Spedy neste sistema — schema do endpoint pendente de confirmação. Use a Focus NFe ou aguarde uma etapa futura.',
-                $nota->referenciaExterna,
-            );
+            return $this->emitirNfe($nota);
         }
 
         if ($nota->modelo === 'NFCE') {
@@ -75,7 +72,7 @@ class SpedyProvider implements FiscalProvider
 
     public function consultar(string $referencia, string $modelo = 'NFSE'): EmissaoResultado
     {
-        $recurso = $modelo === 'NFCE' ? 'consumer-invoices' : 'service-invoices';
+        $recurso = $this->recursoPorModelo($modelo);
 
         $resp = Http::withHeaders(['X-Api-Key' => $this->emissorToken ?? $this->masterKey])
             ->get("{$this->baseUrl}/{$recurso}/{$referencia}");
@@ -91,9 +88,14 @@ class SpedyProvider implements FiscalProvider
 
     public function cancelar(string $referencia, string $motivo, string $modelo = 'NFSE'): EmissaoResultado
     {
+        $recurso = $this->recursoPorModelo($modelo);
+
+        // Campo confirmado como `reason` na doc (docs.spedy.com.br/api-reference/
+        // {nfs-e,nfc-e,nf-e}/cancelar-*.md) — `justification` era um chute anterior,
+        // nunca validado em sandbox real, corrigido nesta sessão.
         $resp = Http::withHeaders(['X-Api-Key' => $this->emissorToken ?? $this->masterKey])
-            ->delete("{$this->baseUrl}/service-invoices/{$referencia}", [
-                'justification' => $motivo,
+            ->delete("{$this->baseUrl}/{$recurso}/{$referencia}", [
+                'reason' => $motivo,
             ]);
 
         if ($resp->failed()) {
@@ -101,6 +103,16 @@ class SpedyProvider implements FiscalProvider
         }
 
         return EmissaoResultado::cancelada($referencia);
+    }
+
+    /** Recurso REST por tipo de documento — mesmos 3 recursos usados em emitir()/consultar()/cancelar(). */
+    private function recursoPorModelo(string $modelo): string
+    {
+        return match ($modelo) {
+            'NFE'  => 'product-invoices',
+            'NFCE' => 'consumer-invoices',
+            default => 'service-invoices',
+        };
     }
 
     public function montarPayloadEmpresa(EmissorData $e): array
@@ -205,6 +217,85 @@ class SpedyProvider implements FiscalProvider
                 'value'  => $valorTotal,
             ]],
         ];
+    }
+
+    /**
+     * Schema confirmado contra docs.spedy.com.br/api-reference/nf-e/criar-nf-e.md
+     * (2026-09-04): POST /v1/product-invoices. Ao contrário de montarPayloadNfce()
+     * (que usa `cfop` string e um único campo `icmsTaxSituation`), este endpoint
+     * usa `cfop` **integer** e separa `cst`/`csosn` em campos distintos dentro de
+     * `taxes.icms` — dai o CrtResolver aqui. Nunca testado contra sandbox real
+     * (sem emissor Spedy registrado ainda neste sistema).
+     */
+    public function montarPayloadNfe(NotaFiscalData $n): array
+    {
+        $docTomador = preg_replace('/\D/', '', $n->tomador['cpf_cnpj'] ?? '') ?: '';
+        $crt        = \App\Services\Fiscal\CrtResolver::resolver($n->regimeTributario);
+        $campoIcms  = $crt === 1 ? 'csosn' : 'cst'; // CRT=1 (Simples Nacional) usa CSOSN, senão CST
+        $valorTotal = round(array_sum(array_map(
+            fn ($item) => (float) $item['quantidade'] * (float) $item['valor_unitario'],
+            $n->itens
+        )), 2);
+
+        return [
+            // NF-e (modelo 55) é sempre B2B neste sistema — venda a consumidor
+            // final pessoa física usa NFC-e (ver seleção automática no controller).
+            'isFinalCustomer' => false,
+            'operationNature' => $n->naturezaOperacao,
+            'receiver' => [
+                'name'             => $n->tomador['nome'],
+                'federalTaxNumber' => $docTomador,
+            ],
+            'items' => array_map(fn (int $i, array $item) => [
+                'code'        => $item['sku'] ?? $item['produto_id'],
+                'description' => $item['descricao'],
+                'ncm'         => $item['ncm'],
+                'cfop'        => (int) $item['cfop'],
+                'unit'        => $item['unidade'] ?? 'UN',
+                'quantity'    => (float) $item['quantidade'],
+                'unitAmount'  => (float) $item['valor_unitario'],
+                'totalAmount' => round((float) $item['quantidade'] * (float) $item['valor_unitario'], 2),
+                'taxes' => [
+                    'icms' => [
+                        'origin'   => (int) $item['origem'],
+                        $campoIcms => (int) $item['cst_csosn'],
+                    ],
+                ],
+            ], array_keys($n->itens), $n->itens),
+            'payments' => [[
+                'method' => $this->mapFormaPagamento($n->formaPagamento),
+                'amount' => $valorTotal,
+            ]],
+        ];
+    }
+
+    private function mapFormaPagamento(string $forma): string
+    {
+        // Enum completo confirmado na doc (payments[].method).
+        return match ($forma) {
+            'Dinheiro'          => 'money',
+            'Cartão de Crédito' => 'creditCard',
+            'Cartão de Débito'  => 'debitCard',
+            'PIX'               => 'pix',
+            'Cheque'            => 'check',
+            'Boleto'            => 'billetBanking',
+            default             => 'other',
+        };
+    }
+
+    private function emitirNfe(NotaFiscalData $nota): EmissaoResultado
+    {
+        $resp = Http::withHeaders(['X-Api-Key' => $this->emissorToken ?? $this->masterKey])
+            ->post("{$this->baseUrl}/product-invoices", $this->montarPayloadNfe($nota));
+
+        if ($resp->failed()) {
+            return EmissaoResultado::rejeitada(
+                $resp->json('message') ?? 'Erro na emissão de NF-e (Spedy).',
+                $nota->referenciaExterna,
+            );
+        }
+
+        return $this->resultadoDe($resp->json(), $nota->referenciaExterna);
     }
 
     private function emitirNfce(NotaFiscalData $nota): EmissaoResultado

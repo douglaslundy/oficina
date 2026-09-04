@@ -70,6 +70,7 @@ class NfeService
         string $codigoServicoFederal = '14.01',
         string $codigoServicoMunicipal = '1401',
         string $codigoIbgeTomador = '',
+        ?Configuracao $config = null,
     ): NotaFiscalData {
         $cliente = $nota->cliente;
         $aliquota = (float) ($nota->aliquota_iss ?? 5.0);
@@ -136,6 +137,7 @@ class NfeService
             ])->all() : [],
             formaPagamento: $nota->forma_pagamento ?? '',
             numeroReservado: $numeroJaReservado,
+            regimeTributario: $config?->regime_tributario ?? '',
         );
     }
 
@@ -153,6 +155,7 @@ class NfeService
             codigoServicoFederal: '14.01',
             codigoServicoMunicipal: '1401',
             codigoIbgeTomador: $config?->codigo_ibge ?? '',
+            config: $config,
         );
 
         $resultado = $provider->emitir($data);

@@ -122,6 +122,40 @@ class SpedyProviderTest extends TestCase
         $this->assertSame('CANCELADA', $r->status);
     }
 
+    public function test_cancelar_manda_o_campo_reason_nao_justification(): void
+    {
+        // docs.spedy.com.br/api-reference/nfs-e/cancelar-nfs-e.md confirma
+        // o campo `reason` (nao `justification`, que era um chute anterior).
+        Http::fake(['*/service-invoices/inv-1' => Http::response([], 200)]);
+
+        $p = new SpedyProvider('https://sandbox-api.spedy.com.br/v1', 'master', 'tok', 'emp-1');
+        $p->cancelar('inv-1', 'Serviço não prestado');
+
+        Http::assertSent(fn ($req) => $req['reason'] === 'Serviço não prestado' && !isset($req['justification']));
+    }
+
+    public function test_cancelar_nfce_usa_consumer_invoices(): void
+    {
+        Http::fake(['*/consumer-invoices/inv-nfce-1' => Http::response([], 200)]);
+
+        $p = new SpedyProvider('https://sandbox-api.spedy.com.br/v1', 'master', 'tok', 'emp-1');
+        $r = $p->cancelar('inv-nfce-1', 'Erro na emissão', 'NFCE');
+
+        $this->assertSame('CANCELADA', $r->status);
+        Http::assertSent(fn ($req) => str_contains($req->url(), '/consumer-invoices/inv-nfce-1') && $req->method() === 'DELETE');
+    }
+
+    public function test_cancelar_nfe_usa_product_invoices(): void
+    {
+        Http::fake(['*/product-invoices/inv-nfe-1' => Http::response([], 200)]);
+
+        $p = new SpedyProvider('https://sandbox-api.spedy.com.br/v1', 'master', 'tok', 'emp-1');
+        $r = $p->cancelar('inv-nfe-1', 'Erro na emissão', 'NFE');
+
+        $this->assertSame('CANCELADA', $r->status);
+        Http::assertSent(fn ($req) => str_contains($req->url(), '/product-invoices/inv-nfe-1') && $req->method() === 'DELETE');
+    }
+
     public function test_status_desconhecido_loga_warning(): void
     {
         \Illuminate\Support\Facades\Log::shouldReceive('warning')
@@ -134,27 +168,124 @@ class SpedyProviderTest extends TestCase
         $this->assertSame('PROCESSANDO', $status);
     }
 
-    public function test_emitir_nfe_rejeitado_ate_schema_ser_confirmado(): void
+    /**
+     * Payload confirmado contra docs.spedy.com.br/api-reference/nf-e/criar-nf-e.md
+     * (2026-09-04) — POST /v1/product-invoices. Nunca testado em sandbox real
+     * (sem credencial de emissor registrado ainda).
+     */
+    private function notaNfeSimplesNacional(array $overrides = []): NotaFiscalData
+    {
+        $args = array_merge([
+            'tipo' => 'NFSE',
+            'tomador' => ['nome' => 'Oficina Cliente LTDA', 'cpf_cnpj' => '12345678000199'],
+            'descricao' => 'Venda de peças',
+            'valorServicos' => 0.0,
+            'aliquotaIss' => 0.0,
+            'issRetido' => false,
+            'codigoServicoFederal' => '',
+            'codigoServicoMunicipal' => '',
+            'naturezaOperacao' => 'Venda de Mercadoria',
+            'referenciaExterna' => 'os-999',
+            'modelo' => 'NFE',
+            'itens' => [[
+                'produto_id' => 'prod-1', 'sku' => 'FLT-001', 'descricao' => 'Filtro de óleo',
+                'unidade' => 'PC', 'ncm' => '84212300', 'cfop' => '5102', 'origem' => 0,
+                'tributacao_icms' => 'NORMAL', 'cst_csosn' => '102',
+                'quantidade' => 2, 'valor_unitario' => 35.50,
+            ]],
+            'formaPagamento' => 'Dinheiro',
+            'regimeTributario' => 'Simples Nacional',
+        ], $overrides);
+
+        return new NotaFiscalData(...$args);
+    }
+
+    public function test_payload_nfe_usa_schema_confirmado_da_doc(): void
     {
         $p = new SpedyProvider('https://sandbox-api.spedy.com.br/v1', 'master', 'tok', 'emp-1');
-        $nota = new NotaFiscalData(
-            tipo: 'NFSE',
-            tomador: ['nome' => 'Cliente Teste', 'cpf_cnpj' => '12345678000199'],
-            descricao: 'Venda de peças',
-            valorServicos: 0.0,
-            aliquotaIss: 0.0,
-            issRetido: false,
-            codigoServicoFederal: '',
-            codigoServicoMunicipal: '',
-            naturezaOperacao: 'Venda de Mercadoria',
-            referenciaExterna: 'os-999',
-            modelo: 'NFE',
-        );
+        $payload = $p->montarPayloadNfe($this->notaNfeSimplesNacional());
 
-        $r = $p->emitir($nota);
+        $this->assertFalse($payload['isFinalCustomer']); // NF-e é B2B neste sistema — B2C usa NFC-e
+        $this->assertSame('12345678000199', $payload['receiver']['federalTaxNumber']);
+        $this->assertSame('Venda de Mercadoria', $payload['operationNature']);
 
-        $this->assertSame('REJEITADA', $r->status);
-        $this->assertSame('os-999', $r->referenciaExterna);
+        $item = $payload['items'][0];
+        $this->assertSame('FLT-001', $item['code']);
+        $this->assertSame('Filtro de óleo', $item['description']);
+        $this->assertSame('84212300', $item['ncm']);
+        $this->assertSame(5102, $item['cfop']); // cfop é integer neste endpoint (NFC-e usa string)
+        $this->assertSame('PC', $item['unit']);
+        $this->assertSame(2.0, $item['quantity']);
+        $this->assertSame(35.50, $item['unitAmount']);
+        $this->assertSame(71.0, $item['totalAmount']);
+        $this->assertSame(0, $item['taxes']['icms']['origin']);
+
+        $this->assertSame('money', $payload['payments'][0]['method']);
+        $this->assertSame(71.0, $payload['payments'][0]['amount']);
+    }
+
+    public function test_payload_nfe_simples_nacional_manda_csosn_nao_cst(): void
+    {
+        // A Spedy separa cst e csosn em campos distintos (confirmado na doc) —
+        // ao contrário do cst_csosn unificado que o resto do sistema usa.
+        $p = new SpedyProvider('https://sandbox-api.spedy.com.br/v1', 'master', 'tok', 'emp-1');
+        $payload = $p->montarPayloadNfe($this->notaNfeSimplesNacional());
+
+        $this->assertSame(102, $payload['items'][0]['taxes']['icms']['csosn']);
+        $this->assertArrayNotHasKey('cst', $payload['items'][0]['taxes']['icms']);
+    }
+
+    public function test_payload_nfe_regime_normal_manda_cst_nao_csosn(): void
+    {
+        $p = new SpedyProvider('https://sandbox-api.spedy.com.br/v1', 'master', 'tok', 'emp-1');
+        $payload = $p->montarPayloadNfe($this->notaNfeSimplesNacional(['regimeTributario' => 'Lucro Presumido']));
+
+        $this->assertSame(102, $payload['items'][0]['taxes']['icms']['cst']);
+        $this->assertArrayNotHasKey('csosn', $payload['items'][0]['taxes']['icms']);
+    }
+
+    public function test_payload_nfe_sem_regime_tributario_lanca_excecao(): void
+    {
+        // Nunca deve cair num default silencioso de CST/CSOSN — decisão fiscal
+        // sem base não pode virar um chute (mesma regra já aplicada em CrtResolver).
+        $p = new SpedyProvider('https://sandbox-api.spedy.com.br/v1', 'master', 'tok', 'emp-1');
+
+        $this->expectException(\InvalidArgumentException::class);
+        $p->montarPayloadNfe($this->notaNfeSimplesNacional(['regimeTributario' => '']));
+    }
+
+    public function test_emitir_nfe_usa_product_invoices(): void
+    {
+        Http::fake([
+            '*/product-invoices' => Http::response([
+                'id' => 'inv-nfe-1', 'status' => 'authorized', 'accessKey' => 'CHAVE-NFE-SP', 'number' => '77',
+            ], 201),
+        ]);
+
+        $p = new SpedyProvider('https://sandbox-api.spedy.com.br/v1', 'master', 'tok', 'emp-1');
+        $r = $p->emitir($this->notaNfeSimplesNacional());
+
+        $this->assertSame('AUTORIZADA', $r->status);
+        $this->assertSame('CHAVE-NFE-SP', $r->chave);
+        $this->assertSame('77', $r->numero);
+        Http::assertSent(fn ($req) => str_contains($req->url(), '/product-invoices')
+            && !str_contains($req->url(), 'consumer-invoices'));
+    }
+
+    public function test_consultar_nfe_usa_product_invoices(): void
+    {
+        Http::fake([
+            '*/product-invoices/inv-nfe-1' => Http::response([
+                'status' => 'authorized', 'accessKey' => 'CHAVE-NFE-2', 'number' => '78',
+            ], 200),
+        ]);
+
+        $p = new SpedyProvider('https://sandbox-api.spedy.com.br/v1', 'master', 'tok', 'emp-1');
+        $r = $p->consultar('inv-nfe-1', 'NFE');
+
+        $this->assertSame('AUTORIZADA', $r->status);
+        $this->assertSame('CHAVE-NFE-2', $r->chave);
+        Http::assertSent(fn ($req) => str_contains($req->url(), '/product-invoices/inv-nfe-1'));
     }
 
     private function notaNfce(): NotaFiscalData

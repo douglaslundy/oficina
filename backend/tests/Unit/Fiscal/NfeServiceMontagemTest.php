@@ -120,6 +120,36 @@ class NfeServiceMontagemTest extends TestCase
         $this->assertSame('PAR', $data->itens[0]['unidade']);
     }
 
+    public function test_monta_nota_data_inclui_regime_tributario_da_configuracao(): void
+    {
+        $cliente = new Cliente(['nome' => 'Fulano', 'cpf_cnpj' => '87748248800']);
+        $nota = new NotaFiscal([
+            'modelo' => 'NF-e', 'valor_total' => 90.0,
+            'natureza_operacao' => 'Venda de Mercadoria', 'referencia_externa' => 'nf-y',
+        ]);
+        $nota->setRelation('cliente', $cliente);
+        $nota->setRelation('itens', collect());
+        $config = new \App\Models\Configuracao(['regime_tributario' => 'Simples Nacional']);
+
+        $data = (new NfeService())->montarNotaData($nota, config: $config);
+
+        $this->assertSame('Simples Nacional', $data->regimeTributario);
+    }
+
+    public function test_monta_nota_data_sem_config_regime_tributario_fica_vazio(): void
+    {
+        $cliente = new Cliente(['nome' => 'Fulano', 'cpf_cnpj' => '87748248800']);
+        $nota = new NotaFiscal([
+            'modelo' => 'NFS-e', 'valor_total' => 90.0,
+            'natureza_operacao' => 'Prestação de Serviços', 'referencia_externa' => 'nf-z',
+        ]);
+        $nota->setRelation('cliente', $cliente);
+
+        $data = (new NfeService())->montarNotaData($nota);
+
+        $this->assertSame('', $data->regimeTributario);
+    }
+
     public function test_monta_nota_data_item_sem_sku_ou_unidade_usa_fallback(): void
     {
         $cliente = new Cliente(['nome' => 'Fulano', 'cpf_cnpj' => '87748248800']);

@@ -38,5 +38,12 @@ final class NotaFiscalData
         // (Configuracao::serie_nfe), lido direto por MotorNfe::emitir() a
         // cada tentativa; não há nada pra "reservar".
         public readonly ?string $numeroReservado = null,
+        // Configuracao.regime_tributario (texto livre) — usado por
+        // SpedyProvider::montarPayloadNfe() via CrtResolver pra decidir se um
+        // item manda `cst` ou `csosn` (a Spedy separa os dois campos, ao
+        // contrário do CST/CSOSN unificado que o resto do sistema usa em
+        // cst_csosn). Só populado por NfeService::montarNotaData() quando
+        // $modelo é NFE/NFCE (mesma condição de $itens).
+        public readonly string $regimeTributario = '',
     ) {}
 }

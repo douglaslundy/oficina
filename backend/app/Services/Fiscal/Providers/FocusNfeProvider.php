@@ -221,8 +221,22 @@ class FocusNfeProvider implements FiscalProvider
 
     public function cancelar(string $referencia, string $motivo, string $modelo = 'NFSE'): EmissaoResultado
     {
+        // Antes hardcoded em /v2/nfse — cancelava NF-e/NFC-e no recurso errado
+        // (nunca tinha caller real: NotaFiscalController::cancelar() só chamava
+        // o provider pra NFS-e até esta sessão). Mesmo mapeamento de consultar().
+        $recurso = match ($modelo) {
+            'NFE'  => 'nfe',
+            'NFCE' => 'nfce',
+            default => 'nfse',
+        };
+
+        // doc.focusnfe.com.br/reference/cancelar_nfe.md: justificativa exige
+        // 15-255 caracteres pra NF-e/NFC-e (o min:10 da validação do nosso
+        // controller é compartilhado entre todos os modelos/provedores — uma
+        // justificativa de 10-14 chars aqui volta como erro do provedor, não
+        // erro nosso).
         $resp = Http::withBasicAuth($this->emissorToken ?? $this->masterToken, '')
-            ->delete("{$this->baseUrl}/v2/nfse/{$referencia}", [
+            ->delete("{$this->baseUrl}/v2/{$recurso}/{$referencia}", [
                 'justificativa' => $motivo,
             ]);
 
