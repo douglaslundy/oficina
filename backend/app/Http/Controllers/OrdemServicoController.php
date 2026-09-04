@@ -121,7 +121,11 @@ class OrdemServicoController extends Controller
         // veículo vem do campo legado do cliente (sem registro real em `veiculos`).
         // Nesse caso, ou em qualquer id que não exista mais, degrada para null —
         // mesmo comportamento de hoje (só texto livre em veiculo_descricao/placa).
-        if (!empty($validated['veiculo_id']) && !Veiculo::where('id', $validated['veiculo_id'])->exists()) {
+        // A checagem de UUID vem ANTES do where(): `veiculos.id` é uuid no
+        // Postgres e comparar com "__proprio_..." lança 22P02 (invalid uuid).
+        if (!empty($validated['veiculo_id'])
+            && (!\Illuminate\Support\Str::isUuid($validated['veiculo_id'])
+                || !Veiculo::where('id', $validated['veiculo_id'])->exists())) {
             $validated['veiculo_id'] = null;
         }
 
