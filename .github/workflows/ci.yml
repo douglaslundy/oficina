@@ -63,12 +63,7 @@ jobs:
         run: php artisan test --testsuite=Unit
 
       - name: PHPUnit — Feature (contra Postgres)
-        # Reabilitado 2026-09-04: a suíte Feature nunca tinha rodado contra um
-        # Postgres real — ~80 testes escritos "no papel" falham por dívida
-        # acumulada (Oficina sem cnpj, Http::fake que não casa, tenant não
-        # preenchido). Rehab em andamento; por ora não bloqueia o merge, mas
-        # a falha fica visível. Remover o continue-on-error quando zerar.
-        continue-on-error: true
+        # Rehab concluída 2026-09-04 (84 → 0 falhas). Gate real a partir daqui.
         run: php artisan test --testsuite=Feature
 
   frontend:

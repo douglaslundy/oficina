@@ -1,7 +1,8 @@
 # Progresso do Projeto
 
 ## Última atualização
-2026-09-02
+2026-09-04 — última falha da suíte Feature (`VeiculoTest`) resolvida, ver
+"Continuação (mesma sessão) — RESOLVIDO" na Rodada 31 abaixo.
 
 ## Rodada 31 (2026-09-04) — tarefas de dev sem bloqueio: CI, reconciliação, download de backup, rehab de testes
 
@@ -169,6 +170,47 @@ inferido — confirmado com URLs exatas) antes de implementar:
   (+2, feature/CI). Unit local: **217 OK**. CI: Unit 213 (gate) + Feature
   **246 passando, 1 falha** (a mesma `VeiculoTest` já documentada acima —
   nada regrediu).
+
+## Continuação (mesma sessão) — RESOLVIDO: a última falha da suíte Feature (`VeiculoTest`)
+
+A suspeita registrada acima (interação `tenant`/`role`/`X-Tenant`) estava
+**errada** — não era isso. Causa raiz real, confirmada depurando contra
+Postgres de verdade pela primeira vez nesta sessão:
+
+- Subi um Postgres **efêmero e isolado** na VPS (`docker run --rm`, sem
+  volume, container `pgtest-debug`, bind só em `127.0.0.1:15432` — zero
+  contato com containers/dados de produção) e abri um túnel SSH local
+  (`ssh -f -N -L 15432:127.0.0.1:15432 root@144.91.92.70`) pra rodar o
+  PHPUnit local contra ele. Primeira vez que foi possível reproduzir uma
+  falha de Feature test localmente nesta máquina (sem Docker/Postgres
+  nativo — ver [[feedback-local-testing]] na memória).
+- Reproduzi a falha (403 esperado, 200 recebido), coloquei log temporário
+  dentro de `CheckRole::handle()` e confirmei: **as duas chamadas
+  `auth()->user()` (a do admin criando o veículo e a do mecânico tentando
+  transferir) retornavam o MESMO usuário ADMIN**, mesmo a segunda
+  `postJson()` mandando o bearer token do mecânico.
+- Causa: `Illuminate\Auth\AuthManager` cacheia o guard `sanctum` por nome
+  durante a vida do container; o `RequestGuard` do Sanctum memoiza o
+  `$user` resolvido na primeira chamada. Como o teste faz dois
+  `withToken(...)->postJson(...)` no MESMO método sem o container ser
+  recriado entre eles (diferente de produção, onde cada request HTTP
+  real recria tudo do zero), a segunda autenticação nunca era
+  re-resolvida de fato.
+- **Não é uma falha de autorização real** — é um artefato de como o
+  teste simula dois atores autenticados em sequência. Removi o log de
+  debug (arquivo `CheckRole.php` voltou ao estado original) e apliquei o
+  fix no teste: `Auth::forgetGuards()` entre as duas requisições, forçando
+  o guard a re-resolver a partir do novo token.
+- Confirmado: `VeiculoTest::test_mecanico_nao_pode_transferir_veiculo`
+  isolado passa; o arquivo inteiro roda **10/10 verde** contra o Postgres
+  efêmero via túnel. Commit `7a9dd30`, push pra `main`.
+- Container `pgtest-debug` parado (`--rm` já limpou); túnel SSH local
+  encerrado.
+- **Confirmado em CI (run 33917436067): Unit 213 passed, Feature 247
+  passed + 3 skipped (OPENSSL_CONF, esperado), 0 falhas.** Suíte Feature
+  100% verde pela primeira vez.
+- `continue-on-error: true` **removido** do step Feature em `ci.yml` —
+  agora é gate real igual ao Unit.
 
 ## TAREFA PENDENTE — validar emissão fiscal ponta a ponta (stuntmotos / Spedy homologação)
 
