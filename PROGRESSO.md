@@ -3,6 +3,76 @@
 ## Última atualização
 2026-09-02
 
+## Rodada 31 (2026-09-04) — tarefas de dev sem bloqueio: CI, reconciliação, download de backup, rehab de testes
+
+Usuário: "execute todas as tarefas de desenvolvimento possíveis agora."
+
+### CI (GitHub Actions) — NOVO
+- `.github/workflows/ci.yml`: job `backend` (PHP 8.4 + Postgres 16 service,
+  PHPUnit) e job `frontend` (tsc + build). **Primeira vez que os feature
+  tests rodam contra um Postgres real.**
+- Estrutura: step `Unit` é o **gate** (passa, 201 testes); step `Feature` é
+  `continue-on-error` até a rehab terminar.
+
+### Rehab da suíte Feature — 84 → ~22 falhas
+A suíte Feature nunca tinha rodado contra Postgres (só SQLite-friendly no
+papel). Correções sistemáticas:
+- **`oficinas.cnpj` NOT NULL UNIQUE**: testes hardcodavam
+  `'11222333000181'` (2º Oficina::create de cada teste = unique violation).
+  Trocado por `mt_rand` de 14 dígitos em todo `tests/Feature/`.
+- **`cobrancas.mes_referencia` NOT NULL**: `Cobranca::boot` ganhou default
+  defensivo (1º dia do mês do vencimento). Prod sempre seta explícito.
+- **`notas_entrada.oficina_id` NOT NULL**: `EntradaNfTest::loginAdmin` cria
+  oficina + seta `TenancyContext` (os testes criam NotaEntrada fora do
+  request).
+- Restam ~22 (WhatsApp Http::fake, NotaFiscalNfce/Nfe, avulsos) — tail
+  conhecido pra uma rodada dedicada.
+
+### 2 BUGS DE PRODUÇÃO achados pelo CI novo
+1. **`OrdemServicoController` — `veiculo_id` sintético "__proprio_"**:
+   `Veiculo::where('id', '__proprio_<uuid>')->exists()` lança
+   `22P02 invalid uuid` no Postgres. **Toda OS criada com veículo do campo
+   legado do cliente dava 500 em produção.** Fix: `Str::isUuid()` antes do
+   `where()`. (commit no dia)
+2. **`BackupController::nomeValido()`**: a regex rejeitava o sufixo
+   `_pre-deploy` (underscore). **Backups pré-deploy não podiam ser baixados
+   nem apagados pela API** (422). Fix na regex.
+
+### Reconciliação de notas PROCESSANDO — NOVO
+- `AplicarResultadoNotaService` (extrai `aplicarResultadoEmissao` do
+  controller — reusado pelo polling do frontend E pelo comando novo).
+- `nfe:reconciliar-processando` (agendado a cada 15min, container
+  `scheduler`) — varre notas PROCESSANDO há >10min e consulta o status
+  real no provedor. Fecha a lacuna do polling do frontend só reconciliar
+  com a tela de emissão aberta. `ReconciliarNotasProcessandoTest` (feature).
+
+### Download de backup sem carregar na memória — NOVO
+- `GET /saas/backup/{arquivo}/link` → URL assinada relativa de 3min;
+  `GET .../download-assinado` com `signed:relative` (a assinatura é a
+  credencial). Frontend navega direto → browser faz streaming pro disco
+  (antes: `fetch()` + `res.blob()` bufferava o arquivo inteiro).
+  `BackupDownloadTest` (feature).
+
+### Runbook de disaster recovery — NOVO
+`docs/runbook-backup-restore.md` — onde ficam, decifrar, restaurar (tela e
+CLI), DR em servidor novo, checagens periódicas.
+
+### Spike Spedy `/v1/orders` — feito contra o sandbox real
+Ver memória `project-spedy-focus-calculo-automatico` → "Spike do /v1/orders
+(2026-09-04)". Resumo: `/v1/orders` existe no sandbox; a company STUNT
+MOTOS na Spedy está **sem regime tributário** configurado; nenhum endpoint
+de grupo de tributação via API (só backoffice web). Implementar
+`AUTOMATICO_PROVEDOR` é possível mas exige config no painel Spedy — não
+vale antes de o usuário decidir o trade-off.
+
+### Verificação
+- `phpunit --testsuite=Unit`: **205 OK** local; **201 OK** no CI (o CI não
+  tem o `OPENSSL_CONF` que destrava 4 testes de certificado — esses ficam
+  como "risky"/warning, não falha).
+- CI backend+frontend: **verde** (gate).
+- **A DEPLOYAR**: os 2 bugs de produção (`__proprio_` e `nomeValido`) + o
+  comando `nfe:reconciliar-processando` + o endpoint de download assinado.
+
 ## TAREFA PENDENTE — validar emissão fiscal ponta a ponta (stuntmotos / Spedy homologação)
 
 Estado em 2026-09-03/04 (verificado direto na produção):
