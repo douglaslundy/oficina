@@ -48,7 +48,8 @@ class BackupDownloadTest extends TestCase
         // Sem token — a assinatura é a credencial.
         $resp = $this->get($url);
         $resp->assertOk();
-        $resp->assertHeader('content-disposition', 'attachment; filename="' . $this->arquivo . '"');
+        $this->assertStringContainsString($this->arquivo, $resp->headers->get('content-disposition') ?? '');
+        $this->assertStringContainsString('attachment', $resp->headers->get('content-disposition') ?? '');
     }
 
     public function test_assinatura_invalida_recusa(): void

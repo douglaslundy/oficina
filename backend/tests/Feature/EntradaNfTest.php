@@ -27,7 +27,16 @@ class EntradaNfTest extends TestCase
             'role' => 'ADMIN', 'status' => 'ATIVO', 'senha_hash' => Hash::make('admin123'),
             'oficina_id' => $oficina->id,
         ]);
+        // Os testes criam NotaEntrada direto (fora do request), então o
+        // HasTenantScope precisa do contexto pra preencher oficina_id.
+        \App\Tenancy\TenancyContext::set($oficina->id, $oficina->slug);
         return $user->createToken('test')->plainTextToken;
+    }
+
+    protected function tearDown(): void
+    {
+        \App\Tenancy\TenancyContext::clear();
+        parent::tearDown();
     }
 
     private function xmlValido(): string
