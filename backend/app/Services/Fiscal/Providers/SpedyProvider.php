@@ -3,8 +3,10 @@ declare(strict_types=1);
 
 namespace App\Services\Fiscal\Providers;
 
+use App\Services\Fiscal\Contracts\ConsultaNotaTerceiroProvider;
 use App\Services\Fiscal\Contracts\FiscalProvider;
 use App\Services\Fiscal\Data\ConsultaNotaTerceiroResultado;
+use App\Services\Fiscal\Data\ConsultaNotaTerceiroResumo;
 use App\Services\Fiscal\Data\EmissaoResultado;
 use App\Services\Fiscal\Data\EmissorData;
 use App\Services\Fiscal\Data\NotaFiscalData;
@@ -12,7 +14,7 @@ use App\Services\Fiscal\Data\RegistroResultado;
 use App\Services\NotaEntradaXmlParser;
 use Illuminate\Support\Facades\Http;
 
-class SpedyProvider implements FiscalProvider
+class SpedyProvider implements FiscalProvider, ConsultaNotaTerceiroProvider
 {
     public function __construct(
         private readonly string $baseUrl,
@@ -431,5 +433,29 @@ class SpedyProvider implements FiscalProvider
         }
 
         return ConsultaNotaTerceiroResultado::completa((new NotaEntradaXmlParser())->parse($xmlResp->body()));
+    }
+
+    public function listarNotasRecebidas(string $cnpjOficina, ?\DateTimeInterface $desde = null): array
+    {
+        $query = [];
+        if ($desde !== null) {
+            $query['initialDate'] = $desde->format('Y-m-d');
+        }
+
+        $resp = Http::withHeaders(['X-Api-Key' => $this->emissorToken ?? $this->masterKey])
+            ->get("{$this->baseUrl}/inbound-product-invoices", $query);
+
+        if ($resp->failed()) {
+            return [];
+        }
+
+        return array_map(fn (array $item) => new ConsultaNotaTerceiroResumo(
+            chaveAcesso: (string) ($item['accessKey'] ?? ''),
+            fornecedorNome: $item['issuer']['name'] ?? null,
+            fornecedorCnpj: $item['issuer']['federalTaxNumber'] ?? null,
+            dataEmissao: isset($item['issuedOn']) ? substr((string) $item['issuedOn'], 0, 10) : null,
+            valorTotal: (float) ($item['amount'] ?? 0),
+            completa: ($item['isComplete'] ?? false) === true,
+        ), $resp->json('items') ?? []);
     }
 }

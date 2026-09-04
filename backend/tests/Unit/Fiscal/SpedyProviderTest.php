@@ -435,4 +435,26 @@ XML;
         $this->assertSame('ERRO', $r->status);
         $this->assertStringContainsString('Chave de API inválida', (string) $r->mensagemErro);
     }
+
+    public function test_listar_notas_recebidas_mapeia_a_lista(): void
+    {
+        Http::fake([
+            '*/inbound-product-invoices' => Http::response([
+                'items' => [
+                    ['accessKey' => 'CHAVE1', 'isComplete' => true, 'amount' => 250.5, 'issuedOn' => '2026-09-01T10:00:00', 'issuer' => ['name' => 'Fornecedor A', 'federalTaxNumber' => '11111111000191']],
+                    ['accessKey' => 'CHAVE2', 'isComplete' => false, 'amount' => 80.0, 'issuedOn' => '2026-09-02T10:00:00', 'issuer' => ['name' => 'Fornecedor B', 'federalTaxNumber' => '22222222000192']],
+                ],
+            ], 200),
+        ]);
+
+        $p = new SpedyProvider('https://sandbox-api.spedy.com.br/v1', 'master', 'tok', 'emp-1');
+        $resumos = $p->listarNotasRecebidas('12345678000199');
+
+        $this->assertCount(2, $resumos);
+        $this->assertSame('CHAVE1', $resumos[0]->chaveAcesso);
+        $this->assertSame('Fornecedor A', $resumos[0]->fornecedorNome);
+        $this->assertTrue($resumos[0]->completa);
+        $this->assertSame('2026-09-01', $resumos[0]->dataEmissao);
+        $this->assertFalse($resumos[1]->completa);
+    }
 }
