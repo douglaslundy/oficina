@@ -443,4 +443,62 @@ class FocusNfeProviderTest extends TestCase
         $this->assertSame('AUTORIZADA', $r->status);
         Http::assertSent(fn ($req) => str_contains($req->url(), '/v2/nfce/os-nfce-1'));
     }
+
+    public function test_consultar_nota_recebida_completa_mapeia_via_mapper(): void
+    {
+        Http::fake([
+            '*/nfes_recebidas/CHAVE1.json*' => Http::response([
+                'chave_nfe' => 'CHAVE1',
+                'nome_emitente' => 'Fornecedor Focus',
+                'documento_emitente' => '12345678000199',
+                'valor_total' => '99.90',
+                'data_emissao' => '2026-09-01T10:00:00-03:00',
+                'manifestacao_destinatario' => 'ciencia',
+                'requisicao_nota_fiscal' => ['itens' => []],
+            ], 200),
+        ]);
+
+        $p = new FocusNfeProvider('https://homologacao.focusnfe.com.br', 'master', 'HOMOLOGACAO', 'tok');
+        $r = $p->consultarNotaRecebida('CHAVE1');
+
+        $this->assertSame('COMPLETA', $r->status);
+        $this->assertSame('Fornecedor Focus', $r->dados['fornecedor_nome']);
+    }
+
+    public function test_consultar_nota_recebida_sem_manifestacao_manifesta_e_retorna_aguardando(): void
+    {
+        Http::fake([
+            '*/nfes_recebidas/CHAVE1.json*' => Http::response([
+                'chave_nfe' => 'CHAVE1', 'manifestacao_destinatario' => null,
+            ], 200),
+            '*/nfes_recebidas/CHAVE1/manifesto' => Http::response(['status' => 'evento_registrado'], 200),
+        ]);
+
+        $p = new FocusNfeProvider('https://homologacao.focusnfe.com.br', 'master', 'HOMOLOGACAO', 'tok');
+        $r = $p->consultarNotaRecebida('CHAVE1');
+
+        $this->assertSame('AGUARDANDO_MANIFESTACAO', $r->status);
+        Http::assertSent(fn ($req) => str_contains($req->url(), '/manifesto') && $req['tipo'] === 'ciencia');
+    }
+
+    public function test_consultar_nota_recebida_nao_encontrada(): void
+    {
+        Http::fake(['*/nfes_recebidas/CHAVE1.json*' => Http::response(['mensagem' => 'não encontrada'], 404)]);
+
+        $p = new FocusNfeProvider('https://homologacao.focusnfe.com.br', 'master', 'HOMOLOGACAO', 'tok');
+        $r = $p->consultarNotaRecebida('CHAVE1');
+
+        $this->assertSame('NAO_ENCONTRADA', $r->status);
+    }
+
+    public function test_consultar_nota_recebida_erro_do_provedor(): void
+    {
+        Http::fake(['*/nfes_recebidas/CHAVE1.json*' => Http::response(['mensagem' => 'Token inválido'], 401)]);
+
+        $p = new FocusNfeProvider('https://homologacao.focusnfe.com.br', 'master', 'HOMOLOGACAO', 'tok');
+        $r = $p->consultarNotaRecebida('CHAVE1');
+
+        $this->assertSame('ERRO', $r->status);
+        $this->assertStringContainsString('Token inválido', (string) $r->mensagemErro);
+    }
 }

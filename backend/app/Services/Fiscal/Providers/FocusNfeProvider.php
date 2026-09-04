@@ -4,6 +4,7 @@ declare(strict_types=1);
 namespace App\Services\Fiscal\Providers;
 
 use App\Services\Fiscal\Contracts\FiscalProvider;
+use App\Services\Fiscal\Data\ConsultaNotaTerceiroResultado;
 use App\Services\Fiscal\Data\EmissaoResultado;
 use App\Services\Fiscal\Data\EmissorData;
 use App\Services\Fiscal\Data\NotaFiscalData;
@@ -474,5 +475,30 @@ class FocusNfeProvider implements FiscalProvider
         }
 
         return $resp->body() ?: null;
+    }
+
+    public function consultarNotaRecebida(string $chaveAcesso): ConsultaNotaTerceiroResultado
+    {
+        $resp = Http::withBasicAuth($this->emissorToken ?? $this->masterToken, '')
+            ->get("{$this->baseUrl}/v2/nfes_recebidas/{$chaveAcesso}.json", ['completa' => 1]);
+
+        if ($resp->status() === 404) {
+            return ConsultaNotaTerceiroResultado::naoEncontrada();
+        }
+
+        if ($resp->failed()) {
+            return ConsultaNotaTerceiroResultado::erro($resp->json('mensagem') ?? 'Erro ao consultar nota na Focus.');
+        }
+
+        $json = $resp->json();
+
+        if (empty($json['manifestacao_destinatario'])) {
+            Http::withBasicAuth($this->emissorToken ?? $this->masterToken, '')
+                ->post("{$this->baseUrl}/v2/nfes_recebidas/{$chaveAcesso}/manifesto", ['tipo' => 'ciencia']);
+
+            return ConsultaNotaTerceiroResultado::aguardandoManifestacao();
+        }
+
+        return ConsultaNotaTerceiroResultado::completa(FocusNfeRecebidaMapper::paraArray($json));
     }
 }
