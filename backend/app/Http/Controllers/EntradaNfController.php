@@ -34,6 +34,11 @@ class EntradaNfController extends Controller
             return response()->json(['message' => $e->getMessage()], 422);
         }
 
+        return response()->json($this->montarPreview($dados, $fiscalService) + ['xml_original' => $conteudo]);
+    }
+
+    private function montarPreview(array $dados, ProdutoFiscalService $fiscalService): array
+    {
         $config          = Configuracao::first();
         $markup          = (float) ($config?->markup_padrao_entrada_nf ?? 40);
         $qtyMinimaPadrao = (int) ($config?->estoque_limite_padrao ?? 5);
@@ -73,8 +78,6 @@ class EntradaNfController extends Controller
                 ];
             }
 
-            // Nota já lançada: item sem produto correspondente não tem o
-            // que atualizar (este fluxo nunca cria produto novo) — descarta.
             if ($jaLancada) {
                 return null;
             }
@@ -106,7 +109,7 @@ class EntradaNfController extends Controller
             ];
         }, $dados['itens']), fn ($item) => $item !== null));
 
-        return response()->json([
+        return [
             'numero_nf'       => $dados['numero_nf'],
             'serie'           => $dados['serie'],
             'chave_acesso'    => $dados['chave_acesso'],
@@ -117,8 +120,7 @@ class EntradaNfController extends Controller
             'ja_lancada'      => $jaLancada,
             'atualizacao_fiscal_disponivel' => $jaLancada && collect($itens)->contains('sera_atualizado', true),
             'itens'           => $itens,
-            'xml_original'    => $conteudo,
-        ]);
+        ];
     }
 
     public function store(
