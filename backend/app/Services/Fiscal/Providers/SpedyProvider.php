@@ -4,10 +4,12 @@ declare(strict_types=1);
 namespace App\Services\Fiscal\Providers;
 
 use App\Services\Fiscal\Contracts\FiscalProvider;
+use App\Services\Fiscal\Data\ConsultaNotaTerceiroResultado;
 use App\Services\Fiscal\Data\EmissaoResultado;
 use App\Services\Fiscal\Data\EmissorData;
 use App\Services\Fiscal\Data\NotaFiscalData;
 use App\Services\Fiscal\Data\RegistroResultado;
+use App\Services\NotaEntradaXmlParser;
 use Illuminate\Support\Facades\Http;
 
 class SpedyProvider implements FiscalProvider
@@ -397,5 +399,37 @@ class SpedyProvider implements FiscalProvider
             pdfUrl: $json['pdfUrl'] ?? null,
             ref: $ref,
         );
+    }
+
+    public function consultarNotaRecebida(string $chaveAcesso): ConsultaNotaTerceiroResultado
+    {
+        $resp = Http::withHeaders(['X-Api-Key' => $this->emissorToken ?? $this->masterKey])
+            ->get("{$this->baseUrl}/inbound-product-invoices", ['accessKey' => $chaveAcesso]);
+
+        if ($resp->failed()) {
+            return ConsultaNotaTerceiroResultado::erro($resp->json('message') ?? 'Erro ao consultar nota na Spedy.');
+        }
+
+        $itens = $resp->json('items') ?? [];
+        $nota  = $itens[0] ?? null;
+        if ($nota === null) {
+            return ConsultaNotaTerceiroResultado::naoEncontrada();
+        }
+
+        if (($nota['isComplete'] ?? false) !== true) {
+            Http::withHeaders(['X-Api-Key' => $this->emissorToken ?? $this->masterKey])
+                ->post("{$this->baseUrl}/inbound-product-invoices/{$nota['id']}/manifest", ['status' => 'acknowledged']);
+
+            return ConsultaNotaTerceiroResultado::aguardandoManifestacao();
+        }
+
+        $xmlResp = Http::withHeaders(['X-Api-Key' => $this->emissorToken ?? $this->masterKey])
+            ->get("{$this->baseUrl}/inbound-product-invoices/{$nota['id']}/xml");
+
+        if ($xmlResp->failed()) {
+            return ConsultaNotaTerceiroResultado::erro('Erro ao baixar o XML da nota na Spedy.');
+        }
+
+        return ConsultaNotaTerceiroResultado::completa((new NotaEntradaXmlParser())->parse($xmlResp->body()));
     }
 }

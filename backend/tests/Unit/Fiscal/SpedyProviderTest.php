@@ -363,4 +363,76 @@ class SpedyProviderTest extends TestCase
         $this->assertSame('CHAVE-NFCE-SP', $r->chave);
         Http::assertSent(fn ($req) => str_contains($req->url(), '/consumer-invoices/inv-nfce-1'));
     }
+
+    public function test_consultar_nota_recebida_completa_baixa_e_faz_parse_do_xml(): void
+    {
+        $xml = <<<XML
+<?xml version="1.0" encoding="UTF-8"?>
+<nfeProc xmlns="http://www.portalfiscal.inf.br/nfe" versao="4.00">
+  <NFe>
+    <infNFe Id="NFe35260712345678000199550010000012340000000001" versao="4.00">
+      <ide><nNF>1234</nNF><serie>1</serie><dhEmi>2026-07-01T09:15:32-03:00</dhEmi></ide>
+      <emit><CNPJ>12345678000199</CNPJ><xNome>Fornecedor Teste</xNome></emit>
+      <det nItem="1">
+        <prod><cEAN>7891234567890</cEAN><xProd>FILTRO DE OLEO</xProd><qCom>10.0000</qCom><vUnCom>15.5000</vUnCom><NCM>84212300</NCM><CFOP>5102</CFOP><uCom>UN</uCom></prod>
+        <imposto><ICMS><ICMS00><orig>0</orig><CST>00</CST></ICMS00></ICMS></imposto>
+      </det>
+    </infNFe>
+  </NFe>
+</nfeProc>
+XML;
+
+        Http::fake([
+            '*/inbound-product-invoices?*' => Http::response([
+                'items' => [['id' => 'inv-abc', 'accessKey' => '35260712345678000199550010000012340000000001', 'isComplete' => true]],
+            ], 200),
+            '*/inbound-product-invoices/inv-abc/xml' => Http::response($xml, 200),
+        ]);
+
+        $p = new SpedyProvider('https://sandbox-api.spedy.com.br/v1', 'master', 'tok', 'emp-1');
+        $r = $p->consultarNotaRecebida('35260712345678000199550010000012340000000001');
+
+        $this->assertSame('COMPLETA', $r->status);
+        $this->assertSame('Fornecedor Teste', $r->dados['fornecedor_nome']);
+        $this->assertCount(1, $r->dados['itens']);
+        $this->assertSame('84212300', $r->dados['itens'][0]['ncm']);
+        $this->assertSame('7891234567890', $r->dados['itens'][0]['codigo_barras']);
+    }
+
+    public function test_consultar_nota_recebida_incompleta_manifesta_e_retorna_aguardando(): void
+    {
+        Http::fake([
+            '*/inbound-product-invoices?*' => Http::response([
+                'items' => [['id' => 'inv-abc', 'accessKey' => 'CHAVE1', 'isComplete' => false]],
+            ], 200),
+            '*/inbound-product-invoices/inv-abc/manifest' => Http::response(['status' => 'ok'], 200),
+        ]);
+
+        $p = new SpedyProvider('https://sandbox-api.spedy.com.br/v1', 'master', 'tok', 'emp-1');
+        $r = $p->consultarNotaRecebida('CHAVE1');
+
+        $this->assertSame('AGUARDANDO_MANIFESTACAO', $r->status);
+        Http::assertSent(fn ($req) => str_contains($req->url(), '/manifest') && $req['status'] === 'acknowledged');
+    }
+
+    public function test_consultar_nota_recebida_nao_encontrada(): void
+    {
+        Http::fake(['*/inbound-product-invoices?*' => Http::response(['items' => []], 200)]);
+
+        $p = new SpedyProvider('https://sandbox-api.spedy.com.br/v1', 'master', 'tok', 'emp-1');
+        $r = $p->consultarNotaRecebida('CHAVE-INEXISTENTE');
+
+        $this->assertSame('NAO_ENCONTRADA', $r->status);
+    }
+
+    public function test_consultar_nota_recebida_erro_do_provedor(): void
+    {
+        Http::fake(['*/inbound-product-invoices?*' => Http::response(['message' => 'Chave de API inválida'], 403)]);
+
+        $p = new SpedyProvider('https://sandbox-api.spedy.com.br/v1', 'master', 'tok', 'emp-1');
+        $r = $p->consultarNotaRecebida('CHAVE1');
+
+        $this->assertSame('ERRO', $r->status);
+        $this->assertStringContainsString('Chave de API inválida', (string) $r->mensagemErro);
+    }
 }
