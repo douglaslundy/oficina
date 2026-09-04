@@ -73,6 +73,67 @@ vale antes de o usuário decidir o trade-off.
 - **A DEPLOYAR**: os 2 bugs de produção (`__proprio_` e `nomeValido`) + o
   comando `nfe:reconciliar-processando` + o endpoint de download assinado.
 
+### Continuação (mesma sessão) — rehab da suíte Feature terminada: 84 → 1
+Usuário pediu pra continuar ("vamos fazer o que ainda dá pra fazer").
+Foram mais 3 rodadas de commit+CI, cada uma investigando os failures reais
+(sem rodar local — só via `gh run view --log`):
+
+- **2 bugs de produção reais achados e corrigidos**:
+  - `AgendamentoController::store()` inseria `status = NULL` explícito
+    (`$request->validate()` inclui a chave no array mesmo ausente do
+    payload, quando a regra é `nullable` sem `sometimes`) — ignorava o
+    default `'AGENDADO'` da coluna. Todo agendamento criado sem `status`
+    explícito nascia sem status.
+  - `NotificacaoVisualizacao`: cogitei um default de `visualizado_em` no
+    model e **descartei** — quebrava `NotificacaoAtivasEligibilidadeTest`
+    (o throttle usa esse timestamp com `$this->travel()`/Carbon test
+    clock; o default só deveria existir no teste que precisava dele, via
+    `refresh()`, não mudar o INSERT de produção). Fix ficou só no teste.
+- **Padrão sistemático descoberto**: vários testes fiscais (`NotaFiscalNfceTest`
+  ×5, `NotaFiscalNfeTest` ×1) criavam uma `Oficina` de teste separada e
+  depois `Cliente`/`Produto`/`Configuracao` **fora de qualquer
+  `TenancyContext`** — ficavam com `oficina_id = NULL`. Quando a
+  requisição real rodava sob o tenant da nova oficina (header
+  `X-Tenant`), o global scope do `HasTenantScope` não os enxergava:
+  `Produto::findOrFail()` 404ava dentro do `store()`, `notaId` ficava
+  `null`, e o `emitir()` seguinte também 404ava. Fix: `TenancyContext::
+  set()`/`clear()` em volta da criação das fixtures.
+- Outros: `WhatsAppServiceTest` (credenciais da Evolution são globais via
+  `SaasConfig`, não por oficina — `setUp()` não configurava isso;
+  `testarConexao()` reescrito pra assinatura real de 2 args);
+  `NotaFiscalNfeTest` (cliente CPF cai pra NFC-e automaticamente desde a
+  Rodada 25 — trocado pra CNPJ); `SaasConfig{Cobranca,AlertaCobranca}Test`
+  (faltava `voto_confianca_dias`, campo `required` adicionado depois);
+  `WebhookReconciliacaoTest` MP (faltava simular a assinatura HMAC real —
+  Rodada 9 fecha o webhook sem ela); `ServicoTest` (`assertJsonPath`
+  comparando int `350` com float `350.0` — JSON não preserva a
+  distinção); `EstoqueServiceTest`/`EntradaNfTest` (mesmo padrão de
+  `NotaEntrada::create` sem `oficina_id`/tenant; produto fixture com
+  `tributacao_icms` divergente do XML de teste).
+
+**Resultado final: 84 → 1 falha** (`VeiculoTest > mecanico não pode
+transferir veículo` — 244 passando, 3 skipped por falta de
+`OPENSSL_CONF` no runner, esperado).
+
+**1 falha não resolvida, documentada pra retomar**: `VeiculoTest >
+mecanico_nao_pode_transferir_veiculo` espera 403 (rota
+`POST veiculos/{id}/transferir` está sob middleware
+`role:ADMIN,ATENDENTE` em `routes/api.php`) mas recebe 200. Investigado a
+fundo sem reproduzir localmente (sem Postgres):
+- Rota e grupo de middleware conferidos linha a linha — `transferir` ESTÁ
+  dentro do grupo `role:ADMIN,ATENDENTE`, sem duplicata em outro grupo.
+- `CheckRole` (`app/Http/Middleware/CheckRole.php`) funciona corretamente
+  em outros testes (`RbacTest`, todos passando) — **mas `RbacTest` nunca
+  manda o header `X-Tenant`**, enquanto `VeiculoTest` manda. Suspeita
+  central, não confirmada: alguma interação entre o middleware `tenant`
+  (`InitializeTenancyByHeader`) e `role` quando ambos estão na cadeia com
+  `X-Tenant` presente — possivelmente relacionada a `$middlewarePriority`
+  do Laravel reordenando a execução. Precisa de um ambiente com Postgres
+  pra colocar um `dd()`/log dentro de `CheckRole::handle()` e confirmar
+  se `auth()->user()->role` chega como esperado nesse cenário específico.
+- Não fiz mudança nenhuma tentando "adivinhar" o fix — risco de mascarar
+  um bug de autorização real sem prova.
+
 ## TAREFA PENDENTE — validar emissão fiscal ponta a ponta (stuntmotos / Spedy homologação)
 
 Estado em 2026-09-03/04 (verificado direto na produção):
