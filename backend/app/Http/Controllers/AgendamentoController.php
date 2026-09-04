@@ -54,6 +54,11 @@ class AgendamentoController extends Controller
             'status'           => ['nullable', 'in:AGENDADO,CONFIRMADO,CANCELADO,CONCLUIDO'],
         ]);
 
+        // $request->validate() inclui 'status' no array validado mesmo quando
+        // ausente do payload (regra 'nullable', sem 'sometimes') — Eloquent
+        // então insere NULL explícito, ignorando o default 'AGENDADO' da coluna.
+        $validated['status'] = $validated['status'] ?? 'AGENDADO';
+
         $agendamento = Agendamento::create($validated);
 
         return (new AgendamentoResource($agendamento->load(['cliente', 'mecanico'])))

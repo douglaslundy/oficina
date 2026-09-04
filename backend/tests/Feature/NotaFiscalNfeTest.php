@@ -38,8 +38,11 @@ class NotaFiscalNfeTest extends TestCase
 
     private function criarCliente(array $overrides = []): Cliente
     {
+        // CNPJ (não CPF) de propósito: cliente PF (CPF) é roteado
+        // automaticamente pra NFC-e desde a Rodada 25 — este arquivo testa
+        // especificamente o fluxo de NF-e (modelo 55).
         return Cliente::create(array_merge([
-            'nome' => 'Cliente Teste', 'cpf_cnpj' => '87748248800', 'status' => 'REGULAR', 'uf' => 'SP',
+            'nome' => 'Cliente Teste', 'cpf_cnpj' => '12345678000199', 'status' => 'REGULAR', 'uf' => 'SP',
         ], $overrides));
     }
 

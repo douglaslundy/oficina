@@ -84,7 +84,7 @@ class ServicoTest extends TestCase
 
         $response->assertStatus(201)
                  ->assertJsonPath('data.nome', 'Revisão Completa')
-                 ->assertJsonPath('data.valor_padrao', 350.0);
+                 ->assertJsonPath('data.valor_padrao', 350);
 
         $this->assertDatabaseHas('servicos', ['nome' => 'Revisão Completa']);
     }

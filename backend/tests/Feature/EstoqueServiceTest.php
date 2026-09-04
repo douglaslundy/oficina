@@ -173,9 +173,14 @@ class EstoqueServiceTest extends TestCase
             'preco_venda' => 30,
         ]);
 
+        $oficina = \App\Models\Oficina::create([
+            'nome' => 'Oficina Teste', 'slug' => 'oficina-teste-' . uniqid(),
+            'cnpj' => (string) mt_rand(10000000000000, 99999999999999), 'status' => 'ATIVA',
+        ]);
         $nota = \App\Models\NotaEntrada::create([
             'numero_nf'   => '999',
             'valor_total' => 240,
+            'oficina_id'  => $oficina->id,
         ]);
 
         $atualizado = $this->service->registrarEntradaItem($produto->id, 8, $nota->id, $admin->id);

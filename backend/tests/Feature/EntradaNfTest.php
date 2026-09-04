@@ -185,9 +185,14 @@ XML;
         $token = $this->loginAdmin();
         NotaEntrada::create(['chave_acesso' => '35260712345678000199550010000012340000000001', 'numero_nf' => '1234']);
         Produto::create([
+            // tributacao_icms 'NORMAL' — bate exatamente com o que o
+            // xmlComDadosFiscais() carrega (ICMS00/CST 00). Um valor
+            // divergente (ex.: 'ST') faz haveriaMudanca() corretamente achar
+            // uma atualização disponível, o que não é o que este teste
+            // (produto já 100% revisado, nada pra atualizar) quer exercitar.
             'nome' => 'Filtro de Óleo Existente', 'sku' => 'FLT-EXIST', 'categoria' => 'Filtros',
             'codigo_barras' => '7891234567890', 'qty_atual' => 3, 'qty_minima' => 5, 'preco_venda' => 40,
-            'ncm' => '84212300', 'origem' => 0, 'tributacao_icms' => 'ST',
+            'ncm' => '84212300', 'origem' => 0, 'tributacao_icms' => 'NORMAL',
             'fiscal_fonte' => 'MANUAL', 'fiscal_revisado_em' => now(),
         ]);
 

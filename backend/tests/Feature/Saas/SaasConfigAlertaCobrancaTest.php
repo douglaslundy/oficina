@@ -39,6 +39,7 @@ class SaasConfigAlertaCobrancaTest extends TestCase
             'desconto_anual_pct'                => 15,
             'alerta_cobranca_vezes_dia'          => 2,
             'alerta_cobranca_dias_exibicao'      => 20,
+            'voto_confianca_dias'                => 15,
         ]);
 
         $response->assertStatus(200);

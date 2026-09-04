@@ -4,6 +4,7 @@ declare(strict_types=1);
 namespace Tests\Feature;
 
 use App\Models\Oficina;
+use App\Models\SaasConfig;
 use App\Models\WhatsAppConfig;
 use App\Services\WhatsAppService;
 use App\Tenancy\TenancyContext;
@@ -34,6 +35,14 @@ class WhatsAppServiceTest extends TestCase
             'evolution_api_key' => 'chave-global-123',
             'instance_name'     => 'mecanicapro',
             'ativo'             => true,
+        ]);
+
+        // As credenciais da Evolution são geridas pelo SaaS Admin (globais,
+        // não por oficina) — WhatsAppService::credenciaisConfiguradas() lê
+        // daqui, não do WhatsAppConfig acima (que só guarda instance_name/ativo).
+        SaasConfig::get()->update([
+            'evolution_url'     => 'http://evolution.test',
+            'evolution_api_key' => 'chave-global-123',
         ]);
 
         $this->service = app(WhatsAppService::class);
@@ -92,19 +101,28 @@ class WhatsAppServiceTest extends TestCase
         Http::assertNotSent(fn ($req) => str_contains($req->url(), '/instance/create'));
     }
 
-    public function test_testar_conexao_avisa_quando_instancia_nao_existe(): void
+    public function test_testar_conexao_com_api_key_invalida(): void
     {
         Http::fake([
-            '*/instance/connectionState/*' => Http::response([
-                'status'   => 404,
-                'response' => ['message' => ['The "mecanicapro" instance does not exist']],
-            ], 404),
+            '*/instance/fetchInstances' => Http::response(['message' => 'Unauthorized'], 401),
         ]);
 
-        $resultado = $this->service->testarConexao('http://evolution.test', 'chave-global-123', 'mecanicapro');
+        $resultado = $this->service->testarConexao('http://evolution.test', 'chave-errada');
 
         $this->assertFalse($resultado['ok']);
-        $this->assertSame('nao_criada', $resultado['status']);
+        $this->assertStringContainsString('API Key inválida', $resultado['error']);
+    }
+
+    public function test_testar_conexao_bem_sucedida(): void
+    {
+        Http::fake([
+            '*/instance/fetchInstances' => Http::response([], 200),
+        ]);
+
+        $resultado = $this->service->testarConexao('http://evolution.test', 'chave-global-123');
+
+        $this->assertTrue($resultado['ok']);
+        $this->assertSame('conectado', $resultado['status']);
     }
 
     public function test_qrcode_propaga_erro_de_conexao(): void

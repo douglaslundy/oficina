@@ -55,11 +55,26 @@ class WebhookReconciliacaoTest extends TestCase
     {
         [$oficina, $cobranca] = $this->criarOficinaComCobranca('MERCADOPAGO', 'mp_payment_id', 'pref_mp_1');
 
+        // Rodada 9 (auditoria de segurança): o webhook falha fechado sem
+        // segredo configurado ou sem assinatura válida — precisa simular a
+        // assinatura HMAC real do Mercado Pago, não só o body.
+        $secret = 'segredo-teste';
+        \App\Models\SaasConfig::get()->update(['mp_webhook_secret' => $secret]);
+
         Http::fake([
             '*/v1/payments/mp_pay_1' => Http::response(['id' => 'mp_pay_1', 'status' => 'approved', 'external_reference' => $cobranca->id], 200),
         ]);
 
-        $response = $this->postJson('/api/saas/webhooks/mercadopago?data_id=mp_pay_1', [
+        $ts        = (string) time();
+        $requestId = 'req-teste-1';
+        $dataId    = 'mp_pay_1';
+        $manifest  = "id:{$dataId};request-id:{$requestId};ts:{$ts};";
+        $v1        = hash_hmac('sha256', $manifest, $secret);
+
+        $response = $this->withHeaders([
+            'x-signature'  => "ts={$ts},v1={$v1}",
+            'x-request-id' => $requestId,
+        ])->postJson('/api/saas/webhooks/mercadopago?data_id=mp_pay_1', [
             'type' => 'payment',
             'data' => ['id' => 'mp_pay_1'],
         ]);

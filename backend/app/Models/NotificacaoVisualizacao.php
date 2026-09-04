@@ -27,7 +27,14 @@ class NotificacaoVisualizacao extends Model
     protected static function boot(): void
     {
         parent::boot();
-        static::creating(fn ($m) => $m->id ??= (string) Str::uuid());
+        static::creating(function ($m) {
+            $m->id ??= (string) Str::uuid();
+            // useCurrent() na migration cobre o default no banco, mas o
+            // Postgres não devolve o valor gerado pro objeto Eloquent em
+            // memória (só o id via RETURNING) — sem isso, ler o atributo
+            // logo após create() dá null até um refresh().
+            $m->visualizado_em ??= now();
+        });
     }
 
     public function oficina(): BelongsTo

@@ -142,11 +142,15 @@ class NotaFiscalNfceTest extends TestCase
 
     public function test_emitir_nfce_autorizada_sincrona_fim_a_fim_via_focus(): void
     {
-        $this->criarConfiguracao(['uf' => 'MG']);
         $oficina = \App\Models\Oficina::create([
             'nome' => 'Oficina Focus NFC-e', 'cnpj' => (string) mt_rand(10000000000000, 99999999999999),
             'slug' => 'oficina-nfce-' . uniqid(), 'provedor_fiscal' => 'FOCUS',
         ]);
+        // As requisições abaixo rodam sob o tenant desta oficina (header
+        // X-Tenant) — a Configuracao precisa ser da MESMA oficina, senão o
+        // global scope do HasTenantScope não a encontra (store() rejeita
+        // com "Complete a UF..." e o teste falha rio abaixo com 404 no emitir).
+        $this->criarConfiguracao(['uf' => 'MG', 'oficina_id' => $oficina->id]);
         $token   = $this->loginAdmin();
         $cliente = Cliente::create(['nome' => 'Fulano', 'cpf_cnpj' => '87748248800', 'uf' => 'MG']);
         $produto = $this->criarProduto();
@@ -181,11 +185,11 @@ class NotaFiscalNfceTest extends TestCase
 
     public function test_numeracao_nfce_nao_compartilha_contador_com_nfe(): void
     {
-        $this->criarConfiguracao(['uf' => 'MG']);
         $oficina = \App\Models\Oficina::create([
             'nome' => 'Oficina Numeracao', 'cnpj' => (string) mt_rand(10000000000000, 99999999999999),
             'slug' => 'oficina-num-' . uniqid(), 'provedor_fiscal' => 'FOCUS',
         ]);
+        $this->criarConfiguracao(['uf' => 'MG', 'oficina_id' => $oficina->id]);
         $token = $this->loginAdmin();
         $headers = ['X-Tenant' => $oficina->slug];
 
@@ -219,11 +223,11 @@ class NotaFiscalNfceTest extends TestCase
 
     public function test_status_consulta_provedor_quando_processando_e_atualiza_para_autorizada(): void
     {
-        $this->criarConfiguracao(['uf' => 'MG']);
         $oficina = \App\Models\Oficina::create([
             'nome' => 'Oficina Spedy NFC-e', 'cnpj' => (string) mt_rand(10000000000000, 99999999999999),
             'slug' => 'oficina-spedy-nfce-' . uniqid(), 'provedor_fiscal' => 'SPEDY',
         ]);
+        $this->criarConfiguracao(['uf' => 'MG', 'oficina_id' => $oficina->id]);
         $token   = $this->loginAdmin();
         $headers = ['X-Tenant' => $oficina->slug];
         $cliente = Cliente::create(['nome' => 'Fulano', 'cpf_cnpj' => '87748248800', 'uf' => 'MG']);
@@ -251,11 +255,11 @@ class NotaFiscalNfceTest extends TestCase
 
     public function test_status_nao_consulta_provedor_quando_ja_autorizada(): void
     {
-        $this->criarConfiguracao(['uf' => 'MG']);
         $oficina = \App\Models\Oficina::create([
             'nome' => 'Oficina Focus 2', 'cnpj' => (string) mt_rand(10000000000000, 99999999999999),
             'slug' => 'oficina-focus2-' . uniqid(), 'provedor_fiscal' => 'FOCUS',
         ]);
+        $this->criarConfiguracao(['uf' => 'MG', 'oficina_id' => $oficina->id]);
         $token   = $this->loginAdmin();
         $headers = ['X-Tenant' => $oficina->slug];
         $cliente = Cliente::create(['nome' => 'Fulano', 'cpf_cnpj' => '87748248800', 'uf' => 'MG']);
@@ -287,11 +291,11 @@ class NotaFiscalNfceTest extends TestCase
 
     public function test_pdf_de_nfce_autorizada_retorna_200(): void
     {
-        $this->criarConfiguracao(['uf' => 'MG']);
         $oficina = \App\Models\Oficina::create([
             'nome' => 'Oficina PDF NFC-e', 'cnpj' => (string) mt_rand(10000000000000, 99999999999999),
             'slug' => 'oficina-pdf-nfce-' . uniqid(), 'provedor_fiscal' => 'FOCUS',
         ]);
+        $this->criarConfiguracao(['uf' => 'MG', 'oficina_id' => $oficina->id]);
         $token   = $this->loginAdmin();
         $headers = ['X-Tenant' => $oficina->slug];
         $cliente = Cliente::create(['nome' => 'Fulano', 'cpf_cnpj' => '87748248800', 'uf' => 'MG']);
