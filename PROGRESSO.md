@@ -134,6 +134,42 @@ fundo sem reproduzir localmente (sem Postgres):
 - Não fiz mudança nenhuma tentando "adivinhar" o fix — risco de mascarar
   um bug de autorização real sem prova.
 
+## Continuação (mesma sessão) — NF-e via Spedy (Task 7) + cancelamento NF-e/NFC-e
+
+Usuário pediu pra seguir com os itens 2/3 do backlog fiscal que ainda
+faltavam. Pesquisei a doc real da Spedy e da Focus via WebFetch (não
+inferido — confirmado com URLs exatas) antes de implementar:
+
+- **`SpedyProvider::montarPayloadNfe()`** — `POST /v1/product-invoices`
+  (schema confirmado em `docs.spedy.com.br/api-reference/nf-e/criar-nf-e.md`).
+  Diferenças do schema de NFC-e já existente: `cfop` é **integer** (não
+  string), e `taxes.icms` separa **`cst` e `csosn` em campos distintos**
+  (não um campo unificado). `NotaFiscalData` ganhou `regimeTributario`
+  (populado por `NfeService::montarNotaData()` a partir de
+  `Configuracao.regime_tributario`) só pra isso — `CrtResolver` decide
+  qual campo mandar. **Sem regime tributário, lança exceção** — nunca
+  defaulta uma decisão fiscal.
+- **Cancelamento roteado corretamente pros 3 modelos** (era só NFS-e):
+  - `SpedyProvider::cancelar()`/`consultar()` — resource
+    `service-invoices`/`consumer-invoices`/`product-invoices` por modelo.
+    Campo corrigido de `justification` (nunca confirmado, chute antigo)
+    pra **`reason`** (confirmado na doc).
+  - `FocusNfeProvider::cancelar()` — estava **hardcoded em `/v2/nfse`**
+    mesmo pra NF-e/NFC-e (bug real, nunca tinha caller antes desta
+    sessão). Corrigido pra `/v2/{nfe,nfce,nfse}`. Campo `justificativa`
+    confirmado (min 15 chars pela doc da Focus — nossa validação exige
+    só 10, compartilhada entre modelos).
+  - `NotaFiscalController::cancelar()`: a chamada real ao provider
+    (Spedy/Focus) não fica mais restrita a NFS-e.
+- **Nunca testado em sandbox real** — a Spedy não tem emissor registrado
+  ainda (falta o certificado A1, mesma pendência de sempre). Documentado
+  como tal em comentário no código.
+- Testes: `SpedyProviderTest` (+11), `FocusNfeProviderTest` (+2),
+  `NfeServiceMontagemTest` (+2), `NotaFiscalCancelamentoProvedorTest`
+  (+2, feature/CI). Unit local: **217 OK**. CI: Unit 213 (gate) + Feature
+  **246 passando, 1 falha** (a mesma `VeiculoTest` já documentada acima —
+  nada regrediu).
+
 ## TAREFA PENDENTE — validar emissão fiscal ponta a ponta (stuntmotos / Spedy homologação)
 
 Estado em 2026-09-03/04 (verificado direto na produção):
