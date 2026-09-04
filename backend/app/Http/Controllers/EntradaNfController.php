@@ -10,6 +10,7 @@ use App\Models\NotaEntradaItem;
 use App\Models\Produto;
 use App\Services\EstoqueService;
 use App\Services\Fiscal\Contracts\ConsultaNotaTerceiroProvider;
+use App\Services\Fiscal\Data\ConsultaNotaTerceiroResumo;
 use App\Services\Fiscal\FiscalProviderManager;
 use App\Services\Fiscal\ProdutoFiscalService;
 use App\Services\NotaEntradaXmlParser;
@@ -355,6 +356,29 @@ class EntradaNfController extends Controller
             ], 404),
             default => response()->json(['message' => $resultado->mensagemErro ?? 'Erro ao consultar a nota.'], 422),
         };
+    }
+
+    public function recebidas(FiscalProviderManager $providerManager): JsonResponse
+    {
+        $provider = $providerManager->forTenant();
+        if (!$provider instanceof ConsultaNotaTerceiroProvider) {
+            return response()->json(['message' => 'O motor fiscal desta oficina ainda não suporta consultar notas recebidas.'], 422);
+        }
+
+        $cnpjOficina      = (string) (Configuracao::first()?->cnpj ?? '');
+        $chavesJaLancadas = NotaEntrada::whereNotNull('chave_acesso')->pluck('chave_acesso')->all();
+
+        $resumos = array_map(fn (ConsultaNotaTerceiroResumo $r) => [
+            'chave_acesso'    => $r->chaveAcesso,
+            'fornecedor_nome' => $r->fornecedorNome,
+            'fornecedor_cnpj' => $r->fornecedorCnpj,
+            'data_emissao'    => $r->dataEmissao,
+            'valor_total'     => $r->valorTotal,
+            'completa'        => $r->completa,
+            'ja_lancada'      => in_array($r->chaveAcesso, $chavesJaLancadas, true),
+        ], $provider->listarNotasRecebidas($cnpjOficina));
+
+        return response()->json(['notas' => $resumos]);
     }
 
     public function index(): AnonymousResourceCollection

@@ -119,4 +119,36 @@ XML, 200),
 
         Http::assertNothingSent();
     }
+
+    public function test_recebidas_lista_com_ja_lancada_calculado(): void
+    {
+        [$token, $oficina] = $this->loginAdmin('SPEDY');
+        \App\Models\NotaEntrada::create(['chave_acesso' => 'CHAVE1', 'valor_total' => 10]);
+
+        Http::fake([
+            '*/inbound-product-invoices' => Http::response([
+                'items' => [
+                    ['accessKey' => 'CHAVE1', 'isComplete' => true, 'amount' => 10, 'issuedOn' => '2026-09-01T10:00:00', 'issuer' => ['name' => 'Fornecedor A', 'federalTaxNumber' => '111']],
+                    ['accessKey' => 'CHAVE2', 'isComplete' => false, 'amount' => 20, 'issuedOn' => '2026-09-02T10:00:00', 'issuer' => ['name' => 'Fornecedor B', 'federalTaxNumber' => '222']],
+                ],
+            ], 200),
+        ]);
+
+        $res = $this->withToken($token)->withHeaders(['X-Tenant' => $oficina->slug])
+            ->getJson('/api/entradas-nf/recebidas')
+            ->assertStatus(200);
+
+        $notas = $res->json('notas');
+        $this->assertTrue(collect($notas)->firstWhere('chave_acesso', 'CHAVE1')['ja_lancada']);
+        $this->assertFalse(collect($notas)->firstWhere('chave_acesso', 'CHAVE2')['ja_lancada']);
+    }
+
+    public function test_recebidas_com_motor_nfephp_retorna_422(): void
+    {
+        [$token, $oficina] = $this->loginAdmin('NFEPHP');
+
+        $this->withToken($token)->withHeaders(['X-Tenant' => $oficina->slug])
+            ->getJson('/api/entradas-nf/recebidas')
+            ->assertStatus(422);
+    }
 }
