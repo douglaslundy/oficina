@@ -30,7 +30,7 @@ class ReconciliarNotasProcessandoTest extends TestCase
 
     public function test_nota_processando_antiga_e_reconciliada_com_o_status_do_provedor(): void
     {
-        $of = $this->criarOficina();
+        $of = Oficina::create(['nome' => 'O', 'slug' => 'o-' . uniqid(), 'cnpj' => uniqid('c'), 'status' => 'ATIVA']);
         $nota = $this->notaProcessando($of, 20);
 
         $this->mock(NfeService::class, function ($m) {
@@ -47,7 +47,7 @@ class ReconciliarNotasProcessandoTest extends TestCase
 
     public function test_nota_processando_recente_e_ignorada(): void
     {
-        $of = $this->criarOficina();
+        $of = Oficina::create(['nome' => 'O', 'slug' => 'o-' . uniqid(), 'cnpj' => uniqid('c'), 'status' => 'ATIVA']);
         $nota = $this->notaProcessando($of, 3);
 
         $this->mock(NfeService::class, function ($m) {
@@ -61,7 +61,7 @@ class ReconciliarNotasProcessandoTest extends TestCase
 
     public function test_falha_na_consulta_nao_derruba_o_comando_nem_muda_a_nota(): void
     {
-        $of = $this->criarOficina();
+        $of = Oficina::create(['nome' => 'O', 'slug' => 'o-' . uniqid(), 'cnpj' => uniqid('c'), 'status' => 'ATIVA']);
         $nota = $this->notaProcessando($of, 20);
 
         $this->mock(NfeService::class, function ($m) {

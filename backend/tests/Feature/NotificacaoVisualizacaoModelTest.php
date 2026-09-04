@@ -21,7 +21,7 @@ class NotificacaoVisualizacaoModelTest extends TestCase
     {
         $plano = Plano::create(['nome' => 'Padrão', 'preco_mensal' => 100]);
         $oficina = Oficina::create([
-            'nome' => 'Teste', 'cnpj' => '11222333000181', 'slug' => 'teste-' . uniqid(),
+            'nome' => 'Teste', 'cnpj' => (string) mt_rand(10000000000000, 99999999999999), 'slug' => 'teste-' . uniqid(),
             'plano_id' => $plano->id, 'status' => 'ATIVA',
         ]);
         TenancyContext::set($oficina->id, $oficina->slug);

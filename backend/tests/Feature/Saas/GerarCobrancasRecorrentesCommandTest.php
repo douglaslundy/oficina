@@ -19,7 +19,7 @@ class GerarCobrancasRecorrentesCommandTest extends TestCase
         $plano = Plano::create(['nome' => 'Padrão', 'preco_mensal' => 100]);
 
         $oficinaAVencer = Oficina::create([
-            'nome' => 'A Vencer', 'cnpj' => '11222333000181', 'slug' => 'a-vencer-' . uniqid(),
+            'nome' => 'A Vencer', 'cnpj' => (string) mt_rand(10000000000000, 99999999999999), 'slug' => 'a-vencer-' . uniqid(),
             'plano_id' => $plano->id, 'status' => 'ATIVA', 'gateway' => 'ASAAS',
             'asaas_customer_id' => 'cus_1', 'proximo_vencimento' => now()->addDays(2)->toDateString(),
         ]);

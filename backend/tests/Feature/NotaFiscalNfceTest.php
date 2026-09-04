@@ -73,7 +73,7 @@ class NotaFiscalNfceTest extends TestCase
     {
         $this->criarConfiguracao();
         $token   = $this->loginAdmin();
-        $cliente = Cliente::create(['nome' => 'Oficina Cliente LTDA', 'cpf_cnpj' => '11222333000181', 'uf' => 'MG']);
+        $cliente = Cliente::create(['nome' => 'Oficina Cliente LTDA', 'cpf_cnpj' => (string) mt_rand(10000000000000, 99999999999999), 'uf' => 'MG']);
         $produto = $this->criarProduto();
 
         $response = $this->withToken($token)->postJson('/api/notas-fiscais', $this->payloadVenda($cliente->id, $produto->id));
@@ -97,7 +97,7 @@ class NotaFiscalNfceTest extends TestCase
     {
         $this->criarConfiguracao();
         $token   = $this->loginAdmin();
-        $cliente = Cliente::create(['nome' => 'Oficina Cliente LTDA', 'cpf_cnpj' => '11222333000181', 'uf' => 'MG']);
+        $cliente = Cliente::create(['nome' => 'Oficina Cliente LTDA', 'cpf_cnpj' => (string) mt_rand(10000000000000, 99999999999999), 'uf' => 'MG']);
         $produto = $this->criarProduto();
 
         $response = $this->withToken($token)->postJson('/api/notas-fiscais', $this->payloadVenda($cliente->id, $produto->id, ['forcar_nfe' => true]));
@@ -144,7 +144,7 @@ class NotaFiscalNfceTest extends TestCase
     {
         $this->criarConfiguracao(['uf' => 'MG']);
         $oficina = \App\Models\Oficina::create([
-            'nome' => 'Oficina Focus NFC-e', 'cnpj' => '11222333000181',
+            'nome' => 'Oficina Focus NFC-e', 'cnpj' => (string) mt_rand(10000000000000, 99999999999999),
             'slug' => 'oficina-nfce-' . uniqid(), 'provedor_fiscal' => 'FOCUS',
         ]);
         $token   = $this->loginAdmin();
@@ -183,7 +183,7 @@ class NotaFiscalNfceTest extends TestCase
     {
         $this->criarConfiguracao(['uf' => 'MG']);
         $oficina = \App\Models\Oficina::create([
-            'nome' => 'Oficina Numeracao', 'cnpj' => '11222333000181',
+            'nome' => 'Oficina Numeracao', 'cnpj' => (string) mt_rand(10000000000000, 99999999999999),
             'slug' => 'oficina-num-' . uniqid(), 'provedor_fiscal' => 'FOCUS',
         ]);
         $token = $this->loginAdmin();
@@ -195,7 +195,7 @@ class NotaFiscalNfceTest extends TestCase
         ]);
 
         $clientePf = Cliente::create(['nome' => 'PF', 'cpf_cnpj' => '87748248800', 'uf' => 'MG']);
-        $clientePj = Cliente::create(['nome' => 'PJ', 'cpf_cnpj' => '11222333000181', 'uf' => 'MG']);
+        $clientePj = Cliente::create(['nome' => 'PJ', 'cpf_cnpj' => (string) mt_rand(10000000000000, 99999999999999), 'uf' => 'MG']);
         $produto   = $this->criarProduto();
 
         $nfce1 = $this->withToken($token)->withHeaders($headers)->postJson('/api/notas-fiscais', $this->payloadVenda($clientePf->id, $produto->id));
@@ -221,7 +221,7 @@ class NotaFiscalNfceTest extends TestCase
     {
         $this->criarConfiguracao(['uf' => 'MG']);
         $oficina = \App\Models\Oficina::create([
-            'nome' => 'Oficina Spedy NFC-e', 'cnpj' => '11222333000181',
+            'nome' => 'Oficina Spedy NFC-e', 'cnpj' => (string) mt_rand(10000000000000, 99999999999999),
             'slug' => 'oficina-spedy-nfce-' . uniqid(), 'provedor_fiscal' => 'SPEDY',
         ]);
         $token   = $this->loginAdmin();
@@ -253,7 +253,7 @@ class NotaFiscalNfceTest extends TestCase
     {
         $this->criarConfiguracao(['uf' => 'MG']);
         $oficina = \App\Models\Oficina::create([
-            'nome' => 'Oficina Focus 2', 'cnpj' => '11222333000181',
+            'nome' => 'Oficina Focus 2', 'cnpj' => (string) mt_rand(10000000000000, 99999999999999),
             'slug' => 'oficina-focus2-' . uniqid(), 'provedor_fiscal' => 'FOCUS',
         ]);
         $token   = $this->loginAdmin();
@@ -289,7 +289,7 @@ class NotaFiscalNfceTest extends TestCase
     {
         $this->criarConfiguracao(['uf' => 'MG']);
         $oficina = \App\Models\Oficina::create([
-            'nome' => 'Oficina PDF NFC-e', 'cnpj' => '11222333000181',
+            'nome' => 'Oficina PDF NFC-e', 'cnpj' => (string) mt_rand(10000000000000, 99999999999999),
             'slug' => 'oficina-pdf-nfce-' . uniqid(), 'provedor_fiscal' => 'FOCUS',
         ]);
         $token   = $this->loginAdmin();

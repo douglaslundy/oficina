@@ -21,6 +21,7 @@ class VeiculoTest extends TestCase
         return Oficina::create([
             'nome'   => $nome ?? 'Oficina Teste',
             'slug'   => $slug,
+            'cnpj'   => (string) mt_rand(10000000000000, 99999999999999),
             'status' => 'ATIVA',
         ]);
     }

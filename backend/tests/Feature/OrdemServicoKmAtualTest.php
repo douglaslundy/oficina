@@ -16,7 +16,7 @@ class OrdemServicoKmAtualTest extends TestCase
 
     private function setupEntities(): array
     {
-        $oficina = $this->criarOficina();
+        $oficina = Oficina::create(['nome' => 'Oficina Teste', 'slug' => 'oficina-teste', 'cnpj' => uniqid('c'), 'status' => 'ATIVA']);
         $admin = Usuario::create([
             'nome' => 'Admin', 'email' => 'a@t.com', 'cpf' => '52998224725',
             'role' => 'ADMIN', 'status' => 'ATIVO', 'senha_hash' => Hash::make('pass'),

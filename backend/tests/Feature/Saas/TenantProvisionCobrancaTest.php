@@ -22,7 +22,7 @@ class TenantProvisionCobrancaTest extends TestCase
         ]);
 
         $oficina = app(TenantProvisionService::class)->provisionar([
-            'nome' => 'Nova Oficina', 'cnpj' => '11222333000181', 'slug' => 'nova-oficina-' . uniqid(),
+            'nome' => 'Nova Oficina', 'cnpj' => (string) mt_rand(10000000000000, 99999999999999), 'slug' => 'nova-oficina-' . uniqid(),
             'plano_id' => $plano->id, 'admin_nome' => 'Admin', 'admin_email' => 'admin@nova.com',
             'admin_cpf' => '52998224725',
         ]);

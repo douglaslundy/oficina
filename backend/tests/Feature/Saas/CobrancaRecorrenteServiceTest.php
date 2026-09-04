@@ -22,7 +22,7 @@ class CobrancaRecorrenteServiceTest extends TestCase
 
         return Oficina::create(array_merge([
             'nome'               => 'Oficina Teste',
-            'cnpj'               => '11222333000181',
+            'cnpj'               => (string) mt_rand(10000000000000, 99999999999999),
             'slug'               => 'oficina-teste-' . uniqid(),
             'plano_id'           => $plano->id,
             'status'             => 'ATIVA',

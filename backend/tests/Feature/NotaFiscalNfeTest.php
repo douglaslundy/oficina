@@ -142,7 +142,7 @@ class NotaFiscalNfeTest extends TestCase
         // persistido — não só a camada de unit do FocusNfeProvider isoladamente.
         $this->criarConfiguracao(['uf' => 'SP']);
         $oficina = Oficina::create([
-            'nome' => 'Oficina Focus Teste', 'cnpj' => '11222333000181',
+            'nome' => 'Oficina Focus Teste', 'cnpj' => (string) mt_rand(10000000000000, 99999999999999),
             'slug' => 'oficina-focus-' . uniqid(), 'provedor_fiscal' => 'FOCUS',
         ]);
         $token   = $this->loginAdmin();
