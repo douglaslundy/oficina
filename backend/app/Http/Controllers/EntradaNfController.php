@@ -9,6 +9,8 @@ use App\Models\NotaEntrada;
 use App\Models\NotaEntradaItem;
 use App\Models\Produto;
 use App\Services\EstoqueService;
+use App\Services\Fiscal\Contracts\ConsultaNotaTerceiroProvider;
+use App\Services\Fiscal\FiscalProviderManager;
 use App\Services\Fiscal\ProdutoFiscalService;
 use App\Services\NotaEntradaXmlParser;
 use App\Services\PlanLimitService;
@@ -326,6 +328,33 @@ class EntradaNfController extends Controller
             'message'              => 'Dados fiscais atualizados.',
             'produtos_atualizados' => $produtosAtualizados,
         ]);
+    }
+
+    public function consultar(Request $request, FiscalProviderManager $providerManager, ProdutoFiscalService $fiscalService): JsonResponse
+    {
+        $validated = $request->validate(['chave_acesso' => ['required', 'string', 'max:44']]);
+
+        if (NotaEntrada::where('chave_acesso', $validated['chave_acesso'])->exists()) {
+            return response()->json(['message' => 'Esta nota fiscal já foi lançada anteriormente.'], 422);
+        }
+
+        $provider = $providerManager->forTenant();
+        if (!$provider instanceof ConsultaNotaTerceiroProvider) {
+            return response()->json(['message' => 'O motor fiscal desta oficina ainda não suporta essa consulta.'], 422);
+        }
+
+        $resultado = $provider->consultarNotaRecebida($validated['chave_acesso']);
+
+        return match ($resultado->status) {
+            'COMPLETA' => response()->json($this->montarPreview($resultado->dados, $fiscalService)),
+            'AGUARDANDO_MANIFESTACAO' => response()->json([
+                'message' => 'Ciência da operação enviada à SEFAZ. Isso pode levar alguns minutos — tente consultar novamente em instantes.',
+            ], 202),
+            'NAO_ENCONTRADA' => response()->json([
+                'message' => 'Nota não encontrada no provedor ainda. A sincronização com a SEFAZ pode levar até 1 hora — tente novamente mais tarde.',
+            ], 404),
+            default => response()->json(['message' => $resultado->mensagemErro ?? 'Erro ao consultar a nota.'], 422),
+        };
     }
 
     public function index(): AnonymousResourceCollection
