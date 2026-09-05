@@ -59,131 +59,16 @@ class NotaFiscalController extends Controller
             'itens.*.valor_unitario' => ['required_with:itens', 'numeric', 'min:0'],
         ]);
 
-        $ehVenda = $validated['natureza_operacao'] === 'Venda de Mercadoria';
-        $modelo  = 'NFS-e';
-
-        // Dados fiscais que alimentam os resolvers de CFOP/CST-CSOSN precisam estar
-        // completos ANTES de abrir a transação — nunca cair num default/fallback
-        // silencioso em decisão fiscal (gera CFOP/CST-CSOSN errado num documento
-        // fiscal real, sem erro visível em lugar nenhum).
-        $configuracao  = null;
-        $cliente       = null;
-        $produtosPorId = [];
-
-        if ($ehVenda) {
-            $configuracao = \App\Models\Configuracao::first();
-            if (!$configuracao || empty($configuracao->uf) || empty($configuracao->regime_tributario)) {
-                return response()->json(['message' => 'Complete a UF e o regime tributário da empresa em Configurações antes de emitir NF-e.'], 422);
-            }
-
-            $cliente = \App\Models\Cliente::find($validated['cliente_id']);
-            if (!$cliente || empty($cliente->uf)) {
-                return response()->json(['message' => 'Complete a UF do cliente antes de emitir NF-e.'], 422);
-            }
-
-            // Seleção automática NFC-e/NF-e: consumidor final pessoa física (CPF, 11
-            // dígitos) recebe NFC-e por padrão — só existe NFC-e pra pessoa física.
-            // "forcar_nfe" é o escape hatch pro caso raro de PF que precise de NF-e
-            // mesmo assim; ignorado quando o cliente já é pessoa jurídica (CNPJ
-            // sempre gera NF-e, não existe NFC-e pra CNPJ).
-            $cpfCnpjLimpo   = preg_replace('/\D/', '', (string) $cliente->cpf_cnpj);
-            $ehPessoaFisica = strlen($cpfCnpjLimpo) === 11;
-            $forcarNfe      = (bool) ($validated['forcar_nfe'] ?? false);
-            // NFC-e é legalmente restrita a venda presencial dentro do estado — o
-            // payload da Focus (local_destino) e o CFOP do CfopConsumidorResolver
-            // assumem operação interna. Cliente PF de outra UF cai pra NF-e, mesma
-            // lógica do escape hatch forcar_nfe (achado da revisão final de branch).
-            $mesmoEstado    = strtoupper((string) $cliente->uf) === strtoupper((string) $configuracao->uf);
-            $modelo         = ($ehPessoaFisica && !$forcarNfe && $mesmoEstado) ? 'NFC-e' : 'NF-e';
-
-            foreach ($validated['itens'] as $item) {
-                $produto = \App\Models\Produto::findOrFail($item['produto_id']);
-
-                if ($produto->tributacao_icms === null) {
-                    return response()->json(['message' => "Produto \"{$produto->nome}\" está com a tributação de ICMS pendente de revisão. Complete em Produtos › Pendências Fiscais antes de emitir NF-e."], 422);
-                }
-
-                // origem === null não pode virar (int) 0 silenciosamente: 0 é um valor
-                // fiscal válido e distinto ("mercadoria nacional") — diferente de ncm,
-                // que pode ficar incompleto sem bloquear a emissão (decisão deliberada),
-                // origem nula precisa bloquear porque defaultar pra 0 afirma um fato
-                // fiscal específico que pode ser falso.
-                if ($produto->origem === null) {
-                    return response()->json(['message' => "Produto \"{$produto->nome}\" está com a origem da mercadoria pendente de revisão. Complete em Produtos › Pendências Fiscais antes de emitir NF-e."], 422);
-                }
-
-                $produtosPorId[$produto->id] = $produto;
-            }
+        // Toda a lógica fiscal (checagem de UF/regime/pendências, seleção
+        // NFC-e vs NF-e, resolução de CFOP/CST-CSOSN, série, criação) vive
+        // em CriarNotaFiscalService — reaproveitada pelo
+        // EmissaoOrquestradorService (OS mista → 2 notas). Bloqueio fiscal
+        // vira EmissaoBloqueadaException aqui traduzida pra 422.
+        try {
+            $nota = app(\App\Services\Fiscal\CriarNotaFiscalService::class)->criar($validated);
+        } catch (\App\Exceptions\EmissaoBloqueadaException $e) {
+            return response()->json(['message' => $e->getMessage()], 422);
         }
-
-        $subtotal = $ehVenda
-            ? collect($validated['itens'])->sum(fn ($i) => $i['quantidade'] * $i['valor_unitario'])
-            : (float) $validated['subtotal'];
-
-        $desconto   = (float) ($validated['desconto'] ?? 0);
-        $aliquota   = (float) ($validated['aliquota_iss'] ?? 5.00);
-        $valorIss   = $ehVenda ? 0.0 : (($subtotal - $desconto) * $aliquota) / 100;
-        $valorTotal = ($subtotal - $desconto) + $valorIss;
-
-        // Achado da revisão final de branch: serie_nf/serie_nfce existiam em
-        // Configuracao mas nunca eram aplicados em notas_fiscais.serie (sempre caía
-        // no default '001' da coluna). Só resolve o caminho de venda (NF-e/NFC-e),
-        // onde $configuracao já está carregado — NFS-e mantém o comportamento
-        // anterior (fora de escopo desta correção).
-        $serie = '001';
-        if ($ehVenda) {
-            $serie = $modelo === 'NFC-e' ? ($configuracao->serie_nfce ?: '001') : ($configuracao->serie_nf ?: '001');
-        }
-
-        $nota = \Illuminate\Support\Facades\DB::transaction(function () use ($validated, $modelo, $serie, $subtotal, $desconto, $aliquota, $valorIss, $valorTotal, $ehVenda, $configuracao, $cliente, $produtosPorId) {
-            $nota = NotaFiscal::create([
-                'cliente_id'        => $validated['cliente_id'],
-                'os_id'             => $validated['os_id'] ?? null,
-                'natureza_operacao' => $validated['natureza_operacao'],
-                'forma_pagamento'   => $validated['forma_pagamento'] ?? null,
-                'observacoes'       => $validated['observacoes'] ?? null,
-                'modelo'            => $modelo,
-                'serie'             => $serie,
-                'subtotal'          => $subtotal,
-                'desconto'          => $desconto,
-                'aliquota_iss'      => $aliquota,
-                'valor_iss'         => $valorIss,
-                'valor_total'       => $valorTotal,
-                'status'            => 'RASCUNHO',
-            ]);
-
-            if ($ehVenda) {
-                $oficinaUf = $configuracao->uf;
-                $regime    = $configuracao->regime_tributario;
-
-                foreach ($validated['itens'] as $item) {
-                    $produto    = $produtosPorId[$item['produto_id']];
-                    $tributacao = $produto->tributacao_icms;
-
-                    $cfop = $modelo === 'NFC-e'
-                        ? \App\Services\Fiscal\CfopConsumidorResolver::resolver($oficinaUf, $cliente->uf)
-                        : \App\Services\Fiscal\CfopSaidaResolver::resolver($oficinaUf, $cliente->uf, $tributacao === 'ST');
-                    $cstCsosn = \App\Services\Fiscal\TributacaoIcmsSaidaResolver::resolver($regime, $tributacao);
-
-                    \App\Models\NotaFiscalItem::create([
-                        'nota_fiscal_id'  => $nota->id,
-                        'produto_id'      => $produto->id,
-                        'sku'             => $produto->sku,
-                        'descricao'       => $produto->nome,
-                        'unidade'         => $produto->unidade,
-                        'ncm'             => $produto->ncm,
-                        'cfop'            => $cfop,
-                        'origem'          => $produto->origem,
-                        'tributacao_icms' => $tributacao,
-                        'cst_csosn'       => $cstCsosn,
-                        'quantidade'      => $item['quantidade'],
-                        'valor_unitario'  => $item['valor_unitario'],
-                    ]);
-                }
-            }
-
-            return $nota;
-        });
 
         return (new NotaFiscalResource($nota->load(['cliente', 'itens'])))->response()->setStatusCode(201);
     }
@@ -204,55 +89,11 @@ class NotaFiscalController extends Controller
             return response()->json(['message' => 'Emissão já em andamento — consulte GET /notas-fiscais/{id}/status.'], 409);
         }
 
-        $provedor = app(\App\Services\Fiscal\FiscalProviderManager::class)->provedorDaOficina(\App\Tenancy\TenancyContext::get() ?? '');
-        $ambiente = \App\Models\Configuracao::first()?->ambiente_fiscal ?? 'HOMOLOGACAO';
-        $ref      = $nota->referencia_externa ?: ('nf-' . $nota->id);
-
-        // Finding 3 do fix wave pós-revisão da Etapa C2 (2026-08-11): NF-e via
-        // NFEPHP tem numeração PRÓPRIA (Configuracao::proximo_numero_nfe, via
-        // MotorNfe::proximoNumeroNfe()), independente do contador Spedy/Focus
-        // (NfeService::proximoNumeroNf()) e do contador de NFC-e
-        // (proximoNumeroNfce()). Pra NFEPHP + NF-e, preservamos $nota->numero
-        // existente (permite retry reutilizar número reservado em tentativa
-        // anterior). NFC-e aloca do contador próprio dela. Demais combinações
-        // provedor/modelo alocam novo número via proximoNumeroNf().
-        // Fix round 3: a checagem de "mesmo provedor" tem que usar
-        // $nota->provedor (o provedor de QUANDO o número foi reservado, lido
-        // aqui ANTES do update() abaixo sobrescrever) e não $provedor (o
-        // provedor recém-resolvido pra ESTA tentativa). Sem isso, uma nota
-        // rejeitada sob Spedy/Focus e reenviada após o admin trocar o
-        // provedor pra NFEPHP reaproveitava o número alocado pelo contador
-        // errado.
-        if ($provedor === 'NFEPHP' && $nota->modelo === 'NF-e') {
-            $numeroInicial = ($nota->provedor === 'NFEPHP') ? $nota->numero : null;
-        } elseif ($nota->modelo === 'NFC-e') {
-            $numeroInicial = $this->nfeService->proximoNumeroNfce();
-        } else {
-            $numeroInicial = $this->nfeService->proximoNumeroNf();
-        }
-
-        $nota->update([
-            'status'             => 'PROCESSANDO',
-            'numero'             => $numeroInicial,
-            'provedor'           => $provedor,
-            'ambiente'           => $ambiente,
-            'referencia_externa' => $ref,
-        ]);
-
-        // Emissão fora do request (fila Redis em produção): a chamada ao
-        // provedor — que pra NFePHP + contingência EPEC pode levar dezenas
-        // de segundos — não bloqueia mais a API. A resposta volta com a nota
-        // PROCESSANDO e o frontend acompanha via GET /notas-fiscais/{id}/status
-        // (polling que já existe desde a NFC-e). Em teste/local
-        // (QUEUE_CONNECTION=sync) o job roda inline no dispatch, então
-        // $nota->fresh() abaixo já traz o status final — comportamento
-        // idêntico ao síncrono anterior pros testes de feature.
-        \App\Jobs\EmitirNotaFiscalJob::dispatch(
-            $nota->id,
-            (string) \App\Tenancy\TenancyContext::get(),
-            \App\Models\Oficina::find(\App\Tenancy\TenancyContext::get())?->slug ?? '',
-            $ambiente,
-        );
+        // Resolve provedor, aloca o número (síncrono/transacional) e
+        // enfileira o EmitirNotaFiscalJob. Em teste/local (QUEUE=sync) o job
+        // roda inline, então $nota->fresh() já traz o status final —
+        // comportamento idêntico ao síncrono anterior pros testes.
+        app(\App\Services\Fiscal\IniciarEmissaoNotaService::class)->iniciar($nota);
 
         return response()->json(['data' => new NotaFiscalResource($nota->fresh()->load('cliente'))]);
     }

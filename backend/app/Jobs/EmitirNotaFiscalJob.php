@@ -43,6 +43,13 @@ class EmitirNotaFiscalJob implements ShouldQueue
 
     public function handle(NfeService $nfeService, AplicarResultadoNotaService $aplicarResultado): void
     {
+        // Salva o contexto anterior: em teste/local (QUEUE=sync) este job
+        // roda INLINE dentro de um request que já tem tenant setado (e o
+        // EmissaoOrquestradorService dispara 2 jobs em sequência) — um
+        // clear() cego apagaria o contexto que o chamador ainda precisa.
+        $tenantAnterior = TenancyContext::get();
+        $slugAnterior   = TenancyContext::getSlug();
+
         TenancyContext::set($this->oficinaId, $this->oficinaSlug);
 
         try {
@@ -66,7 +73,11 @@ class EmitirNotaFiscalJob implements ShouldQueue
                     'mensagem_erro' => 'Falha técnica ao emitir a nota: ' . $e->getMessage(),
                 ]);
         } finally {
-            TenancyContext::clear();
+            if ($tenantAnterior !== null) {
+                TenancyContext::set($tenantAnterior, $slugAnterior);
+            } else {
+                TenancyContext::clear();
+            }
         }
     }
 

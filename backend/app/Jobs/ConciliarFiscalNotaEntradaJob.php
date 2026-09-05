@@ -38,6 +38,13 @@ class ConciliarFiscalNotaEntradaJob implements ShouldQueue
 
     public function handle(FiscalProviderManager $providerManager, ProdutoFiscalService $fiscalService): void
     {
+        // Salva/restaura o contexto anterior: em teste/local (QUEUE=sync)
+        // este job roda inline, e conciliarPendentes() dispara vários em
+        // sequência — um clear() cego apagaria o tenant do request que o
+        // loop ainda precisa.
+        $tenantAnterior = TenancyContext::get();
+        $slugAnterior   = TenancyContext::getSlug();
+
         TenancyContext::set($this->oficinaId, $this->oficinaSlug);
 
         try {
@@ -66,7 +73,11 @@ class ConciliarFiscalNotaEntradaJob implements ShouldQueue
             $resultado = $provider->consultarNotaRecebida($nota->chave_acesso);
             $this->aplicarResultado($nota, $resultado, $fiscalService);
         } finally {
-            TenancyContext::clear();
+            if ($tenantAnterior !== null) {
+                TenancyContext::set($tenantAnterior, $slugAnterior);
+            } else {
+                TenancyContext::clear();
+            }
         }
     }
 
