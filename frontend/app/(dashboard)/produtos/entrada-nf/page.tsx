@@ -40,7 +40,7 @@ interface NotaPreview {
   ja_lancada: boolean
   atualizacao_fiscal_disponivel: boolean
   itens: ItemPreview[]
-  xml_original: string
+  xml_original: string | null
 }
 
 const CATEGORIAS = ['Filtros', 'Óleo/Fluidos', 'Freios', 'Suspensão', 'Elétrica', 'Motor', 'Outros']
@@ -57,6 +57,9 @@ export default function EntradaNfPage() {
   const [confirming, setConfirming] = useState(false)
   const [preview, setPreview] = useState<NotaPreview | null>(null)
   const [itens, setItens] = useState<ItemPreview[]>([])
+  const [modo, setModo] = useState<'upload' | 'scan'>('upload')
+  const [chaveDigitada, setChaveDigitada] = useState('')
+  const [consultando, setConsultando] = useState(false)
 
   async function handleUpload(file: File) {
     setUploading(true)
@@ -73,6 +76,30 @@ export default function EntradaNfPage() {
       toast(e.response?.data?.message ?? 'Erro ao ler o XML da nota.', 'danger')
     } finally {
       setUploading(false)
+    }
+  }
+
+  async function consultarChave(chave: string) {
+    const chaveLimpa = chave.replace(/\D/g, '')
+    if (chaveLimpa.length !== 44) {
+      toast('A chave de acesso precisa ter 44 dígitos.', 'danger')
+      return
+    }
+    setConsultando(true)
+    try {
+      const res = await api.post<NotaPreview | { message: string }>('/entradas-nf/consultar', { chave_acesso: chaveLimpa })
+      if (res.status === 202) {
+        toast((res.data as { message: string }).message, 'success')
+        return
+      }
+      const nota = res.data as NotaPreview
+      setPreview(nota)
+      setItens(nota.itens)
+    } catch (err: unknown) {
+      const e = err as { response?: { data?: { message?: string } } }
+      toast(e.response?.data?.message ?? 'Erro ao consultar a nota.', 'danger')
+    } finally {
+      setConsultando(false)
     }
   }
 
@@ -169,18 +196,55 @@ export default function EntradaNfPage() {
       </div>
 
       {!preview && (
-        <div style={{ background: 'var(--card)', borderRadius: 12, border: '1px solid var(--border)', padding: 32, textAlign: 'center' }}>
-          <p style={{ color: 'var(--muted)', marginBottom: 16 }}>
-            Selecione o arquivo XML da NF-e enviado pelo fornecedor.
-          </p>
-          <input
-            type="file"
-            accept=".xml"
-            disabled={uploading}
-            onChange={e => { const f = e.target.files?.[0]; if (f) handleUpload(f) }}
-            style={{ color: 'var(--text)' }}
-          />
-          {uploading && <p style={{ color: 'var(--muted)', marginTop: 12 }}>Lendo XML...</p>}
+        <div style={{ background: 'var(--card)', borderRadius: 12, border: '1px solid var(--border)', padding: 32 }}>
+          <div style={{ display: 'flex', gap: 8, marginBottom: 24, justifyContent: 'center' }}>
+            {([['upload', 'Upload de XML'], ['scan', 'Ler QR / código de barras']] as const).map(([m, label]) => (
+              <button key={m} type="button" onClick={() => setModo(m)}
+                style={{
+                  padding: '8px 16px', borderRadius: 8, cursor: 'pointer', fontSize: 13, fontWeight: 600,
+                  border: '1px solid var(--border)',
+                  background: modo === m ? 'var(--accent)' : 'transparent',
+                  color: modo === m ? '#000' : 'var(--muted)',
+                }}>
+                {label}
+              </button>
+            ))}
+          </div>
+
+          {modo === 'upload' && (
+            <div style={{ textAlign: 'center' }}>
+              <p style={{ color: 'var(--muted)', marginBottom: 16 }}>
+                Selecione o arquivo XML da NF-e enviado pelo fornecedor.
+              </p>
+              <input type="file" accept=".xml" disabled={uploading}
+                onChange={e => { const f = e.target.files?.[0]; if (f) handleUpload(f) }}
+                style={{ color: 'var(--text)' }} />
+              {uploading && <p style={{ color: 'var(--muted)', marginTop: 12 }}>Lendo XML...</p>}
+            </div>
+          )}
+
+          {modo === 'scan' && (
+            <div style={{ textAlign: 'center' }}>
+              <p style={{ color: 'var(--muted)', marginBottom: 16 }}>
+                Digite a chave de acesso de 44 dígitos impressa na nota.
+              </p>
+              <div style={{ display: 'flex', gap: 8, justifyContent: 'center' }}>
+                <input value={chaveDigitada} maxLength={44}
+                  onChange={e => setChaveDigitada(e.target.value.replace(/\D/g, ''))}
+                  placeholder="Chave de acesso (44 dígitos)"
+                  style={{ ...inputStyle, width: 320 }} />
+                <button type="button" disabled={consultando || chaveDigitada.length !== 44}
+                  onClick={() => consultarChave(chaveDigitada)}
+                  style={{
+                    padding: '8px 20px', borderRadius: 8, border: 'none', fontWeight: 700,
+                    background: chaveDigitada.length === 44 ? 'var(--accent)' : 'var(--muted)', color: '#000',
+                    cursor: chaveDigitada.length === 44 ? 'pointer' : 'not-allowed',
+                  }}>
+                  {consultando ? 'Consultando...' : 'Consultar'}
+                </button>
+              </div>
+            </div>
+          )}
         </div>
       )}
 
