@@ -33,6 +33,13 @@ janela abaixo de ~1140px CSS no Windows), injetei um breakpoint de teste a
 semana 7→1) e que não há scroll horizontal no body. Tabelas já rolavam via
 `DataTable` (`overflow-x:auto`).
 
+**Deploy 2026-09-05:** `git pull` + `deploy-vps.sh` na VPS. HEAD da VPS em
+`ee92bb9`, todos os containers healthy, `saas` e `stuntmotos` respondendo
+200 no domínio público, e as classes novas (`rcols-6`, `week-grid`,
+`auth-left`…) confirmadas no bundle CSS servido em produção. Modificações
+locais de nginx (slugs de tenant) preservadas — o `git pull` foi
+fast-forward e nenhum commit tocava `docker/nginx/`.
+
 ## Rodada 37 (2026-09-05) — verificação a fundo do backlog geral ("Verifique a fundo e faça todos itens abertos")
 
 Auditoria item por item da seção "❌ FALTA IMPLEMENTAR" de
