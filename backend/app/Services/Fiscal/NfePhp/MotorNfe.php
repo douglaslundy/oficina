@@ -1296,15 +1296,14 @@ class MotorNfe
      * (`sefazDistDFe(0, 0, null)` monta `<distNSU><ultNSU>000...0</ultNSU>`,
      * confirmado em Tools.php:384).
      *
-     * LIMITAÇÃO CONHECIDA E DELIBERADA DESTA v1: sem paginação. O XSD limita
-     * cada resposta a 50 `docZip` (`maxOccurs="50"` em loteDistDFeInt) e
-     * devolve `ultNSU`/`maxNSU` justamente pra o cliente continuar de onde
-     * parou — nada disso é usado aqui: sempre recomeçamos do NSU 0 e
-     * ficamos com o primeiro lote. Se houver mais de 50 documentos, os
-     * excedentes não aparecem. Não implementado nesta rodada (YAGNI):
-     * paginação correta exige um checkpoint de NSU persistido por oficina, e
-     * o motor NFePHP não está registrado em nenhuma oficina em produção
-     * ainda. Revisitar antes do primeiro uso real com volume.
+     * PAGINAÇÃO PARCIAL (2026-09-05): varre até `self::MAX_PAGINAS_DIST_DFE`
+     * páginas de NSU (até ~150 documentos), logando aviso de "listagem
+     * parcial" se ainda houver `ultNSU < maxNSU` no fim. NÃO é paginação
+     * completa: sem checkpoint de NSU persistido, sempre recomeça do 0, e o
+     * teto de páginas existe pra não levar bloqueio de "Consumo Indevido"
+     * (cStat 656) da SEFAZ. Pra volume real o certo é sincronização agendada
+     * com checkpoint — não feito (NFePHP não está registrado em nenhuma
+     * oficina). Revisitar antes do primeiro uso real com volume alto.
      *
      * $cnpjOficina não é usado: o CNPJ consultado é sempre o do certificado/
      * configuração passada ao construtor de Tools (`configJson()`), não um
@@ -1325,6 +1324,18 @@ class MotorNfe
      *
      * @return list<ConsultaNotaTerceiroResumo>
      */
+    /**
+     * Teto de páginas por consulta. Cada página traz até 50 docZip (limite
+     * do XSD), então 3 páginas = até 150 documentos. NÃO subir muito: a
+     * SEFAZ pune consulta agressiva de Distribuição DFe com cStat 656
+     * (Consumo Indevido) e bloqueia a chave por 1h. Pra volume real o certo
+     * é uma sincronização agendada com checkpoint de NSU persistido — não
+     * feito aqui (NFePHP não está registrado em nenhuma oficina ainda).
+     * Quando o teto é atingido e ainda há `ultNSU < maxNSU`, loga aviso de
+     * listagem parcial.
+     */
+    private const MAX_PAGINAS_DIST_DFE = 3;
+
     public function listarNotasRecebidas(string $cnpjOficina, string $ambiente): array
     {
         try {
@@ -1337,9 +1348,7 @@ class MotorNfe
             $certificate = Certificate::readPfx($dados['pfx'], $dados['senha']);
             $tools       = new Tools($this->configJson($cfg, $ambiente), $certificate);
 
-            $respostaXml = $tools->sefazDistDFe(0, 0, null);
-
-            return $this->mapearListaDistDFe($respostaXml);
+            return $this->paginarDistDFe(fn (int $ultNSU): string => $tools->sefazDistDFe($ultNSU, 0, null));
         } catch (\Throwable $e) {
             Log::warning('NFePHP/DistDFe: falha ao listar notas recebidas.', ['erro' => $e->getMessage()]);
             throw new \RuntimeException(
@@ -1348,6 +1357,61 @@ class MotorNfe
                 $e,
             );
         }
+    }
+
+    /**
+     * Varre as páginas de Distribuição DFe (NSU incremental) até acabarem os
+     * documentos (`ultNSU >= maxNSU`) ou bater o teto de páginas. Puro em
+     * relação a rede/certificado: recebe um `callable(int $ultNSU): string`
+     * que devolve o XML da resposta — testável direto por reflexão.
+     *
+     * @param callable(int): string $buscarPagina
+     * @return list<ConsultaNotaTerceiroResumo>
+     */
+    private function paginarDistDFe(callable $buscarPagina): array
+    {
+        $resumos = [];
+        $ultNSU  = 0;
+        $maxNSU  = 0;
+        $pagina  = 0;
+
+        do {
+            $xml     = $buscarPagina($ultNSU);
+            $resumos = array_merge($resumos, $this->mapearListaDistDFe($xml));
+            [$ultNSU, $maxNSU] = $this->nsuDaResposta($xml);
+            $pagina++;
+        } while ($ultNSU > 0 && $ultNSU < $maxNSU && $pagina < self::MAX_PAGINAS_DIST_DFE);
+
+        if ($ultNSU > 0 && $ultNSU < $maxNSU) {
+            Log::warning('NFePHP/DistDFe: listagem PARCIAL — há mais documentos que o teto de páginas desta consulta.', [
+                'ultNSU' => $ultNSU, 'maxNSU' => $maxNSU, 'paginas_lidas' => $pagina,
+            ]);
+        }
+
+        return $resumos;
+    }
+
+    /**
+     * ultNSU/maxNSU da resposta de sefazDistDFe (retDistDFeInt) — o cliente
+     * usa pra saber se ainda há documentos a buscar. Parsing puro.
+     *
+     * @return array{0: int, 1: int} [ultNSU, maxNSU]
+     */
+    private function nsuDaResposta(string $xml): array
+    {
+        libxml_use_internal_errors(true);
+        $sxml = simplexml_load_string($xml);
+        libxml_clear_errors();
+
+        if ($sxml === false) {
+            return [0, 0];
+        }
+
+        $sxml->registerXPathNamespace('nfe', 'http://www.portalfiscal.inf.br/nfe');
+        $ult = $sxml->xpath('//nfe:retDistDFeInt/nfe:ultNSU')[0] ?? null;
+        $max = $sxml->xpath('//nfe:retDistDFeInt/nfe:maxNSU')[0] ?? null;
+
+        return [(int) (string) $ult, (int) (string) $max];
     }
 
     /**

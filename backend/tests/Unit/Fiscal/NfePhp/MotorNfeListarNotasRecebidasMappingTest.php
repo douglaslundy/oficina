@@ -158,4 +158,87 @@ class MotorNfeListarNotasRecebidasMappingTest extends TestCase
 
         $this->invocar('isto nao e xml <<<');
     }
+
+    // ── Paginação por NSU (paginarDistDFe / nsuDaResposta) ─────────────────
+
+    private function invocarPaginar(callable $buscarPagina): array
+    {
+        $motor = new MotorNfe();
+        $m = new \ReflectionMethod(MotorNfe::class, 'paginarDistDFe');
+        $m->setAccessible(true);
+        return $m->invoke($motor, $buscarPagina);
+    }
+
+    private function paginaComResumo(string $chave, int $ultNSU, int $maxNSU): string
+    {
+        $resNfe = "<resNFe xmlns=\"http://www.portalfiscal.inf.br/nfe\"><chNFe>{$chave}</chNFe><vNF>10.00</vNF></resNFe>";
+        return <<<XML
+        <retDistDFeInt xmlns="http://www.portalfiscal.inf.br/nfe" versao="1.01">
+          <tpAmb>2</tpAmb><verAplic>1.0</verAplic><cStat>138</cStat><xMotivo>ok</xMotivo>
+          <dhResp>2026-09-05T10:00:00-03:00</dhResp><ultNSU>{$ultNSU}</ultNSU><maxNSU>{$maxNSU}</maxNSU>
+          <loteDistDFeInt><docZip NSU="{$ultNSU}" schema="resNFe_v1.01.xsd">{$this->zip($resNfe)}</docZip></loteDistDFeInt>
+        </retDistDFeInt>
+        XML;
+    }
+
+    public function test_paginacao_continua_ate_ultNSU_alcancar_maxNSU(): void
+    {
+        $chamadas = [];
+        $resumos = $this->invocarPaginar(function (int $ultNSU) use (&$chamadas) {
+            $chamadas[] = $ultNSU;
+            // 3 documentos no total (maxNSU=3), 1 por página.
+            return $this->paginaComResumo('CHAVE-' . ($ultNSU + 1), $ultNSU + 1, 3);
+        });
+
+        $this->assertSame([0, 1, 2], $chamadas, 'Deve pedir a próxima página a partir do ultNSU anterior até chegar em maxNSU.');
+        $this->assertCount(3, $resumos);
+        $this->assertSame('CHAVE-1', $resumos[0]->chaveAcesso);
+        $this->assertSame('CHAVE-3', $resumos[2]->chaveAcesso);
+    }
+
+    public function test_paginacao_para_no_teto_de_paginas_mesmo_com_mais_documentos(): void
+    {
+        $chamadas = 0;
+        $resumos = $this->invocarPaginar(function (int $ultNSU) use (&$chamadas) {
+            $chamadas++;
+            // maxNSU sempre bem acima do ultNSU → nunca "acaba" sozinho;
+            // só o teto de páginas (MAX_PAGINAS_DIST_DFE = 3) segura.
+            return $this->paginaComResumo('CHAVE-' . ($ultNSU + 1), $ultNSU + 1, 9999);
+        });
+
+        $this->assertSame(3, $chamadas, 'Não pode passar de MAX_PAGINAS_DIST_DFE páginas (risco de cStat 656 da SEFAZ).');
+        $this->assertCount(3, $resumos);
+    }
+
+    public function test_paginacao_uma_pagina_so_quando_ja_veio_tudo(): void
+    {
+        $chamadas = 0;
+        $this->invocarPaginar(function (int $ultNSU) use (&$chamadas) {
+            $chamadas++;
+            return $this->paginaComResumo('CHAVE-1', 1, 1); // ultNSU == maxNSU já na 1ª
+        });
+
+        $this->assertSame(1, $chamadas);
+    }
+
+    public function test_nsu_da_resposta_le_ultNSU_e_maxNSU(): void
+    {
+        $motor = new MotorNfe();
+        $m = new \ReflectionMethod(MotorNfe::class, 'nsuDaResposta');
+        $m->setAccessible(true);
+
+        [$ult, $max] = $m->invoke($motor, $this->paginaComResumo('X', 7, 42));
+
+        $this->assertSame(7, $ult);
+        $this->assertSame(42, $max);
+    }
+
+    public function test_nsu_da_resposta_xml_invalido_devolve_zeros(): void
+    {
+        $motor = new MotorNfe();
+        $m = new \ReflectionMethod(MotorNfe::class, 'nsuDaResposta');
+        $m->setAccessible(true);
+
+        $this->assertSame([0, 0], $m->invoke($motor, 'nao e xml <<<'));
+    }
 }
