@@ -6,9 +6,11 @@
 
 ## Fila (nesta ordem)
 
-- [ ] **1. Correção pontual — `MotorNfse::consultar()` trata falha de rede como "não cancelado"**
-      Bounded. Sem caller hoje (`consultar()` não é chamado por nada ainda) — risco parked
-      registrado desde a Rodada 20/22, resolver antes que um job de sincronização use isso.
+- [x] **1. Correção pontual — `MotorNfse::consultar()` trata falha de rede como "não cancelado"**
+      ✅ Concluída 2026-09-05. `resultadoAposVerificarCancelamento()` extraído (mesmo padrão de
+      `mapearResultadoConsulta()`): falha ao listar eventos 101101 agora vira `ERRO` explícito,
+      nunca mais "tratado como sem cancelamento" silenciosamente. 3 testes novos, 6/6 passando,
+      zero regressão na suíte Unit (247 testes, só as 3 falhas pré-existentes de OpenSSL local).
 
 - [ ] **2. Conciliação fiscal de notas de entrada já importadas**
       Arquitetural. Design apresentado e discutido no chat em 2026-09-05 (reconsulta via

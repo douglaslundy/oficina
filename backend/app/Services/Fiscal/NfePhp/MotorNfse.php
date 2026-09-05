@@ -270,46 +270,61 @@ class MotorNfse
                 // delega para SefinClient::listarEventosPorTipo(), que faz
                 // GET em "nfse/{chaveAcesso}/eventos/{tipoEvento}" e devolve
                 // json_decode(..., true) — um array puro (associativo/de
-                // arrays), NÃO uma lista de objetos com propriedades. O
-                // próprio exemplo oficial do pacote
-                // (examples/contribuinte/listar_eventos.php) acessa
-                // $evento->tipoEvento como se fosse objeto, o que diverge do
-                // retorno real de SefinClient::get() — não confiamos nesse
-                // exemplo para o formato interno dos elementos.
+                // arrays), NÃO uma lista de objetos com propriedades.
                 //
-                // Como o endpoint já filtra por tipoEvento na própria URL,
-                // não precisamos depender do formato interno de cada evento:
-                // uma resposta não-vazia para tipoEvento=101101 já significa
-                // "existe pelo menos um evento de cancelamento registrado
-                // para esta chave".
-                //
-                // NÃO foi possível confirmar contra a SEFIN real (sem
-                // certificado/rede neste ambiente) o que a API devolve
-                // quando NÃO há nenhum evento desse tipo — se é um array
-                // vazio (200) ou um erro HTTP (que
-                // SefinClient::handleException() sempre transforma em
-                // NfseApiException, mesmo para "não encontrado"). Tratamos
-                // os dois casos ausência-de-array-vazio e exceção como
-                // "nenhum evento de cancelamento encontrado" (nunca como
-                // cancelado por engano) — ver relatório final para esse
-                // risco residual.
-                $temEventoCancelamento = false;
+                // A lib não distingue "sem eventos" (array vazio, 200) de
+                // "erro real" (SefinClient::handleException() sempre lança
+                // NfseApiException, mesmo pra "não encontrado") — CORRIGIDO
+                // aqui: uma exceção agora vira incerteza (ERRO), nunca mais
+                // "tratado como sem cancelamento" silenciosamente. A mesma
+                // regra que mapearResultadoConsulta() já aplica pro cStat
+                // (nunca chutar um status de sucesso não confirmado) agora
+                // vale também pra essa checagem.
+                $eventosCancelamento = null;
+                $falhaAoListarEventos = null;
                 try {
                     $chave = $resultado->infNfse?->id ?? $referencia;
                     $eventosCancelamento = $nfse->contribuinte()->listarEventos($chave, 101101);
-                    $temEventoCancelamento = ! empty($eventosCancelamento);
                 } catch (\Throwable $e) {
-                    Log::info(
-                        'NFePHP/NFS-e: não foi possível listar eventos 101101 ao consultar (tratado como "sem cancelamento").',
+                    $falhaAoListarEventos = $e;
+                    Log::warning(
+                        'NFePHP/NFS-e: falha ao listar eventos 101101 ao consultar — reportado como incerteza (ERRO), não mais como "sem cancelamento".',
                         ['erro' => $e->getMessage(), 'ref' => $referencia],
                     );
                 }
 
-                return $this->mapearResultadoConsulta($resultado, $temEventoCancelamento, $referencia);
+                return $this->resultadoAposVerificarCancelamento($resultado, $eventosCancelamento, $falhaAoListarEventos, $referencia);
             });
         } catch (\Throwable $e) {
             return EmissaoResultado::erro('Falha ao consultar NFS-e: ' . $e->getMessage(), $referencia);
         }
+    }
+
+    /**
+     * Decide o resultado da consulta considerando se foi possível checar
+     * eventos de cancelamento — extraído de consultar() pra ser testável
+     * sem rede/certificado, mesmo padrão de mapearResultadoConsulta().
+     *
+     * $falhaAoListarEventos não-nulo significa que não dá pra confirmar se
+     * a nota está cancelada ou não — nesse caso o resultado é ERRO, nunca
+     * o cStat do corpo da NFS-e (que poderia estar desatualizado se a nota
+     * foi cancelada e só não conseguimos confirmar isso agora).
+     */
+    private function resultadoAposVerificarCancelamento(
+        NfseData $resultado,
+        ?array $eventosCancelamento,
+        ?\Throwable $falhaAoListarEventos,
+        ?string $referencia,
+    ): EmissaoResultado {
+        if ($falhaAoListarEventos !== null) {
+            return EmissaoResultado::erro(
+                'Não foi possível confirmar se a NFS-e está cancelada (falha ao consultar eventos): '
+                    . $falhaAoListarEventos->getMessage(),
+                $referencia,
+            );
+        }
+
+        return $this->mapearResultadoConsulta($resultado, !empty($eventosCancelamento), $referencia);
     }
 
     /**
