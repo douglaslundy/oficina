@@ -287,7 +287,7 @@ Expected: FAIL — `Call to undefined method App\Services\Fiscal\Providers\Spedy
 
 - [ ] **Step 3: Implement `consultarNotaRecebida()`**
 
-Em `backend/app/Services/Fiscal/Providers/SpedyProvider.php`: adicionar `use App\Services\Fiscal\Contracts\ConsultaNotaTerceiroProvider;`, `use App\Services\Fiscal\Data\ConsultaNotaTerceiroResultado;`, `use App\Services\NotaEntradaXmlParser;` no topo; mudar a declaração da classe para `class SpedyProvider implements FiscalProvider, ConsultaNotaTerceiroProvider`; adicionar o método:
+Em `backend/app/Services/Fiscal/Providers/SpedyProvider.php`: adicionar `use App\Services\Fiscal\Data\ConsultaNotaTerceiroResultado;`, `use App\Services\NotaEntradaXmlParser;` no topo; adicionar o método abaixo ao corpo da classe. **Não mude a declaração da classe (`class SpedyProvider implements FiscalProvider`) nesta task** — só declare `implements ConsultaNotaTerceiroProvider` quando a classe tiver os 2 métodos da interface (isso acontece na Task 3, que adiciona `listarNotasRecebidas()`); declarar antes disso é um fatal error do PHP (classe com método de interface faltando):
 
 ```php
     public function consultarNotaRecebida(string $chaveAcesso): ConsultaNotaTerceiroResultado
@@ -379,7 +379,7 @@ Expected: FAIL — `Call to undefined method ... listarNotasRecebidas()`.
 
 - [ ] **Step 3: Implement**
 
-Adicionar em `SpedyProvider.php` (mesmo `use ConsultaNotaTerceiroResumo` a acrescentar no topo):
+Em `SpedyProvider.php`: acrescentar `use App\Services\Fiscal\Contracts\ConsultaNotaTerceiroProvider;` e `use App\Services\Fiscal\Data\ConsultaNotaTerceiroResumo;` no topo; **agora sim** mudar a declaração da classe pra `class SpedyProvider implements FiscalProvider, ConsultaNotaTerceiroProvider` (só agora os 2 métodos da interface existem); adicionar o método:
 
 ```php
     public function listarNotasRecebidas(string $cnpjOficina, ?\DateTimeInterface $desde = null): array
@@ -694,7 +694,7 @@ Expected: FAIL — `Call to undefined method ... consultarNotaRecebida()`.
 
 - [ ] **Step 3: Implement**
 
-Em `backend/app/Services/Fiscal/Providers/FocusNfeProvider.php`: adicionar `use App\Services\Fiscal\Contracts\ConsultaNotaTerceiroProvider;` e `use App\Services\Fiscal\Data\ConsultaNotaTerceiroResultado;` no topo; mudar a declaração pra `class FocusNfeProvider implements FiscalProvider, ConsultaNotaTerceiroProvider`; adicionar:
+Em `backend/app/Services/Fiscal/Providers/FocusNfeProvider.php`: adicionar `use App\Services\Fiscal\Data\ConsultaNotaTerceiroResultado;` no topo; adicionar o método abaixo ao corpo da classe. **Não mude a declaração da classe (`class FocusNfeProvider implements FiscalProvider`) nesta task** — só declare `implements ConsultaNotaTerceiroProvider` quando a classe tiver os 2 métodos da interface (isso acontece na Task 6, que adiciona `listarNotasRecebidas()`); declarar antes disso é um fatal error do PHP (classe com método de interface faltando):
 
 ```php
     public function consultarNotaRecebida(string $chaveAcesso): ConsultaNotaTerceiroResultado
@@ -776,7 +776,7 @@ Expected: FAIL — método não existe.
 
 - [ ] **Step 3: Implement**
 
-Adicionar `use App\Services\Fiscal\Data\ConsultaNotaTerceiroResumo;` no topo do arquivo e o método:
+Acrescentar `use App\Services\Fiscal\Contracts\ConsultaNotaTerceiroProvider;` e `use App\Services\Fiscal\Data\ConsultaNotaTerceiroResumo;` no topo do arquivo; **agora sim** mudar a declaração da classe pra `class FocusNfeProvider implements FiscalProvider, ConsultaNotaTerceiroProvider` (só agora os 2 métodos da interface existem); adicionar o método:
 
 ```php
     public function listarNotasRecebidas(string $cnpjOficina, ?\DateTimeInterface $desde = null): array
