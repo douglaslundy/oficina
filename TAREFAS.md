@@ -47,18 +47,12 @@
       (`[data-theme='light']`). Isso era outro item de backlog desatualizado — corrigido aqui e
       na memória persistente, mesma causa do engano com as Etapas C1/C2.
 
-## Bloqueado — não entra na fila até o usuário resolver
+## Bloqueado — nada mais na fila
 
-- **Toggle `MANUAL` vs `AUTOMATICO_PROVEDOR`** (Spedy/Focus calculando CFOP/CST/ICMS/ISSO
-  automaticamente em vez do sistema calcular tudo). **Não implementar às cegas**: o próprio
-  desenho de 2026-08-05 já registrava isso como "aguardando confirmação real via sandbox" —
-  ninguém nunca testou `POST /v1/orders` da Spedy sem mandar CFOP/CST/ICMS pra confirmar que
-  ela realmente calcula certo. Implementar um toggle pra um comportamento nunca confirmado
-  quebraria a regra mais repetida deste projeto (nunca assumir comportamento fiscal sem
-  confirmar na doc/sandbox real) — e um erro de cálculo fiscal enviado à SEFAZ é caro e
-  difícil de desfazer. Fica fora da fila até você criar a conta sandbox da Spedy
-  (`app.spedy.com.br/signup`) e eu poder testar de verdade, ou até você decidir que quer que
-  eu implemente mesmo assim, ciente do risco.
+(vazio — o toggle `MANUAL`/`AUTOMATICO_PROVEDOR` saiu daqui em 2026-09-05: o
+usuário pediu pra atacar, o spike real do `POST /v1/orders` foi feito no
+sandbox Spedy e confirmou que a Spedy calcula a tributação sozinha, então
+foi implementado. Ver `PROGRESSO.md` Rodada 35.)
 
 ## Verificação final (controlador, 2026-09-05)
 
@@ -81,3 +75,9 @@ item explicitamente bloqueado abaixo.
 - Conciliação fiscal de notas de entrada (commits `19cdd7d`..`8553e91`, fix `a91021e`)
 - Extensão do NFePHP pra `ConsultaNotaTerceiroProvider` (commits `c10f61c`..`389c489`)
 - Dark mode (já existia — `047b992`, achado nesta rodada)
+- Toggle `calculo_tributario_modo` MANUAL/AUTOMATICO_PROVEDOR (Rodada 35, commits `a6a9937`..`ee46d7c`)
+
+## Backlog restante (nada foi pedido pra fila — cada um precisa de desenho próprio)
+- `EmissaoOrquestrador` — OS mista (peça + serviço) gerando as 2 notas com 1 clique.
+- Emissão fiscal em fila (Horizon).
+- Sobra do NFePHP: `listarNotasRecebidas()` best-effort sem paginação (some doc acima de 50).

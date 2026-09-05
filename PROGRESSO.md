@@ -1,10 +1,56 @@
 # Progresso do Projeto
 
 ## Última atualização
-2026-09-05 — Rodada 34: conciliação fiscal de notas de entrada já
-importadas (item 2 do backlog), ver seção própria abaixo. (Rodada 33,
-logo abaixo, foi trabalho concorrente de outra sessão no mesmo dia —
-`ConsultaNotaTerceiroProvider` estendida ao motor NFePHP.)
+2026-09-05 — Rodada 35: toggle `calculo_tributario_modo` (MANUAL vs
+AUTOMATICO_PROVEDOR) — item que estava "bloqueado até testar em sandbox
+real"; o spike foi feito e desbloqueou. Ver seção abaixo.
+
+## Rodada 35 (2026-09-05) — toggle `calculo_tributario_modo` (deixar a Spedy calcular a tributação)
+
+O item estava marcado como bloqueado ("não implementar às cegas um cálculo
+fiscal nunca confirmado em sandbox real"). Usuário pediu explicitamente pra
+atacar. Fiz o spike que faltava.
+
+### Spike real do `POST /v1/orders` (sandbox Spedy, chave `163b406a-...`, STUNT MOTOS)
+Mandei 3 vendas sem NENHUM campo fiscal (sem NCM/CFOP/CST/ICMS). Resultado:
+a nota passou por TODA a validação fiscal e só foi rejeitada por
+**`SPD003: "O certificado digital é obrigatório para emissão de NF-e"`** —
+o mesmo bloqueio que trava qualquer emissão, não é específico do toggle.
+**Conclusão: a Spedy calcula a tributação sozinha de verdade no fluxo
+`/v1/orders`.** Contrato confirmado: `amount`/`date`/`items[]` obrigatórios,
+`product.invoiceModel` (`productInvoice`/`consumerInvoice`/`serviceInvoice`)
+distingue o tipo, `customer.address` completo obrigatório, resposta
+assíncrona (`invoices[0].status: enqueued`), `GET /product-invoices/{id}`
+reconcilia. Detalhes em `project-spedy-focus-calculo-automatico` (memória).
+
+### O que foi entregue
+- `configuracoes.calculo_tributario_modo` (VARCHAR default `MANUAL`).
+- Threading `MANUAL`|`AUTOMATICO_PROVEDOR` via `NotaFiscalData` (populado
+  por `NfeService::montarNotaData()` a partir do `Configuracao`).
+- `SpedyProvider::emitir()` checa o modo ANTES de qualquer branch de
+  modelo: `AUTOMATICO_PROVEDOR` → `emitirViaOrders()` (POST `/v1/orders`,
+  payload SEM campo fiscal, um só caminho pros 3 modelos). Modo `MANUAL`
+  (default) 100% intocado.
+- `FocusNfeProvider::emitir()` recusa `AUTOMATICO_PROVEDOR` com mensagem
+  clara (a Focus tem "Automations" mas sem contrato de API confirmado —
+  v1 = Spedy only), sem HTTP nenhum.
+- `ConfiguracaoController` valida `in:MANUAL,AUTOMATICO_PROVEDOR`; tela de
+  Dados da Empresa ganha o `<select>` + aviso dos pré-requisitos.
+- Testes: `SpedyProviderTest` (+4), `FocusNfeProviderTest` (+1),
+  `NfeServiceMontagemTest` (+2), `ConfiguracaoEntradaNfTest` (+2, feature).
+  Unit local: 273, só as 7 falhas pré-existentes já conhecidas (3 OpenSSL,
+  4 do `ConciliarFiscalNotaEntradaJobTest` que exige Postgres).
+
+### Limitações conhecidas (documentadas na UI e aqui)
+- **Nunca testado com catálogo variado real.** A própria doc da Spedy
+  chama `/v1/orders` de fluxo pra "cenários simples". Se a "config da
+  empresa" no painel Spedy usa um NCM/CFOP padrão único, itens de NCM
+  muito diferentes entre si podem sair com tributação errada. O usuário
+  precisa configurar regime + grupos de tributação no painel WEB da Spedy
+  (fora do nosso código) e conferir as primeiras notas.
+- **`POST /v1/orders` de verdade nunca chegou a AUTORIZAR** uma nota (parou
+  no certificado A1). O caminho até lá está confirmado; a autorização em si
+  depende do mesmo bloqueio de sempre.
 
 ## Rodada 33 (2026-09-05) — `ConsultaNotaTerceiroProvider` no motor NFePHP (Distribuição DFe)
 
