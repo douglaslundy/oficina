@@ -141,8 +141,21 @@ class MotorNfeListarNotasRecebidasMappingTest extends TestCase
         $this->assertSame('CHAVE-OK', $resumos[0]->chaveAcesso);
     }
 
-    public function test_resposta_nao_xml_devolve_lista_vazia(): void
+    public function test_resposta_nao_xml_lanca_excecao_em_vez_de_lista_vazia(): void
     {
-        $this->assertSame([], $this->invocar('isto nao e xml <<<'));
+        // Achado da autorrevisão: uma resposta ilegível é FALHA, não
+        // "nenhuma nota". Devolver [] aqui reintroduziria pela porta dos
+        // fundos exatamente o que o contrato de
+        // ConsultaNotaTerceiroProvider proíbe — a tela diria "nenhuma nota
+        // recebida" pra uma SEFAZ devolvendo lixo/HTML de erro. `[]` fica
+        // reservado pra "a SEFAZ respondeu direito e não há documentos"
+        // (test_resposta_sem_lote_devolve_lista_vazia, acima).
+        //
+        // A exceção sobe pelo try/catch de listarNotasRecebidas(), que já
+        // a converte na RuntimeException que o controller espera.
+        $this->expectException(\RuntimeException::class);
+        $this->expectExceptionMessage('não pôde ser interpretada');
+
+        $this->invocar('isto nao e xml <<<');
     }
 }

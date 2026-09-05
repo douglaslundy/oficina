@@ -1360,7 +1360,14 @@ class MotorNfe
      * procEventoNFe) são descartados: não são notas.
      *
      * Um docZip corrompido é pulado com log, nunca derruba o lote inteiro —
-     * perder uma linha é melhor que esconder as outras 49.
+     * perder uma linha é melhor que esconder as outras 49. Já uma resposta
+     * INTEIRA ilegível é outra coisa: é falha, não "nenhuma nota", e por
+     * isso lança (o catch de listarNotasRecebidas() converte na
+     * RuntimeException que o contrato exige). Devolver `[]` aqui
+     * reintroduziria pela porta dos fundos o bug que aquele contrato
+     * existe pra impedir — a tela diria "nenhuma nota recebida" pra uma
+     * SEFAZ devolvendo lixo/HTML de erro. `[]` fica reservado pro caso em
+     * que a resposta é válida e o lote está ausente/vazio.
      *
      * @return list<ConsultaNotaTerceiroResumo>
      */
@@ -1371,8 +1378,7 @@ class MotorNfe
         libxml_clear_errors();
 
         if ($sxml === false) {
-            Log::warning('NFePHP/DistDFe: resposta da listagem não é XML válido.');
-            return [];
+            throw new \RuntimeException('Resposta da SEFAZ não pôde ser interpretada ao listar notas recebidas.');
         }
 
         $sxml->registerXPathNamespace('nfe', 'http://www.portalfiscal.inf.br/nfe');
