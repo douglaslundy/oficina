@@ -25,8 +25,10 @@ implícito por precedente repetido, não pedido de novo). Ledger completo em
 ### O que foi entregue
 - **Nova interface `ConsultaNotaTerceiroProvider`** (`consultarNotaRecebida(chave)`,
   `listarNotasRecebidas(cnpj, desde?)`), implementada por `SpedyProvider` e
-  `FocusNfeProvider` — **não** por `NfePhpProvider` (Etapa C1 continua fora
-  de escopo, decisão já tomada antes).
+  `FocusNfeProvider` — **não** por `NfePhpProvider` (decisão de escopo desta
+  rodada, não bloqueio: as Etapas C1/C2 do motor NFePHP já estão mergeadas
+  e em produção desde 2026-08-11/12 — só não foi estendida pra esse recurso
+  específico ainda, ninguém pediu).
 - Endpoints confirmados via WebFetch contra a doc real da Spedy e da Focus
   antes de codar (nada assumido): Spedy usa `/v1/inbound-product-invoices`
   (lista/filtra por `accessKey`, manifesta como `acknowledged`, baixa XML
