@@ -60,5 +60,24 @@
   (`app.spedy.com.br/signup`) e eu poder testar de verdade, ou até você decidir que quer que
   eu implemente mesmo assim, ciente do risco.
 
+## Verificação final (controlador, 2026-09-05)
+
+Depois dos 2 agentes paralelos (itens 2 e 3) terminarem, rodei eu mesmo os
+testes de Feature/DB-dependentes contra um Postgres real (túnel SSH) —
+achei e corrigi 1 bug real que nenhum dos dois agentes pôde ver (os testes
+que o exercitavam exigem `RefreshDatabase`, indisponível na máquina de
+ambos): 2 dos 4 testes do `ConciliarFiscalNotaEntradaJobTest` mockavam só
+`ConsultaNotaTerceiroProvider`, mas `FiscalProviderManager::forTenant()`
+tem retorno tipado estrito como `FiscalProvider` — `TypeError` em runtime.
+Corrigido mockando as duas interfaces juntas (commit `a91021e`). CI
+confirmado verde nesse commit (Backend + Frontend, `success`).
+
+**Todos os 4 itens que o usuário pediu pra fila + a conciliação fiscal
+estão concluídos, com CI verde.** Nenhuma tarefa restante na fila além do
+item explicitamente bloqueado abaixo.
+
 ## Concluído
-(nada ainda nesta lista — itens anteriores já concluídos estão em `PROGRESSO.md`)
+- Correção do `MotorNfse::consultar()` (commit `7bd7eb9`)
+- Conciliação fiscal de notas de entrada (commits `19cdd7d`..`8553e91`, fix `a91021e`)
+- Extensão do NFePHP pra `ConsultaNotaTerceiroProvider` (commits `c10f61c`..`389c489`)
+- Dark mode (já existia — `047b992`, achado nesta rodada)
