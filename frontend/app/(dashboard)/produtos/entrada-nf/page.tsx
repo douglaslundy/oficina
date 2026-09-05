@@ -59,7 +59,7 @@ export default function EntradaNfPage() {
   const [confirming, setConfirming] = useState(false)
   const [preview, setPreview] = useState<NotaPreview | null>(null)
   const [itens, setItens] = useState<ItemPreview[]>([])
-  const [modo, setModo] = useState<'upload' | 'scan'>('upload')
+  const [modo, setModo] = useState<'upload' | 'scan' | 'recebidas'>('upload')
   const [chaveDigitada, setChaveDigitada] = useState('')
   const [consultando, setConsultando] = useState(false)
   const videoRef = useRef<HTMLVideoElement>(null)
@@ -244,7 +244,7 @@ export default function EntradaNfPage() {
       {!preview && (
         <div style={{ background: 'var(--card)', borderRadius: 12, border: '1px solid var(--border)', padding: 32 }}>
           <div style={{ display: 'flex', gap: 8, marginBottom: 24, justifyContent: 'center' }}>
-            {([['upload', 'Upload de XML'], ['scan', 'Ler QR / código de barras']] as const).map(([m, label]) => (
+            {([['upload', 'Upload de XML'], ['scan', 'Ler QR / código de barras'], ['recebidas', 'Notas Recebidas']] as const).map(([m, label]) => (
               <button key={m} type="button" onClick={() => setModo(m)}
                 style={{
                   padding: '8px 16px', borderRadius: 8, cursor: 'pointer', fontSize: 13, fontWeight: 600,
@@ -298,6 +298,8 @@ export default function EntradaNfPage() {
               </div>
             </div>
           )}
+
+          {modo === 'recebidas' && <NotasRecebidasTab onImportar={consultarChave} />}
         </div>
       )}
 
@@ -450,5 +452,71 @@ export default function EntradaNfPage() {
         </>
       )}
     </div>
+  )
+}
+
+interface NotaRecebidaResumo {
+  chave_acesso: string
+  fornecedor_nome: string | null
+  fornecedor_cnpj: string | null
+  data_emissao: string | null
+  valor_total: number
+  completa: boolean
+  ja_lancada: boolean
+}
+
+function NotasRecebidasTab({ onImportar }: { onImportar: (chave: string) => void }) {
+  const [notas, setNotas] = useState<NotaRecebidaResumo[]>([])
+  const [carregando, setCarregando] = useState(true)
+  const [erro, setErro] = useState<string | null>(null)
+
+  useEffect(() => {
+    let ativo = true
+    api.get<{ notas: NotaRecebidaResumo[] }>('/entradas-nf/recebidas')
+      .then(res => { if (ativo) setNotas(res.data.notas) })
+      .catch((err: unknown) => {
+        const e = err as { response?: { data?: { message?: string } } }
+        if (ativo) setErro(e.response?.data?.message ?? 'Erro ao listar notas recebidas.')
+      })
+      .finally(() => { if (ativo) setCarregando(false) })
+    return () => { ativo = false }
+  }, [])
+
+  if (carregando) return <p style={{ color: 'var(--muted)' }}>Carregando notas recebidas...</p>
+  if (erro) return <p style={{ color: 'var(--danger)' }}>{erro}</p>
+  if (notas.length === 0) return <p style={{ color: 'var(--muted)' }}>Nenhuma nota pendente encontrada no provedor fiscal.</p>
+
+  return (
+    <table style={{ width: '100%', borderCollapse: 'collapse' }}>
+      <thead>
+        <tr>
+          {['Fornecedor', 'Emissão', 'Valor', 'Status', ''].map(h => (
+            <th key={h} style={{ padding: '8px 12px', textAlign: 'left', fontSize: 12, color: 'var(--muted)', borderBottom: '1px solid var(--border)' }}>{h}</th>
+          ))}
+        </tr>
+      </thead>
+      <tbody>
+        {notas.map(n => (
+          <tr key={n.chave_acesso}>
+            <td style={{ padding: '8px 12px', borderBottom: '1px solid var(--border)' }}>{n.fornecedor_nome ?? '-'}</td>
+            <td style={{ padding: '8px 12px', borderBottom: '1px solid var(--border)' }}>{n.data_emissao ?? '-'}</td>
+            <td className="font-mono" style={{ padding: '8px 12px', borderBottom: '1px solid var(--border)' }}>{formatarMoeda(n.valor_total)}</td>
+            <td style={{ padding: '8px 12px', borderBottom: '1px solid var(--border)' }}>
+              {n.ja_lancada ? 'Já lançada' : n.completa ? 'Pronta pra importar' : 'Aguardando manifestação'}
+            </td>
+            <td style={{ padding: '8px 12px', borderBottom: '1px solid var(--border)' }}>
+              <button type="button" disabled={n.ja_lancada} onClick={() => onImportar(n.chave_acesso)}
+                style={{
+                  padding: '4px 12px', borderRadius: 6, border: 'none', fontWeight: 700, fontSize: 12,
+                  background: n.ja_lancada ? 'var(--muted)' : 'var(--accent)', color: '#000',
+                  cursor: n.ja_lancada ? 'not-allowed' : 'pointer',
+                }}>
+                Importar
+              </button>
+            </td>
+          </tr>
+        ))}
+      </tbody>
+    </table>
   )
 }
