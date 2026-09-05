@@ -239,21 +239,20 @@ class NotaFiscalController extends Controller
             'referencia_externa' => $ref,
         ]);
 
-        try {
-            $resultado = $this->nfeService->emitir($nota);
-            $nota      = $this->aplicarResultadoEmissao($nota, $resultado, $ambiente);
-
-            if ($resultado['status'] === 'REJEITADA') {
-                return response()->json(['message' => $resultado['mensagem_erro'] ?? 'Nota rejeitada.'], 422);
-            }
-
-            if ($resultado['status'] === 'ERRO') {
-                return response()->json(['message' => $resultado['mensagem_erro'] ?? 'Falha técnica ao emitir a nota. Tente novamente ou contate o suporte.'], 500);
-            }
-        } catch (\Exception $e) {
-            $nota->update(['status' => 'REJEITADA']);
-            return response()->json(['message' => $e->getMessage()], 422);
-        }
+        // Emissão fora do request (fila Redis em produção): a chamada ao
+        // provedor — que pra NFePHP + contingência EPEC pode levar dezenas
+        // de segundos — não bloqueia mais a API. A resposta volta com a nota
+        // PROCESSANDO e o frontend acompanha via GET /notas-fiscais/{id}/status
+        // (polling que já existe desde a NFC-e). Em teste/local
+        // (QUEUE_CONNECTION=sync) o job roda inline no dispatch, então
+        // $nota->fresh() abaixo já traz o status final — comportamento
+        // idêntico ao síncrono anterior pros testes de feature.
+        \App\Jobs\EmitirNotaFiscalJob::dispatch(
+            $nota->id,
+            (string) \App\Tenancy\TenancyContext::get(),
+            \App\Models\Oficina::find(\App\Tenancy\TenancyContext::get())?->slug ?? '',
+            $ambiente,
+        );
 
         return response()->json(['data' => new NotaFiscalResource($nota->fresh()->load('cliente'))]);
     }
