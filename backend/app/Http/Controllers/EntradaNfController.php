@@ -15,6 +15,7 @@ use App\Services\Fiscal\FiscalProviderManager;
 use App\Services\Fiscal\ProdutoFiscalService;
 use App\Services\NotaEntradaXmlParser;
 use App\Services\PlanLimitService;
+use App\Tenancy\TenancyContext;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Http\Resources\Json\AnonymousResourceCollection;
@@ -406,5 +407,26 @@ class EntradaNfController extends Controller
     public function show(string $id): NotaEntradaResource
     {
         return new NotaEntradaResource(NotaEntrada::with('itens')->findOrFail($id));
+    }
+
+    public function conciliar(string $id): JsonResponse
+    {
+        $nota = NotaEntrada::findOrFail($id);
+        \App\Jobs\ConciliarFiscalNotaEntradaJob::dispatch($nota->id, (string) TenancyContext::get(), $this->slugAtual());
+        return response()->json(['message' => 'Conciliação enfileirada.'], 202);
+    }
+
+    public function conciliarPendentes(): JsonResponse
+    {
+        $notas = NotaEntrada::whereNotNull('chave_acesso')->whereNull('fiscal_conferida_em')->get();
+        foreach ($notas as $nota) {
+            \App\Jobs\ConciliarFiscalNotaEntradaJob::dispatch($nota->id, (string) TenancyContext::get(), $this->slugAtual());
+        }
+        return response()->json(['message' => 'Conciliação enfileirada.', 'notas_enfileiradas' => $notas->count()], 202);
+    }
+
+    private function slugAtual(): string
+    {
+        return \App\Models\Oficina::find(TenancyContext::get())?->slug ?? '';
     }
 }

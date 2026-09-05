@@ -264,6 +264,11 @@ Route::middleware(['tenant', 'auth:sanctum', 'role:ADMIN,ATENDENTE'])->group(fun
     Route::post('entradas-nf', [EntradaNfController::class, 'store']);
     Route::post('entradas-nf/atualizar-fiscal', [EntradaNfController::class, 'atualizarFiscal']);
     Route::post('entradas-nf/consultar', [EntradaNfController::class, 'consultar']);
+    // `conciliar-pendentes` precisa vir ANTES de `{id}/conciliar`, mesmo
+    // motivo já documentado acima pra `entradas-nf/recebidas` vs `{id}`
+    // (rota com segmento fixo casaria como `{id}` se viesse depois).
+    Route::post('entradas-nf/conciliar-pendentes', [EntradaNfController::class, 'conciliarPendentes']);
+    Route::post('entradas-nf/{id}/conciliar', [EntradaNfController::class, 'conciliar']);
     Route::put('categorias-fiscais', [CategoriaPadraoFiscalController::class, 'update']);
 });
 
