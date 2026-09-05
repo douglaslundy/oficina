@@ -14,6 +14,10 @@ interface ConsultaNotaTerceiroProvider
 
     /** Lista notas recebidas já sincronizadas pelo provedor, mais recentes
      *  primeiro. $desde filtra por data de emissão quando informado.
-     *  @return list<\App\Services\Fiscal\Data\ConsultaNotaTerceiroResumo> */
+     *  @return list<\App\Services\Fiscal\Data\ConsultaNotaTerceiroResumo>
+     *  @throws \RuntimeException quando o provedor falha (HTTP de erro) —
+     *  nunca deve devolver `[]` silenciosamente pra isso, só pra "de fato
+     *  não tem nota nenhuma". O chamador precisa distinguir os dois casos
+     *  (ver EntradaNfController::recebidas()). */
     public function listarNotasRecebidas(string $cnpjOficina, ?\DateTimeInterface $desde = null): array;
 }

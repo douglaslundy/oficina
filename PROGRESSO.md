@@ -62,9 +62,14 @@ implícito por precedente repetido, não pedido de novo). Ledger completo em
   Corrigido com um ref de "ainda montado" checado logo após a Promise do
   `decodeFromVideoDevice` resolver. Achado pela revisão da Task 11, não
   problema em produção hoje (feature nova).
-- **Focus não expõe `origem` (0-8) nem `CEST` no JSON de nota recebida**
-  (diferente do XML completo) — o mapper deixa esses campos `null` de
-  propósito; documentado no próprio código, não é bug.
+- **CORRIGIDO na revisão final**: a primeira versão do mapper (Task 4)
+  assumia, sem confirmar, que a Focus não expõe `origem`/`CEST` no JSON de
+  nota recebida — falso. Confirmado via WebFetch direto no JSON de
+  exemplo real (`icms_origem` e `cest` são campos de verdade, ao lado de
+  `icms_situacao_tributaria`, que o mapper já lia). Corrigido antes do
+  merge; `origem = 0` (nacional) é tratado como valor válido, não ausente
+  (classe de bug que já se repetiu 4x neste projeto — ver
+  `project-zero-e-valor-fiscal-valido` na memória).
 - **`serie`/`numero_nf` derivados da própria chave de acesso** (posições
   fixas 23-25 e 26-34 do padrão nacional) quando o provedor não os retorna
   separadamente (caso da Focus) — técnica válida pra qualquer provedor.
