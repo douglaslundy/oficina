@@ -84,7 +84,7 @@ export default function ProdutoDetailPage() {
       </div>
 
       {/* Info rápida */}
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(5, 1fr)', gap: 12, marginBottom: 24 }}>
+      <div className="rcols-5" style={{ display: 'grid', gap: 12, marginBottom: 24 }}>
         {[
           { label: 'SKU', value: produto.sku, mono: true },
           { label: 'Código de barras (EAN)', value: produto.codigo_barras ?? '-', mono: true },
@@ -108,7 +108,7 @@ export default function ProdutoDetailPage() {
         <StockBar qtyAtual={produto.qty_atual} qtyMinima={produto.qty_minima} status={produto.status_estoque} />
       </div>
 
-      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 24 }}>
+      <div className="rsplit" style={{ display: 'grid', gap: 24 }}>
         {/* Formulário de edição */}
         <div style={{ background: 'var(--card)', borderRadius: 12, border: '1px solid var(--border)', padding: 24 }}>
           <h3 className="font-display" style={{ fontSize: 16, fontWeight: 700, color: 'var(--text)', marginBottom: 16 }}>

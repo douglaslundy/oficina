@@ -2,7 +2,7 @@ export default function AuthLayout({ children }: { children: React.ReactNode }) 
   return (
     <div style={{ display: 'flex', minHeight: '100vh', background: 'var(--bg)' }}>
       {/* Left panel */}
-      <div style={{
+      <div className="auth-left" style={{
         flex: 1,
         background: 'var(--surface)',
         display: 'flex',
@@ -46,7 +46,7 @@ export default function AuthLayout({ children }: { children: React.ReactNode }) 
         </div>
       </div>
       {/* Right panel */}
-      <div style={{
+      <div className="auth-right" style={{
         width: 480, display: 'flex', alignItems: 'center',
         justifyContent: 'center', padding: 48,
       }}>

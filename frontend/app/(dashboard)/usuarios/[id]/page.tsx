@@ -66,7 +66,7 @@ export default function UsuarioDetailPage() {
       </div>
 
       {/* Info rápida */}
-      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12, marginBottom: 24 }}>
+      <div className="rform" style={{ display: 'grid', gap: 12, marginBottom: 24 }}>
         {[
           { label: 'E-mail',        value: usuario.email },
           { label: 'Último acesso', value: formatarData(usuario.ultimo_acesso) },

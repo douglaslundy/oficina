@@ -64,7 +64,7 @@ export default function DashboardPage() {
     return (
       <div>
         <h1 className="font-display" style={{ fontSize: 28, fontWeight: 800, color: 'var(--text)', marginBottom: 24 }}>Dashboard</h1>
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(6, 1fr)', gap: 12, marginBottom: 24 }}>
+        <div className="rcols-6" style={{ display: 'grid', gap: 12, marginBottom: 24 }}>
           {[1,2,3,4,5,6].map(i => (
             <div key={i} style={{ background: 'var(--card)', borderRadius: 10, border: '1px solid var(--border)', height: 118, animation: 'pulse 1.5s ease-in-out infinite' }} />
           ))}
@@ -78,7 +78,7 @@ export default function DashboardPage() {
       <h1 className="font-display" style={{ fontSize: 28, fontWeight: 800, color: 'var(--text)', marginBottom: 24 }}>Dashboard</h1>
 
       {/* Stat cards — 6 em linha única */}
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(6, 1fr)', gap: 12, marginBottom: 24 }}>
+      <div className="rcols-6" style={{ display: 'grid', gap: 12, marginBottom: 24 }}>
         <StatCard title="Faturamento" value={formatarMoeda(data.stats.faturamento_mes)} icon="💰" color="var(--success)" subtitle="Mês atual" href="/contas-a-receber" compact />
         <StatCard title="Dívidas" value={formatarMoeda(data.stats.dividas_abertas)} icon="⚠" color="var(--danger)" subtitle="Em aberto" href="/clientes?status=DEVEDOR,DIVIDA_VENCIDA" compact />
         <StatCard title="NF Emitidas" value={data.stats.nf_emitidas_mes} icon="🧾" color="var(--info)" subtitle="Este mês" href="/fiscal/historico" compact />
@@ -87,7 +87,7 @@ export default function DashboardPage() {
         <StatCard title="Vendas Balcão" value={data.stats.vendas_mes} icon="🛒" color="var(--info)" subtitle={formatarMoeda(data.stats.vendas_mes_valor)} href="/contas-a-receber" compact />
       </div>
 
-      <div style={{ display: 'grid', gridTemplateColumns: '2fr 1fr', gap: 24, marginBottom: 24 }}>
+      <div className="rsplit-2-1" style={{ display: 'grid', gap: 24, marginBottom: 24 }}>
         <FaturamentoChart data={data.faturamento_mensal} />
 
         <EstoqueAlerts produtos={data.produtos_criticos} />

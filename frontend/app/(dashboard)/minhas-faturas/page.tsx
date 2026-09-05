@@ -87,7 +87,7 @@ export default function MinhasFaturasPage() {
         ) : (
           <>
             {/* KPIs */}
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 14, marginBottom: 20 }}>
+            <div className="rcols-3" style={{ display: 'grid', gap: 14, marginBottom: 20 }}>
               <div style={{ background: 'var(--card)', border: '1px solid var(--border)', borderTop: '2px solid var(--accent)', borderRadius: 10, padding: '14px 18px' }}>
                 <p style={{ ...labelStyle, margin: '0 0 5px' }}>Em Aberto</p>
                 {loading ? <Sk w={100} h={22} /> : (

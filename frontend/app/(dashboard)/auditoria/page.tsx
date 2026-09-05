@@ -243,7 +243,7 @@ export default function AuditoriaPage() {
                 </div>
 
                 {/* Meta grid */}
-                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8, marginBottom: 20 }}>
+                <div className="rform" style={{ display: 'grid', gap: 8, marginBottom: 20 }}>
                   {[
                     ['Evento', (() => {
                       const cfg = eventoCfg(detail.evento)

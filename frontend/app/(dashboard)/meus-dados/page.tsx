@@ -204,7 +204,7 @@ export default function MeusDadosPage() {
           <div style={{ background: 'var(--card)', border: '1px solid var(--border)', borderRadius: 12, padding: '24px 28px', display: 'flex', flexDirection: 'column', gap: 20 }}>
 
             {/* Info fixa */}
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16 }}>
+            <div className="rform" style={{ display: 'grid', gap: 16 }}>
               <div>
                 <label style={lStyle}>CPF</label>
                 <input
@@ -240,7 +240,7 @@ export default function MeusDadosPage() {
                   />
                 </div>
 
-                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16 }}>
+                <div className="rform" style={{ display: 'grid', gap: 16 }}>
                   <div>
                     <label style={lStyle}>E-mail <span style={{ color: 'var(--danger)' }}>*</span></label>
                     <input
@@ -274,7 +274,7 @@ export default function MeusDadosPage() {
                 Deixe em branco para manter a senha atual.
               </p>
 
-              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16 }}>
+              <div className="rform" style={{ display: 'grid', gap: 16 }}>
                 <div>
                   <label style={lStyle}>Nova senha</label>
                   <div style={{ position: 'relative' }}>

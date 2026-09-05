@@ -117,3 +117,58 @@ html, body {
   0%, 100% { opacity: 1; }
   50%       { opacity: 0.4; }
 }
+
+/* ─── Responsividade ──────────────────────────────────────────────────────────
+   Classes de grid responsivo. O `display:grid` e o `gap` continuam inline em
+   cada uso; estas classes só controlam a contagem de colunas por breakpoint.
+   Regra: colunas cheias no desktop, colapso progressivo até o celular. */
+
+.rcols-2 { grid-template-columns: repeat(2, 1fr); }
+.rcols-3 { grid-template-columns: repeat(3, 1fr); }
+.rcols-4 { grid-template-columns: repeat(4, 1fr); }
+.rcols-5 { grid-template-columns: repeat(5, 1fr); }
+.rcols-6 { grid-template-columns: repeat(6, 1fr); }
+
+/* Grade de campos de formulário (2 ou 3 colunas no desktop). */
+.rform      { grid-template-columns: repeat(2, 1fr); }
+.rform-3    { grid-template-columns: repeat(3, 1fr); }
+/* Linha "campo + campo + botão". */
+.rform-auto { grid-template-columns: 1fr 1fr auto; }
+
+/* Layout de 2 painéis lado a lado (não são cards — é conteúdo maior). */
+.rsplit     { grid-template-columns: 1fr 1fr; }
+.rsplit-2-1 { grid-template-columns: 2fr 1fr; }
+
+/* Grade semanal do calendário de agendamentos. */
+.week-grid  { grid-template-columns: repeat(7, 1fr); }
+.week-day   { min-height: 280px; }
+@media (max-width: 900px) { .week-day { min-height: auto; } }
+
+/* Vista mensal: rola na horizontal no mobile em vez de espremer 7 colunas. */
+.month-grid       { grid-template-columns: repeat(7, 1fr); }
+.month-scroll     { overflow-x: auto; }
+@media (max-width: 620px) { .month-scroll > * { min-width: 560px; } }
+
+@media (max-width: 900px) {
+  .rcols-4, .rcols-5, .rcols-6 { grid-template-columns: repeat(3, 1fr); }
+  .rsplit, .rsplit-2-1          { grid-template-columns: 1fr; }
+  .week-grid                    { grid-template-columns: 1fr; }
+}
+
+@media (max-width: 640px) {
+  .rcols-3, .rcols-4, .rcols-5, .rcols-6 { grid-template-columns: repeat(2, 1fr); }
+  .rform, .rform-3, .rform-auto           { grid-template-columns: 1fr; }
+}
+
+@media (max-width: 420px) {
+  .rcols-2, .rcols-3 { grid-template-columns: 1fr; }
+}
+
+/* Telas de autenticação: some com o painel de marca no mobile. */
+@media (max-width: 900px) {
+  .auth-left  { display: none !important; }
+  .auth-right { width: 100% !important; max-width: 100% !important; flex: 1 1 100% !important; }
+}
+@media (max-width: 480px) {
+  .auth-right { padding: 24px !important; }
+}

@@ -328,7 +328,7 @@ export default function EntradaNfPage() {
       {preview && (
         <>
           <div style={{ background: 'var(--card)', borderRadius: 12, border: '1px solid var(--border)', padding: 20, marginBottom: 20 }}>
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 16 }}>
+            <div className="rcols-4" style={{ display: 'grid', gap: 16 }}>
               <div>
                 <p style={{ color: 'var(--muted)', fontSize: 12, margin: '0 0 4px' }}>NF-e</p>
                 <p style={{ color: 'var(--text)', fontWeight: 600, margin: 0 }}>{preview.numero_nf ?? '-'} / série {preview.serie ?? '-'}</p>

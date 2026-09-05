@@ -200,7 +200,7 @@ export default function ContasAReceberPage() {
 
         {/* KPIs — Em Aberto */}
         {modo === 'aberto' && (
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 14, marginBottom: 20 }}>
+          <div className="rcols-3" style={{ display: 'grid', gap: 14, marginBottom: 20 }}>
             {[
               { label: 'Total em Aberto', valor: totalGeral,   cor: 'var(--text)'   },
               { label: 'Vencido',         valor: totalVencido, cor: 'var(--danger)' },
@@ -216,7 +216,7 @@ export default function ContasAReceberPage() {
 
         {/* KPIs — Recebidas */}
         {modo === 'recebidas' && (
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 14, marginBottom: 20 }}>
+          <div className="rcols-3" style={{ display: 'grid', gap: 14, marginBottom: 20 }}>
             <div style={{ background: 'var(--card)', border: '1px solid var(--border)', borderTop: '2px solid var(--success)', borderRadius: 10, padding: '14px 18px' }}>
               <p style={{ ...labelStyle, margin: '0 0 5px' }}>Total Faturado</p>
               <p className="font-mono" style={{ margin: 0, fontSize: 22, fontWeight: 800, color: 'var(--success)' }}>{formatarMoeda(totalFaturado)}</p>

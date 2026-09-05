@@ -148,7 +148,7 @@ export default function EmpresaPage() {
     <div style={{ maxWidth: 800, margin: '0 auto' }}>
       <h1 className="font-display" style={{ fontSize: 28, fontWeight: 800, color: 'var(--text)', marginBottom: 24 }}>Dados da Empresa</h1>
       <div style={{ background: 'var(--card)', borderRadius: 12, border: '1px solid var(--border)', padding: 28 }}>
-        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16 }}>
+        <div className="rform" style={{ display: 'grid', gap: 16 }}>
           {fields.map(([key, label, col]) => (
             <div key={key} style={col ? { gridColumn: col } : {}}>
               <label style={lStyle}>{label}</label>
@@ -202,7 +202,7 @@ export default function EmpresaPage() {
               {temCertificado && <span style={{ color: 'var(--success)', fontSize: 13 }}>✓ Certificado carregado</span>}
               {certValidade && <span style={{ color: 'var(--muted)', fontSize: 12 }}>Válido até {certValidade.split('-').reverse().join('/')}</span>}
             </div>
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr auto', gap: 12, alignItems: 'end' }}>
+            <div className="rform-auto" style={{ display: 'grid', gap: 12, alignItems: 'end' }}>
               <div>
                 <label style={{ ...lStyle, fontSize: 12 }}>Arquivo .pfx</label>
                 <label
@@ -287,7 +287,7 @@ export default function EmpresaPage() {
         <p style={{ color: 'var(--muted)', fontSize: 13, margin: '0 0 16px' }}>
           Fecha junto à SEFAZ uma faixa de números de NF-e que nunca chegou a ser transmitida (ex.: falha do sistema entre alocar o número e enviar). Use apenas quando tiver certeza de que os números da faixa não serão reaproveitados.
         </p>
-        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 16 }}>
+        <div className="rform-3" style={{ display: 'grid', gap: 16 }}>
           <div>
             <label style={lStyle}>Série</label>
             <input type="number" min={1} value={inutSerie} onChange={e => setInutSerie(e.target.value)} style={iStyle} placeholder="1" />

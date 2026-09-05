@@ -153,7 +153,7 @@ function NovoAgendamentoModal({ onClose, onSaved, defaultDate }: NovoAgendamento
     }}>
       <div style={{
         background: 'var(--card)', borderRadius: 14, border: '1px solid var(--border)',
-        padding: 28, width: 480, maxHeight: '90vh', overflowY: 'auto',
+        padding: 28, width: 'min(480px, calc(100vw - 32px))', maxHeight: '90vh', overflowY: 'auto',
       }}>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 20 }}>
           <h3 className="font-display" style={{ fontSize: 20, fontWeight: 800, color: 'var(--text)', margin: 0 }}>
@@ -495,13 +495,14 @@ function MonthView({ agendamentos, currentDate, onDayClick }: {
   const WEEKDAYS = ['Dom', 'Seg', 'Ter', 'Qua', 'Qui', 'Sex', 'Sáb']
 
   return (
-    <div>
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(7, 1fr)', gap: 1, marginBottom: 1 }}>
+    <div className="month-scroll">
+     <div>
+      <div className="month-grid" style={{ display: 'grid', gap: 1, marginBottom: 1 }}>
         {WEEKDAYS.map(d => (
           <div key={d} style={{ textAlign: 'center', color: 'var(--muted)', fontSize: 12, fontWeight: 600, padding: '8px 4px' }}>{d}</div>
         ))}
       </div>
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(7, 1fr)', gap: 1 }}>
+      <div className="month-grid" style={{ display: 'grid', gap: 1 }}>
         {days.map((day, i) => {
           if (!day) return <div key={`pad-${i}`} style={{ background: 'var(--surface)', minHeight: 80, borderRadius: 4 }} />
           const key = `${year}-${String(month + 1).padStart(2, '0')}-${String(day.getDate()).padStart(2, '0')}`
@@ -531,6 +532,7 @@ function MonthView({ agendamentos, currentDate, onDayClick }: {
           )
         })}
       </div>
+     </div>
     </div>
   )
 }
@@ -664,9 +666,8 @@ function CalendarioAgendamentos() {
           onDayClick={date => { setModalDate(date); setShowModal(true) }}
         />
       ) : (
-        <div style={{
+        <div className="week-grid" style={{
           display: 'grid',
-          gridTemplateColumns: 'repeat(7, 1fr)',
           gap: 8,
         }}>
           {dias.map(dia => {
@@ -676,11 +677,10 @@ function CalendarioAgendamentos() {
             const isWeekend = dia.getDay() === 0 || dia.getDay() === 6
 
             return (
-              <div key={dateStr} style={{
+              <div key={dateStr} className="week-day" style={{
                 background: isWeekend ? 'rgba(122,128,144,0.05)' : 'var(--card)',
                 border: `1px solid ${isHoje ? 'var(--accent)' : 'var(--border)'}`,
                 borderRadius: 10,
-                minHeight: 280,
                 overflow: 'hidden',
               }}>
                 {/* Cabeçalho do dia */}

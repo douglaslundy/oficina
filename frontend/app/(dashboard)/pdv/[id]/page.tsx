@@ -196,7 +196,7 @@ export default function VendaDetalhe() {
       </div>
 
       {/* Totais */}
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 12, marginBottom: 20 }}>
+      <div className="rcols-3" style={{ display: 'grid', gap: 12, marginBottom: 20 }}>
         {[
           { label: 'Total', valor: venda.valor_total, cor: 'var(--text)' },
           { label: 'Pago', valor: venda.valor_pago, cor: 'var(--success)' },
@@ -316,7 +316,7 @@ export default function VendaDetalhe() {
         >
           <div style={{
             background: 'var(--card)', border: '1px solid var(--border)',
-            borderRadius: 12, padding: 28, width: 420, boxShadow: '0 16px 48px rgba(0,0,0,.4)',
+            borderRadius: 12, padding: 28, width: 'min(420px, calc(100vw - 32px))', boxShadow: '0 16px 48px rgba(0,0,0,.4)',
           }}>
             <h3 className="font-display" style={{ fontSize: 18, fontWeight: 800, margin: '0 0 4px' }}>
               Registrar Pagamento

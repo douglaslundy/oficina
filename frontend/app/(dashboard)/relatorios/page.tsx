@@ -119,7 +119,7 @@ export default function RelatoriosPage() {
               📊 Exportar XLSX
             </button>
           </div>
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 12, marginBottom: 16 }}>
+          <div className="rcols-4" style={{ display: 'grid', gap: 12, marginBottom: 16 }}>
             {[
               { label: 'Total de OS',  value: String(osData.total_os),                    color: 'var(--info)' },
               { label: 'Faturado',     value: formatarMoeda(osData.total_faturado),        color: 'var(--success)' },
@@ -145,7 +145,7 @@ export default function RelatoriosPage() {
       )}
 
       {/* Clientes e Estoque */}
-      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 20 }}>
+      <div className="rsplit" style={{ display: 'grid', gap: 20 }}>
         <div style={card}>
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 14 }}>
             <h3 className="font-display" style={{ fontSize: 16, fontWeight: 700, color: 'var(--text)', margin: 0 }}>Clientes</h3>
@@ -168,7 +168,7 @@ export default function RelatoriosPage() {
                 📊 Exportar XLSX
               </button>
             </div>
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 8 }}>
+            <div className="rcols-3" style={{ display: 'grid', gap: 8 }}>
               {[
                 { label: 'Críticos', value: estoqueData.criticos, color: 'var(--danger)' },
                 { label: 'Baixos',   value: estoqueData.baixos,   color: 'var(--accent)' },

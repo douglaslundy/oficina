@@ -98,14 +98,14 @@ export default function VeiculoDetailPage() {
         )}
       </div>
 
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 16, marginBottom: 24 }}>
+      <div className="rcols-4" style={{ display: 'grid', gap: 16, marginBottom: 24 }}>
         <StatCard title="Total de OS" value={veiculo.resumo.total_os} icon="🔧" color="var(--info)" />
         <StatCard title="Valor Total Gasto" value={formatarMoeda(veiculo.resumo.valor_total_gasto)} icon="💰" color="var(--success)" />
         <StatCard title="Última Visita" value={veiculo.resumo.ultima_visita ?? '-'} icon="📅" color="var(--accent)" />
         <StatCard title="KM (última leitura)" value={veiculo.km_ultimo != null ? veiculo.km_ultimo.toLocaleString('pt-BR') : '-'} icon="🛣️" color="var(--muted)" />
       </div>
 
-      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 20, marginBottom: 24 }}>
+      <div className="rsplit" style={{ display: 'grid', gap: 20, marginBottom: 24 }}>
         <div style={{ background: 'var(--card)', borderRadius: 12, border: '1px solid var(--border)', padding: 24 }}>
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
             <h3 className="font-display" style={{ fontSize: 16, fontWeight: 700, color: 'var(--text)', margin: 0 }}>Proprietário Atual</h3>

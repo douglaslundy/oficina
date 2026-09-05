@@ -218,7 +218,7 @@ export default function HistoricoEntradaNfPage() {
                     style={{ background: 'none', border: 'none', color: 'var(--muted)', fontSize: 22, cursor: 'pointer', lineHeight: 1, padding: 0 }}>×</button>
                 </div>
 
-                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12, marginBottom: 20 }}>
+                <div className="rform" style={{ display: 'grid', gap: 12, marginBottom: 20 }}>
                   <div>
                     <p style={{ color: 'var(--muted)', fontSize: 12, textTransform: 'uppercase', letterSpacing: '0.05em', margin: '0 0 4px' }}>Fornecedor</p>
                     <p style={{ color: 'var(--text)', fontSize: 14, margin: 0 }}>{detalhe.fornecedor_nome ?? '-'}</p>

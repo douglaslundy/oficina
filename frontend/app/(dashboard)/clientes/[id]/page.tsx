@@ -143,7 +143,7 @@ export default function ClienteDetailPage() {
         )}
       </div>
 
-      <div style={{ display: 'grid', gridTemplateColumns: '1.3fr 0.7fr', gap: 24 }}>
+      <div className="rsplit-2-1" style={{ display: 'grid', gap: 24 }}>
         {/* Coluna esquerda: formulário + débitos */}
         <div style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>
           <div style={{ background: 'var(--card)', borderRadius: 12, border: '1px solid var(--border)', padding: 24 }}>
@@ -162,7 +162,7 @@ export default function ClienteDetailPage() {
               </p>
 
               {/* Totalizadores */}
-              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 12, marginBottom: 20 }}>
+              <div className="rcols-3" style={{ display: 'grid', gap: 12, marginBottom: 20 }}>
                 {totalVencido > 0 && (
                   <div style={{ background: 'rgba(229,57,53,0.1)', border: '1px solid var(--danger)', borderRadius: 8, padding: '12px 16px' }}>
                     <p style={{ color: 'var(--muted)', fontSize: 11, textTransform: 'uppercase', letterSpacing: '0.06em', margin: '0 0 4px' }}>Vencido</p>
@@ -312,7 +312,7 @@ export default function ClienteDetailPage() {
                 onChange={e => setNovoVeiculo(p => ({ ...p, modelo: e.target.value }))}
                 style={{ padding: '7px 10px', borderRadius: 6, background: 'var(--bg)', border: '1px solid var(--border)', color: 'var(--text)', fontSize: 13, outline: 'none' }}
               />
-              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8 }}>
+              <div className="rform" style={{ display: 'grid', gap: 8 }}>
                 <input
                   placeholder="Ano (ex: 2021)"
                   value={novoVeiculo.ano}
