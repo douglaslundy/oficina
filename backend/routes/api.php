@@ -297,6 +297,7 @@ Route::middleware(['tenant', 'auth:sanctum', 'role:ADMIN,ATENDENTE,MECANICO'])->
     Route::post('os/{osId}/itens',                          [OrdemServicoController::class, 'addItem']);
     Route::put('os/{osId}/itens/{itemId}',                  [OrdemServicoController::class, 'updateItem']);
     Route::delete('os/{osId}/itens/{itemId}',               [OrdemServicoController::class, 'removeItem']);
+    Route::post('os/{id}/emitir-notas',                      [OrdemServicoController::class, 'emitirNotas']);
     Route::post('os/{id}/pagamentos',                        [OrdemServicoController::class, 'addPagamento']);
     Route::delete('os/{id}/pagamentos/{pagamentoId}',        [OrdemServicoController::class, 'removePagamento']);
     Route::post('os/{os}/orcamento/enviar',                  [OrcamentoController::class, 'enviar']);

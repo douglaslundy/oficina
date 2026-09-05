@@ -219,6 +219,24 @@ class OrdemServicoController extends Controller
         return new OrdemServicoResource($os);
     }
 
+    /**
+     * OS mista → gera e emite a NF-e das peças + a NFS-e dos serviços de
+     * uma vez. Cada nota vai pra fila e o frontend acompanha o status de
+     * cada uma pelo id retornado.
+     */
+    public function emitirNotas(string $id): JsonResponse
+    {
+        $os = OrdemServico::with(['itens'])->findOrFail($id);
+
+        try {
+            $resultado = app(\App\Services\Fiscal\EmissaoOrquestradorService::class)->orquestrar($os);
+        } catch (\App\Exceptions\EmissaoBloqueadaException $e) {
+            return response()->json(['message' => $e->getMessage()], 422);
+        }
+
+        return response()->json($resultado, 202);
+    }
+
     public function update(Request $request, string $id): OrdemServicoResource
     {
         $os = OrdemServico::with('itens')->findOrFail($id);

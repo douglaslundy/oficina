@@ -130,6 +130,30 @@ export default function OSDetailPage() {
   const [devolverEstoque, setDevolverEstoque] = useState(true)
   const [concluindo, setConcluindo] = useState(false)
   const [cancelando, setCancelando] = useState(false)
+  const [emitindoNotas, setEmitindoNotas] = useState(false)
+
+  async function emitirNotas() {
+    setEmitindoNotas(true)
+    try {
+      const r = await api.post<{ nfe_id: string | null; nfse_id: string | null; avisos: string[] }>(
+        `/os/${id}/emitir-notas`, {},
+      )
+      const geradas: string[] = []
+      if (r.data.nfe_id) geradas.push('NF-e (peças)')
+      if (r.data.nfse_id) geradas.push('NFS-e (serviços)')
+      toast(
+        geradas.length
+          ? `Enfileirado: ${geradas.join(' + ')}. Acompanhe em Notas Fiscais.`
+          : 'Nenhuma nota gerada.',
+        geradas.length ? 'success' : 'danger',
+      )
+      ;(r.data.avisos ?? []).forEach(a => toast(a, 'info'))
+      router.push('/fiscal/historico')
+    } catch (e: unknown) {
+      const msg = (e as { response?: { data?: { message?: string } } })?.response?.data?.message
+      toast(msg ?? 'Erro ao gerar as notas fiscais da OS.', 'danger')
+    } finally { setEmitindoNotas(false) }
+  }
 
   async function concluirOS() {
     setConcluindo(true)
@@ -304,6 +328,13 @@ export default function OSDetailPage() {
           <button onClick={downloadRecibo}
             style={{ padding: '6px 14px', background: 'transparent', border: '1px solid var(--success)', color: 'var(--success)', borderRadius: 8, cursor: 'pointer', fontSize: 13 }}>
             🧾 Recibo
+          </button>
+        )}
+        {os.status === 'CONCLUIDA' && (
+          <button onClick={emitirNotas} disabled={emitindoNotas}
+            title="Gera a NF-e das peças e a NFS-e dos serviços desta OS"
+            style={{ padding: '6px 14px', background: 'var(--info)', border: 'none', color: '#fff', borderRadius: 8, cursor: emitindoNotas ? 'not-allowed' : 'pointer', fontSize: 13, fontWeight: 700 }}>
+            {emitindoNotas ? '⟳ Gerando...' : '🧾 Gerar notas fiscais'}
           </button>
         )}
       </div>
