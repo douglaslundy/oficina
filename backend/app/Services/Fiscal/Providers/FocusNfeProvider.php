@@ -489,14 +489,26 @@ class FocusNfeProvider implements FiscalProvider, ConsultaNotaTerceiroProvider
         }
 
         if ($resp->failed()) {
+            \Illuminate\Support\Facades\Log::warning(
+                'Focus NFe: falha ao consultar nota recebida.',
+                ['chave_acesso' => $chaveAcesso, 'status' => $resp->status(), 'corpo' => $resp->body()],
+            );
             return ConsultaNotaTerceiroResultado::erro($resp->json('mensagem') ?? 'Erro ao consultar nota na Focus.');
         }
 
         $json = $resp->json();
 
         if (empty($json['manifestacao_destinatario'])) {
-            Http::withBasicAuth($this->emissorToken ?? $this->masterToken, '')
+            $manifestoResp = Http::withBasicAuth($this->emissorToken ?? $this->masterToken, '')
                 ->post("{$this->baseUrl}/v2/nfes_recebidas/{$chaveAcesso}/manifesto", ['tipo' => 'ciencia']);
+
+            if ($manifestoResp->failed()) {
+                \Illuminate\Support\Facades\Log::warning(
+                    'Focus NFe: falha ao registrar ciência da operação (manifesto).',
+                    ['chave_acesso' => $chaveAcesso, 'status' => $manifestoResp->status(), 'corpo' => $manifestoResp->body()],
+                );
+                return ConsultaNotaTerceiroResultado::erro('Falha ao registrar ciência da operação na Focus.');
+            }
 
             return ConsultaNotaTerceiroResultado::aguardandoManifestacao();
         }
@@ -515,7 +527,12 @@ class FocusNfeProvider implements FiscalProvider, ConsultaNotaTerceiroProvider
             ->get("{$this->baseUrl}/v2/nfes_recebidas", ['cnpj' => $cnpjLimpo]);
 
         if ($resp->failed()) {
-            return [];
+            $mensagem = (string) ($resp->json('mensagem') ?? 'Erro ao listar notas recebidas na Focus.');
+            \Illuminate\Support\Facades\Log::warning(
+                'Focus NFe: falha ao listar notas recebidas.',
+                ['cnpj' => $cnpjLimpo, 'status' => $resp->status(), 'corpo' => $resp->body()],
+            );
+            throw new \RuntimeException($mensagem);
         }
 
         return array_map(fn (array $item) => new ConsultaNotaTerceiroResumo(

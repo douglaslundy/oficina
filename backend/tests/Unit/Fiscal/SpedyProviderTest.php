@@ -436,6 +436,64 @@ XML;
         $this->assertStringContainsString('Chave de API inválida', (string) $r->mensagemErro);
     }
 
+    public function test_consultar_nota_recebida_sem_emissor_registrado_nao_chama_a_api(): void
+    {
+        // Sem EmissorFiscal (estado padrão de qualquer oficina que nunca
+        // configurou emissão), o header cairia no masterKey da plataforma —
+        // que NÃO é escopado por empresa e devolveria notas de outros
+        // tenants. A chamada não pode sair.
+        Http::fake();
+
+        $p = new SpedyProvider('https://sandbox-api.spedy.com.br/v1', 'master', null, null);
+        $r = $p->consultarNotaRecebida('35260712345678000199550010000012340000000001');
+
+        $this->assertSame('ERRO', $r->status);
+        $this->assertStringContainsString('não está registrada na Spedy', (string) $r->mensagemErro);
+        Http::assertNothingSent();
+    }
+
+    public function test_listar_notas_recebidas_sem_emissor_registrado_nao_chama_a_api(): void
+    {
+        Http::fake();
+
+        $p = new SpedyProvider('https://sandbox-api.spedy.com.br/v1', 'master', null, null);
+
+        $this->assertSame([], $p->listarNotasRecebidas('12345678000199'));
+        Http::assertNothingSent();
+    }
+
+    public function test_consultar_nota_recebida_com_manifesto_falhando_retorna_erro(): void
+    {
+        // O POST de manifesto falhando não pode virar AGUARDANDO_MANIFESTACAO:
+        // a ciência nunca foi registrada, então "tente de novo em instantes"
+        // seria mentira — a nota nunca ficaria completa.
+        Http::fake([
+            '*/inbound-product-invoices?*' => Http::response([
+                'items' => [['id' => 'inv-abc', 'accessKey' => 'CHAVE1', 'isComplete' => false]],
+            ], 200),
+            '*/inbound-product-invoices/inv-abc/manifest' => Http::response(['message' => 'Add-on não contratado'], 403),
+        ]);
+
+        $p = new SpedyProvider('https://sandbox-api.spedy.com.br/v1', 'master', 'tok', 'emp-1');
+        $r = $p->consultarNotaRecebida('CHAVE1');
+
+        $this->assertSame('ERRO', $r->status);
+        $this->assertStringContainsString('ciência da operação', (string) $r->mensagemErro);
+    }
+
+    public function test_listar_notas_recebidas_com_falha_http_lanca_excecao(): void
+    {
+        // Falha do provedor não pode virar lista vazia — o controller precisa
+        // conseguir distinguir "nenhuma nota" de "provedor com erro".
+        Http::fake(['*/inbound-product-invoices*' => Http::response(['message' => 'Chave de API inválida'], 403)]);
+
+        $p = new SpedyProvider('https://sandbox-api.spedy.com.br/v1', 'master', 'tok', 'emp-1');
+
+        $this->expectException(\RuntimeException::class);
+        $this->expectExceptionMessage('Chave de API inválida');
+        $p->listarNotasRecebidas('12345678000199');
+    }
+
     public function test_listar_notas_recebidas_mapeia_a_lista(): void
     {
         Http::fake([

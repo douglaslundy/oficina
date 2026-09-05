@@ -502,6 +502,38 @@ class FocusNfeProviderTest extends TestCase
         $this->assertStringContainsString('Token inválido', (string) $r->mensagemErro);
     }
 
+    public function test_consultar_nota_recebida_com_manifesto_falhando_retorna_erro(): void
+    {
+        // O POST de manifesto falhando não pode virar AGUARDANDO_MANIFESTACAO:
+        // a ciência nunca foi registrada, então "tente de novo em instantes"
+        // seria mentira — a nota nunca ficaria completa.
+        Http::fake([
+            '*/nfes_recebidas/CHAVE1.json*' => Http::response([
+                'chave_nfe' => 'CHAVE1', 'manifestacao_destinatario' => null,
+            ], 200),
+            '*/nfes_recebidas/CHAVE1/manifesto' => Http::response(['mensagem' => 'Token sem permissão'], 403),
+        ]);
+
+        $p = new FocusNfeProvider('https://homologacao.focusnfe.com.br', 'master', 'HOMOLOGACAO', 'tok');
+        $r = $p->consultarNotaRecebida('CHAVE1');
+
+        $this->assertSame('ERRO', $r->status);
+        $this->assertStringContainsString('ciência da operação', (string) $r->mensagemErro);
+    }
+
+    public function test_listar_notas_recebidas_com_falha_http_lanca_excecao(): void
+    {
+        // Falha do provedor não pode virar lista vazia — o controller precisa
+        // conseguir distinguir "nenhuma nota" de "provedor com erro".
+        Http::fake(['*/nfes_recebidas*' => Http::response(['mensagem' => 'Token inválido'], 401)]);
+
+        $p = new FocusNfeProvider('https://homologacao.focusnfe.com.br', 'master', 'HOMOLOGACAO', 'tok');
+
+        $this->expectException(\RuntimeException::class);
+        $this->expectExceptionMessage('Token inválido');
+        $p->listarNotasRecebidas('12.345.678/0001-99');
+    }
+
     public function test_listar_notas_recebidas_mapeia_a_lista(): void
     {
         Http::fake([

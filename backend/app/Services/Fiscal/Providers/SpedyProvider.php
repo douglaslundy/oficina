@@ -405,10 +405,22 @@ class SpedyProvider implements FiscalProvider, ConsultaNotaTerceiroProvider
 
     public function consultarNotaRecebida(string $chaveAcesso): ConsultaNotaTerceiroResultado
     {
-        $resp = Http::withHeaders(['X-Api-Key' => $this->emissorToken ?? $this->masterKey])
+        // NUNCA cair no masterKey aqui: a master key é da plataforma, não é
+        // escopada a uma empresa — usá-la nos endpoints de notas recebidas
+        // devolveria notas de OUTROS tenants. Sem emissor registrado, não
+        // existe consulta legítima a fazer.
+        if ($this->emissorToken === null) {
+            return ConsultaNotaTerceiroResultado::erro('Esta oficina ainda não está registrada na Spedy.');
+        }
+
+        $resp = Http::withHeaders(['X-Api-Key' => $this->emissorToken])
             ->get("{$this->baseUrl}/inbound-product-invoices", ['accessKey' => $chaveAcesso]);
 
         if ($resp->failed()) {
+            \Illuminate\Support\Facades\Log::warning(
+                'Spedy: falha ao consultar nota recebida.',
+                ['chave_acesso' => $chaveAcesso, 'status' => $resp->status(), 'corpo' => $resp->body()],
+            );
             return ConsultaNotaTerceiroResultado::erro($resp->json('message') ?? 'Erro ao consultar nota na Spedy.');
         }
 
@@ -419,16 +431,33 @@ class SpedyProvider implements FiscalProvider, ConsultaNotaTerceiroProvider
         }
 
         if (($nota['isComplete'] ?? false) !== true) {
-            Http::withHeaders(['X-Api-Key' => $this->emissorToken ?? $this->masterKey])
+            $manifestoResp = Http::withHeaders(['X-Api-Key' => $this->emissorToken])
                 ->post("{$this->baseUrl}/inbound-product-invoices/{$nota['id']}/manifest", ['status' => 'acknowledged']);
+
+            if ($manifestoResp->failed()) {
+                \Illuminate\Support\Facades\Log::warning(
+                    'Spedy: falha ao registrar ciência da operação (manifesto).',
+                    [
+                        'chave_acesso' => $chaveAcesso,
+                        'nota_id'      => $nota['id'] ?? null,
+                        'status'       => $manifestoResp->status(),
+                        'corpo'        => $manifestoResp->body(),
+                    ],
+                );
+                return ConsultaNotaTerceiroResultado::erro('Falha ao registrar ciência da operação na Spedy.');
+            }
 
             return ConsultaNotaTerceiroResultado::aguardandoManifestacao();
         }
 
-        $xmlResp = Http::withHeaders(['X-Api-Key' => $this->emissorToken ?? $this->masterKey])
+        $xmlResp = Http::withHeaders(['X-Api-Key' => $this->emissorToken])
             ->get("{$this->baseUrl}/inbound-product-invoices/{$nota['id']}/xml");
 
         if ($xmlResp->failed()) {
+            \Illuminate\Support\Facades\Log::warning(
+                'Spedy: falha ao baixar o XML da nota recebida.',
+                ['chave_acesso' => $chaveAcesso, 'nota_id' => $nota['id'] ?? null, 'status' => $xmlResp->status()],
+            );
             return ConsultaNotaTerceiroResultado::erro('Erro ao baixar o XML da nota na Spedy.');
         }
 
@@ -437,16 +466,27 @@ class SpedyProvider implements FiscalProvider, ConsultaNotaTerceiroProvider
 
     public function listarNotasRecebidas(string $cnpjOficina, ?\DateTimeInterface $desde = null): array
     {
+        // Mesma regra de consultarNotaRecebida(): sem emissor registrado não
+        // há chamada legítima — a master key traria notas de outros tenants.
+        if ($this->emissorToken === null) {
+            return [];
+        }
+
         $query = [];
         if ($desde !== null) {
             $query['initialDate'] = $desde->format('Y-m-d');
         }
 
-        $resp = Http::withHeaders(['X-Api-Key' => $this->emissorToken ?? $this->masterKey])
+        $resp = Http::withHeaders(['X-Api-Key' => $this->emissorToken])
             ->get("{$this->baseUrl}/inbound-product-invoices", $query);
 
         if ($resp->failed()) {
-            return [];
+            $mensagem = (string) ($resp->json('message') ?? 'Erro ao listar notas recebidas na Spedy.');
+            \Illuminate\Support\Facades\Log::warning(
+                'Spedy: falha ao listar notas recebidas.',
+                ['url' => "{$this->baseUrl}/inbound-product-invoices", 'status' => $resp->status(), 'corpo' => $resp->body()],
+            );
+            throw new \RuntimeException($mensagem);
         }
 
         return array_map(fn (array $item) => new ConsultaNotaTerceiroResumo(

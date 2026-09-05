@@ -151,4 +151,51 @@ XML, 200),
             ->getJson('/api/entradas-nf/recebidas')
             ->assertStatus(422);
     }
+
+    public function test_recebidas_com_falha_do_provedor_retorna_422_com_a_mensagem(): void
+    {
+        // Falha do provedor não pode chegar na tela como lista vazia
+        // ("nenhuma nota pendente") — o usuário precisa ver o erro real,
+        // igual já acontece em /consultar.
+        [$token, $oficina] = $this->loginAdmin('SPEDY');
+
+        Http::fake([
+            '*/inbound-product-invoices*' => Http::response(['message' => 'Chave de API inválida'], 403),
+        ]);
+
+        $this->withToken($token)->withHeaders(['X-Tenant' => $oficina->slug])
+            ->getJson('/api/entradas-nf/recebidas')
+            ->assertStatus(422)
+            ->assertJsonPath('message', 'Chave de API inválida');
+    }
+
+    public function test_recebidas_exige_admin_ou_atendente(): void
+    {
+        // A rota expõe fornecedor/CNPJ/valores e dispara chamada tarifada ao
+        // provedor — não pode ficar aberta a qualquer role autenticada.
+        [$token, $oficina] = $this->loginComRole('MECANICO');
+        Http::fake();
+
+        $this->withToken($token)->withHeaders(['X-Tenant' => $oficina->slug])
+            ->getJson('/api/entradas-nf/recebidas')
+            ->assertStatus(403);
+
+        Http::assertNothingSent();
+    }
+
+    private function loginComRole(string $role): array
+    {
+        $oficina = Oficina::create([
+            'nome' => 'Oficina Teste', 'slug' => 'oficina-teste',
+            'cnpj' => (string) mt_rand(10000000000000, 99999999999999), 'status' => 'ATIVA',
+            'provedor_fiscal' => 'SPEDY',
+        ]);
+        $user = Usuario::create([
+            'nome' => 'Mecanico', 'email' => 'mecanico@test.com', 'cpf' => '11144477735',
+            'role' => $role, 'status' => 'ATIVO', 'senha_hash' => Hash::make('mec123'),
+            'oficina_id' => $oficina->id,
+        ]);
+        TenancyContext::set($oficina->id, $oficina->slug);
+        return [$user->createToken('test')->plainTextToken, $oficina];
+    }
 }

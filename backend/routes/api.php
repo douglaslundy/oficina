@@ -235,13 +235,20 @@ Route::middleware(['tenant', 'auth:sanctum', 'role:ADMIN,ATENDENTE'])->group(fun
 });
 
 // ─── Produtos — leitura: todos; escrita: ADMIN, ATENDENTE ───────────────────
+// `entradas-nf/recebidas` exige ADMIN/ATENDENTE (expõe fornecedor/CNPJ/valores
+// e dispara chamada tarifada ao provedor fiscal), mas precisa ficar registrada
+// ANTES de `entradas-nf/{id}`: as duas são GET e o Laravel casa na ordem de
+// registro — com `{id}` primeiro, "recebidas" seria capturado como id. Daí o
+// grupo próprio aqui em vez de junto de `entradas-nf/consultar` mais abaixo.
+Route::middleware(['tenant', 'auth:sanctum', 'role:ADMIN,ATENDENTE'])->group(function () {
+    Route::get('entradas-nf/recebidas', [EntradaNfController::class, 'recebidas']);
+});
 Route::middleware(['tenant', 'auth:sanctum'])->group(function () {
     Route::get('produtos',            [ProdutoController::class, 'index']);
     Route::get('produtos/pendencias-fiscais', [ProdutoFiscalController::class, 'pendencias']);
     Route::get('produtos/{produto}',  [ProdutoController::class, 'show']);
     Route::get('produtos/{produto}/estoque/historico', [EstoqueController::class, 'historico']);
     Route::get('entradas-nf',      [EntradaNfController::class, 'index']);
-    Route::get('entradas-nf/recebidas', [EntradaNfController::class, 'recebidas']);
     Route::get('entradas-nf/{id}', [EntradaNfController::class, 'show']);
     Route::get('categorias-fiscais', [CategoriaPadraoFiscalController::class, 'index']);
 });

@@ -81,6 +81,8 @@ class EntradaNfController extends Controller
                 ];
             }
 
+            // Nota já lançada: item sem produto correspondente não tem o
+            // que atualizar (este fluxo nunca cria produto novo) — descarta.
             if ($jaLancada) {
                 return null;
             }
@@ -347,7 +349,11 @@ class EntradaNfController extends Controller
         $resultado = $provider->consultarNotaRecebida($validated['chave_acesso']);
 
         return match ($resultado->status) {
-            'COMPLETA' => response()->json($this->montarPreview($resultado->dados, $fiscalService)),
+            // xml_original explícito: nota consultada não tem um XML cru
+            // canônico pra guardar (o da Spedy é descartado depois do parse,
+            // a Focus nunca devolve um) — mas o contrato do preview é o
+            // mesmo do parse(), então a chave precisa existir.
+            'COMPLETA' => response()->json($this->montarPreview($resultado->dados, $fiscalService) + ['xml_original' => null]),
             'AGUARDANDO_MANIFESTACAO' => response()->json([
                 'message' => 'Ciência da operação enviada à SEFAZ. Isso pode levar alguns minutos — tente consultar novamente em instantes.',
             ], 202),
@@ -368,6 +374,15 @@ class EntradaNfController extends Controller
         $cnpjOficina      = (string) (Configuracao::first()?->cnpj ?? '');
         $chavesJaLancadas = NotaEntrada::whereNotNull('chave_acesso')->pluck('chave_acesso')->all();
 
+        try {
+            $notas = $provider->listarNotasRecebidas($cnpjOficina);
+        } catch (\RuntimeException $e) {
+            // Falha do provedor (token expirado, add-on não contratado, queda)
+            // não pode virar lista vazia: a tela mostraria "nenhuma nota
+            // pendente" pra um erro real, escondendo o problema do usuário.
+            return response()->json(['message' => $e->getMessage()], 422);
+        }
+
         $resumos = array_map(fn (ConsultaNotaTerceiroResumo $r) => [
             'chave_acesso'    => $r->chaveAcesso,
             'fornecedor_nome' => $r->fornecedorNome,
@@ -376,7 +391,7 @@ class EntradaNfController extends Controller
             'valor_total'     => $r->valorTotal,
             'completa'        => $r->completa,
             'ja_lancada'      => in_array($r->chaveAcesso, $chavesJaLancadas, true),
-        ], $provider->listarNotasRecebidas($cnpjOficina));
+        ], $notas);
 
         return response()->json(['notas' => $resumos]);
     }
