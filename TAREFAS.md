@@ -77,7 +77,13 @@ item explicitamente bloqueado abaixo.
 - Dark mode (já existia — `047b992`, achado nesta rodada)
 - Toggle `calculo_tributario_modo` MANUAL/AUTOMATICO_PROVEDOR (Rodada 35, commits `a6a9937`..`ee46d7c`)
 
-## Backlog restante (nada foi pedido pra fila — cada um precisa de desenho próprio)
-- `EmissaoOrquestrador` — OS mista (peça + serviço) gerando as 2 notas com 1 clique.
-- Emissão fiscal em fila (Horizon).
-- Sobra do NFePHP: `listarNotasRecebidas()` best-effort sem paginação (some doc acima de 50).
+- Emissão fiscal em fila (Rodada 36, commits `91fd465` + `b0268f4`)
+- Paginação parcial do NFePHP DistDFe (Rodada 36, commit `8b15a34`)
+- `EmissaoOrquestrador` — OS mista → NF-e + NFS-e com 1 clique (Rodada 36, commit `6145620`)
+
+## Backlog vazio — tudo o que estava listado foi feito.
+
+Sobras conhecidas (documentadas, não bloqueiam ninguém, ninguém pediu):
+- Paginação COMPLETA do NFePHP DistDFe (checkpoint de NSU + sync agendado) — só se alguma oficina usar o NFePHP com volume alto.
+- Validação real do toggle AUTOMATICO_PROVEDOR com catálogo variado — depende do certificado A1.
+- Bloco IBS/CBS na NF-e (obrigatório só em 2027), CSC pra QR Code da NFC-e (precisa credencial SEFAZ-MG).

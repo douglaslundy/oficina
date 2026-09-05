@@ -1,9 +1,52 @@
 # Progresso do Projeto
 
 ## Última atualização
-2026-09-05 — Rodada 35: toggle `calculo_tributario_modo` (MANUAL vs
-AUTOMATICO_PROVEDOR) — item que estava "bloqueado até testar em sandbox
-real"; o spike foi feito e desbloqueou. Ver seção abaixo.
+2026-09-05 — Rodada 36: fila de emissão (não bloqueia mais o request),
+paginação parcial do NFePHP DistDFe, e **EmissaoOrquestrador** (OS mista →
+NF-e das peças + NFS-e dos serviços com 1 clique). Backlog zerado.
+
+## Rodada 36 (2026-09-05) — fila de emissão, paginação NFePHP, EmissaoOrquestrador
+
+Fechamento do backlog. 3 itens:
+
+### 1. Emissão fiscal vai pra fila
+`NotaFiscalController::emitir()` não chama mais `NfeService::emitir()` na
+cara do request — aloca o número (síncrono/transacional), marca
+PROCESSANDO e enfileira `EmitirNotaFiscalJob`. Motivação: o caminho NFePHP
++ contingência EPEC faz SOAP com a SEFAZ e podia levar dezenas de segundos.
+Produção já tem Redis + worker (`queue:work redis`). Em teste/local
+(`QUEUE_CONNECTION=sync`) o job roda inline, então os 23 testes de feature
+de emissão passam sem mudança (validações que dão 422 acontecem no
+`store()`, não no `emitir()`).
+
+### 2. Paginação parcial do NFePHP Distribuição DFe
+`MotorNfe::listarNotasRecebidas()` varre até 3 páginas de NSU (~150 docs) e
+loga aviso de "listagem PARCIAL" se ainda houver mais. Antes: só o 1º lote
+(50 docs), excedentes sumiam sem aviso. Teto proposital — a SEFAZ pune
+consulta agressiva de DistDFe com cStat 656 (bloqueio de 1h). Paginação
+completa de verdade (checkpoint de NSU + sync agendado) fica pra quando
+alguma oficina real usar o NFePHP com volume.
+
+### 3. EmissaoOrquestrador — OS mista → 2 notas
+`POST /os/{id}/emitir-notas`: separa itens da OS (`PECA` com produto →
+NF-e; `SERVICO` → NFS-e), cria cada nota via `CriarNotaFiscalService`
+(validação fiscal extraída do `store()`) e enfileira via
+`IniciarEmissaoNotaService` (extraído do `emitir()`). **Independentes**:
+peça com pendência fiscal bloqueia só a NF-e, a NFS-e sai mesmo assim
+(avisos no retorno). Botão "Gerar notas fiscais" na tela da OS (só
+CONCLUIDA).
+
+**Bug real achado na verificação contra Postgres**: `EmitirNotaFiscalJob`/
+`ConciliarFiscalNotaEntradaJob` faziam `TenancyContext::clear()` cego no
+`finally`. Com `QUEUE=sync` o job roda inline dentro de um request que já
+tem tenant, e o orquestrador dispara 2 jobs em sequência — o 2º pegava
+tenant vazio. Corrigido: salvam e restauram o contexto anterior.
+
+Testes: `EmissaoOrquestradorTest` (+3, feature), `EmitirNotaFiscalJobTest`
+(+3), `MotorNfeListarNotasRecebidasMappingTest` (+6). Tudo verde contra
+Postgres real via túnel.
+
+## Rodada 35 (2026-09-05) — toggle `calculo_tributario_modo` (deixar a Spedy calcular a tributação)
 
 ## Rodada 35 (2026-09-05) — toggle `calculo_tributario_modo` (deixar a Spedy calcular a tributação)
 
