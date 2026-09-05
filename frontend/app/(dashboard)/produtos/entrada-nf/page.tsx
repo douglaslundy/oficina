@@ -65,6 +65,10 @@ export default function EntradaNfPage() {
   const videoRef = useRef<HTMLVideoElement>(null)
   const controlsRef = useRef<{ stop: () => void } | null>(null)
   const montadoRef = useRef(true)
+  // Guarda de re-entrância do scanner. Precisa ser ref, não state: o callback
+  // de decode é criado uma vez dentro de iniciarCamera() e enxergaria sempre o
+  // valor do render em que foi criado (um `consultando` eternamente false).
+  const jaDecodificouRef = useRef(false)
   const [cameraAtiva, setCameraAtiva] = useState(false)
 
   async function handleUpload(file: File) {
@@ -111,6 +115,7 @@ export default function EntradaNfPage() {
 
   async function iniciarCamera() {
     if (!videoRef.current) return
+    jaDecodificouRef.current = false
     setCameraAtiva(true)
 
     const hints = new Map()
@@ -120,7 +125,12 @@ export default function EntradaNfPage() {
 
     try {
       const controls = await reader.decodeFromVideoDevice(undefined, videoRef.current, (result) => {
-        if (!result || consultando) return
+        if (!result || jaDecodificouRef.current) return
+        // Marca ANTES de qualquer await/setState: dois frames decodificados
+        // no mesmo tick não podem disparar duas consultas. controlsRef só
+        // existe depois que decodeFromVideoDevice resolve, então ele sozinho
+        // não segura um decode precoce.
+        jaDecodificouRef.current = true
         const texto = result.getText()
         const match = texto.match(/\d{44}/)
         controlsRef.current?.stop()
@@ -148,6 +158,18 @@ export default function EntradaNfPage() {
       controlsRef.current?.stop()
     }
   }, [])
+
+  // Sair da aba de scan tem que desligar a câmera: sem isso o stream continua
+  // rodando e cameraAtiva fica true, então ao voltar pra aba o <video> aponta
+  // pra uma sessão morta e o botão "Abrir câmera" (renderizado só com
+  // !cameraAtiva) some de vez.
+  useEffect(() => {
+    if (modo !== 'scan') {
+      controlsRef.current?.stop()
+      controlsRef.current = null
+      setCameraAtiva(false)
+    }
+  }, [modo])
 
   function updateItem<K extends keyof ItemPreview>(idx: number, field: K, value: ItemPreview[K]) {
     setItens(prev => prev.map((it, i) => i === idx ? { ...it, [field]: value } : it))
