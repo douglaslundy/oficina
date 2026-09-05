@@ -28,6 +28,7 @@ class Configuracao extends Model
         'serie_dps', 'proximo_numero_dps',
         'serie_nfe', 'proximo_numero_nfe',
         'logradouro', 'numero', 'bairro',
+        'calculo_tributario_modo',
     ];
 
     protected $casts = [
