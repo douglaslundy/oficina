@@ -36,9 +36,12 @@ implícito por precedente repetido, não pedido de novo). Ledger completo em
 - Manifestação automática só como "ciência da operação" (nunca confirma
   nem rejeita a operação) — decisão aprovada antes de implementar.
 - `EntradaNfController` ganhou `montarPreview()` (extraído de `parse()`
-  sem mudar comportamento) reaproveitado por 2 endpoints novos:
-  `POST entradas-nf/consultar` (chave → mesmo preview do upload de XML) e
-  `GET entradas-nf/recebidas` (lista notas do provedor, marca `ja_lancada`).
+  sem mudar comportamento), reaproveitado por `POST entradas-nf/consultar`
+  (chave → mesmo preview do upload de XML). `GET entradas-nf/recebidas`
+  (lista notas do provedor, marca `ja_lancada`) é mais simples — mapeia
+  `ConsultaNotaTerceiroResumo` direto, não passa por `montarPreview()`
+  (esse método monta preview de UMA nota com itens; a listagem é um
+  resumo de VÁRIAS notas sem itens).
 - Frontend (`produtos/entrada-nf/page.tsx`) ganhou 3 modos: Upload de XML
   (já existia) · Ler QR/código de barras (câmera via `@zxing/browser` +
   `@zxing/library`, restrita a QR Code e Code128, com digitação manual
@@ -68,6 +71,24 @@ implícito por precedente repetido, não pedido de novo). Ledger completo em
 - Ordem de rota importa: `entradas-nf/recebidas` precisa vir ANTES de
   `entradas-nf/{id}` em `routes/api.php`, senão o Laravel casa como
   wildcard primeiro — verificado na revisão da Task 9, correto.
+
+### Revisão final de branch (opus) — achados corrigidos antes do merge
+Achou 1 Critical (vazamento potencial entre tenants: `SpedyProvider`
+caía pro master key quando a oficina não tem `emissorToken`, numa
+chamada sem escopo por empresa) e 5 Important (guard de câmera com
+closure obsoleta, vazamento de stream trocando de aba, falhas de
+provedor sem log nenhum, `recebidas()` não distinguindo "vazio" de
+"erro", e o mapper da Focus descartando `origem`/`cest` que **existem
+de verdade** no payload — confirmado via WebFetch no JSON de exemplo
+real antes de corrigir, não é suposição). Todos corrigidos numa única
+leva de fix antes do merge — ver commits subsequentes a este.
+
+**Limitação conhecida, não corrigida (decisão de escopo, não bug)**: uma
+nota já lançada via upload de XML pode usar o fluxo "atualizar dados
+fiscais" (Rodada 24/2026-08-11); a mesma nota, se chegasse via QR/Notas
+Recebidas, recebe o mesmo 422 de sempre e não tem esse fluxo — as duas
+vias não convergem 100% nesse caso específico. A spec nunca pediu essa
+convergência; registrar aqui como possível melhoria futura, não como bug.
 
 ### Nunca testado em produção / pendências reais
 - **Nunca testado contra Spedy/Focus de verdade** — nenhuma das duas

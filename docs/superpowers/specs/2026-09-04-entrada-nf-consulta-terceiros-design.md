@@ -166,16 +166,18 @@ JSON traduzido da Focus), tudo vira o mesmo array antes de chegar no
    `completa($dados)`.
 4. Outro erro HTTP → `erro($resp->json('mensagem') ?? 'Erro ao consultar nota
    na Focus.')`.
-5. **Manifestação**: a doc consultada não deixou claro se `completa=1`
-   já exige manifestação prévia pra essa rota específica (`nfes_recebidas`,
-   diferente da rota genérica de "distribuição DFe" descrita em blogs de
-   terceiros). Trato como **não exige** por ora (chamada única, sem
-   manifestar) — se em produção a Focus devolver itens vazios/parciais
-   nesse caso, o sintoma vai aparecer como `dados.itens` vazio, e nesse
-   ponto adiciono a chamada de manifestação
-   (`POST /v2/nfes_recebidas/{chave}/manifestacao`, mesmo endpoint já usado
-   por `manifestar_nfe_recebida` na doc) antes de repetir a consulta. Registro
-   isso como item de validação em produção, não bloqueia o desenvolvimento.
+5. **Manifestação — CORRIGIDO durante o plano de implementação** (a versão
+   acima, escrita na fase de spec, ficou desatualizada e nunca foi
+   codada): a incerteza foi resolvida confirmando, via WebFetch direto no
+   JSON de exemplo real (`consultar_nfe_recebida_individual_json`), que o
+   próprio campo `manifestacao_destinatario` já vem no payload — vazio/nulo
+   quando não manifestada, `"ciencia"` etc. quando já manifestada. O plano
+   (Task 5) usa isso: se `empty($json['manifestacao_destinatario'])`,
+   manifesta via `POST /v2/nfes_recebidas/{chave}/manifesto` (não
+   `/manifestacao` — nome corrigido, confirmado em
+   `manifestar_nfe_recebida`) com body `{"tipo": "ciencia"}`, e devolve
+   `aguardandoManifestacao()`; só então repete a consulta (ação do
+   usuário, não um loop automático). É essa versão que está implementada.
 
 ### `SpedyProvider::listarNotasRecebidas()` / `FocusNfeProvider::listarNotasRecebidas()`
 
