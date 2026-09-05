@@ -13,6 +13,8 @@
     "@hookform/resolvers": "^5.4.0",
     "@mercadopago/sdk-react": "^1.0.7",
     "@tanstack/react-query": "^5.100.14",
+    "@zxing/browser": "^0.2.1",
+    "@zxing/library": "^0.23.0",
     "axios": "^1.16.1",
     "class-variance-authority": "^0.7.1",
     "clsx": "^2.1.1",

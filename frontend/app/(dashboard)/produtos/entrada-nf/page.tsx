@@ -1,6 +1,8 @@
 'use client'
-import { useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { useRouter } from 'next/navigation'
+import { BrowserMultiFormatReader } from '@zxing/browser'
+import { BarcodeFormat, DecodeHintType } from '@zxing/library'
 import { formatarMoeda } from '@/lib/formatters'
 import { toast } from '@/hooks/useToast'
 import api from '@/lib/api'
@@ -60,6 +62,9 @@ export default function EntradaNfPage() {
   const [modo, setModo] = useState<'upload' | 'scan'>('upload')
   const [chaveDigitada, setChaveDigitada] = useState('')
   const [consultando, setConsultando] = useState(false)
+  const videoRef = useRef<HTMLVideoElement>(null)
+  const controlsRef = useRef<{ stop: () => void } | null>(null)
+  const [cameraAtiva, setCameraAtiva] = useState(false)
 
   async function handleUpload(file: File) {
     setUploading(true)
@@ -102,6 +107,39 @@ export default function EntradaNfPage() {
       setConsultando(false)
     }
   }
+
+  async function iniciarCamera() {
+    if (!videoRef.current) return
+    setCameraAtiva(true)
+
+    const hints = new Map()
+    hints.set(DecodeHintType.POSSIBLE_FORMATS, [BarcodeFormat.QR_CODE, BarcodeFormat.CODE_128])
+    hints.set(DecodeHintType.TRY_HARDER, true)
+    const reader = new BrowserMultiFormatReader(hints)
+
+    try {
+      const controls = await reader.decodeFromVideoDevice(undefined, videoRef.current, (result) => {
+        if (!result) return
+        const texto = result.getText()
+        const match = texto.match(/\d{44}/)
+        controlsRef.current?.stop()
+        setCameraAtiva(false)
+        if (match) {
+          consultarChave(match[0])
+        } else {
+          toast('Não encontrei uma chave de acesso de 44 dígitos nesse código.', 'danger')
+        }
+      })
+      controlsRef.current = controls
+    } catch {
+      toast('Não foi possível acessar a câmera. Digite a chave manualmente.', 'danger')
+      setCameraAtiva(false)
+    }
+  }
+
+  useEffect(() => {
+    return () => { controlsRef.current?.stop() }
+  }, [])
 
   function updateItem<K extends keyof ItemPreview>(idx: number, field: K, value: ItemPreview[K]) {
     setItens(prev => prev.map((it, i) => i === idx ? { ...it, [field]: value } : it))
@@ -225,6 +263,13 @@ export default function EntradaNfPage() {
 
           {modo === 'scan' && (
             <div style={{ textAlign: 'center' }}>
+              {!cameraAtiva && (
+                <button type="button" onClick={iniciarCamera}
+                  style={{ marginBottom: 16, padding: '8px 20px', borderRadius: 8, border: '1px solid var(--border)', background: 'transparent', color: 'var(--text)', cursor: 'pointer' }}>
+                  📷 Abrir câmera
+                </button>
+              )}
+              <video ref={videoRef} style={{ display: cameraAtiva ? 'block' : 'none', width: '100%', maxWidth: 480, margin: '0 auto 16px', borderRadius: 8 }} />
               <p style={{ color: 'var(--muted)', marginBottom: 16 }}>
                 Digite a chave de acesso de 44 dígitos impressa na nota.
               </p>
