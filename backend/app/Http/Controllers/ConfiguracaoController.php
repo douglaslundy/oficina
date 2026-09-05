@@ -38,6 +38,7 @@ class ConfiguracaoController extends Controller
             'telefone'              => ['nullable', 'string', 'max:15'],
             'email'                 => ['nullable', 'email', 'max:120'],
             'ambiente_fiscal'       => ['nullable', 'in:PRODUCAO,HOMOLOGACAO'],
+            'calculo_tributario_modo' => ['nullable', 'in:MANUAL,AUTOMATICO_PROVEDOR'],
             'serie_nf'              => ['nullable', 'string', 'max:5'],
             'aliquota_iss'          => ['nullable', 'numeric', 'min:0', 'max:100'],
             'cnae'                  => ['nullable', 'string', 'max:20'],

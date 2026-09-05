@@ -181,6 +181,22 @@ export default function EmpresaPage() {
           </div>
 
           <div style={{ gridColumn: '1 / -1' }}>
+            <label style={lStyle}>Cálculo da tributação (CFOP / CST / ICMS / ISS)</label>
+            <select value={form.calculo_tributario_modo ?? 'MANUAL'} onChange={set('calculo_tributario_modo')} style={iStyle}>
+              <option value="MANUAL">Manual — o sistema calcula</option>
+              <option value="AUTOMATICO_PROVEDOR">Automático pelo provedor (Spedy)</option>
+            </select>
+            {form.calculo_tributario_modo === 'AUTOMATICO_PROVEDOR' && (
+              <p style={{ color: 'var(--accent)', fontSize: 12, marginTop: 6, lineHeight: 1.5 }}>
+                A Spedy calcula CFOP/CST/ICMS/ISS a partir da configuração fiscal da sua empresa no
+                painel dela. Exige: certificado A1 enviado à Spedy + regime tributário e grupos de
+                tributação configurados no painel web da Spedy. Funciona melhor para catálogos
+                fiscais simples. A Focus ainda não suporta este modo.
+              </p>
+            )}
+          </div>
+
+          <div style={{ gridColumn: '1 / -1' }}>
             <label style={lStyle}>Certificado Digital A1 (.pfx)</label>
             <div style={{ display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap' as const, marginBottom: 10 }}>
               {temCertificado && <span style={{ color: 'var(--success)', fontSize: 13 }}>✓ Certificado carregado</span>}

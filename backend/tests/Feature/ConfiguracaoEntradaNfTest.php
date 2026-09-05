@@ -38,6 +38,29 @@ class ConfiguracaoEntradaNfTest extends TestCase
         ]);
     }
 
+    public function test_persiste_calculo_tributario_modo(): void
+    {
+        $token = $this->loginAdmin();
+
+        $this->withToken($token)->putJson('/api/configuracoes', [
+            'calculo_tributario_modo' => 'AUTOMATICO_PROVEDOR',
+        ])->assertStatus(200);
+
+        $this->assertDatabaseHas('configuracoes', ['calculo_tributario_modo' => 'AUTOMATICO_PROVEDOR']);
+
+        $this->withToken($token)->getJson('/api/configuracoes')
+            ->assertJsonPath('calculo_tributario_modo', 'AUTOMATICO_PROVEDOR');
+    }
+
+    public function test_rejeita_calculo_tributario_modo_invalido(): void
+    {
+        $token = $this->loginAdmin();
+
+        $this->withToken($token)->putJson('/api/configuracoes', [
+            'calculo_tributario_modo' => 'INVENTADO',
+        ])->assertStatus(422);
+    }
+
     public function test_show_retorna_valores_padrao(): void
     {
         Configuracao::create([]);
