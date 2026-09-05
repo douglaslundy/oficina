@@ -81,6 +81,20 @@ item explicitamente bloqueado abaixo.
 - Paginação parcial do NFePHP DistDFe (Rodada 36, commit `8b15a34`)
 - `EmissaoOrquestrador` — OS mista → NF-e + NFS-e com 1 clique (Rodada 36, commit `6145620`)
 
+## Verificação a fundo do backlog GERAL (não-fiscal) — 2026-09-05
+
+"Verifique a fundo e faça todos itens abertos": auditei item por item a
+seção "❌ FALTA IMPLEMENTAR" de `project-mecanicapro.md` contra o código.
+**Todo P0/P1/P2 já está implementado** (editar itens de OS, recálculo de
+status ao listar clientes, filtros+busca na lista de OS, exportação Excel,
+módulo de relatórios, recibo PDF, dark mode, filtro de período em Contas a
+Receber). Detalhe da verificação em `PROGRESSO.md` Rodada 37.
+
+Único item ainda parcial: **responsividade mobile/tablet** — o shell está
+pronto (sidebar colapsável, hambúrguer, `overflow-x` nas tabelas), falta
+polish por página. Não é uma feature fechada e nenhuma tela foi reportada
+quebrada; fica como melhoria contínua, não como tarefa de backlog.
+
 ## Backlog vazio — tudo o que estava listado foi feito.
 
 Sobras conhecidas (documentadas, não bloqueiam ninguém, ninguém pediu):

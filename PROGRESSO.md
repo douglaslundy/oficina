@@ -1,9 +1,37 @@
 # Progresso do Projeto
 
 ## Última atualização
-2026-09-05 — Rodada 36: fila de emissão (não bloqueia mais o request),
-paginação parcial do NFePHP DistDFe, e **EmissaoOrquestrador** (OS mista →
-NF-e das peças + NFS-e dos serviços com 1 clique). Backlog zerado.
+2026-09-05 — Rodada 37: verificação a fundo do backlog geral (não-fiscal)
+item por item contra o código real. **Resultado: nada aberto pra
+desenvolver.** Todo P0/P1/P2 já implementado; único item parcial é polish
+de responsividade mobile (shell pronto, sem tela reportada quebrada).
+Memória `project-mecanicapro.md` (seção "FALTA IMPLEMENTAR") reescrita —
+estava de novo muito desatualizada.
+
+## Rodada 37 (2026-09-05) — verificação a fundo do backlog geral ("Verifique a fundo e faça todos itens abertos")
+
+Auditoria item por item da seção "❌ FALTA IMPLEMENTAR" de
+`project-mecanicapro.md`, cada um cruzado com o código:
+
+| Item | Status verificado |
+|---|---|
+| P0 #3 Editar itens de OS antes de concluir | ✅ `OrdemServicoController::addItem/updateItem/removeItem`, bloqueado só em CONCLUIDA/CANCELADA |
+| P1 #4 Recálculo status ao listar clientes | ✅ `ClienteController::index()` roda `recalcular()` em todo DEVEDOR |
+| P1 #5/#6 Filtros + busca por nome na lista de OS | ✅ `data_inicio/data_fim/mecanico_id/numero/veiculo_id/tipo/em_aberto` + `search` (whereHas cliente nome ilike) |
+| P1 #9 Exportação Excel | ✅ `maatwebsite/excel`, `OsExport`/`ClientesExport`/`EstoqueExport`, `?export=true`, botões em `/relatorios` |
+| P1 #10 Módulo de relatórios | ✅ `/relatorios` com filtro período+status, cards de resumo, export |
+| P2 #11 Contas a Receber filtro período | ✅ Rodada 27 |
+| P2 #12 Paginação/filtros lista agendamentos | ✅ N/A — tela é calendário semana/mês com janela `inicio/fim`; paginar calendário não faz sentido; backend já filtra status+período |
+| P2 #13 Recibo de pagamento PDF | ✅ rota `os/{id}/recibo` |
+| P2 #14 Responsividade mobile/tablet | 🟡 **PARCIAL** — shell pronto (`layout.tsx` isMobile <768, sidebar colapsável+overlay+hambúrguer, `DataTable` com `overflow-x:auto`); falta polish por página (grade `repeat(7,1fr)` de agendamentos, forms de empresa). `globals.css` sem nenhum `@media`. Nenhuma tela reportada quebrada. |
+| P2 #15 Modo claro/escuro | ✅ commit `047b992` |
+| P3 #16/#17 SEFAZ/SMTP prod | ⚙️ ação do usuário, não código |
+| P3 #18 Cobertura de testes | escopo aberto |
+| P3 #19/#20 tenant scope / activitylog | ✅ em uso |
+
+**Nenhum código escrito nesta rodada** — não havia item de desenvolvimento
+genuinamente aberto. Só atualização de `project-mecanicapro.md`,
+`PROGRESSO.md` e `TAREFAS.md`.
 
 ## Rodada 36 (2026-09-05) — fila de emissão, paginação NFePHP, EmissaoOrquestrador
 
