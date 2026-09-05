@@ -53,6 +53,16 @@ class SpedyProvider implements FiscalProvider, ConsultaNotaTerceiroProvider
 
     public function emitir(NotaFiscalData $nota): EmissaoResultado
     {
+        // Modo AUTOMATICO_PROVEDOR: a Spedy calcula CFOP/CST/ICMS/ISS sozinha
+        // via POST /v1/orders (nenhum campo fiscal no payload). Confirmado
+        // por spike real no sandbox (2026-09-05) — a nota passa por toda a
+        // validação fiscal, só bloqueia por falta do certificado A1. Um só
+        // caminho pros 3 modelos (NF-e/NFC-e/NFS-e), distinguidos por
+        // product.invoiceModel.
+        if ($nota->calculoTributarioModo === 'AUTOMATICO_PROVEDOR') {
+            return $this->emitirViaOrders($nota);
+        }
+
         if ($nota->modelo === 'NFE') {
             return $this->emitirNfe($nota);
         }
@@ -285,6 +295,107 @@ class SpedyProvider implements FiscalProvider, ConsultaNotaTerceiroProvider
             'Boleto'            => 'billetBanking',
             default             => 'other',
         };
+    }
+
+    /**
+     * Emissão no modo AUTOMATICO_PROVEDOR: POST /v1/orders SEM nenhum campo
+     * fiscal — a Spedy resolve a tributação a partir da config da empresa no
+     * painel dela. Contrato confirmado no spike de 2026-09-05.
+     */
+    private function emitirViaOrders(NotaFiscalData $nota): EmissaoResultado
+    {
+        $resp = Http::withHeaders(['X-Api-Key' => $this->emissorToken ?? $this->masterKey])
+            ->post("{$this->baseUrl}/orders", $this->montarPayloadOrder($nota));
+
+        if ($resp->failed()) {
+            return EmissaoResultado::rejeitada(
+                $resp->json('message') ?? 'Erro ao criar a venda na Spedy (/orders).',
+                $nota->referenciaExterna,
+            );
+        }
+
+        $invoice = $resp->json('invoices.0');
+        if (!is_array($invoice) || empty($invoice['id'])) {
+            return EmissaoResultado::rejeitada(
+                'A Spedy criou a venda mas não devolveu nenhuma nota fiscal.',
+                $nota->referenciaExterna,
+            );
+        }
+
+        $status = $this->mapStatus((string) ($invoice['status'] ?? 'enqueued'));
+        if ($status === 'REJEITADA') {
+            return EmissaoResultado::rejeitada(
+                $invoice['processingDetail']['message'] ?? 'Rejeitada pela SEFAZ.',
+                (string) $invoice['id'],
+            );
+        }
+
+        // Assíncrono: número/chave só existem depois de autorizada. A
+        // referência externa passa a ser o id da invoice da Spedy — consultar()
+        // usa em /product-invoices/{id} pra reconciliar (spike-confirmado).
+        return EmissaoResultado::processando((string) $invoice['id']);
+    }
+
+    /**
+     * Payload do POST /v1/orders — SEM nenhum campo fiscal (NCM/CFOP/CST/ICMS).
+     * A Spedy resolve a tributação. `invoiceModel` do produto distingue
+     * NF-e/NFC-e/NFS-e.
+     */
+    private function montarPayloadOrder(NotaFiscalData $n): array
+    {
+        $invoiceModel = match ($n->modelo) {
+            'NFE'   => 'productInvoice',
+            'NFCE'  => 'consumerInvoice',
+            default => 'serviceInvoice',
+        };
+
+        $itens = $n->itens !== []
+            ? array_map(fn (array $item) => [
+                'description' => $item['descricao'],
+                'quantity'    => (float) $item['quantidade'],
+                'price'       => (float) $item['valor_unitario'],
+                'amount'      => round((float) $item['quantidade'] * (float) $item['valor_unitario'], 2),
+                'product'     => [
+                    'name'         => $item['descricao'],
+                    'code'         => $item['sku'] ?? $item['produto_id'],
+                    'price'        => (float) $item['valor_unitario'],
+                    'invoiceModel' => $invoiceModel,
+                ],
+            ], $n->itens)
+            : [[
+                // NFS-e não tem itens — vira 1 item sintético do serviço inteiro.
+                'description' => $n->descricao,
+                'quantity'    => 1.0,
+                'price'       => $n->valorServicos,
+                'amount'      => $n->valorServicos,
+                'product'     => [
+                    'name'         => $n->descricao,
+                    'code'         => 'servico',
+                    'price'        => $n->valorServicos,
+                    'invoiceModel' => 'serviceInvoice',
+                ],
+            ]];
+
+        $total = round(array_sum(array_map(fn ($i) => $i['amount'], $itens)), 2);
+
+        return [
+            'transactionId' => $n->referenciaExterna,
+            'amount'        => $total,
+            'date'          => now()->toIso8601String(),
+            'customer'      => [
+                'name'             => $n->tomador['nome'] ?? '-',
+                'federalTaxNumber' => (preg_replace('/\D/', '', $n->tomador['cpf_cnpj'] ?? '') ?: null),
+                'email'            => $n->tomador['email'] ?? null,
+                'address'          => [
+                    'street'     => $n->tomador['logradouro'] ?? null,
+                    'number'     => $n->tomador['numero'] ?? 'S/N',
+                    'district'   => $n->tomador['bairro'] ?? null,
+                    'postalCode' => (preg_replace('/\D/', '', $n->tomador['cep'] ?? '') ?: null),
+                    'city'       => ['code' => (($n->tomador['codigo_ibge'] ?? '') ?: null)],
+                ],
+            ],
+            'items' => $itens,
+        ];
     }
 
     private function emitirNfe(NotaFiscalData $nota): EmissaoResultado

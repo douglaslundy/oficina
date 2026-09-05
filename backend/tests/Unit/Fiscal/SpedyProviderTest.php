@@ -515,4 +515,80 @@ XML;
         $this->assertSame('2026-09-01', $resumos[0]->dataEmissao);
         $this->assertFalse($resumos[1]->completa);
     }
+
+    // ── Modo AUTOMATICO_PROVEDOR — emissão via POST /v1/orders ──────────────
+
+    public function test_modo_automatico_emite_via_orders_sem_campo_fiscal_no_payload(): void
+    {
+        Http::fake([
+            '*/orders' => Http::response([
+                'id' => 'order-1',
+                'invoices' => [['id' => 'inv-spedy-1', 'status' => 'enqueued', 'model' => 'productInvoice']],
+            ], 201),
+        ]);
+
+        $p = new SpedyProvider('https://sandbox-api.spedy.com.br/v1', 'master', 'tok', 'emp-1');
+        $r = $p->emitir($this->notaNfeSimplesNacional(['calculoTributarioModo' => 'AUTOMATICO_PROVEDOR']));
+
+        $this->assertSame('PROCESSANDO', $r->status);
+        $this->assertSame('inv-spedy-1', $r->referenciaExterna);
+
+        Http::assertSent(function ($req) {
+            if (!str_contains($req->url(), '/orders')) {
+                return false;
+            }
+            $body     = $req->data();
+            $itemZero = $body['items'][0] ?? [];
+            // Nenhum campo fiscal no item — a Spedy calcula.
+            return !array_key_exists('ncm', $itemZero)
+                && !array_key_exists('cfop', $itemZero)
+                && !array_key_exists('taxes', $itemZero)
+                && ($itemZero['product']['invoiceModel'] ?? null) === 'productInvoice';
+        });
+        Http::assertNotSent(fn ($req) => str_contains($req->url(), '/product-invoices'));
+    }
+
+    public function test_modo_automatico_invoice_rejeitada_vira_rejeitada_com_mensagem(): void
+    {
+        Http::fake([
+            '*/orders' => Http::response([
+                'id' => 'order-2',
+                'invoices' => [[
+                    'id' => 'inv-spedy-2', 'status' => 'rejected',
+                    'processingDetail' => ['message' => 'O certificado digital é obrigatório para emissão de NF-e.'],
+                ]],
+            ], 201),
+        ]);
+
+        $p = new SpedyProvider('https://sandbox-api.spedy.com.br/v1', 'master', 'tok', 'emp-1');
+        $r = $p->emitir($this->notaNfeSimplesNacional(['calculoTributarioModo' => 'AUTOMATICO_PROVEDOR']));
+
+        $this->assertSame('REJEITADA', $r->status);
+        $this->assertStringContainsString('certificado digital', (string) $r->mensagemErro);
+    }
+
+    public function test_modo_automatico_falha_http_vira_rejeitada(): void
+    {
+        Http::fake(['*/orders' => Http::response(['message' => 'Empresa não encontrada'], 404)]);
+
+        $p = new SpedyProvider('https://sandbox-api.spedy.com.br/v1', 'master', 'tok', 'emp-1');
+        $r = $p->emitir($this->notaNfeSimplesNacional(['calculoTributarioModo' => 'AUTOMATICO_PROVEDOR']));
+
+        $this->assertSame('REJEITADA', $r->status);
+        $this->assertStringContainsString('Empresa não encontrada', (string) $r->mensagemErro);
+    }
+
+    public function test_modo_manual_continua_indo_pra_product_invoices(): void
+    {
+        Http::fake([
+            '*/product-invoices' => Http::response(['id' => 'x', 'status' => 'enqueued'], 201),
+        ]);
+
+        $p = new SpedyProvider('https://sandbox-api.spedy.com.br/v1', 'master', 'tok', 'emp-1');
+        // sem calculoTributarioModo → default 'MANUAL'
+        $p->emitir($this->notaNfeSimplesNacional());
+
+        Http::assertSent(fn ($req) => str_contains($req->url(), '/product-invoices'));
+        Http::assertNotSent(fn ($req) => str_contains($req->url(), '/orders'));
+    }
 }
