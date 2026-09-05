@@ -1,8 +1,86 @@
 # Progresso do Projeto
 
 ## Última atualização
-2026-09-04 — última falha da suíte Feature (`VeiculoTest`) resolvida, ver
-"Continuação (mesma sessão) — RESOLVIDO" na Rodada 31 abaixo.
+2026-09-04 — Rodada 32: entrada de NF via consulta ao provedor (QR/código
+de barras + Notas Recebidas), ver seção própria abaixo.
+
+## Rodada 32 (2026-09-04) — entrada de NF via consulta ao provedor (QR/código de barras + Notas Recebidas)
+
+Usuário pediu pra poder cadastrar nota fiscal só de papel, lendo o QR
+Code/código de barras, o sistema pesquisando na SEFAZ (via os motores já
+integrados) e caindo no mesmo fluxo de estoque/fiscal que hoje é feito via
+XML — e, quando perguntado, confirmou querer aproveitar também qualquer
+recurso melhor que os motores já oferecem (listagem de notas por CNPJ).
+
+Brainstorming (arquitetural) → spec commitada em
+`docs/superpowers/specs/2026-09-04-entrada-nf-consulta-terceiros-design.md`
+→ plano de 13 tasks em
+`docs/superpowers/plans/2026-09-04-entrada-nf-consulta-terceiros.md` →
+executado via `superpowers:subagent-driven-development` direto na `main`
+(mesmo padrão já usado nesta sessão pra CI/rehab de testes — consentimento
+implícito por precedente repetido, não pedido de novo). Ledger completo em
+`.superpowers/sdd/2026-09-04-entrada-nf-consulta-terceiros/progress.md`
+(git-ignored, apagado ao final — este resumo é o registro permanente).
+
+### O que foi entregue
+- **Nova interface `ConsultaNotaTerceiroProvider`** (`consultarNotaRecebida(chave)`,
+  `listarNotasRecebidas(cnpj, desde?)`), implementada por `SpedyProvider` e
+  `FocusNfeProvider` — **não** por `NfePhpProvider` (Etapa C1 continua fora
+  de escopo, decisão já tomada antes).
+- Endpoints confirmados via WebFetch contra a doc real da Spedy e da Focus
+  antes de codar (nada assumido): Spedy usa `/v1/inbound-product-invoices`
+  (lista/filtra por `accessKey`, manifesta como `acknowledged`, baixa XML
+  completo já reaproveitando o `NotaEntradaXmlParser` existente); Focus usa
+  `/v2/nfes_recebidas` (JSON estruturado, não XML — precisou de um mapper
+  novo, `FocusNfeRecebidaMapper`, traduzindo pro mesmo array shape).
+- Manifestação automática só como "ciência da operação" (nunca confirma
+  nem rejeita a operação) — decisão aprovada antes de implementar.
+- `EntradaNfController` ganhou `montarPreview()` (extraído de `parse()`
+  sem mudar comportamento) reaproveitado por 2 endpoints novos:
+  `POST entradas-nf/consultar` (chave → mesmo preview do upload de XML) e
+  `GET entradas-nf/recebidas` (lista notas do provedor, marca `ja_lancada`).
+- Frontend (`produtos/entrada-nf/page.tsx`) ganhou 3 modos: Upload de XML
+  (já existia) · Ler QR/código de barras (câmera via `@zxing/browser` +
+  `@zxing/library`, restrita a QR Code e Code128, com digitação manual
+  sempre disponível) · Notas Recebidas (tabela com botão Importar). Os 3
+  caem no mesmo componente de revisão e no mesmo `POST /entradas-nf` de
+  sempre — nenhuma duplicação de UI.
+
+### Decisões não óbvias / achados durante a execução
+- **Bug de autoria no meu próprio plano**: a task do endpoint `consultar()`
+  especificava `size:44` na validação da chave, mas os fixtures de teste
+  do mesmo plano usavam chaves curtas tipo `'CHAVE-QR-1'`. O implementador
+  parou e reportou em vez de afrouxar a regra silenciosamente — ruling:
+  `size:44` estava certo (chave de acesso real sempre tem 44 dígitos),
+  quem estava errado eram os fixtures. Corrigido nos testes, não na regra.
+- **Vazamento de câmera no unmount**: se o componente desmonta enquanto o
+  prompt nativo de permissão da câmera ainda está pendente, o stream que
+  inicia depois (permissão concedida tardiamente) nunca era parado.
+  Corrigido com um ref de "ainda montado" checado logo após a Promise do
+  `decodeFromVideoDevice` resolver. Achado pela revisão da Task 11, não
+  problema em produção hoje (feature nova).
+- **Focus não expõe `origem` (0-8) nem `CEST` no JSON de nota recebida**
+  (diferente do XML completo) — o mapper deixa esses campos `null` de
+  propósito; documentado no próprio código, não é bug.
+- **`serie`/`numero_nf` derivados da própria chave de acesso** (posições
+  fixas 23-25 e 26-34 do padrão nacional) quando o provedor não os retorna
+  separadamente (caso da Focus) — técnica válida pra qualquer provedor.
+- Ordem de rota importa: `entradas-nf/recebidas` precisa vir ANTES de
+  `entradas-nf/{id}` em `routes/api.php`, senão o Laravel casa como
+  wildcard primeiro — verificado na revisão da Task 9, correto.
+
+### Nunca testado em produção / pendências reais
+- **Nunca testado contra Spedy/Focus de verdade** — nenhuma das duas
+  contas tem confirmado se o produto "notas recebidas"/MDe está
+  contratado (é add-on separado da emissão em ambos os provedores). Se não
+  estiver, a consulta falha de forma clara (422/erro do provedor), não
+  quebra o resto do sistema — mas só descobrimos testando com credencial
+  real.
+- A listagem da Focus (`GET /v2/nfes_recebidas`) exige `cnpj` — vem de
+  `Configuracao::first()?->cnpj`; se essa configuração nunca foi
+  preenchida, a listagem da Focus provavelmente volta vazia (não é bug,
+  é pré-requisito de cadastro já conhecido do projeto).
+- NFePHP (Etapa C1) continua sem esse recurso — só quando mergear.
 
 ## Rodada 31 (2026-09-04) — tarefas de dev sem bloqueio: CI, reconciliação, download de backup, rehab de testes
 
