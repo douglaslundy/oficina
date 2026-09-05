@@ -1,12 +1,37 @@
 # Progresso do Projeto
 
 ## Última atualização
-2026-09-05 — Rodada 37: verificação a fundo do backlog geral (não-fiscal)
-item por item contra o código real. **Resultado: nada aberto pra
-desenvolver.** Todo P0/P1/P2 já implementado; único item parcial é polish
-de responsividade mobile (shell pronto, sem tela reportada quebrada).
-Memória `project-mecanicapro.md` (seção "FALTA IMPLEMENTAR") reescrita —
-estava de novo muito desatualizada.
+2026-09-05 — Rodada 38: responsividade mobile/tablet (P2 #14) implementada
+— classes de grid responsivo em `globals.css` (que não tinha nenhum
+`@media`), ~17 telas do dashboard, calendário de agendamentos, modais e
+telas `(auth)`. **Backlog geral agora 100% fechado.**
+
+## Rodada 38 (2026-09-05) — responsividade mobile/tablet (P2 #14, último item do backlog)
+
+Commit `5d33afa`. Único item do backlog geral que ainda estava parcial.
+
+- `app/globals.css` (que não tinha **nenhum** `@media`) ganhou classes de
+  grid responsivo: `.rcols-2..6` (cards/stats), `.rform`/`.rform-3`/`.rform-auto`
+  (grades de formulário), `.rsplit`/`.rsplit-2-1` (2 painéis), `.week-grid`
+  (semana do calendário), `.month-grid` + `.month-scroll` (mês). Breakpoints
+  900 / 640 / 420px.
+- ~17 telas de `(dashboard)` trocaram `gridTemplateColumns` inline por essas
+  classes (dashboard `repeat(6,1fr)`, produtos/[id] `repeat(5,1fr)`, veiculos,
+  contas-a-receber, relatorios, pdv, minhas-faturas, clientes/[id], empresa,
+  meus-dados, usuarios/[id], auditoria, entrada-nf…). `gap`/`margin` seguem inline.
+- Agendamentos: vista semanal empilha os 7 dias em ≤900px (`min-height` do
+  card também cai); vista mensal rola na horizontal (`min-width:560` só no
+  mobile) em vez de espremer 7 colunas.
+- Modais sem `maxWidth` (NovoAgendamento, alertas ×2, pagamento do PDV) →
+  `width: 'min(Npx, calc(100vw - 32px))'`.
+- `(auth)/layout.tsx`: `.auth-left` (painel de marca) some em ≤900px,
+  `.auth-right` ocupa 100% e reduz padding em ≤480px.
+
+**Verificação:** `npm run build` limpo. No Chrome (não foi possível encolher a
+janela abaixo de ~1140px CSS no Windows), injetei um breakpoint de teste a
+1200px e confirmei que os grids colapsam de verdade (dashboard 6→2 colunas,
+semana 7→1) e que não há scroll horizontal no body. Tabelas já rolavam via
+`DataTable` (`overflow-x:auto`).
 
 ## Rodada 37 (2026-09-05) — verificação a fundo do backlog geral ("Verifique a fundo e faça todos itens abertos")
 

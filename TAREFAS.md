@@ -90,10 +90,10 @@ status ao listar clientes, filtros+busca na lista de OS, exportação Excel,
 módulo de relatórios, recibo PDF, dark mode, filtro de período em Contas a
 Receber). Detalhe da verificação em `PROGRESSO.md` Rodada 37.
 
-Único item ainda parcial: **responsividade mobile/tablet** — o shell está
-pronto (sidebar colapsável, hambúrguer, `overflow-x` nas tabelas), falta
-polish por página. Não é uma feature fechada e nenhuma tela foi reportada
-quebrada; fica como melhoria contínua, não como tarefa de backlog.
+Responsividade mobile/tablet: RESOLVIDO 2026-09-05 (Rodada 38, commit
+`5d33afa`). Classes de grid responsivo em `globals.css`, ~17 telas do
+dashboard, calendário de agendamentos (semana empilha, mês rola), modais e
+telas `(auth)`. Ver `PROGRESSO.md` Rodada 38. **Backlog geral 100% fechado.**
 
 ## Backlog vazio — tudo o que estava listado foi feito.
 
