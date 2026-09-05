@@ -3,10 +3,12 @@ declare(strict_types=1);
 
 namespace Tests\Feature\Fiscal;
 
+use App\Models\EmissorFiscal;
 use App\Models\Oficina;
 use App\Models\Usuario;
 use App\Tenancy\TenancyContext;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Support\Facades\Crypt;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Facades\Http;
 use Tests\TestCase;
@@ -26,6 +28,18 @@ class EntradaNfConsultaTest extends TestCase
             'nome' => 'Admin', 'email' => 'admin@test.com', 'cpf' => '52998224725',
             'role' => 'ADMIN', 'status' => 'ATIVO', 'senha_hash' => Hash::make('admin123'),
             'oficina_id' => $oficina->id,
+        ]);
+        // FiscalProviderManager::forTenant() só passa um emissorToken real
+        // pro provider quando existe um EmissorFiscal registrado — sem
+        // isso, SpedyProvider::consultarNotaRecebida()/listarNotasRecebidas()
+        // agora recusam a chamada de propósito (guard anti-vazamento entre
+        // tenants, ver revisão final da Rodada 32). Sem ambiente_fiscal
+        // configurado em Configuracao, FiscalProviderManager resolve
+        // 'HOMOLOGACAO' por padrão — o registro precisa bater com isso.
+        EmissorFiscal::create([
+            'oficina_id' => $oficina->id, 'provedor' => $provedor, 'ambiente' => 'HOMOLOGACAO',
+            'emissor_externo_id' => 'emp-1', 'token_encrypted' => Crypt::encryptString('tok'),
+            'status' => 'REGISTRADO',
         ]);
         TenancyContext::set($oficina->id, $oficina->slug);
         return [$user->createToken('test')->plainTextToken, $oficina];
