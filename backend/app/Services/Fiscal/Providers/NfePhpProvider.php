@@ -4,7 +4,9 @@ declare(strict_types=1);
 namespace App\Services\Fiscal\Providers;
 
 use App\Services\Fiscal\CertificadoValidator;
+use App\Services\Fiscal\Contracts\ConsultaNotaTerceiroProvider;
 use App\Services\Fiscal\Contracts\FiscalProvider;
+use App\Services\Fiscal\Data\ConsultaNotaTerceiroResultado;
 use App\Services\Fiscal\Data\EmissaoResultado;
 use App\Services\Fiscal\Data\EmissorData;
 use App\Services\Fiscal\Data\NotaFiscalData;
@@ -12,7 +14,7 @@ use App\Services\Fiscal\Data\RegistroResultado;
 use App\Services\Fiscal\NfePhp\MotorNfe;
 use App\Services\Fiscal\NfePhp\MotorNfse;
 
-class NfePhpProvider implements FiscalProvider
+class NfePhpProvider implements FiscalProvider, ConsultaNotaTerceiroProvider
 {
     public function __construct(
         private readonly string $ambiente,
@@ -79,5 +81,28 @@ class NfePhpProvider implements FiscalProvider
         }
 
         return app(MotorNfse::class)->cancelar($referencia, $motivo, $this->ambiente);
+    }
+
+    /**
+     * Consulta de NF-e de terceiro (nota de entrada) — ao contrário de
+     * Spedy/Focus, aqui não há provedor intermediário: o MotorNfe fala
+     * direto com o webservice nacional de Distribuição DFe usando o
+     * certificado A1 da própria oficina.
+     */
+    public function consultarNotaRecebida(string $chaveAcesso): ConsultaNotaTerceiroResultado
+    {
+        return app(MotorNfe::class)->consultarNotaRecebida($chaveAcesso, $this->ambiente);
+    }
+
+    /**
+     * @return list<\App\Services\Fiscal\Data\ConsultaNotaTerceiroResumo>
+     */
+    public function listarNotasRecebidas(string $cnpjOficina, ?\DateTimeInterface $desde = null): array
+    {
+        // $desde fica sem uso: a Distribuição DFe só ordena/pagina por NSU
+        // incremental, não filtra por data de emissão — mesma limitação já
+        // documentada em FocusNfeProvider::listarNotasRecebidas(). Mantido
+        // na assinatura por exigência da interface.
+        return app(MotorNfe::class)->listarNotasRecebidas($cnpjOficina, $this->ambiente);
     }
 }

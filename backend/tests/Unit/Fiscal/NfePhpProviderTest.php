@@ -3,6 +3,9 @@ declare(strict_types=1);
 
 namespace Tests\Unit\Fiscal;
 
+use App\Services\Fiscal\Contracts\ConsultaNotaTerceiroProvider;
+use App\Services\Fiscal\Data\ConsultaNotaTerceiroResultado;
+use App\Services\Fiscal\Data\ConsultaNotaTerceiroResumo;
 use App\Services\Fiscal\Data\EmissaoResultado;
 use App\Services\Fiscal\Data\EmissorData;
 use App\Services\Fiscal\Data\NotaFiscalData;
@@ -187,5 +190,80 @@ class NfePhpProviderTest extends TestCase
         $resultado = $provider->cancelar($ref, 'Motivo');
 
         $this->assertSame($esperado, $resultado);
+    }
+
+    // --- ConsultaNotaTerceiroProvider (Distribuição DFe) -------------------
+    //
+    // Consulta de NF-e de TERCEIRO (nota de entrada), agora também suportada
+    // pelo motor NFePHP — direto na SEFAZ via NFeDistribuicaoDFe, sem
+    // provedor intermediário. Aqui só se testa a delegação (o parsing real
+    // está em MotorNfeConsultarNotaRecebidaMappingTest /
+    // MotorNfeListarNotasRecebidasMappingTest); mockar o motor é obrigatório
+    // porque a chamada real precisaria de banco, certificado e rede.
+
+    public function test_provider_implementa_o_contrato_de_consulta_de_nota_de_terceiro(): void
+    {
+        // Sem isso, EntradaNfController::consultar()/recebidas() barra o
+        // motor com "ainda não suporta essa consulta" (checagem por
+        // instanceof), por mais que os métodos existam.
+        $this->assertInstanceOf(
+            ConsultaNotaTerceiroProvider::class,
+            new NfePhpProvider('HOMOLOGACAO'),
+        );
+    }
+
+    public function test_consultar_nota_recebida_despacha_para_motor_nfe_com_o_ambiente(): void
+    {
+        $chave = str_repeat('7', 44);
+        $esperado = ConsultaNotaTerceiroResultado::aguardandoManifestacao();
+
+        $mock = Mockery::mock(MotorNfe::class);
+        $mock->shouldReceive('consultarNotaRecebida')->once()->with($chave, 'PRODUCAO')->andReturn($esperado);
+        $this->app->instance(MotorNfe::class, $mock);
+
+        $provider = new NfePhpProvider('PRODUCAO');
+
+        $this->assertSame($esperado, $provider->consultarNotaRecebida($chave));
+    }
+
+    public function test_listar_notas_recebidas_despacha_para_motor_nfe_com_o_ambiente(): void
+    {
+        $esperado = [new ConsultaNotaTerceiroResumo(
+            chaveAcesso: str_repeat('8', 44),
+            fornecedorNome: 'Fornecedor',
+            fornecedorCnpj: '12345678000199',
+            dataEmissao: '2026-08-01',
+            valorTotal: 10.5,
+            completa: false,
+        )];
+
+        $mock = Mockery::mock(MotorNfe::class);
+        $mock->shouldReceive('listarNotasRecebidas')->once()->with('12345678000199', 'HOMOLOGACAO')->andReturn($esperado);
+        $this->app->instance(MotorNfe::class, $mock);
+
+        $provider = new NfePhpProvider('HOMOLOGACAO');
+
+        // $desde é aceito pela interface mas ignorado: sefazDistDFe() só
+        // ordena por NSU incremental, não filtra por data de emissão —
+        // mesma limitação já documentada em FocusNfeProvider.
+        $this->assertSame($esperado, $provider->listarNotasRecebidas('12345678000199', new \DateTimeImmutable('2026-01-01')));
+    }
+
+    public function test_falha_ao_listar_propaga_excecao_em_vez_de_lista_vazia(): void
+    {
+        // Contrato de ConsultaNotaTerceiroProvider: falha do provedor nunca
+        // pode virar `[]`, senão a tela mostra "nenhuma nota recebida" pra
+        // um erro real (ver EntradaNfController::recebidas()).
+        $mock = Mockery::mock(MotorNfe::class);
+        $mock->shouldReceive('listarNotasRecebidas')->once()
+            ->andThrow(new \RuntimeException('Falha ao consultar notas recebidas na SEFAZ: certificado vencido'));
+        $this->app->instance(MotorNfe::class, $mock);
+
+        $provider = new NfePhpProvider('HOMOLOGACAO');
+
+        $this->expectException(\RuntimeException::class);
+        $this->expectExceptionMessage('certificado vencido');
+
+        $provider->listarNotasRecebidas('12345678000199');
     }
 }
