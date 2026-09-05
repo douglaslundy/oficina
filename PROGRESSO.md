@@ -1,8 +1,10 @@
 # Progresso do Projeto
 
 ## Última atualização
-2026-09-05 — Rodada 33: `ConsultaNotaTerceiroProvider` estendida ao motor
-NFePHP (Distribuição DFe direto na SEFAZ), ver seção própria abaixo.
+2026-09-05 — Rodada 34: conciliação fiscal de notas de entrada já
+importadas (item 2 do backlog), ver seção própria abaixo. (Rodada 33,
+logo abaixo, foi trabalho concorrente de outra sessão no mesmo dia —
+`ConsultaNotaTerceiroProvider` estendida ao motor NFePHP.)
 
 ## Rodada 33 (2026-09-05) — `ConsultaNotaTerceiroProvider` no motor NFePHP (Distribuição DFe)
 
@@ -66,6 +68,85 @@ o `procNFe` completo direto, ou se depende de manifestação prévia (como
 acontece via Spedy/Focus). Os dois cenários são tratados: sem `procNFe`
 no lote, manifesta ciência e devolve `AGUARDANDO_MANIFESTACAO` — nunca
 monta um lançamento a partir do resumo (`resNFe` não tem `<det>` nenhum).
+
+## Rodada 34 (2026-09-05) — conciliação fiscal de notas de entrada já importadas
+
+Item 2 do backlog (`TAREFAS.md`). Usuário já tinha notas de entrada
+(`NotaEntrada`) importadas cujos produtos podem ter ficado com dados
+fiscais incompletos. Construída uma rotina que reconsulta cada nota no
+provedor fiscal e atualiza SÓ os campos fiscais dos produtos já
+vinculados — nunca estoque — marcando a nota como "conferida" quando
+todos os itens ficam fiscalmente completos.
+
+Spec/plano já vinham prontos de uma sessão anterior (brainstorming +
+plano com código completo especificado, `docs/superpowers/plans/
+2026-09-05-conciliacao-fiscal-notas-entrada.md`). Executado direto na
+`main` em 5 tasks, TDD, sem worktree (mesmo padrão já usado neste
+projeto). Relatório completo em `docs/superpowers/plans/
+2026-09-05-conciliacao-fiscal-notas-entrada-report.md`.
+
+### O que foi entregue (4 commits de código + este de documentação)
+- **Migração** `notas_entrada.fiscal_conferida_em` /
+  `.fiscal_ultima_consulta_em` / `.fiscal_erro_consulta` (todas
+  nullable) + `NotaEntrada` ganhou os 3 campos em `$fillable`/`$casts`.
+- **`ConciliarFiscalNotaEntradaJob`** (fila Redis, nunca síncrono no
+  request): reconsulta a nota via `FiscalProviderManager::forTenant()`
+  → `ConsultaNotaTerceiroProvider::consultarNotaRecebida()` (só quando o
+  provider da oficina implementa a interface — hoje Spedy/Focus e,
+  desde a Rodada 33 concorrente, também NFePHP) e aplica cada item
+  casado (por código de barras, com fallback por descrição) via
+  `ProdutoFiscalService::aplicarDoXml()` — reaproveitada tal como está,
+  sem duplicar a lógica de PREENCHER/DIVERGÊNCIA/NADA. `TenancyContext::
+  clear()` sempre roda num `finally`, mesmo se algo lançar no meio.
+  Casos cobertos: nota sem chave de acesso, motor sem suporte à
+  interface, erro do provedor, e o caminho feliz (marca
+  `fiscal_conferida_em` só quando todos os itens do lote ficam
+  completos). **Nunca chama `EstoqueService`** — regra mais importante
+  desta feature, coberta por asserção explícita no teste de sucesso
+  (`qty_atual` antes/depois do produto).
+- **Endpoints**: `POST entradas-nf/{id}/conciliar` (1 job) e
+  `POST entradas-nf/conciliar-pendentes` (1 job por nota com
+  `chave_acesso` e sem `fiscal_conferida_em` ainda, ambos 202
+  assíncronos). Rota `conciliar-pendentes` registrada ANTES de
+  `{id}/conciliar` em `routes/api.php` (mesmo cuidado de ordem já
+  documentado pra `entradas-nf/recebidas` vs `entradas-nf/{id}` na
+  Rodada 32 — confirmado com `php artisan route:list`).
+  `NotaEntradaResource` ganhou `fiscal_conferida_em`,
+  `fiscal_ultima_consulta_em`, `fiscal_erro_consulta` e
+  `status_fiscal` computado (`CONFERIDA|PENDENTE|ERRO|SEM_CHAVE`).
+- **Frontend**: tela "Histórico de Entrada de NF" ganhou coluna "Status
+  Fiscal" (pill reaproveitando `StatusPill` — 2 chaves novas,
+  `CONFERIDA`/`SEM_CHAVE`, adicionadas ao mapa existente em vez de um
+  componente novo) com tooltip do erro quando `ERRO`, botão "Conciliar"
+  por linha (desabilitado em `SEM_CHAVE` e durante o próprio request) e
+  botão "Conciliar todas pendentes" no topo da tela, ambos com toast de
+  confirmação e bloqueio de submit duplo.
+
+### Decisões não óbvias
+- **Trabalho concorrente na mesma `main` sem worktree**: durante a
+  execução desta rodada, outra sessão commitou a Rodada 33 (item 3,
+  NFePHP) diretamente na `main` em paralelo — confirmado pelos commits
+  intercalados no `git log` e por um erro fatal temporário na suíte
+  Unit (`NfePhpProvider` declarando a interface sem os métodos ainda
+  implementados, num instante entre os commits deles). Nada desta
+  rodada toca `NfePhpProvider`/`MotorNfe` — a suíte completa foi
+  confirmada limpa (exceto as 3 falhas de OpenSSL de sempre) rodando
+  novamente depois que os commits concorrentes terminaram. `TAREFAS.md`
+  tinha uma edição não commitada da outra sessão no meio da execução;
+  preservada via `git stash`/`stash pop` em vez de sobrescrita direta.
+- Testes novos que usam `RefreshDatabase` (o Job e os endpoints) não
+  rodam nesta máquina (sem Postgres local) — escritos e revisados com
+  cuidado, `php -l` limpo, mas RED/GREEN não confirmados por execução
+  real. Ver relatório para a lista exata.
+
+### Verificação
+- `php vendor/bin/phpunit tests/Unit`: sem regressão nos testes que
+  rodam sem banco (confirmado excluindo o diretório `NfePhp` enquanto a
+  Rodada 33 concorrente estava em estado transitório, e de novo na
+  suíte completa depois). As 3 falhas de OpenSSL seguem as mesmas de
+  sempre.
+- `npx tsc --noEmit` (frontend): limpo.
+- **Não deployado.**
 
 ## Rodada 32 (2026-09-04) — entrada de NF via consulta ao provedor (QR/código de barras + Notas Recebidas)
 

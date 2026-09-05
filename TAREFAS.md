@@ -12,11 +12,18 @@
       nunca mais "tratado como sem cancelamento" silenciosamente. 3 testes novos, 6/6 passando,
       zero regressão na suíte Unit (247 testes, só as 3 falhas pré-existentes de OpenSSL local).
 
-- [ ] **2. Conciliação fiscal de notas de entrada já importadas**
-      Arquitetural. Design apresentado e discutido no chat em 2026-09-05 (reconsulta via
-      `ConsultaNotaTerceiroProvider`, aplica só campos fiscais via `ProdutoFiscalService::aplicarDoXml()`,
-      nunca mexe em estoque, marca `fiscal_conferida_em` em `notas_entrada`, estende a tela
-      "Histórico de Entrada de NF"). Falta: spec formal, plano, execução via SDD.
+- [x] **2. Conciliação fiscal de notas de entrada já importadas**
+      ✅ Concluída 2026-09-05, ver `PROGRESSO.md`. Plano de 5 tasks
+      (`docs/superpowers/plans/2026-09-05-conciliacao-fiscal-notas-entrada.md`) executado direto
+      na `main`, TDD. `ConciliarFiscalNotaEntradaJob` reconsulta cada `NotaEntrada` via
+      `ConsultaNotaTerceiroProvider::consultarNotaRecebida()` e aplica só campos fiscais via
+      `ProdutoFiscalService::aplicarDoXml()` (nunca `EstoqueService`, verificado por teste e por
+      autorrevisão do diff). Endpoints `POST entradas-nf/{id}/conciliar` e
+      `POST entradas-nf/conciliar-pendentes`; tela "Histórico de Entrada de NF" ganhou coluna de
+      status fiscal + botões de conciliação. Ver relatório completo em
+      `docs/superpowers/plans/2026-09-05-conciliacao-fiscal-notas-entrada-report.md` pra detalhes
+      de quais testes rodaram localmente (Unit) vs. quais precisam de CI/túnel Postgres
+      (Feature, `RefreshDatabase`).
 
 - [x] **3. Estender `ConsultaNotaTerceiroProvider` pro motor NFePHP**
       ✅ Concluída 2026-09-05 (Rodada 33, ver `PROGRESSO.md`). `NfePhpProvider` agora implementa
@@ -32,12 +39,13 @@
       completo direto ou precisa manifestar antes — os dois caminhos são tratados, o desconhecido
       degrada pra `AGUARDANDO_MANIFESTACAO`.
 
-- [ ] **4. Dark mode**
-      Arquitetural, frontend inteiro. O design system já é 100% CSS variables
-      (`--bg`, `--surface`, `--card`, `--border`, `--text`, `--muted`, etc.) — a base pra um
-      toggle claro/escuro já existe, falta a paleta clara + o mecanismo de troca. Precisa de
-      brainstorming próprio (onde persiste a preferência, troca automática por `prefers-color-scheme`
-      ou só manual, etc.).
+- [x] **4. Dark mode**
+      ✅ **JÁ ESTAVA PRONTO** — descoberto ao investigar, não construído agora. Commit `047b992
+      feat: modo claro/escuro com next-themes` já implementou tudo: `ThemeProvider` (`next-themes`)
+      em `app/layout.tsx` (`attribute="data-theme"`, default escuro, sem seguir SO), toggle ☀️/🌙
+      funcional em `components/layout/Topbar.tsx`, paleta clara completa em `app/globals.css`
+      (`[data-theme='light']`). Isso era outro item de backlog desatualizado — corrigido aqui e
+      na memória persistente, mesma causa do engano com as Etapas C1/C2.
 
 ## Bloqueado — não entra na fila até o usuário resolver
 
