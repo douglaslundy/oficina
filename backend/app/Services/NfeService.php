@@ -138,6 +138,7 @@ class NfeService
             formaPagamento: $nota->forma_pagamento ?? '',
             numeroReservado: $numeroJaReservado,
             regimeTributario: $config?->regime_tributario ?? '',
+            calculoTributarioModo: $config?->calculo_tributario_modo ?? 'MANUAL',
         );
     }
 

@@ -136,6 +136,36 @@ class NfeServiceMontagemTest extends TestCase
         $this->assertSame('Simples Nacional', $data->regimeTributario);
     }
 
+    public function test_monta_nota_data_inclui_calculo_tributario_modo_da_configuracao(): void
+    {
+        $cliente = new Cliente(['nome' => 'Fulano', 'cpf_cnpj' => '87748248800']);
+        $nota = new NotaFiscal([
+            'modelo' => 'NF-e', 'valor_total' => 90.0,
+            'natureza_operacao' => 'Venda de Mercadoria', 'referencia_externa' => 'nf-modo',
+        ]);
+        $nota->setRelation('cliente', $cliente);
+        $nota->setRelation('itens', collect());
+        $config = new \App\Models\Configuracao(['calculo_tributario_modo' => 'AUTOMATICO_PROVEDOR']);
+
+        $data = (new NfeService())->montarNotaData($nota, config: $config);
+
+        $this->assertSame('AUTOMATICO_PROVEDOR', $data->calculoTributarioModo);
+    }
+
+    public function test_monta_nota_data_sem_config_calculo_tributario_modo_fica_manual(): void
+    {
+        $cliente = new Cliente(['nome' => 'Fulano', 'cpf_cnpj' => '87748248800']);
+        $nota = new NotaFiscal([
+            'modelo' => 'NFS-e', 'valor_total' => 90.0,
+            'natureza_operacao' => 'Prestação de Serviços', 'referencia_externa' => 'nf-modo2',
+        ]);
+        $nota->setRelation('cliente', $cliente);
+
+        $data = (new NfeService())->montarNotaData($nota);
+
+        $this->assertSame('MANUAL', $data->calculoTributarioModo);
+    }
+
     public function test_monta_nota_data_sem_config_regime_tributario_fica_vazio(): void
     {
         $cliente = new Cliente(['nome' => 'Fulano', 'cpf_cnpj' => '87748248800']);

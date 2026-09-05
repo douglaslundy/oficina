@@ -45,5 +45,12 @@ final class NotaFiscalData
         // cst_csosn). Só populado por NfeService::montarNotaData() quando
         // $modelo é NFE/NFCE (mesma condição de $itens).
         public readonly string $regimeTributario = '',
+        // Configuracao.calculo_tributario_modo — 'MANUAL' (padrão, o
+        // sistema calcula CFOP/CST/ICMS/ISS de cada item) | 'AUTOMATICO_PROVEDOR'
+        // (a Spedy calcula via POST /v1/orders, sem nenhum campo fiscal no
+        // payload). Populado por NfeService::montarNotaData() pra TODOS os
+        // modelos. SpedyProvider::emitir() checa isso ANTES de qualquer
+        // branch de modelo; FocusNfeProvider recusa (v1 = Spedy only).
+        public readonly string $calculoTributarioModo = 'MANUAL',
     ) {}
 }
