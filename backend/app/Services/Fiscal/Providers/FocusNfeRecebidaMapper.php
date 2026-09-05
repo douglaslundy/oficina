@@ -12,9 +12,11 @@ use App\Services\Fiscal\ValidadorCamposFiscais;
  * que NotaEntradaXmlParser::parse() produz a partir de XML — é o contrato
  * comum que EntradaNfController já sabe consumir, seja qual for a origem.
  *
- * A Focus não expõe o campo de origem da mercadoria (0-8) nesse JSON — fica
- * sempre null aqui, diferente do caminho via XML. Não bloqueia o
- * lançamento sozinho (fiscal_pendente só olha NCM e tributacao_icms).
+ * O schema de requisicao_nota_fiscal.itens[] da Focus expõe `icms_origem`
+ * (0-8) e `cest` como campos de primeiro nível do item, irmãos de
+ * `icms_situacao_tributaria` — ambos são mapeados aqui, igual ao caminho
+ * via XML. Valor ausente ou malformado vira null via ValidadorCamposFiscais
+ * (atenção: origem 0 é "nacional", valor válido — nunca tratar como ausente).
  */
 final class FocusNfeRecebidaMapper
 {
@@ -42,9 +44,9 @@ final class FocusNfeRecebidaMapper
                 'valor_unitario'  => (float) ($item['valor_unitario_comercial'] ?? 0),
                 'ncm'             => ValidadorCamposFiscais::ncm($item['codigo_ncm'] ?? null),
                 'cfop'            => ValidadorCamposFiscais::cfop($item['cfop'] ?? null),
-                'cest'            => null,
+                'cest'            => ValidadorCamposFiscais::cest($item['cest'] ?? null),
                 'unidade'         => ((string) ($item['unidade_comercial'] ?? '')) ?: null,
-                'origem'          => ValidadorCamposFiscais::origem(null),
+                'origem'          => ValidadorCamposFiscais::origem($item['icms_origem'] ?? null),
                 'cst_csosn'       => $digitos !== '' ? $digitos : null,
                 'tributacao_icms' => $ehCsosn
                     ? ClassificacaoIcms::derivar(null, $digitos)

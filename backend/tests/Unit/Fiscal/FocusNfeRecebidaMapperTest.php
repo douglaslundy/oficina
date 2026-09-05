@@ -57,8 +57,39 @@ class FocusNfeRecebidaMapperTest extends TestCase
         $this->assertSame('NORMAL', $item['tributacao_icms']);
         $this->assertSame(10.0, $item['quantidade']);
         $this->assertSame(15.5, $item['valor_unitario']);
+        // jsonBase() não traz icms_origem/cest — ausente continua virando null.
         $this->assertNull($item['origem']);
         $this->assertNull($item['cest']);
+    }
+
+    public function test_mapeia_cest_e_origem_quando_a_focus_os_envia(): void
+    {
+        // requisicao_nota_fiscal.itens[] expõe `icms_origem` e `cest` como
+        // campos de primeiro nível, irmãos de icms_situacao_tributaria.
+        $dados = FocusNfeRecebidaMapper::paraArray($this->jsonBase([
+            'cest'        => '1234567',
+            'icms_origem' => '0',
+        ]));
+        $item = $dados['itens'][0];
+
+        $this->assertSame('1234567', $item['cest']);
+        // origem 0 = mercadoria nacional. É valor VÁLIDO, não "ausente" —
+        // comparação estrita de propósito (assertSame, não assertNotEmpty).
+        $this->assertSame(0, $item['origem']);
+    }
+
+    public function test_mapeia_origem_nao_nacional(): void
+    {
+        $dados = FocusNfeRecebidaMapper::paraArray($this->jsonBase(['icms_origem' => '2']));
+
+        $this->assertSame(2, $dados['itens'][0]['origem']);
+    }
+
+    public function test_origem_fora_da_faixa_vira_null(): void
+    {
+        $dados = FocusNfeRecebidaMapper::paraArray($this->jsonBase(['icms_origem' => '99']));
+
+        $this->assertNull($dados['itens'][0]['origem']);
     }
 
     public function test_mapeia_item_com_csosn(): void
