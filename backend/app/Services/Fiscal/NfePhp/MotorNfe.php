@@ -6,9 +6,11 @@ namespace App\Services\Fiscal\NfePhp;
 use App\Models\Configuracao;
 use App\Models\NotaFiscal;
 use App\Services\Fiscal\CrtResolver;
+use App\Services\Fiscal\Data\ConsultaNotaTerceiroResultado;
 use App\Services\Fiscal\Data\EmissaoResultado;
 use App\Services\Fiscal\Data\NotaFiscalData;
 use App\Services\NfeService;
+use App\Services\NotaEntradaXmlParser;
 use Illuminate\Support\Facades\Log;
 use NFePHP\Common\Certificate;
 use NFePHP\Common\Exception\SoapException;
@@ -1150,5 +1152,140 @@ class MotorNfe
         } catch (\Throwable $e) {
             return EmissaoResultado::erro('Falha ao inutilizar numeração: ' . $e->getMessage());
         }
+    }
+
+    /**
+     * Consulta uma NF-e emitida CONTRA o CNPJ desta oficina (nota de
+     * terceiro / entrada de mercadoria) direto na SEFAZ, via o webservice
+     * nacional de Distribuição DFe — sem depender de provedor terceiro
+     * (Spedy/Focus), usando só o certificado A1 da própria oficina.
+     *
+     * Confirmado em vendor/nfephp-org/sped-nfe/src/Tools.php:384 —
+     * `sefazDistDFe(int $ultNSU = 0, int $numNSU = 0, ?string $chave = null,
+     * string $fonte = 'AN'): string`: quando `$chave` é informada, o corpo
+     * da requisição vira `<consChNFe><chNFe>...</chNFe></consChNFe>`
+     * (consulta por chave específica, ignorando ultNSU/numNSU). Retorna o
+     * corpo cru da resposta como string.
+     *
+     * CORRIGIDO vs. o brief desta rodada — mesmo achado já documentado em
+     * consultar()/cancelar()/retransmitir()/inutilizar(): o brief deixava
+     * `Configuracao::first()` FORA do try/catch. Sem conexão de banco
+     * (ambiente de teste sem Postgres, ver memória do projeto),
+     * `Model::resolveConnection()` lança um `\Error` fatal — não uma
+     * `\Exception` — que escaparia incapturado em vez de virar um
+     * `ConsultaNotaTerceiroResultado::erro()` gracioso. Corpo inteiro dentro
+     * do try, igual ao resto deste arquivo.
+     */
+    public function consultarNotaRecebida(string $chaveAcesso, string $ambiente): ConsultaNotaTerceiroResultado
+    {
+        try {
+            $cfg = Configuracao::first();
+            if (! $cfg) {
+                return ConsultaNotaTerceiroResultado::erro('Configurações da empresa não encontradas.');
+            }
+
+            $dados       = $this->certificados->obter($cfg);
+            $certificate = Certificate::readPfx($dados['pfx'], $dados['senha']);
+            $tools       = new Tools($this->configJson($cfg, $ambiente), $certificate);
+
+            $respostaXml = $tools->sefazDistDFe(0, 0, $chaveAcesso);
+
+            return $this->interpretarRespostaDistDFe($respostaXml, $chaveAcesso, $tools);
+        } catch (\Throwable $e) {
+            Log::warning('NFePHP/DistDFe: falha ao consultar NF-e de terceiro.', [
+                'chave' => $chaveAcesso,
+                'erro'  => $e->getMessage(),
+            ]);
+            return ConsultaNotaTerceiroResultado::erro('Falha ao consultar NF-e de terceiro: ' . $e->getMessage());
+        }
+    }
+
+    /**
+     * Parsing puro (sem I/O de rede) da resposta de sefazDistDFe() —
+     * separado do método público pra ser testável via reflection, mesmo
+     * padrão de processarRespostaConsulta()/extrairCStatEvento().
+     *
+     * Estrutura confirmada contra o XSD oficial do pacote instalado,
+     * schemes/PL_010_V1.30/retDistDFeInt_v1.01.xsd: a raiz `retDistDFeInt`
+     * tem tpAmb/verAplic/cStat/xMotivo/dhResp/ultNSU/maxNSU e um
+     * `loteDistDFeInt` OPCIONAL (`minOccurs="0"`) com até 50 `docZip`
+     * (`maxOccurs="50"`). Cada `docZip` é `xs:base64Binary` e a própria
+     * documentação do XSD diz "O conteúdo desta tag estará compactado no
+     * padrão gZip" — daí o base64_decode() + gzdecode(). O atributo
+     * `schema` (obrigatório) identifica o documento: `resNFe_v1.xx.xsd`
+     * (resumo, SEM itens), `procNFe_v3.10.xsd`/`procNFe_v4.00.xsd` (XML
+     * completo da NF-e autorizada, COM itens — mesmo `nfeProc` que
+     * NotaEntradaXmlParser já sabe parsear), `resEvento_1.00.xsd` /
+     * `procEventoNFe_v1.00.xsd` (eventos, irrelevantes aqui).
+     *
+     * [decisão] cStat/xMotivo entram SÓ no log, nunca numa comparação de
+     * controle de fluxo: o tipo do XSD é `TStat` genérico, sem nenhuma
+     * enumeração de valores documentada nesse schema — hardcodar um número
+     * como "não encontrado" seria inventar um contrato que o schema não dá.
+     * O sinal usado é estrutural e está no próprio XSD: `loteDistDFeInt` é
+     * opcional, então a AUSÊNCIA de `docZip` já É "nenhum documento",
+     * qualquer que seja o código devolvido.
+     *
+     * $tools só é usado no branch "veio resumo, não veio XML completo", pra
+     * manifestar ciência da operação.
+     */
+    private function interpretarRespostaDistDFe(string $xml, string $chaveAcesso, Tools $tools): ConsultaNotaTerceiroResultado
+    {
+        libxml_use_internal_errors(true);
+        $sxml = simplexml_load_string($xml);
+        libxml_clear_errors();
+
+        if ($sxml === false) {
+            return ConsultaNotaTerceiroResultado::erro('Resposta inválida da SEFAZ ao consultar Distribuição DFe.');
+        }
+
+        $sxml->registerXPathNamespace('nfe', 'http://www.portalfiscal.inf.br/nfe');
+        $docZips = $sxml->xpath('//nfe:loteDistDFeInt/nfe:docZip') ?: [];
+
+        if ($docZips === []) {
+            Log::info('NFePHP/DistDFe: nenhum docZip na resposta.', [
+                'chave'   => $chaveAcesso,
+                'cStat'   => (string) ($sxml->xpath('//nfe:cStat')[0] ?? ''),
+                'xMotivo' => (string) ($sxml->xpath('//nfe:xMotivo')[0] ?? ''),
+            ]);
+            return ConsultaNotaTerceiroResultado::naoEncontrada();
+        }
+
+        foreach ($docZips as $docZip) {
+            if (! str_starts_with((string) $docZip['schema'], 'procNFe')) {
+                continue;
+            }
+
+            $conteudoGzip = base64_decode((string) $docZip, true);
+            $xmlCompleto  = $conteudoGzip !== false ? @gzdecode($conteudoGzip) : false;
+
+            if ($xmlCompleto === false) {
+                Log::warning('NFePHP/DistDFe: falha ao decodificar docZip (base64/gzip).', ['chave' => $chaveAcesso]);
+                continue;
+            }
+
+            return ConsultaNotaTerceiroResultado::completa((new NotaEntradaXmlParser())->parse($xmlCompleto));
+        }
+
+        // Só veio resNFe (resumo, sem itens) — manifesta "ciência da
+        // operação" (mesmo caminho de Spedy/Focus) e devolve aguardando.
+        // Nunca inventa itens a partir do resumo: o resNFe não tem <det>
+        // nenhum, e um lançamento de entrada sem itens é pior que nenhum.
+        //
+        // NÃO CONFIRMADO contra a SEFAZ real (exigiria certificado + rede):
+        // se uma consulta consChNFe feita pelo próprio CNPJ destinatário já
+        // devolve o procNFe direto, ou se depende de manifestação prévia
+        // como acontece via Spedy/Focus. Por isso os dois cenários são
+        // tratados, e o desconhecido degrada pro caminho seguro.
+        try {
+            $tools->sefazManifesta($chaveAcesso, Tools::EVT_CIENCIA);
+        } catch (\Throwable $e) {
+            Log::warning('NFePHP/DistDFe: falha ao manifestar ciência.', [
+                'chave' => $chaveAcesso,
+                'erro'  => $e->getMessage(),
+            ]);
+        }
+
+        return ConsultaNotaTerceiroResultado::aguardandoManifestacao();
     }
 }
