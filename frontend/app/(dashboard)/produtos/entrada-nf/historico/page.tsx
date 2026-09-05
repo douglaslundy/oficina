@@ -2,8 +2,12 @@
 import { useState, useEffect, useCallback } from 'react'
 import { useRouter } from 'next/navigation'
 import { DataTable, Column } from '@/components/ui/DataTable'
+import { StatusPill } from '@/components/ui/StatusPill'
 import { formatarMoeda } from '@/lib/formatters'
+import { toast } from '@/hooks/useToast'
 import api from '@/lib/api'
+
+type StatusFiscal = 'CONFERIDA' | 'PENDENTE' | 'ERRO' | 'SEM_CHAVE'
 
 interface NotaEntradaListItem {
   id: string
@@ -14,6 +18,8 @@ interface NotaEntradaListItem {
   valor_total: number
   data_emissao: string | null
   criado_em: string | null
+  status_fiscal: StatusFiscal
+  fiscal_erro_consulta: string | null
 }
 
 interface NotaEntradaItem {
@@ -44,6 +50,8 @@ export default function HistoricoEntradaNfPage() {
   const [lastPage, setLastPage] = useState(1)
   const [detalhe, setDetalhe] = useState<NotaEntradaDetail | null>(null)
   const [carregandoDetalhe, setCarregandoDetalhe] = useState(false)
+  const [conciliando, setConciliando] = useState<Set<string>>(new Set())
+  const [conciliandoTodas, setConciliandoTodas] = useState(false)
 
   const fetchNotas = useCallback(() => {
     setLoading(true)
@@ -67,6 +75,34 @@ export default function HistoricoEntradaNfPage() {
       setDetalhe(null)
     } finally {
       setCarregandoDetalhe(false)
+    }
+  }
+
+  async function conciliarNota(id: string) {
+    setConciliando(prev => new Set(prev).add(id))
+    try {
+      await api.post(`/entradas-nf/${id}/conciliar`)
+      toast('Enfileirado.', 'success')
+    } catch (e: any) {
+      toast(e.response?.data?.message ?? 'Erro ao enfileirar a conciliação.', 'danger')
+    } finally {
+      setConciliando(prev => {
+        const next = new Set(prev)
+        next.delete(id)
+        return next
+      })
+    }
+  }
+
+  async function conciliarTodasPendentes() {
+    setConciliandoTodas(true)
+    try {
+      const res = await api.post<{ notas_enfileiradas: number }>('/entradas-nf/conciliar-pendentes')
+      toast(`${res.data.notas_enfileiradas} nota(s) enfileirada(s) para conciliação.`, 'success')
+    } catch (e: any) {
+      toast(e.response?.data?.message ?? 'Erro ao enfileirar a conciliação em lote.', 'danger')
+    } finally {
+      setConciliandoTodas(false)
     }
   }
 
@@ -96,6 +132,32 @@ export default function HistoricoEntradaNfPage() {
       key: 'valor_total', label: 'Valor total',
       render: r => <span className="font-mono" style={{ color: 'var(--text)' }}>{formatarMoeda(r.valor_total)}</span>,
     },
+    {
+      key: 'status_fiscal', label: 'Status Fiscal',
+      render: r => (
+        <div title={r.status_fiscal === 'ERRO' ? (r.fiscal_erro_consulta ?? undefined) : undefined}>
+          <StatusPill status={r.status_fiscal} />
+        </div>
+      ),
+    },
+    {
+      key: 'acoes', label: '',
+      render: r => (
+        <button
+          onClick={e => { e.stopPropagation(); conciliarNota(r.id) }}
+          disabled={r.status_fiscal === 'SEM_CHAVE' || conciliando.has(r.id)}
+          style={{
+            padding: '6px 12px', borderRadius: 6, fontSize: 12, whiteSpace: 'nowrap',
+            background: 'none', border: '1px solid var(--border)',
+            color: r.status_fiscal === 'SEM_CHAVE' ? 'var(--muted)' : 'var(--accent)',
+            cursor: r.status_fiscal === 'SEM_CHAVE' || conciliando.has(r.id) ? 'not-allowed' : 'pointer',
+            opacity: conciliando.has(r.id) ? 0.6 : 1,
+          }}
+        >
+          {conciliando.has(r.id) ? '⟳ Enfileirando...' : 'Conciliar'}
+        </button>
+      ),
+    },
   ]
 
   return (
@@ -104,10 +166,16 @@ export default function HistoricoEntradaNfPage() {
         <h1 className="font-display" style={{ fontSize: 28, fontWeight: 800, color: 'var(--text)', margin: 0 }}>
           Histórico de Entradas de NF
         </h1>
-        <button onClick={() => router.push('/produtos/entrada-nf')}
-          style={{ padding: '8px 16px', borderRadius: 8, background: 'rgba(245,166,35,0.12)', border: '1px solid var(--accent)', color: 'var(--accent)', cursor: 'pointer', fontSize: 14, whiteSpace: 'nowrap' }}>
-          + Lançar NF
-        </button>
+        <div style={{ display: 'flex', gap: 12 }}>
+          <button onClick={conciliarTodasPendentes} disabled={conciliandoTodas}
+            style={{ padding: '8px 16px', borderRadius: 8, background: 'none', border: '1px solid var(--border)', color: 'var(--text)', cursor: conciliandoTodas ? 'not-allowed' : 'pointer', fontSize: 14, whiteSpace: 'nowrap', opacity: conciliandoTodas ? 0.6 : 1 }}>
+            {conciliandoTodas ? '⟳ Enfileirando...' : 'Conciliar todas pendentes'}
+          </button>
+          <button onClick={() => router.push('/produtos/entrada-nf')}
+            style={{ padding: '8px 16px', borderRadius: 8, background: 'rgba(245,166,35,0.12)', border: '1px solid var(--accent)', color: 'var(--accent)', cursor: 'pointer', fontSize: 14, whiteSpace: 'nowrap' }}>
+            + Lançar NF
+          </button>
+        </div>
       </div>
 
       <DataTable
