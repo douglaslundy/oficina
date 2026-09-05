@@ -59,7 +59,12 @@ class ConciliarFiscalNotaEntradaJobTest extends TestCase
         [$oficina, $nota, $produto] = $this->montarCenario();
         $qtyAntes = $produto->qty_atual;
 
-        $providerFake = Mockery::mock(ConsultaNotaTerceiroProvider::class);
+        // FiscalProviderManager::forTenant() tem retorno tipado estrito como
+        // FiscalProvider (nunca ConsultaNotaTerceiroProvider sozinho) —
+        // SpedyProvider/FocusNfeProvider implementam os dois de verdade, e o
+        // double do Mockery precisa fazer o mesmo, senão o PHP rejeita o
+        // valor de retorno em tempo de execução (TypeError).
+        $providerFake = Mockery::mock(\App\Services\Fiscal\Contracts\FiscalProvider::class, ConsultaNotaTerceiroProvider::class);
         $providerFake->shouldReceive('consultarNotaRecebida')
             ->with('35260712345678000199550010000012340000000001')
             ->andReturn(ConsultaNotaTerceiroResultado::completa([
@@ -129,7 +134,7 @@ class ConciliarFiscalNotaEntradaJobTest extends TestCase
     {
         [$oficina, $nota, $produto] = $this->montarCenario();
 
-        $providerFake = Mockery::mock(ConsultaNotaTerceiroProvider::class);
+        $providerFake = Mockery::mock(\App\Services\Fiscal\Contracts\FiscalProvider::class, ConsultaNotaTerceiroProvider::class);
         $providerFake->shouldReceive('consultarNotaRecebida')
             ->andReturn(ConsultaNotaTerceiroResultado::erro('Chave de API inválida.'));
         $this->mock(FiscalProviderManager::class, function ($mock) use ($providerFake) {
