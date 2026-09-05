@@ -61,6 +61,16 @@ class FocusNfeProvider implements FiscalProvider, ConsultaNotaTerceiroProvider
 
     public function emitir(NotaFiscalData $nota): EmissaoResultado
     {
+        // Modo AUTOMATICO_PROVEDOR (a Spedy tem via /v1/orders) — a Focus
+        // tem um equivalente ("Automations"), mas sem contrato de API
+        // confirmado. Recusa aqui, sem HTTP nenhum. v1 = Spedy only.
+        if ($nota->calculoTributarioModo === 'AUTOMATICO_PROVEDOR') {
+            return EmissaoResultado::rejeitada(
+                'Cálculo automático de tributação ainda não é suportado pela Focus — use o modo MANUAL nas configurações fiscais.',
+                $nota->referenciaExterna,
+            );
+        }
+
         return match ($nota->modelo) {
             'NFE'  => $this->emitirNfe($nota),
             'NFCE' => $this->emitirNfce($nota),

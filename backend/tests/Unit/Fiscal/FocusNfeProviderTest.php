@@ -552,4 +552,31 @@ class FocusNfeProviderTest extends TestCase
         $this->assertFalse($resumos[1]->completa);
         Http::assertSent(fn ($req) => str_contains($req->url(), 'cnpj=12345678000199'));
     }
+
+    public function test_modo_automatico_provedor_e_recusado_sem_http(): void
+    {
+        Http::fake();
+
+        $nota = new NotaFiscalData(
+            tipo: 'NFSE',
+            tomador: ['nome' => 'Cliente', 'cpf_cnpj' => '12345678000199'],
+            descricao: 'Venda',
+            valorServicos: 100.0,
+            aliquotaIss: 0.0,
+            issRetido: false,
+            codigoServicoFederal: '',
+            codigoServicoMunicipal: '',
+            naturezaOperacao: 'Venda de Mercadoria',
+            referenciaExterna: 'os-auto',
+            modelo: 'NFE',
+            calculoTributarioModo: 'AUTOMATICO_PROVEDOR',
+        );
+
+        $p = new FocusNfeProvider('https://homologacao.focusnfe.com.br', 'master', 'HOMOLOGACAO', 'tok');
+        $r = $p->emitir($nota);
+
+        $this->assertSame('REJEITADA', $r->status);
+        $this->assertStringContainsString('não é suportado pela Focus', (string) $r->mensagemErro);
+        Http::assertNothingSent();
+    }
 }
