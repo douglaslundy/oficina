@@ -18,13 +18,19 @@
       nunca mexe em estoque, marca `fiscal_conferida_em` em `notas_entrada`, estende a tela
       "Histórico de Entrada de NF"). Falta: spec formal, plano, execução via SDD.
 
-- [ ] **3. Estender `ConsultaNotaTerceiroProvider` pro motor NFePHP**
-      Arquitetural. Hoje só `SpedyProvider`/`FocusNfeProvider` implementam a interface (decisão
-      de escopo da Rodada 32, não bloqueio técnico). Pra NFePHP, a consulta seria direto na SEFAZ
-      via Distribuição DFe usando o certificado A1 da própria oficina (`sped-nfe`, que o motor
-      NFe/NFSe já usa) — caminho mais frágil que a API REST da Spedy/Focus. Precisa de pesquisa
-      real na doc do `sped-nfe`/`nfephp-org` antes de desenhar (mesma disciplina de nunca
-      assumir comportamento fiscal).
+- [x] **3. Estender `ConsultaNotaTerceiroProvider` pro motor NFePHP**
+      ✅ Concluída 2026-09-05 (Rodada 33, ver `PROGRESSO.md`). `NfePhpProvider` agora implementa
+      a interface consultando a SEFAZ direto via Distribuição DFe (`Tools::sefazDistDFe()`), com
+      o certificado A1 da própria oficina. A pesquisa exigida foi feita contra o código real do
+      vendor e os XSDs oficiais do pacote instalado (`Tools.php:384/677`,
+      `schemes/PL_010_V1.30/retDistDFeInt_v1.01.xsd`, `resNFe_v1.01.xsd`) — nada assumido de doc
+      externa. 3 commits, 15 testes `Unit` novos, zero regressão.
+      **Sobra conhecida (não bloqueia):** `listarNotasRecebidas()` é best-effort — varre do NSU 0
+      e fica no primeiro lote (máx. 50 docs pelo XSD), sem checkpoint de `ultNSU`/`maxNSU`.
+      Revisitar antes de a primeira oficina real usar o motor NFePHP com volume.
+      **Não confirmado contra a SEFAZ real:** se o próprio destinatário recebe o `procNFe`
+      completo direto ou precisa manifestar antes — os dois caminhos são tratados, o desconhecido
+      degrada pra `AGUARDANDO_MANIFESTACAO`.
 
 - [ ] **4. Dark mode**
       Arquitetural, frontend inteiro. O design system já é 100% CSS variables

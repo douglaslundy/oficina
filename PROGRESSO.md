@@ -1,8 +1,71 @@
 # Progresso do Projeto
 
 ## Última atualização
-2026-09-04 — Rodada 32: entrada de NF via consulta ao provedor (QR/código
-de barras + Notas Recebidas), ver seção própria abaixo.
+2026-09-05 — Rodada 33: `ConsultaNotaTerceiroProvider` estendida ao motor
+NFePHP (Distribuição DFe direto na SEFAZ), ver seção própria abaixo.
+
+## Rodada 33 (2026-09-05) — `ConsultaNotaTerceiroProvider` no motor NFePHP (Distribuição DFe)
+
+Item 3 do backlog (`TAREFAS.md`). Até aqui só `SpedyProvider`/
+`FocusNfeProvider` implementavam `ConsultaNotaTerceiroProvider` (consulta
+de NF-e de terceiro por chave — leitura de QR/código de barras e listagem
+"Notas Recebidas", Rodada 32). Agora `NfePhpProvider` também implementa,
+consultando a SEFAZ **direto** pelo webservice nacional de Distribuição
+DFe (`NFeDistribuicaoDFe`) com o certificado A1 da própria oficina — sem
+provedor terceiro no meio.
+
+Plano: `docs/superpowers/plans/2026-09-05-nfephp-consulta-nota-terceiro.md`.
+Relatório de execução: mesmo caminho com sufixo `-report.md`.
+
+### O que foi entregue (3 commits, TDD)
+- `MotorNfe::consultarNotaRecebida(chave, ambiente)` + o parsing puro
+  `interpretarRespostaDistDFe()` (privado, testado via reflection —
+  mesmo padrão de `processarRespostaConsulta()`/`extrairCStatEvento()`).
+- `MotorNfe::listarNotasRecebidas(cnpj, ambiente)` + `mapearListaDistDFe()`
+  / `resumoDeDocumento()`.
+- `NfePhpProvider implements FiscalProvider, ConsultaNotaTerceiroProvider`,
+  delegando pro `MotorNfe` com o ambiente do provider.
+- 15 testes novos (`Tests\Unit`, sem banco), suíte Unit 266 testes.
+
+### Confirmado lendo o vendor/XSD real (não é suposição)
+- `Tools::sefazDistDFe(int $ultNSU=0, int $numNSU=0, ?string $chave=null,
+  string $fonte='AN'): string` (`vendor/nfephp-org/sped-nfe/src/Tools.php:384`)
+  — com `$chave`, monta `<consChNFe><chNFe>…</chNFe></consChNFe>`.
+- `Tools::sefazManifesta()` (Tools.php:677) + `Tools::EVT_CIENCIA = 210210`
+  (Tools.php:36).
+- `schemes/PL_010_V1.30/retDistDFeInt_v1.01.xsd`: `loteDistDFeInt` é
+  `minOccurs="0"` com até 50 `docZip`; `docZip` é `xs:base64Binary` e o
+  próprio XSD documenta "estará compactado no padrão gZip"; o atributo
+  `schema` identifica `resNFe_*`/`procNFe_*`/`resEvento_*`. **`cStat` é
+  `TStat` genérico, sem enumeração no XSD** — por isso o sinal de "não
+  encontrado" é a AUSÊNCIA de `docZip` (estrutural), nunca um número
+  mágico; `cStat`/`xMotivo` só entram no log.
+- `resNFe_v1.01.xsd`: campos direto na raiz (`chNFe`, `CNPJ`, `xNome`,
+  `dhEmi`, `vNF`) — formato diferente do `procNFe`, tratados separado.
+
+### Decisões / desvios do plano (com motivo)
+- **Falha ao listar vira `RuntimeException`, não `[]`** (o plano mandava
+  devolver `[]`). O contrato de `ConsultaNotaTerceiroProvider` proíbe
+  isso explicitamente e `EntradaNfController::recebidas()` só distingue
+  "erro" de "não tem nota" por essa exceção — devolver `[]` mostraria
+  "nenhuma nota recebida" pra um certificado vencido.
+- **`Configuracao::first()` dentro do try/catch** (o plano deixava fora) —
+  mesma correção já aplicada em `consultar()`/`cancelar()`/`inutilizar()`:
+  sem banco, `resolveConnection()` lança `\Error`, não `\Exception`.
+- **`listarNotasRecebidas()` é best-effort nesta v1**: sempre varre a
+  partir do NSU 0 e fica com o primeiro lote (máx. 50 docs pelo XSD), sem
+  checkpoint de `ultNSU`/`maxNSU` persistido. YAGNI consciente — o motor
+  NFePHP não está registrado em nenhuma oficina em produção. Revisitar
+  antes do primeiro uso com volume.
+- **`$desde` ignorado** — DistDFe pagina por NSU, não filtra por data
+  (mesma limitação já documentada no `FocusNfeProvider`).
+
+### NÃO confirmado (exigiria certificado + rede reais)
+Se uma consulta `consChNFe` feita pelo próprio CNPJ destinatário devolve
+o `procNFe` completo direto, ou se depende de manifestação prévia (como
+acontece via Spedy/Focus). Os dois cenários são tratados: sem `procNFe`
+no lote, manifesta ciência e devolve `AGUARDANDO_MANIFESTACAO` — nunca
+monta um lançamento a partir do resumo (`resNFe` não tem `<det>` nenhum).
 
 ## Rodada 32 (2026-09-04) — entrada de NF via consulta ao provedor (QR/código de barras + Notas Recebidas)
 
