@@ -7,6 +7,7 @@ use App\Models\Configuracao;
 use App\Models\NotaFiscal;
 use App\Services\Fiscal\CrtResolver;
 use App\Services\Fiscal\Data\ConsultaNotaTerceiroResultado;
+use App\Services\Fiscal\Data\ConsultaNotaTerceiroResumo;
 use App\Services\Fiscal\Data\EmissaoResultado;
 use App\Services\Fiscal\Data\NotaFiscalData;
 use App\Services\NfeService;
@@ -1287,5 +1288,170 @@ class MotorNfe
         }
 
         return ConsultaNotaTerceiroResultado::aguardandoManifestacao();
+    }
+
+    /**
+     * Lista as NF-e emitidas contra o CNPJ desta oficina que o Ambiente
+     * Nacional já tem pra distribuir — varredura por NSU
+     * (`sefazDistDFe(0, 0, null)` monta `<distNSU><ultNSU>000...0</ultNSU>`,
+     * confirmado em Tools.php:384).
+     *
+     * LIMITAÇÃO CONHECIDA E DELIBERADA DESTA v1: sem paginação. O XSD limita
+     * cada resposta a 50 `docZip` (`maxOccurs="50"` em loteDistDFeInt) e
+     * devolve `ultNSU`/`maxNSU` justamente pra o cliente continuar de onde
+     * parou — nada disso é usado aqui: sempre recomeçamos do NSU 0 e
+     * ficamos com o primeiro lote. Se houver mais de 50 documentos, os
+     * excedentes não aparecem. Não implementado nesta rodada (YAGNI):
+     * paginação correta exige um checkpoint de NSU persistido por oficina, e
+     * o motor NFePHP não está registrado em nenhuma oficina em produção
+     * ainda. Revisitar antes do primeiro uso real com volume.
+     *
+     * $cnpjOficina não é usado: o CNPJ consultado é sempre o do certificado/
+     * configuração passada ao construtor de Tools (`configJson()`), não um
+     * parâmetro do webservice. Mantido na assinatura por simetria com a
+     * interface ConsultaNotaTerceiroProvider e com Spedy/Focus.
+     *
+     * CORRIGIDO vs. o brief desta rodada: o brief capturava \Throwable e
+     * devolvia `[]`. Isso viola o contrato explícito de
+     * ConsultaNotaTerceiroProvider::listarNotasRecebidas() ("@throws
+     * \RuntimeException quando o provedor falha — nunca deve devolver `[]`
+     * silenciosamente pra isso, só pra 'de fato não tem nota nenhuma'") e
+     * quebraria EntradaNfController::recebidas(), que só distingue os dois
+     * casos por essa exceção: uma queda da SEFAZ/certificado inválido
+     * apareceria na tela como "nenhuma nota pendente", escondendo o erro
+     * real do usuário — exatamente o bug que aquele contrato foi escrito pra
+     * impedir. Aqui a falha vira RuntimeException; `[]` fica reservado pra
+     * "a SEFAZ respondeu e não há documentos".
+     *
+     * @return list<ConsultaNotaTerceiroResumo>
+     */
+    public function listarNotasRecebidas(string $cnpjOficina, string $ambiente): array
+    {
+        try {
+            $cfg = Configuracao::first();
+            if (! $cfg) {
+                throw new \RuntimeException('Configurações da empresa não encontradas.');
+            }
+
+            $dados       = $this->certificados->obter($cfg);
+            $certificate = Certificate::readPfx($dados['pfx'], $dados['senha']);
+            $tools       = new Tools($this->configJson($cfg, $ambiente), $certificate);
+
+            $respostaXml = $tools->sefazDistDFe(0, 0, null);
+
+            return $this->mapearListaDistDFe($respostaXml);
+        } catch (\Throwable $e) {
+            Log::warning('NFePHP/DistDFe: falha ao listar notas recebidas.', ['erro' => $e->getMessage()]);
+            throw new \RuntimeException(
+                'Falha ao consultar notas recebidas na SEFAZ: ' . $e->getMessage(),
+                0,
+                $e,
+            );
+        }
+    }
+
+    /**
+     * Parsing puro (sem I/O) do lote devolvido por sefazDistDFe() sem chave.
+     * Mesmo envelope de interpretarRespostaDistDFe() (ver lá o grounding no
+     * XSD); a diferença é que aqui interessam TODOS os documentos, e tanto
+     * o XML completo (procNFe) quanto o resumo (resNFe) viram uma linha da
+     * listagem — a flag `completa` é o que diz à tela se ainda falta
+     * manifestação pra conseguir os itens. Eventos (resEvento/
+     * procEventoNFe) são descartados: não são notas.
+     *
+     * Um docZip corrompido é pulado com log, nunca derruba o lote inteiro —
+     * perder uma linha é melhor que esconder as outras 49.
+     *
+     * @return list<ConsultaNotaTerceiroResumo>
+     */
+    private function mapearListaDistDFe(string $xml): array
+    {
+        libxml_use_internal_errors(true);
+        $sxml = simplexml_load_string($xml);
+        libxml_clear_errors();
+
+        if ($sxml === false) {
+            Log::warning('NFePHP/DistDFe: resposta da listagem não é XML válido.');
+            return [];
+        }
+
+        $sxml->registerXPathNamespace('nfe', 'http://www.portalfiscal.inf.br/nfe');
+        $docZips = $sxml->xpath('//nfe:loteDistDFeInt/nfe:docZip') ?: [];
+
+        $resumos = [];
+        foreach ($docZips as $docZip) {
+            $schema   = (string) $docZip['schema'];
+            $completo = str_starts_with($schema, 'procNFe');
+
+            if (! $completo && ! str_starts_with($schema, 'resNFe')) {
+                continue;
+            }
+
+            $conteudoGzip = base64_decode((string) $docZip, true);
+            $xmlDoc       = $conteudoGzip !== false ? @gzdecode($conteudoGzip) : false;
+
+            if ($xmlDoc === false) {
+                Log::warning('NFePHP/DistDFe: docZip ilegível na listagem, pulado.', ['schema' => $schema]);
+                continue;
+            }
+
+            $resumo = $this->resumoDeDocumento($xmlDoc, $completo);
+            if ($resumo !== null) {
+                $resumos[] = $resumo;
+            }
+        }
+
+        return $resumos;
+    }
+
+    /**
+     * procNFe e resNFe têm formatos DIFERENTES e por isso são lidos
+     * separadamente (confirmado nos XSDs do pacote):
+     * - procNFe: `NFe > infNFe`, com a chave no atributo `Id` (prefixado
+     *   por "NFe"), emitente em `emit`, data em `ide/dhEmi` e total em
+     *   `total/ICMSTot/vNF`.
+     * - resNFe (resNFe_v1.01.xsd): campos direto na raiz — `chNFe`, `CNPJ`,
+     *   `xNome`, `dhEmi`, `vNF`.
+     *
+     * O namespace é removido por regex antes do parse (mesma técnica já
+     * usada em NotaEntradaXmlParser::parse()), pra poder acessar os nós por
+     * nome sem registrar prefixo em cada sub-elemento.
+     */
+    private function resumoDeDocumento(string $xmlDoc, bool $completo): ?ConsultaNotaTerceiroResumo
+    {
+        libxml_use_internal_errors(true);
+        $doc = simplexml_load_string((string) preg_replace('/xmlns="[^"]*"/', '', $xmlDoc));
+        libxml_clear_errors();
+
+        if ($doc === false) {
+            return null;
+        }
+
+        if ($completo) {
+            $inf = $doc->NFe->infNFe ?? $doc->infNFe ?? null;
+            if ($inf === null) {
+                return null;
+            }
+
+            $chaveBruta = (string) ($inf['Id'] ?? '');
+
+            return new ConsultaNotaTerceiroResumo(
+                chaveAcesso: str_starts_with($chaveBruta, 'NFe') ? substr($chaveBruta, 3) : $chaveBruta,
+                fornecedorNome: ((string) ($inf->emit->xNome ?? '')) ?: null,
+                fornecedorCnpj: ((string) ($inf->emit->CNPJ ?? '')) ?: null,
+                dataEmissao: substr((string) ($inf->ide->dhEmi ?? ''), 0, 10) ?: null,
+                valorTotal: (float) ($inf->total->ICMSTot->vNF ?? 0),
+                completa: true,
+            );
+        }
+
+        return new ConsultaNotaTerceiroResumo(
+            chaveAcesso: (string) ($doc->chNFe ?? ''),
+            fornecedorNome: ((string) ($doc->xNome ?? '')) ?: null,
+            fornecedorCnpj: ((string) ($doc->CNPJ ?? '')) ?: null,
+            dataEmissao: substr((string) ($doc->dhEmi ?? ''), 0, 10) ?: null,
+            valorTotal: (float) ($doc->vNF ?? 0),
+            completa: false,
+        );
     }
 }
