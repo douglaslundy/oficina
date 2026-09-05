@@ -64,6 +64,7 @@ export default function EntradaNfPage() {
   const [consultando, setConsultando] = useState(false)
   const videoRef = useRef<HTMLVideoElement>(null)
   const controlsRef = useRef<{ stop: () => void } | null>(null)
+  const montadoRef = useRef(true)
   const [cameraAtiva, setCameraAtiva] = useState(false)
 
   async function handleUpload(file: File) {
@@ -119,7 +120,7 @@ export default function EntradaNfPage() {
 
     try {
       const controls = await reader.decodeFromVideoDevice(undefined, videoRef.current, (result) => {
-        if (!result) return
+        if (!result || consultando) return
         const texto = result.getText()
         const match = texto.match(/\d{44}/)
         controlsRef.current?.stop()
@@ -130,6 +131,10 @@ export default function EntradaNfPage() {
           toast('Não encontrei uma chave de acesso de 44 dígitos nesse código.', 'danger')
         }
       })
+      if (!montadoRef.current) {
+        controls.stop()
+        return
+      }
       controlsRef.current = controls
     } catch {
       toast('Não foi possível acessar a câmera. Digite a chave manualmente.', 'danger')
@@ -138,7 +143,10 @@ export default function EntradaNfPage() {
   }
 
   useEffect(() => {
-    return () => { controlsRef.current?.stop() }
+    return () => {
+      montadoRef.current = false
+      controlsRef.current?.stop()
+    }
   }, [])
 
   function updateItem<K extends keyof ItemPreview>(idx: number, field: K, value: ItemPreview[K]) {
