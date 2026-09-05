@@ -21,12 +21,15 @@ class NotaEntrada extends Model
     protected $fillable = [
         'numero_nf', 'serie', 'chave_acesso', 'fornecedor_nome', 'fornecedor_cnpj',
         'valor_total', 'data_emissao', 'xml_original', 'usuario_id', 'oficina_id',
+        'fiscal_conferida_em', 'fiscal_ultima_consulta_em', 'fiscal_erro_consulta',
     ];
 
     protected $casts = [
-        'criado_em'    => 'datetime',
-        'data_emissao' => 'date',
-        'valor_total'  => 'float',
+        'criado_em'                 => 'datetime',
+        'data_emissao'              => 'date',
+        'valor_total'               => 'float',
+        'fiscal_conferida_em'       => 'datetime',
+        'fiscal_ultima_consulta_em' => 'datetime',
     ];
 
     protected static function boot(): void
