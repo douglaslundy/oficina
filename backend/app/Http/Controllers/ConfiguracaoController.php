@@ -68,9 +68,16 @@ class ConfiguracaoController extends Controller
 
     public function uploadCertificado(Request $request, \App\Services\Fiscal\CertificadoValidator $validator): JsonResponse
     {
+        // Valida pela extensão do arquivo, não pelo mime-type: arquivos PKCS#12
+        // (.pfx/.p12) são binários DER e o fileinfo do PHP os reporta como
+        // application/octet-stream (ou x-pkcs12, conforme a versão do libmagic),
+        // o que fazia a regra `mimes:pfx,p12` rejeitar certificados válidos.
+        // O conteúdo é validado de verdade logo abaixo por openssl_pkcs12_read().
         $request->validate([
-            'certificado' => ['required', 'file', 'mimes:pfx,p12', 'max:5120'],
+            'certificado' => ['required', 'file', 'extensions:pfx,p12', 'max:5120'],
             'senha'       => ['required', 'string'],
+        ], [
+            'certificado.extensions' => 'O certificado digital A1 deve ser um arquivo .pfx ou .p12.',
         ]);
 
         $file     = $request->file('certificado');

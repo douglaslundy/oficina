@@ -30,6 +30,7 @@ return [
     'email'                => 'Informe um endereço de e-mail válido para :attribute.',
     'ends_with'            => 'O campo :attribute deve terminar com: :values.',
     'exists'               => 'O :attribute selecionado não foi encontrado.',
+    'extensions'           => 'O campo :attribute deve ter uma das seguintes extensões: :values.',
     'file'                 => 'O campo :attribute deve ser um arquivo.',
     'filled'               => 'O campo :attribute não pode estar vazio.',
     'gt'                   => [

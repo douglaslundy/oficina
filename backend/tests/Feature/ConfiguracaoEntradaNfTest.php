@@ -6,6 +6,7 @@ namespace Tests\Feature;
 use App\Models\Configuracao;
 use App\Models\Usuario;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Http\UploadedFile;
 use Illuminate\Support\Facades\Hash;
 use Tests\TestCase;
 
@@ -59,6 +60,39 @@ class ConfiguracaoEntradaNfTest extends TestCase
         $this->withToken($token)->putJson('/api/configuracoes', [
             'calculo_tributario_modo' => 'INVENTADO',
         ])->assertStatus(422);
+    }
+
+    public function test_upload_certificado_aceita_pfx_com_mimetype_octet_stream(): void
+    {
+        // Arquivos PKCS#12 chegam frequentemente como application/octet-stream.
+        // A regra de validação não pode barrá-los pelo mime-type — só a
+        // validação criptográfica (openssl_pkcs12_read) deve reprovar.
+        $token = $this->loginAdmin();
+
+        $arquivo = UploadedFile::fake()->createWithContent('empresa.pfx', 'conteudo-binario-falso')
+            ->mimeType('application/octet-stream');
+
+        $response = $this->withToken($token)->postJson('/api/configuracoes/certificado', [
+            'certificado' => $arquivo,
+            'senha'       => 'serpo123',
+        ]);
+
+        // Passou pela validação de tipo de arquivo; reprovado só na leitura do PKCS#12.
+        $response->assertStatus(422);
+        $response->assertJsonMissingPath('errors');
+        $response->assertJsonPath('message', 'Certificado inválido ou senha incorreta.');
+    }
+
+    public function test_upload_certificado_rejeita_extensao_invalida(): void
+    {
+        $token = $this->loginAdmin();
+
+        $arquivo = UploadedFile::fake()->createWithContent('empresa.txt', 'qualquer coisa');
+
+        $this->withToken($token)->postJson('/api/configuracoes/certificado', [
+            'certificado' => $arquivo,
+            'senha'       => 'serpo123',
+        ])->assertStatus(422)->assertJsonValidationErrors('certificado');
     }
 
     public function test_show_retorna_valores_padrao(): void

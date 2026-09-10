@@ -1,10 +1,40 @@
 # Progresso do Projeto
 
 ## Última atualização
+2026-09-10 — Rodada 39: corrigido bug do upload de certificado A1
+(`mimes:pfx,p12` → `extensions:pfx,p12`). Não deployado.
+
 2026-09-05 — Rodada 38: responsividade mobile/tablet (P2 #14) implementada
 — classes de grid responsivo em `globals.css` (que não tinha nenhum
 `@media`), ~17 telas do dashboard, calendário de agendamentos, modais e
 telas `(auth)`. **Backlog geral agora 100% fechado.**
+
+## Rodada 39 (2026-09-10) — bug: upload de certificado A1 rejeitava .pfx/.p12 válidos
+
+**Sintoma (usuário):** "O campo certificado digital A1 deve ser um arquivo do
+tipo: pfx, p12" ao importar o certificado da empresa.
+
+**Causa raiz:** `ConfiguracaoController::uploadCertificado()` validava com
+`mimes:pfx,p12`. Essa regra compara o mime-type *adivinhado do conteúdo*
+(fileinfo/libmagic) com o mapa extensão→mime do Laravel. Arquivos PKCS#12
+são binários DER e o PHP os reporta como `application/octet-stream` (ou
+`application/x-pkcs12` conforme a versão do libmagic) — nenhum bate com o
+mapa, então todo `.pfx` real era barrado.
+
+**Correção:** troca para `extensions:pfx,p12` (valida a extensão do nome do
+arquivo enviado). O conteúdo continua validado de verdade logo em seguida
+por `CertificadoValidator::validar()` → `openssl_pkcs12_read()` com a senha,
+que é o gate real. Mensagem custom pt-BR no `validate()` + chave
+`extensions` adicionada em `lang/pt_BR/validation.php`.
+
+**Arquivos:** `backend/app/Http/Controllers/ConfiguracaoController.php`,
+`backend/lang/pt_BR/validation.php`,
+`backend/tests/Feature/ConfiguracaoEntradaNfTest.php` (+2 testes: aceita
+`.pfx` com mime octet-stream / rejeita `.txt`).
+
+**Verificação:** `php -l` limpo nos 3 arquivos. Testes de feature não rodam
+nesta máquina (sem Postgres — ver [[feedback-local-testing]]); rodam no CI.
+**Não deployado** — precisa de `git push` + `deploy-vps.sh`.
 
 ## Rodada 38 (2026-09-05) — responsividade mobile/tablet (P2 #14, último item do backlog)
 
