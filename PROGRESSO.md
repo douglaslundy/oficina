@@ -32,9 +32,23 @@ que é o gate real. Mensagem custom pt-BR no `validate()` + chave
 `backend/tests/Feature/ConfiguracaoEntradaNfTest.php` (+2 testes: aceita
 `.pfx` com mime octet-stream / rejeita `.txt`).
 
-**Verificação:** `php -l` limpo nos 3 arquivos. Testes de feature não rodam
-nesta máquina (sem Postgres — ver [[feedback-local-testing]]); rodam no CI.
-**Não deployado** — precisa de `git push` + `deploy-vps.sh`.
+**Verificação:** `php -l` limpo nos 3 arquivos. Suíte Unit: 281 testes,
+10 falhas **todas pré-existentes** (ConciliarFiscal/EmitirNotaFiscalJob =
+precisam de Postgres; CertificadoStore = OpenSSL do Windows). Testes de
+feature rodam no CI.
+
+**Deploy 2026-09-10:** commit `746d491`, push para `main`. Na VPS:
+`git stash` dos mods locais de nginx → `git pull --ff-only` (ee92bb9→746d491)
+→ `git stash pop` (nginx `mecanicapro.conf`/`tenant-slugs.map` preservados)
+→ `bash deploy-vps.sh`. O `build --no-cache` levou ~20min; a sessão SSH
+caiu no fim (OOM na máquina local) **depois** do `up -d` — containers
+recriados OK (`backend`/`frontend`/`worker`/`scheduler` "Up", healthy).
+Verificado manualmente: fix presente no container
+(`grep extensions:pfx,p12`), `migrate --force` = nothing to migrate,
+`config:cache`+`route:cache` refeitos, 4 domínios públicos (`saas`,
+`oficina`, `stuntmotos`, `oficina-do-lundy`) → 200 em `/api/health`.
+(500 em requests sem auth é quirk pré-existente do Laravel — "Route
+[login] not defined" — acontece em `/clientes` também, não é regressão.)
 
 ## Rodada 38 (2026-09-05) — responsividade mobile/tablet (P2 #14, último item do backlog)
 
