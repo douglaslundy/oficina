@@ -53,7 +53,7 @@ class EmitirNotaFiscalJob implements ShouldQueue
         TenancyContext::set($this->oficinaId, $this->oficinaSlug);
 
         try {
-            $nota = NotaFiscal::with(['cliente', 'itens'])->find($this->notaFiscalId);
+            $nota = NotaFiscal::with(['cliente', 'itens.produto'])->find($this->notaFiscalId);
             if (! $nota || $nota->status !== 'PROCESSANDO') {
                 // Nota sumiu ou já foi resolvida (retry, corrida com o
                 // comando de reconciliação, etc.) — nada a fazer.

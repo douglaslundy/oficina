@@ -112,6 +112,10 @@ class NfeServiceMontagemTest extends TestCase
             'origem' => 0, 'tributacao_icms' => 'NORMAL', 'cst_csosn' => '102',
             'quantidade' => 2, 'valor_unitario' => 45,
         ]);
+        // NfeService::montarNotaData() agora lê $item->produto?->cest — sem
+        // setRelation() aqui, o Eloquent tentaria lazy-load via DB (mesmo
+        // padrão evitado acima pra $nota->itens).
+        $item->setRelation('produto', null);
         $nota->setRelation('itens', collect([$item]));
 
         $data = (new NfeService())->montarNotaData($nota);
@@ -194,6 +198,7 @@ class NfeServiceMontagemTest extends TestCase
             'tributacao_icms' => 'NORMAL', 'cst_csosn' => '102',
             'quantidade' => 1, 'valor_unitario' => 10,
         ]);
+        $item->setRelation('produto', null);
         $nota->setRelation('itens', collect([$item]));
 
         $data = (new NfeService())->montarNotaData($nota);
@@ -216,6 +221,7 @@ class NfeServiceMontagemTest extends TestCase
             'origem' => 0, 'tributacao_icms' => 'NORMAL', 'cst_csosn' => '102',
             'quantidade' => 2, 'valor_unitario' => 45,
         ]);
+        $item->setRelation('produto', null);
         $nota->setRelation('itens', collect([$item]));
 
         $service = new NfeService();

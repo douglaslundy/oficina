@@ -194,7 +194,7 @@ class SpedyProviderTest extends TestCase
             'itens' => [[
                 'produto_id' => 'prod-1', 'sku' => 'FLT-001', 'descricao' => 'Filtro de óleo',
                 'unidade' => 'PC', 'ncm' => '84212300', 'cfop' => '5102', 'origem' => 0,
-                'tributacao_icms' => 'NORMAL', 'cst_csosn' => '102',
+                'tributacao_icms' => 'NORMAL', 'cst_csosn' => '102', 'cest' => '0107600',
                 'quantidade' => 2, 'valor_unitario' => 35.50,
             ]],
             'formaPagamento' => 'Dinheiro',
@@ -265,6 +265,25 @@ class SpedyProviderTest extends TestCase
         $this->assertSame('3130507', $addr['city']['code']);
         $this->assertSame('Ilicínea', $addr['city']['name']);
         $this->assertSame('MG', $addr['city']['state']);
+    }
+
+    public function test_payload_nfe_manda_cest_do_item(): void
+    {
+        // SEFAZ rejeitou de verdade (código 806, homologação 2026-09-10):
+        // "Operação com ICMS-ST sem informação do CEST". O dado já existia
+        // em produtos.cest, só não era lido em NfeService::montarNotaData().
+        $p = new SpedyProvider('https://sandbox-api.spedy.com.br/v1', 'master', 'tok', 'emp-1');
+        $item = $p->montarPayloadNfe($this->notaNfeSimplesNacional())['items'][0];
+
+        $this->assertSame('0107600', $item['cest']);
+    }
+
+    public function test_payload_nfce_manda_cest_do_item(): void
+    {
+        $p = new SpedyProvider('https://sandbox-api.spedy.com.br/v1', 'master', 'tok', 'emp-1');
+        $item = $p->montarPayloadNfce($this->notaNfce())['items'][0];
+
+        $this->assertSame('0107600', $item['cest']);
     }
 
     public function test_payload_nfe_manda_series_e_number_quando_alocados(): void
@@ -397,7 +416,7 @@ class SpedyProviderTest extends TestCase
             itens: [[
                 'produto_id' => 'prod-1', 'sku' => 'FLT-001', 'descricao' => 'Filtro de óleo',
                 'unidade' => 'PC', 'ncm' => '84212300', 'cfop' => '5102', 'origem' => 0,
-                'tributacao_icms' => 'NORMAL', 'cst_csosn' => '102',
+                'tributacao_icms' => 'NORMAL', 'cst_csosn' => '102', 'cest' => '0107600',
                 'quantidade' => 2, 'valor_unitario' => 35.50,
             ]],
             formaPagamento: 'Dinheiro',

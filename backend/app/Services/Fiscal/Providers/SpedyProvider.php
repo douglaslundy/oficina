@@ -246,6 +246,10 @@ class SpedyProvider implements FiscalProvider, ConsultaNotaTerceiroProvider
                 'productCode'      => $item['sku'] ?? $item['produto_id'],
                 'description'      => $item['descricao'],
                 'ncm'              => $item['ncm'],
+                // Obrigatório quando icmsTaxSituation indica ST (rejeição
+                // real "806: operação com ICMS-ST sem CEST", homologação
+                // 2026-09-10). Vem de produtos.cest via NfeService.
+                'cest'             => $item['cest'] ?? null,
                 'cfop'             => $item['cfop'],
                 'commercialUnit'   => $item['unidade'] ?? 'UN',
                 'quantity'         => (float) $item['quantidade'],
@@ -338,6 +342,9 @@ class SpedyProvider implements FiscalProvider, ConsultaNotaTerceiroProvider
                 'code'        => $item['sku'] ?? $item['produto_id'],
                 'description' => $item['descricao'],
                 'ncm'         => $item['ncm'],
+                // Obrigatório quando o CST/CSOSN indica ST — ver comentário
+                // em montarPayloadNfce(). Vem de produtos.cest.
+                'cest'        => $item['cest'] ?? null,
                 'cfop'        => (int) $item['cfop'],
                 'unit'        => $item['unidade'] ?? 'UN',
                 'quantity'    => (float) $item['quantidade'],

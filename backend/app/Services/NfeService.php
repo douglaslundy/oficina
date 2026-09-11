@@ -130,6 +130,13 @@ class NfeService
                 'ncm'             => $item->ncm,
                 'cfop'            => $item->cfop,
                 'origem'          => $item->origem,
+                // CEST: obrigatório pela SEFAZ quando tributacao_icms é ST
+                // (rejeição real "806: operação com ICMS-ST sem CEST",
+                // homologação 2026-09-10) — já existe em produtos.cest,
+                // só não era lido aqui. notas_fiscais_itens não tem coluna
+                // própria; lê direto do produto vinculado (lazy-load OK,
+                // poucos itens por nota).
+                'cest'            => $item->produto?->cest,
                 'tributacao_icms' => $item->tributacao_icms,
                 'cst_csosn'       => $item->cst_csosn,
                 'quantidade'      => $item->quantidade,
