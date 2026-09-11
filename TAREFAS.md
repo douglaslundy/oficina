@@ -4,6 +4,21 @@
 > pequeno) antes de codar, seguindo `superpowers:brainstorming`. Ordem
 > escolhida por risco/dependência crescente, não pela ordem em que foi pedida.
 
+## Sobra da Rodada 39 continuação 2 (2026-09-11) — NFC-e via Spedy não testada até autorizar
+
+A NF-e (peça, B2B/consumidor final) já AUTORIZA de verdade via Spedy
+(5 bugs corrigidos, ver `PROGRESSO.md`). A NFC-e (venda de balcão) só
+teve 1 tentativa, ANTES do fix de endereço, e nunca chegou a criar
+registro na Spedy (`consumer-invoices` retornava 0 itens — provavelmente
+o mesmo tipo de campo obrigatório ausente, não diagnosticado). Os 5 fixes
+desta rodada foram aplicados em `montarPayloadNfe()`; `montarPayloadNfce()`
+só recebeu address/CEST/tributáveis/numeração — **falta o grupo PIS/
+COFINS**, que no schema da NFC-e é flat (`icmsOrigin`/`icmsTaxSituation`
+direto no item, não aninhado em `taxes.icms`), então a estrutura exata
+de PIS/COFINS pra esse endpoint não foi confirmada. Precisa de uma
+rodada de teste dedicada (emitir NFC-e de teste, ler o erro real, repetir
+o mesmo método usado pra NF-e: WebFetch na doc + reemissão via tinker).
+
 ## PRÓXIMA TAREFA OBRIGATÓRIA (registrada 2026-09-10, ainda não iniciada)
 
 **Corrigir a reconciliação de status de emissão via Spedy — notas ficam

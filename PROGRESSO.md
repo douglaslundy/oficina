@@ -1,6 +1,16 @@
 # Progresso do Projeto
 
 ## Última atualização
+2026-09-11 — Rodada 39 continuação 2: **primeira NF-e de peça autorizada
+de verdade pela SEFAZ via Spedy** neste projeto, depois de 5 bugs reais
+achados e corrigidos em sequência (campos tributáveis, numeração,
+isFinalCustomer, CEST, PIS/COFINS — commits `58b4137`..`6659c0d`), cada
+um testado ao vivo no sandbox antes de seguir pro próximo. Bônus: deploy
+de 20-30min → ~1-2min (removido `--no-cache` desnecessário, `eb7e0fc`).
+Reconciliação de status Spedy segue como PRÓXIMA TAREFA OBRIGATÓRIA
+(ainda não implementada — notas continuam PROCESSANDO no nosso banco
+mesmo quando autorizadas na Spedy).
+
 2026-09-10 — Rodada 39 continuação: fix do endereço do destinatário na
 NF-e/NFC-e via Spedy (commit `c1a5728`, deployado) + análise de
 Focus/NFePHP (achados registrados em `TAREFAS.md`, nada corrigido ainda —
@@ -14,6 +24,97 @@ TAREFA OBRIGATÓRIA.
 — classes de grid responsivo em `globals.css` (que não tinha nenhum
 `@media`), ~17 telas do dashboard, calendário de agendamentos, modais e
 telas `(auth)`. **Backlog geral agora 100% fechado.**
+
+## Rodada 39 continuação 2 — NF-e via Spedy: 5 bugs reais até AUTORIZAR de verdade
+
+Depois do fix de endereço (acima), o usuário insistiu emitindo NF-e/NFC-e
+reais em homologação e reportando cada rejeição nova. Cada uma foi
+diagnosticada consultando a API da Spedy DIRETAMENTE (não confiando no
+`mensagem_erro` do nosso banco — ver bug de reconciliação registrado como
+tarefa obrigatória) e cada fix foi **testado ao vivo no sandbox antes de
+considerar resolvido** (reemissão via tinker, não só teste unitário).
+
+**Os 5 bugs, na ordem em que a SEFAZ foi rejeitando** (cada fix revelava o
+próximo problema — não é sintoma de arquitetura ruim, é a SEFAZ validando
+camada por camada: schema XML → numeração → regra de negócio → regra de
+negócio → regra de negócio):
+
+1. **Campos tributáveis ausentes** (`quantityTax`/`unitTaxAmount`, uTrib/
+   qTrib/vUnTrib) — obrigatórios no schema real da Spedy
+   (`SefazInvoiceItemDto`, confirmado via `docs.spedy.com.br`, que
+   diverge do que a doc pública mostra à primeira vista). Sem eles a
+   Spedy gerava XML incompleto, rejeitado na validação estrutural (3
+   erros: Id/chave corrompida, nNF='0', 'prod' com filho fora de ordem).
+   Commit `58b4137`.
+2. **`series`/`number` nunca mandados** — Spedy defaultava nNF=0 pra
+   product-invoices sem eles (NFS-e não sofre disso, atribui o próprio
+   número). `NotaFiscalData` ganhou `numeroAlocado`/`serieNf` (o nNF já
+   alocado por `IniciarEmissaoNotaService` antes de chamar o provider).
+   Commit `ffeef4d`.
+3. **`isFinalCustomer` hardcoded `false`** — SEFAZ 696 ("operação com não
+   contribuinte deve indicar consumidor final"). `clientes` não tem
+   coluna de IE, então o destinatário nunca é contribuinte pra Spedy;
+   `isFinalCustomer` tem que ser sempre `true` (igual à NFC-e). Commit
+   `71beb45`.
+4. **CEST nunca propagado** — SEFAZ 806 ("ICMS-ST sem CEST"). O dado já
+   existia em `produtos.cest` desde a Etapa A, só não era lido em
+   `NfeService::montarNotaData()` nem repassado pro payload. Commit
+   `b0cf3ef`.
+5. **Grupo PIS/COFINS ausente** — SEFAZ 745 ("NF-e sem grupo do PIS").
+   Doc da Spedy marca `taxes.pis`/`cofins` como opcional, mas o XSD real
+   exige (mesmo achado já documentado pro NFePHP em `MotorNfe.php` —
+   reutilizei a mesma convenção: CST 49, tudo zerado, porque Simples
+   Nacional paga PIS/COFINS via DAS). Commit `6659c0d`.
+
+**Resultado final, confirmado ao vivo no sandbox (2026-09-11T00:26):**
+```
+status=authorized number=668242
+accessKey=31260950388509000121550010006682421571723820
+processingDetail: "Autorizado o uso da NF-e" (código 100)
+```
+**Primeira NF-e de peça autorizada de verdade pela SEFAZ neste projeto.**
+
+### Método usado (repetido 5x)
+1. Usuário reporta rejeição (ou eu já sabia da próxima pela análise).
+2. Consulto a Spedy direto via tinker (`GET /product-invoices`) pra pegar
+   o `processingDetail.message` REAL — nunca confiar no `mensagem_erro`
+   do nosso banco (contaminado pelo bug de reconciliação).
+3. `WebFetch` na doc oficial da Spedy quando a causa não é óbvia pelo
+   erro (confirmou campos `quantityTax`/`unitTaxAmount`/`makeupTotal`
+   obrigatórios, e a estrutura de `taxes.pis`/`cofins`).
+4. Fix + teste unitário (TDD) + `phpunit --testsuite=Unit` completo (sem
+   regressão, sempre as mesmas 10 falhas pré-existentes de Postgres/
+   OpenSSL local).
+5. Commit + push + deploy na VPS.
+6. **Reemissão de verdade via tinker** (não só teste unitário) contra o
+   sandbox real, consultando o resultado na Spedy — só então considerado
+   resolvido e parte pro próximo erro.
+
+### Bônus: deploy de 20-30min → ~1-2min
+No meio disso o usuário reclamou do tempo de build. Achado:
+`deploy-vps.sh` rodava `docker compose build --no-cache` sempre — o
+Dockerfile do backend compila extensões PHP do zero (o `dom` do PHP 8.4
+embute o parser `lexbor`, centenas de arquivos C), uma camada que quase
+nunca muda. Removido o `--no-cache` do padrão (commit `eb7e0fc`) —
+cache normal já invalida sozinho quando Dockerfile/composer.json/código
+mudam. `FORCAR_REBUILD_COMPLETO=1` mantém a opção de rebuild do zero
+quando for preciso de verdade (patch de SO na imagem base). Confirmado:
+os últimos 3 deploys desta sessão levaram menos de 2 minutos cada.
+
+### Não resolvido nesta rodada (registrado, não é regressão)
+- **Reconciliação de status Spedy continua quebrada** (tarefa obrigatória
+  já registrada) — a nota de teste `b48d2f16` no nosso banco ainda mostra
+  REJEITADA com a mensagem antiga; não foi reconciliada manualmente desta
+  vez (o teste final usou uma referência descartável via tinker, não essa
+  nota). Quando o usuário reemitir pela tela, o resultado real só vai
+  aparecer certo depois do fix de reconciliação.
+- **NFC-e nunca chegou a autorizar** — a única tentativa (`0187ee63`,
+  antes do fix de endereço) morreu antes de criar registro na Spedy
+  (`consumer-invoices` retornava 0 itens). Os 5 fixes desta rodada foram
+  todos em `montarPayloadNfe()`; `montarPayloadNfce()` só ganhou
+  address/CEST/tributáveis/numeração (não PIS/COFINS, que tem estrutura
+  de item diferente — flat, não `taxes.pis`). Precisa de uma rodada de
+  teste dedicada, não testada ao vivo ainda.
 
 ## Rodada 39 continuação — verificação de emissão real (homologação) + análise Focus/NFePHP
 
