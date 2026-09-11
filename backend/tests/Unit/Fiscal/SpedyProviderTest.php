@@ -209,7 +209,11 @@ class SpedyProviderTest extends TestCase
         $p = new SpedyProvider('https://sandbox-api.spedy.com.br/v1', 'master', 'tok', 'emp-1');
         $payload = $p->montarPayloadNfe($this->notaNfeSimplesNacional());
 
-        $this->assertFalse($payload['isFinalCustomer']); // NF-e é B2B neste sistema — B2C usa NFC-e
+        // SEFAZ rejeita com "696: operação com não contribuinte deve indicar
+        // consumidor final" quando isFinalCustomer=false e o destinatário não
+        // tem IE (sempre o caso — clientes não tem coluna de IE). Bug real,
+        // homologação 2026-09-10.
+        $this->assertTrue($payload['isFinalCustomer']);
         $this->assertSame('12345678000199', $payload['receiver']['federalTaxNumber']);
         $this->assertSame('Venda de Mercadoria', $payload['operationNature']);
 

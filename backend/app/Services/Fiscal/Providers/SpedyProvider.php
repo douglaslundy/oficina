@@ -294,6 +294,18 @@ class SpedyProvider implements FiscalProvider, ConsultaNotaTerceiroProvider
      * NFS-e não precisa disso — a Spedy atribui o próprio número nesse
      * recurso. Usa `numeroAlocado`/`serieNf`, já reservados por
      * IniciarEmissaoNotaService (mesma numeração interna da Configuracao).
+     *
+     * Depois desses dois fixes, sobrou rejeição de conteúdo (SEFAZ 696):
+     * "Operação com não contribuinte deve indicar operação com consumidor
+     * final". `isFinalCustomer` estava hardcoded `false` (comentário antigo:
+     * "NF-e é sempre B2B"), mas `clientes` não tem coluna de Inscrição
+     * Estadual nenhuma — o destinatário nunca é mandado como contribuinte
+     * pra Spedy, então a SEFAZ trata como não-contribuinte SEMPRE e exige
+     * `isFinalCustomer: true` (== NFC-e, que já mandava `true`). Corrigido
+     * pra `true` — confirmado no sandbox: sem os 3 erros de schema (fixes
+     * acima) e com isso, a NF-e passa da validação estrutural E da regra
+     * 696 (autorização em si depende do resto do cadastro fiscal do
+     * item/CFOP, não testado item a item nesta rodada).
      */
     public function montarPayloadNfe(NotaFiscalData $n): array
     {
@@ -310,9 +322,11 @@ class SpedyProvider implements FiscalProvider, ConsultaNotaTerceiroProvider
             // NotaFiscalData não os carrega (ex.: chamada direta em teste).
             'series'          => $n->serieNf,
             'number'          => $n->numeroAlocado !== null ? (int) $n->numeroAlocado : null,
-            // NF-e (modelo 55) é sempre B2B neste sistema — venda a consumidor
-            // final pessoa física usa NFC-e (ver seleção automática no controller).
-            'isFinalCustomer' => false,
+            // SEFAZ 696 — ver docblock acima: `clientes` não tem IE, então o
+            // destinatário é sempre não-contribuinte pra Spedy, e isso exige
+            // isFinalCustomer=true (era `false` até 2026-09-10, rejeitava
+            // toda NF-e real). Igual à NFC-e, que já mandava `true`.
+            'isFinalCustomer' => true,
             'operationNature' => $n->naturezaOperacao,
             'receiver' => [
                 'name'             => $n->tomador['nome'],
