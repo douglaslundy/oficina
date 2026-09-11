@@ -4,6 +4,105 @@
 > pequeno) antes de codar, seguindo `superpowers:brainstorming`. Ordem
 > escolhida por risco/dependência crescente, não pela ordem em que foi pedida.
 
+## PRÓXIMA TAREFA OBRIGATÓRIA (registrada 2026-09-10, ainda não iniciada)
+
+**Corrigir a reconciliação de status de emissão via Spedy — notas ficam
+PROCESSANDO pra sempre mesmo quando a Spedy já autorizou.**
+
+Confirmado em homologação (stuntmotos, 2026-09-10): NFS-e emitida ficou
+`PROCESSANDO` no nosso banco por dias, mas consultando a API da Spedy
+diretamente (`GET /service-invoices/{id}`) o status real já era
+`authorized` desde o primeiro segundo.
+
+**Causa raiz confirmada:** ao emitir, a Spedy devolve o `id` dela própria
+(ex. `a5522b3f-...`) no corpo da resposta — `SpedyProvider::resultadoDe()`/
+`resultadoNfceDe()` **nunca leem esse `id`**. O sistema só guarda a nossa
+`referencia_externa` interna (`nf-<uuid>`). Depois, `consultar()` faz
+`GET /{recurso}/{referencia_externa}` — 404 sempre, porque a Spedy não
+conhece essa referência. Resultado: nenhuma nota emitida via Spedy jamais
+sai de PROCESSANDO por reconciliação automática (nem pelo polling do
+frontend, nem pelo comando agendado `nfe:reconciliar-processando`).
+
+**Correção proposta (testada empiricamente, não é suposição):**
+1. Mandar a nossa `referencia_externa` como `integrationId` no payload de
+   criação nos 4 caminhos de emissão da Spedy (`montarPayloadNfse`,
+   `montarPayloadNfce`, `montarPayloadNfe`, `montarPayloadOrder`).
+2. Trocar `consultar()` pra filtrar por ele:
+   `GET /{recurso}?integrationId={referencia}` em vez de
+   `GET /{recurso}/{referencia}`, pegando `items[0]`.
+   **Confirmado no sandbox real (2026-09-10):** `?integrationId=X` filtra
+   de verdade (retornou `totalCount=0` pra um id inexistente, contra uma
+   lista não-vazia sem o filtro) — não é suposição, é comportamento
+   observado da API.
+3. Cobrir com teste (`SpedyProviderTest`) mockando `Http::fake()` pro novo
+   formato de consulta.
+4. Reconciliar manualmente (ou via comando) as notas já presas em
+   PROCESSANDO na stuntmotos depois do deploy da correção.
+
+**Por que não foi feita agora:** usuário pediu explicitamente pra adiar —
+limite semanal de uso perto do fim. Ver [[project-roadmap-fiscal-3-etapas]]
+na memória (seção Spedy) e `PROGRESSO.md` Rodada 39 pra todo o contexto de
+investigação (incluindo o bug irmão, já corrigido: NF-e/NFC-e não mandavam
+endereço do destinatário, commit `c1a5728`).
+
+## Achados da análise Focus/NFePHP (2026-09-10, registrados — não corrigidos ainda)
+
+Usuário pediu análise dos módulos Focus e NFePHP (config + dados enviados),
+mas quer adiar qualquer correção pro próximo momento (limite semanal
+perto do fim). Achados, por ordem de risco:
+
+1. **BUG real — `NfePhpProvider::emitir()` roteia NFC-e pro motor de NFS-e
+   silenciosamente.** `NfePhpProvider::emitir()` só distingue `NFE` (→
+   `MotorNfe`) de "qualquer outra coisa" (→ `MotorNfse`) —
+   `MotorNfse::emitir()` nunca checa `$nota->modelo`. NFePHP **não tem
+   suporte a NFC-e implementado** (confirmado: zero menções a `NFCE`/`CSC`/
+   `idToken` em `MotorNfe.php`), mas nada bloqueia isso — nem
+   `IniciarEmissaoNotaService::iniciar()`, nem o motor. Se uma oficina
+   configurada pra `provedor_fiscal = NFEPHP` tentar emitir uma NFC-e
+   (venda de peça a consumidor, fluxo comum de oficina), o sistema geraria
+   uma NFS-e (nota de serviço) em vez de recusar com erro claro — documento
+   fiscal errado, não uma falha visível. **Hoje dormente**: nenhuma oficina
+   está configurada pra NFEPHP (`provedor_fiscal_padrao = SPEDY`,
+   `oficinas.provedor_fiscal` vazio nas duas oficinas existentes), mas
+   precisa de guarda explícita (rejeitar com mensagem clara) antes de
+   qualquer oficina real ligar o NFEPHP.
+
+2. **Gap de dados cross-provider — `codigo_ibge` do destinatário é sempre o
+   da PRÓPRIA oficina, nunca o do cliente.** `NfeService::montarNotaData()`
+   recebe `codigoIbgeTomador` como parâmetro, mas todo caller
+   (`NfeService::emitir()`) passa `$config->codigo_ibge` (a oficina) — a
+   tabela `clientes` **não tem coluna `codigo_ibge`** (só `cidade`/`uf`
+   texto). Afeta os 3 provedores igualmente (Spedy `enderecoDestinatario()`,
+   Focus `montarPayloadNfse()`/`montarPayloadNfe()`, NFePHP `tagenderDest`/
+   `MotorNfse`), porque nasce numa camada compartilhada. Não deu problema
+   ainda porque o único teste real (ABRAÃO VINICIUS, Ilicínea/MG) mora na
+   mesma cidade da STUNT MOTOS — mas qualquer cliente de outro município
+   sai com `cMun`/`codigo_municipio` errado no documento fiscal (divergente
+   de `UF`/`xMun`, que usam o dado real do cliente). Correção: `clientes`
+   precisa de uma coluna `codigo_ibge` própria, preenchida pelo ViaCEP no
+   cadastro (o ViaCEP já devolve o campo `ibge` na resposta — só não é
+   capturado hoje).
+
+3. **Focus não tem NENHUMA credencial cadastrada** (`saas_config`:
+   `focus_master_token_producao`/`_homologacao` ambos vazios). Não é bug —
+   o código de emissão (`FocusNfeProvider`) está bem documentado e com
+   endereço do destinatário correto em NFS-e/NF-e (ao contrário do bug
+   que existia na Spedy, já corrigido). Mas está 100% não testado contra
+   sandbox real por falta de token — se alguém trocar o provedor pra FOCUS
+   hoje, toda emissão falha com 401 até cadastrar o token em SaaS Admin.
+
+4. **NFePHP nunca foi "ativado" pra nenhuma oficina** (`emissores_fiscais`
+   só tem 1 registro, SPEDY/ERRO). A config da stuntmotos hoje JÁ atende
+   aos requisitos de `NfePhpProvider::registrarEmissor()` (CNPJ, IE, IM,
+   CNAE, código IBGE, regime tributário e certificado A1 — todos
+   presentes), então dá pra testar de verdade quando alguém decidir usar
+   NFePHP em vez de Spedy. Nunca emitida uma NF-e/NFS-e real via NFePHP
+   contra a SEFAZ/ADN em produção nem homologação.
+
+Ver `PROGRESSO.md` Rodada 39 pro detalhe completo da investigação
+(inclusive as consultas diretas à API da Spedy que confirmaram o item 1 da
+seção acima "PRÓXIMA TAREFA OBRIGATÓRIA").
+
 ## Fila (nesta ordem)
 
 - [x] **1. Correção pontual — `MotorNfse::consultar()` trata falha de rede como "não cancelado"**

@@ -1,13 +1,78 @@
 # Progresso do Projeto
 
 ## Última atualização
+2026-09-10 — Rodada 39 continuação: fix do endereço do destinatário na
+NF-e/NFC-e via Spedy (commit `c1a5728`, deployado) + análise de
+Focus/NFePHP (achados registrados em `TAREFAS.md`, nada corrigido ainda —
+usuário pediu pra adiar). Reconciliação de status Spedy é a PRÓXIMA
+TAREFA OBRIGATÓRIA.
+
 2026-09-10 — Rodada 39: corrigido bug do upload de certificado A1
-(`mimes:pfx,p12` → `extensions:pfx,p12`). Não deployado.
+(`mimes:pfx,p12` → `extensions:pfx,p12`). Deployado (commit `746d491`).
 
 2026-09-05 — Rodada 38: responsividade mobile/tablet (P2 #14) implementada
 — classes de grid responsivo em `globals.css` (que não tinha nenhum
 `@media`), ~17 telas do dashboard, calendário de agendamentos, modais e
 telas `(auth)`. **Backlog geral agora 100% fechado.**
+
+## Rodada 39 continuação — verificação de emissão real (homologação) + análise Focus/NFePHP
+
+Depois do fix do certificado, usuário emitiu 3 notas de teste (stuntmotos,
+homologação, provedor Spedy) e pediu verificação. Consultei a API da
+Spedy diretamente (não só o nosso banco) pra cada uma:
+
+- **NFS-e #1 (R$ 5,25, serviço)**: aparecia PROCESSANDO no nosso sistema,
+  mas **estava AUTORIZADA na Spedy** desde o primeiro segundo (número 14,
+  protocolo "EB 8A F1"). Causa raiz: `SpedyProvider::resultadoDe()`/
+  `resultadoNfceDe()` nunca leem o `id` que a Spedy devolve na resposta de
+  emissão — o sistema só guarda a nossa `referencia_externa` interna, e
+  `consultar()` bate em `/service-invoices/{referencia_externa}` → 404
+  sempre. **Nenhuma nota emitida via Spedy reconcilia sozinha.** Corrigi
+  manualmente o registro desta nota (status/numero/protocolo) via tinker
+  na VPS — é homologação, sem valor legal, só pra tirar a confusão do
+  usuário. **Correção de fundo registrada como PRÓXIMA TAREFA OBRIGATÓRIA
+  em `TAREFAS.md`** (usuário pediu pra adiar — limite semanal). Testei
+  empiricamente que `GET /service-invoices?integrationId=X` filtra de
+  verdade na API da Spedy — a correção é viável, só falta implementar.
+
+- **NF-e #2 (R$ 82,62, venda de produto)**: REJEITADA na Spedy com
+  "Endereço do cliente é obrigatório" — confirmado via consulta direta à
+  API (`receiver.address: null` no payload enviado). **Bug real, já
+  corrigido e deployado** (commit `c1a5728`): `montarPayloadNfse()`
+  (serviço) sempre mandou o endereço do destinatário; `montarPayloadNfe()`
+  e `montarPayloadNfce()` (produto) mandavam só nome+documento. Extraído
+  `enderecoDestinatario()` reutilizável; NF-e manda sempre (obrigatório),
+  NFC-e manda só quando o cliente tem logradouro (venda de balcão sem
+  cadastro segue sem o bloco). 3 testes novos em `SpedyProviderTest`,
+  suíte Unit sem regressão (mesmas 10 falhas pré-existentes de sempre —
+  Postgres/OpenSSL locais). Focus já mandava o endereço certo, não
+  precisou de fix lá.
+
+**Análise Focus/NFePHP pedida em seguida** (configuração + dados
+corretos), sem implementar nada — ver `TAREFAS.md` seção "Achados da
+análise Focus/NFePHP" pro detalhe de cada item:
+1. **Bug real dormente**: `NfePhpProvider::emitir()` roteia qualquer nota
+   que não seja modelo NFE pro motor de NFS-e sem checar — NFC-e via
+   NFEPHP viraria NFS-e silenciosamente (NFEPHP não tem NFC-e
+   implementado, mas nada bloqueia). Ninguém está em NFEPHP hoje
+   (`provedor_fiscal_padrao = SPEDY`), então não afeta ninguém agora.
+2. **Gap de dados cross-provider**: `codigo_ibge` do destinatário é
+   SEMPRE o da própria oficina (`clientes` não tem essa coluna) — afeta
+   Spedy/Focus/NFePHP igualmente, nasce em `NfeService::montarNotaData()`.
+   Só não deu problema ainda porque o cliente de teste mora na mesma
+   cidade da oficina.
+3. **Focus sem NENHUMA credencial cadastrada** (`saas_config`:
+   `focus_master_token_producao`/`_homologacao` vazios) — código parece
+   correto (endereço ok em NF-e/NFS-e, campos confirmados contra doc real
+   em rodadas anteriores), mas nunca testado contra sandbox de verdade.
+4. **NFePHP nunca ativado pra nenhuma oficina** — mas a config da
+   stuntmotos já atende todos os requisitos (CNPJ/IE/IM/CNAE/IBGE/regime/
+   certificado A1), então dá pra testar quando decidirem usar.
+
+**Verificação:** só leitura de código + consultas diretas à API da Spedy
+(sandbox real) + queries no Postgres de produção. Nenhuma mudança de
+código nesta parte (só o fix do endereço, já commitado antes desta
+análise).
 
 ## Rodada 39 (2026-09-10) — bug: upload de certificado A1 rejeitava .pfx/.p12 válidos
 
