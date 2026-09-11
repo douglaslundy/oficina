@@ -228,6 +228,22 @@ class SpedyProviderTest extends TestCase
         $this->assertSame(71.0, $payload['payments'][0]['amount']);
     }
 
+    public function test_payload_nfe_manda_campos_tributaveis_obrigatorios(): void
+    {
+        // Bug real, homologação 2026-09-10: a SEFAZ rejeitou a NF-e com 3
+        // erros de schema XML porque quantityTax/unitTaxAmount (uTrib/qTrib/
+        // vUnTrib) nunca eram mandados — são OBRIGATÓRIOS no schema real da
+        // Spedy (confirmado via docs.spedy.com.br), mesmo sem unidade de
+        // conversão (tributável = comercial nesse caso).
+        $p = new SpedyProvider('https://sandbox-api.spedy.com.br/v1', 'master', 'tok', 'emp-1');
+        $item = $p->montarPayloadNfe($this->notaNfeSimplesNacional())['items'][0];
+
+        $this->assertSame('PC', $item['unitTax']);
+        $this->assertSame(2.0, $item['quantityTax']);
+        $this->assertSame(35.50, $item['unitTaxAmount']);
+        $this->assertTrue($item['makeupTotal']);
+    }
+
     public function test_payload_nfe_manda_endereco_do_destinatario(): void
     {
         // A Spedy rejeita NF-e (modelo 55) com "Endereço do cliente é
@@ -353,6 +369,19 @@ class SpedyProviderTest extends TestCase
             ]],
             formaPagamento: 'Dinheiro',
         );
+    }
+
+    public function test_payload_nfce_manda_campos_tributaveis_obrigatorios(): void
+    {
+        // Mesmo schema de item (SefazInvoiceItemDto) usado pela NF-e — ver
+        // test_payload_nfe_manda_campos_tributaveis_obrigatorios().
+        $p = new SpedyProvider('https://sandbox-api.spedy.com.br/v1', 'master', 'tok', 'emp-1');
+        $item = $p->montarPayloadNfce($this->notaNfce())['items'][0];
+
+        $this->assertSame('PC', $item['unitTax']);
+        $this->assertSame(2.0, $item['quantityTax']);
+        $this->assertSame(35.50, $item['unitTaxAmount']);
+        $this->assertTrue($item['makeupTotal']);
     }
 
     public function test_payload_nfce_usa_sku_e_unidade_do_item(): void

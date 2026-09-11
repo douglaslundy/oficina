@@ -245,6 +245,13 @@ class SpedyProvider implements FiscalProvider, ConsultaNotaTerceiroProvider
                 'quantity'         => (float) $item['quantidade'],
                 'unitValue'        => (float) $item['valor_unitario'],
                 'grossValue'       => round((float) $item['quantidade'] * (float) $item['valor_unitario'], 2),
+                // Campos tributáveis (uTrib/qTrib/vUnTrib) — ver comentário em
+                // montarPayloadNfe(). Sem unidade de conversão nesta v1, o
+                // tributável é sempre igual ao comercial.
+                'unitTax'          => $item['unidade'] ?? 'UN',
+                'quantityTax'      => (float) $item['quantidade'],
+                'unitTaxAmount'    => (float) $item['valor_unitario'],
+                'makeupTotal'      => true,
                 'icmsOrigin'       => (int) $item['origem'],
                 'icmsTaxSituation' => $item['cst_csosn'],
             ], array_keys($n->itens), $n->itens),
@@ -260,8 +267,18 @@ class SpedyProvider implements FiscalProvider, ConsultaNotaTerceiroProvider
      * (2026-09-04): POST /v1/product-invoices. Ao contrário de montarPayloadNfce()
      * (que usa `cfop` string e um único campo `icmsTaxSituation`), este endpoint
      * usa `cfop` **integer** e separa `cst`/`csosn` em campos distintos dentro de
-     * `taxes.icms` — dai o CrtResolver aqui. Nunca testado contra sandbox real
-     * (sem emissor Spedy registrado ainda neste sistema).
+     * `taxes.icms` — dai o CrtResolver aqui.
+     *
+     * Testado contra sandbox real em 2026-09-10: a SEFAZ rejeitou com 3 erros
+     * de schema XML ("Id attribute invalid", "nNF valor '0' inválido",
+     * "elemento 'prod' com filho inválido 'qTrib', esperado 'cBarraTrib,
+     * uTrib'") porque o payload não mandava `quantityTax`/`unitTaxAmount`
+     * (uTrib/qTrib/vUnTrib no XML da NF-e) — **obrigatórios** no schema real
+     * `SefazInvoiceItemDto` (confirmado via docs.spedy.com.br), junto com
+     * `makeupTotal` (indTot). Sem eles a Spedy gera um XML incompleto que a
+     * própria SEFAZ rejeita na validação estrutural, antes de qualquer
+     * validação fiscal de conteúdo. Mesmo schema de item usado por
+     * montarPayloadNfce() (SefazInvoiceItemDto é compartilhado).
      */
     public function montarPayloadNfe(NotaFiscalData $n): array
     {
@@ -293,6 +310,12 @@ class SpedyProvider implements FiscalProvider, ConsultaNotaTerceiroProvider
                 'quantity'    => (float) $item['quantidade'],
                 'unitAmount'  => (float) $item['valor_unitario'],
                 'totalAmount' => round((float) $item['quantidade'] * (float) $item['valor_unitario'], 2),
+                // uTrib/qTrib/vUnTrib — obrigatórios (ver doc acima). Sem
+                // unidade de conversão nesta v1, tributável = comercial.
+                'unitTax'       => $item['unidade'] ?? 'UN',
+                'quantityTax'   => (float) $item['quantidade'],
+                'unitTaxAmount' => (float) $item['valor_unitario'],
+                'makeupTotal'   => true,
                 'taxes' => [
                     'icms' => [
                         'origin'   => (int) $item['origem'],
