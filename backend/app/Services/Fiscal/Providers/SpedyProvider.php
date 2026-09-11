@@ -172,23 +172,38 @@ class SpedyProvider implements FiscalProvider, ConsultaNotaTerceiroProvider
                 'name'             => $n->tomador['nome'],
                 'federalTaxNumber' => preg_replace('/\D/', '', $n->tomador['cpf_cnpj']),
                 'email'            => $n->tomador['email'] ?? null,
-                'address'          => [
-                    'street'     => $n->tomador['logradouro'] ?? '',
-                    'number'     => $n->tomador['numero'] ?? 'S/N',
-                    'district'   => $n->tomador['bairro'] ?? '',
-                    'postalCode' => preg_replace('/\D/', '', $n->tomador['cep'] ?? ''),
-                    'city'       => [
-                        'code'  => $n->tomador['codigo_ibge'] ?? '',
-                        'name'  => $n->tomador['cidade'] ?? '',
-                        'state' => $n->tomador['uf'] ?? '',
-                    ],
-                ],
+                'address'          => $this->enderecoDestinatario($n->tomador),
             ],
             'total' => [
                 'invoiceAmount' => $n->valorServicos,
                 'issRate'       => $n->aliquotaIss / 100,
                 'issAmount'     => round($n->valorServicos * $n->aliquotaIss / 100, 2),
                 'issWithheld'   => $n->issRetido,
+            ],
+        ];
+    }
+
+    /**
+     * Bloco de endereço do destinatário no formato da Spedy (`receiver.address`).
+     * Para NF-e (modelo 55) o endereço do destinatário é OBRIGATÓRIO — sem ele
+     * a Spedy rejeita com "Endereço do cliente é obrigatório". A NFS-e sempre
+     * mandou este bloco; a NF-e e a NFC-e não mandavam (bug real, homologação
+     * 2026-09-11).
+     *
+     * @param array<string, mixed> $tomador
+     * @return array<string, mixed>
+     */
+    private function enderecoDestinatario(array $tomador): array
+    {
+        return [
+            'street'     => $tomador['logradouro'] ?? '',
+            'number'     => $tomador['numero'] ?? 'S/N',
+            'district'   => $tomador['bairro'] ?? '',
+            'postalCode' => preg_replace('/\D/', '', $tomador['cep'] ?? ''),
+            'city'       => [
+                'code'  => $tomador['codigo_ibge'] ?? '',
+                'name'  => $tomador['cidade'] ?? '',
+                'state' => $tomador['uf'] ?? '',
             ],
         ];
     }
@@ -212,6 +227,13 @@ class SpedyProvider implements FiscalProvider, ConsultaNotaTerceiroProvider
             'receiver' => array_merge(
                 ['name' => $n->tomador['nome']],
                 [$ehPessoaFisica ? 'individualTaxNumber' : 'federalTaxNumber' => $docTomador],
+                // NFC-e a consumidor final costuma dispensar endereço (venda de
+                // balcão sem cadastro). Só manda o bloco quando o cliente tem
+                // um logradouro cadastrado — senão a Spedy pode recusar um
+                // address todo vazio numa nota que passaria sem ele.
+                empty($n->tomador['logradouro'])
+                    ? []
+                    : ['address' => $this->enderecoDestinatario($n->tomador)],
             ),
             'items' => array_map(fn (int $i, array $item) => [
                 'itemNumber'       => $i + 1,
@@ -259,6 +281,8 @@ class SpedyProvider implements FiscalProvider, ConsultaNotaTerceiroProvider
             'receiver' => [
                 'name'             => $n->tomador['nome'],
                 'federalTaxNumber' => $docTomador,
+                // Obrigatório para NF-e — ver enderecoDestinatario().
+                'address'          => $this->enderecoDestinatario($n->tomador),
             ],
             'items' => array_map(fn (int $i, array $item) => [
                 'code'        => $item['sku'] ?? $item['produto_id'],

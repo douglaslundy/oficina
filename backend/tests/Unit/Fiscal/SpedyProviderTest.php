@@ -177,7 +177,11 @@ class SpedyProviderTest extends TestCase
     {
         $args = array_merge([
             'tipo' => 'NFSE',
-            'tomador' => ['nome' => 'Oficina Cliente LTDA', 'cpf_cnpj' => '12345678000199'],
+            'tomador' => [
+                'nome' => 'Oficina Cliente LTDA', 'cpf_cnpj' => '12345678000199',
+                'cep' => '37175-000', 'logradouro' => 'Rua 15 de Novembro', 'numero' => '472',
+                'bairro' => 'Centro', 'cidade' => 'Ilicínea', 'uf' => 'MG', 'codigo_ibge' => '3130507',
+            ],
             'descricao' => 'Venda de peças',
             'valorServicos' => 0.0,
             'aliquotaIss' => 0.0,
@@ -222,6 +226,45 @@ class SpedyProviderTest extends TestCase
 
         $this->assertSame('money', $payload['payments'][0]['method']);
         $this->assertSame(71.0, $payload['payments'][0]['amount']);
+    }
+
+    public function test_payload_nfe_manda_endereco_do_destinatario(): void
+    {
+        // A Spedy rejeita NF-e (modelo 55) com "Endereço do cliente é
+        // obrigatório" se o receiver vier sem address — ao contrário da NFS-e,
+        // que sempre mandou o bloco. Bug real: NF-e de venda rejeitada em
+        // homologação (2026-09-11), enquanto a NFS-e da mesma OS autorizou.
+        $p = new SpedyProvider('https://sandbox-api.spedy.com.br/v1', 'master', 'tok', 'emp-1');
+        $payload = $p->montarPayloadNfe($this->notaNfeSimplesNacional());
+
+        $addr = $payload['receiver']['address'];
+        $this->assertSame('Rua 15 de Novembro', $addr['street']);
+        $this->assertSame('472', $addr['number']);
+        $this->assertSame('Centro', $addr['district']);
+        $this->assertSame('37175000', $addr['postalCode']);
+        $this->assertSame('3130507', $addr['city']['code']);
+        $this->assertSame('Ilicínea', $addr['city']['name']);
+        $this->assertSame('MG', $addr['city']['state']);
+    }
+
+    public function test_payload_nfce_manda_endereco_quando_o_cliente_tem(): void
+    {
+        $p = new SpedyProvider('https://sandbox-api.spedy.com.br/v1', 'master', 'tok', 'emp-1');
+        $payload = $p->montarPayloadNfce($this->notaNfce([
+            'cep' => '37175-000', 'logradouro' => 'Rua A', 'numero' => '10',
+            'bairro' => 'Centro', 'cidade' => 'Ilicínea', 'uf' => 'MG', 'codigo_ibge' => '3130507',
+        ]));
+
+        $this->assertSame('Rua A', $payload['receiver']['address']['street']);
+        $this->assertSame('Ilicínea', $payload['receiver']['address']['city']['name']);
+    }
+
+    public function test_payload_nfce_balcao_sem_endereco_nao_manda_address(): void
+    {
+        $p = new SpedyProvider('https://sandbox-api.spedy.com.br/v1', 'master', 'tok', 'emp-1');
+        $payload = $p->montarPayloadNfce($this->notaNfce());
+
+        $this->assertArrayNotHasKey('address', $payload['receiver']);
     }
 
     public function test_payload_nfe_simples_nacional_manda_csosn_nao_cst(): void
@@ -288,11 +331,11 @@ class SpedyProviderTest extends TestCase
         Http::assertSent(fn ($req) => str_contains($req->url(), '/product-invoices/inv-nfe-1'));
     }
 
-    private function notaNfce(): NotaFiscalData
+    private function notaNfce(array $tomadorExtra = []): NotaFiscalData
     {
         return new NotaFiscalData(
             tipo: 'NFSE',
-            tomador: ['nome' => 'Cliente Balcão', 'cpf_cnpj' => '87748248800'],
+            tomador: array_merge(['nome' => 'Cliente Balcão', 'cpf_cnpj' => '87748248800'], $tomadorExtra),
             descricao: 'Venda de peças',
             valorServicos: 0.0,
             aliquotaIss: 0.0,
