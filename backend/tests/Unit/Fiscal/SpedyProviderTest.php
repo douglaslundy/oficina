@@ -286,6 +286,21 @@ class SpedyProviderTest extends TestCase
         $this->assertSame('0107600', $item['cest']);
     }
 
+    public function test_payload_nfe_manda_grupo_pis_cofins_zerado(): void
+    {
+        // SEFAZ rejeitou de verdade (código 745, homologação 2026-09-10):
+        // "NF-e sem grupo do PIS". A doc da Spedy marca taxes.pis/cofins
+        // como opcionais, mas a SEFAZ exige o grupo (XSD v4.00) em toda
+        // NF-e — mesmo achado já confirmado pra NFePHP em MotorNfe. CST 49
+        // com tudo zerado é o padrão pra Simples Nacional (PIS/COFINS pago
+        // via DAS, não calculado por operação).
+        $p = new SpedyProvider('https://sandbox-api.spedy.com.br/v1', 'master', 'tok', 'emp-1');
+        $taxes = $p->montarPayloadNfe($this->notaNfeSimplesNacional())['items'][0]['taxes'];
+
+        $this->assertSame(['cst' => 49, 'baseTax' => 0, 'rate' => 0, 'amount' => 0], $taxes['pis']);
+        $this->assertSame(['cst' => 49, 'baseTax' => 0, 'rate' => 0, 'amount' => 0], $taxes['cofins']);
+    }
+
     public function test_payload_nfe_manda_series_e_number_quando_alocados(): void
     {
         // Bug real, homologação 2026-09-10: mesmo com receiver.address e os

@@ -361,6 +361,18 @@ class SpedyProvider implements FiscalProvider, ConsultaNotaTerceiroProvider
                         'origin'   => (int) $item['origem'],
                         $campoIcms => (int) $item['cst_csosn'],
                     ],
+                    // PIS/COFINS: rejeição real "745: NF-e sem grupo do PIS"
+                    // (homologação 2026-09-10) — apesar da doc da Spedy marcar
+                    // `taxes.pis`/`taxes.cofins` como opcionais, a SEFAZ exige
+                    // o grupo em toda NF-e (XSD v4.00, achado já confirmado
+                    // pra NFePHP em MotorNfe::montarNfe() contra o XSD real).
+                    // CST 49 ("Outras Operações") com base/alíquota/valor
+                    // zerados é o padrão pra Simples Nacional (CRT=1): PIS/
+                    // COFINS é pago via DAS unificado, não calculado por
+                    // operação. Mesmo valor pra CRT=3 nesta v1 — nenhuma
+                    // oficina real deste sistema é Regime Normal ainda.
+                    'pis'    => ['cst' => 49, 'baseTax' => 0, 'rate' => 0, 'amount' => 0],
+                    'cofins' => ['cst' => 49, 'baseTax' => 0, 'rate' => 0, 'amount' => 0],
                 ],
             ], array_keys($n->itens), $n->itens),
             'payments' => [[
