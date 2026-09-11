@@ -25,8 +25,26 @@ if [ ! -f .env ] || ! grep -q '^APP_KEY=base64:' .env; then
 fi
 echo "[1/6] APP_KEY validada no .env."
 
-echo "[2/6] Fazendo build das imagens Docker..."
-docker compose -p $PROJECT -f docker-compose.prod.yml build --no-cache
+# Sem --no-cache por padrão: o Dockerfile do backend compila extensões PHP
+# do zero (gd/dom/soap/pdo_pgsql — o `dom` do PHP 8.4 embute o parser HTML
+# lexbor, centenas de arquivos C), uma camada que quase nunca muda. Com
+# cache normal (por hash de conteúdo), essa camada é reaproveitada e o
+# build cai de ~20-30min pra ~1-2min num deploy só de código (o Dockerfile
+# em si e composer.json/lock raramente mudam). --no-cache force-rebuilda
+# tudo, inclusive essa camada pesada, a cada deploy — sem necessidade na
+# maioria das vezes: o cache já invalida sozinho as camadas certas quando
+# o Dockerfile, composer.json/lock ou o código mudam.
+# Defina FORCAR_REBUILD_COMPLETO=1 quando precisar mesmo de um rebuild do
+# zero (ex.: pegar patches de segurança do Alpine na imagem base, ou
+# suspeitar de cache corrompido).
+BUILD_FLAGS=""
+if [ "${FORCAR_REBUILD_COMPLETO:-0}" = "1" ]; then
+    echo "[2/6] Fazendo build das imagens Docker (--no-cache, FORCAR_REBUILD_COMPLETO=1)..."
+    BUILD_FLAGS="--no-cache"
+else
+    echo "[2/6] Fazendo build das imagens Docker (com cache de camadas)..."
+fi
+docker compose -p $PROJECT -f docker-compose.prod.yml build $BUILD_FLAGS
 
 echo "[3/6] Iniciando containers..."
 # Diretório de backups (bind mount ./backups nos containers backend/worker/
