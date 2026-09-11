@@ -52,5 +52,18 @@ final class NotaFiscalData
         // modelos. SpedyProvider::emitir() checa isso ANTES de qualquer
         // branch de modelo; FocusNfeProvider recusa (v1 = Spedy only).
         public readonly string $calculoTributarioModo = 'MANUAL',
+        // nNF/série já alocados por IniciarEmissaoNotaService ANTES de
+        // chamar o provider (Configuracao.serie_nf + NotaFiscal.numero).
+        // Achado real em homologação (2026-09-10): SpedyProvider::montarPayloadNfe()/
+        // montarPayloadNfce() nunca mandavam `series`/`number` (campos raiz
+        // OPCIONAIS no schema da Spedy) — sem eles, a Spedy default pra
+        // nNF=0 pra product-invoices/consumer-invoices, que a SEFAZ rejeita
+        // ("nNF valor '0' inválido" + chave de acesso corrompida). NFS-e não
+        // sofre disso — a Spedy atribui o número dela mesma nesse recurso.
+        // Distinto de $numeroReservado (que é só pra reuso-em-retry do
+        // NFEPHP): aqui é o valor JÁ alocado desta tentativa, pra qualquer
+        // provedor que precise mandar explicitamente.
+        public readonly ?string $numeroAlocado = null,
+        public readonly ?string $serieNf = null,
     ) {}
 }

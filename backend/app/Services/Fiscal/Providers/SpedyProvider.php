@@ -221,7 +221,13 @@ class SpedyProvider implements FiscalProvider, ConsultaNotaTerceiroProvider
             $n->itens
         )), 2);
 
-        return [
+        return array_filter([
+            // series/number: mesmo achado de montarPayloadNfe() — não
+            // confirmado empiricamente pra consumer-invoices especificamente,
+            // mas o schema raiz é o mesmo SefazInvoiceItemDto-family da NF-e,
+            // então mandamos por precaução (omitidos quando não carregados).
+            'series'          => $n->serieNf,
+            'number'          => $n->numeroAlocado !== null ? (int) $n->numeroAlocado : null,
             'isFinalCustomer' => true,
             'operationNature' => $n->naturezaOperacao,
             'receiver' => array_merge(
@@ -259,7 +265,7 @@ class SpedyProvider implements FiscalProvider, ConsultaNotaTerceiroProvider
                 'method' => 'cash',
                 'value'  => $valorTotal,
             ]],
-        ];
+        ], fn ($v) => $v !== null);
     }
 
     /**
@@ -279,6 +285,15 @@ class SpedyProvider implements FiscalProvider, ConsultaNotaTerceiroProvider
      * própria SEFAZ rejeita na validação estrutural, antes de qualquer
      * validação fiscal de conteúdo. Mesmo schema de item usado por
      * montarPayloadNfce() (SefazInvoiceItemDto é compartilhado).
+     *
+     * Depois de corrigir os campos tributáveis acima, sobrou "nNF valor '0'
+     * inválido" + chave de acesso corrompida — a Spedy default pra nNF=0 em
+     * product-invoices quando `series`/`number` (raiz, opcionais no schema)
+     * não são mandados. Confirmado empiricamente no sandbox: mandando
+     * `series`/`number` explícitos, a nota sai `enqueued` sem esse erro.
+     * NFS-e não precisa disso — a Spedy atribui o próprio número nesse
+     * recurso. Usa `numeroAlocado`/`serieNf`, já reservados por
+     * IniciarEmissaoNotaService (mesma numeração interna da Configuracao).
      */
     public function montarPayloadNfe(NotaFiscalData $n): array
     {
@@ -290,7 +305,11 @@ class SpedyProvider implements FiscalProvider, ConsultaNotaTerceiroProvider
             $n->itens
         )), 2);
 
-        return [
+        return array_filter([
+            // series/number: ver docblock acima — omitidos (null) quando
+            // NotaFiscalData não os carrega (ex.: chamada direta em teste).
+            'series'          => $n->serieNf,
+            'number'          => $n->numeroAlocado !== null ? (int) $n->numeroAlocado : null,
             // NF-e (modelo 55) é sempre B2B neste sistema — venda a consumidor
             // final pessoa física usa NFC-e (ver seleção automática no controller).
             'isFinalCustomer' => false,
@@ -327,7 +346,7 @@ class SpedyProvider implements FiscalProvider, ConsultaNotaTerceiroProvider
                 'method' => $this->mapFormaPagamento($n->formaPagamento),
                 'amount' => $valorTotal,
             ]],
-        ];
+        ], fn ($v) => $v !== null);
     }
 
     private function mapFormaPagamento(string $forma): string

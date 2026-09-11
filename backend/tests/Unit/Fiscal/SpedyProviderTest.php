@@ -263,6 +263,35 @@ class SpedyProviderTest extends TestCase
         $this->assertSame('MG', $addr['city']['state']);
     }
 
+    public function test_payload_nfe_manda_series_e_number_quando_alocados(): void
+    {
+        // Bug real, homologação 2026-09-10: mesmo com receiver.address e os
+        // campos tributáveis corretos, a SEFAZ ainda rejeitava com "nNF valor
+        // '0' inválido" + chave de acesso corrompida — a Spedy default pra
+        // nNF=0 em product-invoices quando `series`/`number` (raiz) não são
+        // mandados. Confirmado empiricamente no sandbox: mandando os dois
+        // explícitos, a nota sai `enqueued` sem esse erro.
+        $p = new SpedyProvider('https://sandbox-api.spedy.com.br/v1', 'master', 'tok', 'emp-1');
+        $payload = $p->montarPayloadNfe($this->notaNfeSimplesNacional([
+            'numeroAlocado' => '7', 'serieNf' => '001',
+        ]));
+
+        $this->assertSame('001', $payload['series']);
+        $this->assertSame(7, $payload['number']);
+    }
+
+    public function test_payload_nfe_sem_numero_alocado_nao_manda_series_number(): void
+    {
+        // Chamada direta (ex.: fora do fluxo normal de emissão) sem
+        // numeroAlocado/serieNf não deve mandar `series`/`number` vazios —
+        // melhor deixar a Spedy tentar o default dela do que mandar null/0.
+        $p = new SpedyProvider('https://sandbox-api.spedy.com.br/v1', 'master', 'tok', 'emp-1');
+        $payload = $p->montarPayloadNfe($this->notaNfeSimplesNacional());
+
+        $this->assertArrayNotHasKey('series', $payload);
+        $this->assertArrayNotHasKey('number', $payload);
+    }
+
     public function test_payload_nfce_manda_endereco_quando_o_cliente_tem(): void
     {
         $p = new SpedyProvider('https://sandbox-api.spedy.com.br/v1', 'master', 'tok', 'emp-1');

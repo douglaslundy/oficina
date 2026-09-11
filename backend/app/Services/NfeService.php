@@ -139,6 +139,11 @@ class NfeService
             numeroReservado: $numeroJaReservado,
             regimeTributario: $config?->regime_tributario ?? '',
             calculoTributarioModo: $config?->calculo_tributario_modo ?? 'MANUAL',
+            // $nota->numero já foi alocado por IniciarEmissaoNotaService
+            // (proximoNumeroNf()/proximoNumeroNfce()) antes de chegar aqui,
+            // pra qualquer provedor — ver comentário em NotaFiscalData.
+            numeroAlocado: $temItens && $nota->numero !== null ? (string) $nota->numero : null,
+            serieNf: $config?->serie_nf,
         );
     }
 
