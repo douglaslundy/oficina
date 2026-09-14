@@ -1,7 +1,7 @@
 'use client'
-import { useState, useEffect, useCallback } from 'react'
+import { useState, useEffect, useCallback, useRef } from 'react'
 import { StatusPill } from '@/components/ui/StatusPill'
-import { formatarMoeda, formatarData } from '@/lib/formatters'
+import { formatarMoeda, formatarDataHora } from '@/lib/formatters'
 import api from '@/lib/api'
 import { toast } from '@/hooks/useToast'
 
@@ -31,15 +31,38 @@ export default function HistoricoNFPage() {
   const [motivoModal, setMotivoModal]   = useState<{ numero: number | null; mensagem: string } | null>(null)
   const [retransmitindo, setRetransmitindo] = useState<string | null>(null)
 
-  const fetchNotas = useCallback(() => {
-    setLoading(true)
-    api.get('/notas-fiscais', { params: modeloFiltro ? { modelo: modeloFiltro } : {} })
-      .then(r => { setNotas(r.data.data ?? []); setSelected(new Set()) })
-      .catch(() => setNotas([]))
-      .finally(() => setLoading(false))
+  const fetchNotas = useCallback((opts?: { silent?: boolean }) => {
+    if (!opts?.silent) setLoading(true)
+    return api.get('/notas-fiscais', { params: modeloFiltro ? { modelo: modeloFiltro } : {} })
+      .then(r => { setNotas(r.data.data ?? []); if (!opts?.silent) setSelected(new Set()) })
+      .catch(() => { if (!opts?.silent) setNotas([]) })
+      .finally(() => { if (!opts?.silent) setLoading(false) })
   }, [modeloFiltro])
 
-  useEffect(fetchNotas, [fetchNotas])
+  useEffect(() => { fetchNotas() }, [fetchNotas])
+
+  // Achado do usuário (2026-09-14): gerar nota a partir de uma OS redireciona
+  // pra cá antes do job de emissão (em fila, roda em segundo plano) terminar
+  // — a nota fica PROCESSANDO na tela até um F5 manual, porque antes disso
+  // essa tela só buscava a lista uma vez. Mesma necessidade que
+  // NotaFiscalForm.tsx já resolve pra NFC-e emitida ali (polling); aqui
+  // cobre qualquer nota PROCESSANDO na lista, de onde quer que tenha vindo.
+  // Silencioso (não mexe em `loading`/seleção) pra não piscar a tabela a
+  // cada 3s. Some sozinho depois de ~2 min (mesma janela do timeout do
+  // EmitirNotaFiscalJob) — se ainda estiver PROCESSANDO depois disso, é
+  // porque algo travou de verdade, não vale insistir pra sempre.
+  const tentativasPollingRef = useRef(0)
+  useEffect(() => {
+    const temProcessando = notas.some(n => n.status === 'PROCESSANDO')
+    if (!temProcessando) { tentativasPollingRef.current = 0; return }
+    if (tentativasPollingRef.current >= 40) return
+
+    const intervalo = setInterval(() => {
+      tentativasPollingRef.current += 1
+      fetchNotas({ silent: true })
+    }, 3000)
+    return () => clearInterval(intervalo)
+  }, [notas, fetchNotas])
 
   function toggleSelect(id: string) {
     setSelected(prev => {
@@ -293,7 +316,7 @@ export default function HistoricoNFPage() {
                     </span>
                   </td>
                   <td style={tdStyle}>{nota.cliente?.nome ?? '-'}</td>
-                  <td style={tdStyle}>{formatarData(nota.emitido_em)}</td>
+                  <td style={tdStyle}>{formatarDataHora(nota.emitido_em)}</td>
                   <td style={tdStyle}>
                     <span className="font-mono">
                       {nota.valor_total ? formatarMoeda(nota.valor_total) : '-'}

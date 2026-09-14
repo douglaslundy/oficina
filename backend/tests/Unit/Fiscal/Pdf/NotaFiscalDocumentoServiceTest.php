@@ -106,4 +106,38 @@ class NotaFiscalDocumentoServiceTest extends TestCase
 
         $this->assertSame([], $svc->montarAnexosEmail($nota));
     }
+
+    /**
+     * Pedido explícito do usuário (2026-09-14): o DANFE de referência tem um
+     * código de barras Code-128C da chave de acesso que o nosso não tinha —
+     * já registrado como limitação conhecida no docblock de DanfeRenderer.
+     */
+    private function chamarGerarBarcode(?string $chave): ?string
+    {
+        $svc = new NotaFiscalDocumentoService();
+        $metodo = new \ReflectionMethod($svc, 'gerarBarcodeChaveDataUri');
+        $metodo->setAccessible(true);
+        return $metodo->invoke($svc, $chave);
+    }
+
+    public function test_gerar_barcode_produz_png_valido_para_chave_de_44_digitos(): void
+    {
+        $dataUri = $this->chamarGerarBarcode('31260950388509000121550010000000014082390387');
+
+        $this->assertNotNull($dataUri);
+        $this->assertStringStartsWith('data:image/png;base64,', $dataUri);
+
+        $png = base64_decode(substr($dataUri, strlen('data:image/png;base64,')));
+        // Assinatura binária de um PNG válido (confirma que é uma imagem de
+        // verdade, não só uma string qualquer marcada como PNG).
+        $this->assertSame("\x89PNG\r\n\x1a\n", substr($png, 0, 8));
+    }
+
+    public function test_gerar_barcode_retorna_null_para_chave_ausente_ou_invalida(): void
+    {
+        $this->assertNull($this->chamarGerarBarcode(null));
+        $this->assertNull($this->chamarGerarBarcode(''));
+        $this->assertNull($this->chamarGerarBarcode('123')); // curta demais
+        $this->assertNull($this->chamarGerarBarcode(str_repeat('A', 44))); // não numérica
+    }
 }

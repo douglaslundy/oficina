@@ -54,6 +54,11 @@ export const formatarDataUTC = (iso?: string | null): string => {
 
 export const formatarDataHora = (iso?: string | null): string => {
   if (!iso) return '-'
+  // Alguns endpoints (ex.: NotaFiscalResource::emitido_em) já formatam no
+  // backend como "dd/mm/yyyy HH:mm" — new Date() não parseia esse formato
+  // (só ISO), então cairia sempre no catch e voltaria "-" bem quando já
+  // tinha a hora certa. Mesmo tratamento que formatarData() já faz.
+  if (/^\d{2}\/\d{2}\/\d{4}/.test(iso)) return iso
   try {
     const d = new Date(iso.replace(' ', 'T'))
     if (isNaN(d.getTime())) return '-'

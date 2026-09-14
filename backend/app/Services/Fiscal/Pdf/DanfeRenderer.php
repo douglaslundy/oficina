@@ -42,14 +42,28 @@ class DanfeRenderer
         $itens = [];
         if ($sxml !== null) {
             foreach ($sxml->xpath('//nfe:det') as $det) {
+                $det->registerXPathNamespace('nfe', 'http://www.portalfiscal.inf.br/nfe');
                 $prod = $det->prod;
+                // CST/CSOSN mora num nó filho de <ICMS> cujo NOME muda
+                // conforme o regime (ICMSSN102, ICMS00, etc. — confirmado em
+                // MotorNfe::montarNfe(), que monta um ou outro conforme o
+                // CRT) — não dá pra prever o nome da tag, então pega o
+                // primeiro filho de <ICMS> e lê CSOSN OU CST, o que existir.
+                $icmsGrupo = $det->xpath('.//nfe:ICMS/*')[0] ?? null;
+                $csosnOuCst = $icmsGrupo !== null
+                    ? (string) ($icmsGrupo->CSOSN ?? $icmsGrupo->CST ?? '')
+                    : '';
+
                 $itens[] = [
-                    'descricao' => (string) ($prod->xProd ?? ''),
-                    'ncm'       => (string) ($prod->NCM ?? ''),
-                    'cfop'      => (string) ($prod->CFOP ?? ''),
-                    'quantidade' => (string) ($prod->qCom ?? ''),
+                    'codigo'         => (string) ($prod->cProd ?? ''),
+                    'descricao'      => (string) ($prod->xProd ?? ''),
+                    'ncm'            => (string) ($prod->NCM ?? ''),
+                    'cst_csosn'      => $csosnOuCst,
+                    'cfop'           => (string) ($prod->CFOP ?? ''),
+                    'unidade'        => (string) ($prod->uCom ?? 'UN'),
+                    'quantidade'     => (string) ($prod->qCom ?? ''),
                     'valor_unitario' => (string) ($prod->vUnCom ?? ''),
-                    'valor_total' => (string) ($prod->vProd ?? ''),
+                    'valor_total'    => (string) ($prod->vProd ?? ''),
                 ];
             }
         }
@@ -59,7 +73,9 @@ class DanfeRenderer
         // temos os dados de outra fonte confiável.
         if ($itens === [] && $nota->relationLoaded('itens')) {
             $itens = $nota->itens->map(fn ($i) => [
-                'descricao' => $i->descricao, 'ncm' => $i->ncm, 'cfop' => $i->cfop,
+                'codigo' => $i->sku ?: $i->produto_id, 'descricao' => $i->descricao,
+                'ncm' => $i->ncm, 'cst_csosn' => $i->cst_csosn, 'cfop' => $i->cfop,
+                'unidade' => $i->unidade ?: 'UN',
                 'quantidade' => (string) $i->quantidade, 'valor_unitario' => (string) $i->valor_unitario,
                 'valor_total' => (string) $i->valor_total,
             ])->all();

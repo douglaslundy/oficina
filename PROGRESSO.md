@@ -678,6 +678,90 @@ ignora cStat/xMotivo de propósito (decisão документada no próprio mé
 o XSD não garante uma enumeração fechada de códigos). Não mexi nisso agora
 por estar fora do que foi pedido; registrado aqui pra não se perder.
 
+### 22. Análise visual dos modelos oficiais de nota + polling de status + verificações pontuais
+
+Usuário pediu 4 coisas numa mensagem só (+ mais 2 mid-turn):
+
+**1. Análise visual comparando com os modelos oficiais** (`doc_documentos_
+fiscais/modelo_nota/NotaProduto.pdf` e `NotaServico.pdf`) — "verifique
+tudo que está faltando... implemente". Renderizei os dois lados,
+comparei elemento por elemento (não só olhando, comparando texto extraído
++ imagem renderizada) e achei bem mais faltando do que só o código de
+barras que o usuário já tinha notado:
+
+- **Código de barras (Code-128C) da chave de acesso** — faltava por
+  completo, já registrado como limitação conhecida no próprio docblock
+  de `DanfeRenderer` desde a refatoração de PDF anterior. Adicionado via
+  `picqer/php-barcode-generator` (nova dependência — GD, sem asset
+  externo, mesmo padrão do QR Code da NFC-e via endroid/qr-code). Code-
+  128C é o subtipo correto pra uma chave numérica de 44 dígitos
+  (confirmado no Manual de Orientação do Contribuinte, não é chute).
+- **Seção "Transportador / Volumes Transportados"** inteira — faltava.
+  Adicionada com "9 - Sem Frete" (mesmo valor que a XML já manda) e o
+  resto em branco, já que este sistema não rastreia logística de entrega.
+- **"Cálculo do Imposto" incompleto** — só tinha 3 campos, o oficial tem
+  11 (Base ICMS, Valor ICMS, Base/Valor ICMS ST, Frete, Seguro, Outras
+  Despesas, IPI, PIS, COFINS). Adicionados zerados — não é chute, é o que
+  o XML de verdade já envia pra Simples Nacional (CRT=1, grupo ICMSSN,
+  PIS/COFINS CST 49 zerado — confirmado no próprio `MotorNfe::
+  montarNfe()`).
+- **Tabela de itens incompleta** — faltavam código do produto, CST/CSOSN,
+  unidade, e as colunas de desconto/base ICMS/valor ICMS/IPI/alíquotas.
+- **NFS-e**: faltava Número do RPS/Série, Competência, Código de
+  Classificação do Serviço (LC116 — mesmo texto truncado que já aparece
+  no próprio modelo de referência, não invenção), o bloco inteiro de
+  retenções (INSS/PIS/COFINS/IR/CSLL/descontos/deduções/base ISS/valor
+  líquido), Local de prestação/incidência, e o canhoto de recebimento no
+  rodapé.
+
+**Refatoração pra sustentar isso sem duplicar:** extraído
+`pdf/partials/danfe_corpo.blade.php` — corpo do DANFE compartilhado entre
+`nota_fiscal_nfe.blade.php` (Spedy/Focus) e `danfe.blade.php` (NFePHP),
+que até agora eram dois templates PARCIALMENTE divergentes (o de NFePHP
+era ainda mais incompleto que o outro). Mesmo raciocínio de
+`ProcessaRespostaSefaz` (trait) aplicado à camada de PDF: um único ponto
+de verdade, cada template vira um wrapper fino que só normaliza sua fonte
+de dados (Eloquent vs. array extraído do XML) pro mesmo formato.
+`DanfeRenderer` também ganhou extração de código/CST-CSOSN/unidade do XML
+(faltava pra alimentar a tabela expandida). Verificado renderizando os
+dois caminhos de verdade lado a lado (idêntico, PDF final byte-a-byte
+quase igual) antes de considerar concluído — achei e corrigi um bug de
+`strtoupper()` não-multibyte reintroduzido nos novos campos de NFS-e
+(mesma classe de bug já corrigida antes no cabeçalho) só porque testei
+com um nome de cidade acentuado de verdade.
+
+**2. Status da nota travado em PROCESSANDO até F5** — usuário reportou
+que gerar nota a partir de uma OS te leva pro Histórico Fiscal, mas a
+nota fica PROCESSANDO na tela até um F5 manual. Causa: `EmitirNotaFiscal
+Job` roda em fila (background) — a tela só buscava a lista UMA vez ao
+carregar, nunca de novo. Corrigido com polling silencioso (a cada 3s,
+até ~2min, mesma janela do timeout do job) enquanto houver qualquer nota
+PROCESSANDO na lista — não fica repetindo pra sempre se algo travar de
+verdade. Mesma necessidade que `NotaFiscalForm.tsx` já resolvia só pra
+NFC-e emitida ali; agora cobre a lista inteira, de onde quer que a nota
+tenha vindo.
+
+**3. Coluna de emissão sem hora** — `NotaFiscalResource::emitido_em` já
+formatava com hora (`d/m/Y H:i`), mas `formatarData()` no frontend
+explicitamente descartava a hora (tratamento pra strings já formatadas
+pelo backend). Trocado por `formatarDataHora()` — que por sua vez não
+sabia lidar com string já formatada (só parseia ISO) — corrigido pra
+reconhecer os dois formatos.
+
+**4. Verificação: reimportar XML de nota já lançada mexe em estoque?**
+Não. Conferido de ponta a ponta: `ProdutoFiscalService::aplicarDoXml()`
+só escreve os 4 campos fiscais (`CAMPOS = ['ncm','cest','origem',
+'tributacao_icms']`), nunca `qty_atual`; `EntradaNfController::
+atualizarFiscal()` (endpoint chamado nesse fluxo) não toca em
+`EstoqueService`/`MovimentacaoEstoque` em nenhum ponto; o frontend chama
+`/entradas-nf/atualizar-fiscal` (não `/entradas-nf`) quando em modo de
+atualização fiscal, sem mandar `quantidade` no payload. Já funciona como
+devia — nenhuma mudança de código necessária, só a verificação.
+
+**Testes:** suíte Unit 324→327 (barcode gera PNG válido/rejeita chave
+inválida; DanfeRenderer extrai código/CST-CSOSN/unidade do XML). Suíte
+sem regressão (mesmas 11 falhas de sempre).
+
 ### 21. Motor de NFC-e completo pra NFePHP + switch de documento padrão pra venda de produtos
 
 Pedido explícito do usuário, direto após a auditoria da seção 20 ter

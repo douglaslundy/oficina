@@ -33,7 +33,8 @@ class NotaFiscalDocumentoService
         // teria produzido o layout errado (DANFE cheio em vez de cupom).
         if ($nota->provedor === 'NFEPHP' && $nota->modelo === 'NF-e' && in_array($nota->status, ['AUTORIZADA', 'CONTINGENCIA'], true)) {
             $dados = app(DanfeRenderer::class)->dadosParaTemplate($nota);
-            $pdf   = Pdf::loadView('pdf.danfe', $dados)->setPaper('a4', 'portrait');
+            $dados['barcodeDataUri'] = $this->gerarBarcodeChaveDataUri($nota->chave_acesso);
+            $pdf = Pdf::loadView('pdf.danfe', $dados)->setPaper('a4', 'portrait');
 
             return ['conteudo' => $pdf->output(), 'filename' => 'DANFE-' . ($nota->numero ?? $nota->id) . '.pdf'];
         }
@@ -103,7 +104,8 @@ class NotaFiscalDocumentoService
         }
 
         if ($nota->modelo === 'NF-e') {
-            $pdf = Pdf::loadView('pdf.nota_fiscal_nfe', compact('nota', 'empresa'))
+            $barcodeDataUri = $this->gerarBarcodeChaveDataUri($nota->chave_acesso);
+            $pdf = Pdf::loadView('pdf.nota_fiscal_nfe', compact('nota', 'empresa', 'barcodeDataUri'))
                 ->setPaper('a4', 'portrait');
 
             return ['pdf' => $pdf, 'filename' => 'NFe-' . ($nota->numero ?? $nota->id) . '.pdf'];
@@ -121,6 +123,31 @@ class NotaFiscalDocumentoService
     private function alturaCupomNfce(NotaFiscal $nota): float
     {
         return 260.0 + ($nota->itens->count() * 14) + ($nota->qrcode_url ? 110.0 : 0.0);
+    }
+
+    /**
+     * Pedido explícito do usuário (2026-09-14, análise visual comparando com
+     * os modelos oficiais em doc_documentos_fiscais/modelo_nota): o DANFE
+     * real tem um código de barras Code-128C da chave de acesso, acima do
+     * texto "CHAVE DE ACESSO" — o nosso não tinha (já registrado como
+     * limitação conhecida no docblock de DanfeRenderer desde a Rodada da
+     * refatoração de PDF). Code-128C é o subtipo correto pra uma cadeia
+     * numérica de 44 dígitos com comprimento par (confirmado no Manual de
+     * Orientação do Contribuinte — não é um chute: é o mesmo subtipo que o
+     * modelo de referência da Spedy usa). `picqer/php-barcode-generator`
+     * (adicionado nesta sessão) gera o PNG via GD, sem depender de asset
+     * externo — mesmo padrão já usado pro QR Code da NFC-e (endroid/qr-code).
+     */
+    private function gerarBarcodeChaveDataUri(?string $chaveAcesso): ?string
+    {
+        if (empty($chaveAcesso) || strlen($chaveAcesso) !== 44 || !ctype_digit($chaveAcesso)) {
+            return null;
+        }
+
+        $gerador = new \Picqer\Barcode\BarcodeGeneratorPNG();
+        $png = $gerador->getBarcode($chaveAcesso, \Picqer\Barcode\BarcodeGeneratorPNG::TYPE_CODE_128_C, 1, 40);
+
+        return 'data:image/png;base64,' . base64_encode($png);
     }
 
     private function gerarQrCodeDataUri(NotaFiscal $nota): ?string

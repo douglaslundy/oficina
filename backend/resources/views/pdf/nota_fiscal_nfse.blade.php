@@ -65,8 +65,12 @@
     <td style="width:30%; text-align:right;">
       <div class="lbl">Nota fiscal</div>
       <div class="val" style="font-size:14px;">{{ $nota->numero ?? '-' }}</div>
+      <div class="lbl" style="margin-top:3px;">Número do RPS / Série</div>
+      <div class="val-sm">{{ $nota->numero ?? '-' }} / {{ $nota->serie ?? '1' }}</div>
       <div class="lbl" style="margin-top:3px;">Data e hora da emissão</div>
       <div class="val-sm">{{ $nota->emitido_em?->format('d/m/Y H:i') ?? '-' }}</div>
+      <div class="lbl" style="margin-top:3px;">Competência</div>
+      <div class="val-sm">{{ $nota->emitido_em?->format('m/Y') ?? now()->format('m/Y') }}</div>
     </td>
   </tr>
 </table>
@@ -131,41 +135,110 @@
   </tr>
 </table>
 
+<!-- Local de prestação/incidência -->
+<table class="grid">
+  <tr>
+    <td style="width:50%; border-right:0.75px solid #000;">
+      <div class="lbl">Local de prestação do(s) serviço(s)</div>
+      <div class="val-sm">{{ mb_strtoupper((string) ($emit['cidade'] ?? '-'), 'UTF-8') }}-{{ $emit['uf'] ?? '-' }}</div>
+    </td>
+    <td style="width:50%;">
+      <div class="lbl">Local da incidência do(s) serviço(s)</div>
+      <div class="val-sm">{{ mb_strtoupper((string) ($emit['cidade'] ?? '-'), 'UTF-8') }}-{{ $emit['uf'] ?? '-' }}</div>
+    </td>
+  </tr>
+</table>
+
 <!-- Discriminação -->
 <div class="section-lbl">Discriminação dos Serviços</div>
 <div class="grid discriminacao">{{ $nota->observacoes ?? 'Serviços automotivos prestados conforme acordado.' }}</div>
+
+{{--
+  Código de Classificação do Serviço (LC116) — pedido explícito do usuário
+  (2026-09-14, análise visual comparando com o modelo oficial): faltava
+  esse campo por completo. Fixo em todo o sistema porque este projeto só
+  atende oficina mecânica (mesma ressalva já documentada em
+  CodigoTributacaoNacionalResolver — se um dia outro tipo de serviço for
+  emitido, isso precisa deixar de ser fixo). Texto idêntico ao que já
+  aparece truncado no próprio modelo de referência da Spedy — não é
+  invenção, é a descrição oficial do item 14.01 da lista da LC 116/2003.
+--}}
+<div class="section-lbl">Código de Classificação do Serviço</div>
+<div class="grid" style="padding:4px 6px; font-size:8px; font-weight:700;">14.01 - 1401 - Lubrificação, limpeza, lustração, revisão, manutenção e conservação de veículos</div>
 
 <!-- Valores -->
 <div class="section-lbl">Valores</div>
 <table class="grid">
   <tr>
-    <td style="width:25%; border-right:0.75px solid #000;">
-      <div class="lbl">Valor dos serviços</div>
-      <div class="val-sm">R$ {{ number_format((float) ($nota->subtotal ?? $nota->valor_total ?? 0), 2, ',', '.') }}</div>
+    <td style="width:20%; border-right:0.75px solid #000;">
+      <div class="lbl">INSS</div>
+      <div class="val-sm">0,00</div>
     </td>
-    <td style="width:25%; border-right:0.75px solid #000;">
-      <div class="lbl">Alíquota ISS</div>
-      <div class="val-sm">{{ number_format((float) ($nota->aliquota_iss ?? 0), 2, ',', '.') }}%</div>
+    <td style="width:20%; border-right:0.75px solid #000;">
+      <div class="lbl">PIS/PASEP</div>
+      <div class="val-sm">0,00</div>
     </td>
-    <td style="width:25%; border-right:0.75px solid #000;">
-      <div class="lbl">Valor do ISS</div>
-      <div class="val-sm">R$ {{ number_format((float) ($nota->valor_iss ?? 0), 2, ',', '.') }}</div>
+    <td style="width:20%; border-right:0.75px solid #000;">
+      <div class="lbl">COFINS</div>
+      <div class="val-sm">0,00</div>
     </td>
-    <td style="width:25%;">
-      <div class="lbl">Total da nota</div>
-      <div class="val" style="font-size:11px;">R$ {{ number_format((float) ($nota->valor_total ?? 0), 2, ',', '.') }}</div>
+    <td style="width:20%; border-right:0.75px solid #000;">
+      <div class="lbl">IR</div>
+      <div class="val-sm">0,00</div>
+    </td>
+    <td style="width:20%;">
+      <div class="lbl">CSLL</div>
+      <div class="val-sm">0,00</div>
     </td>
   </tr>
-</table>
-<table class="grid">
   <tr>
-    <td style="width:50%; border-right:0.75px solid #000;">
+    <td style="width:20%; border-right:0.75px solid #000;">
+      <div class="lbl">Valor do ISS</div>
+      <div class="val-sm">{{ number_format((float) ($nota->valor_iss ?? 0), 2, ',', '.') }}</div>
+    </td>
+    <td style="width:20%; border-right:0.75px solid #000;">
+      <div class="lbl">Valor do ISS retido</div>
+      <div class="val-sm">0,00</div>
+    </td>
+    <td style="width:20%; border-right:0.75px solid #000;">
+      <div class="lbl">Desc. condicionado</div>
+      <div class="val-sm">0,00</div>
+    </td>
+    <td style="width:20%; border-right:0.75px solid #000;">
+      <div class="lbl">Desc. incondicionado</div>
+      <div class="val-sm">{{ number_format((float) ($nota->desconto ?? 0), 2, ',', '.') }}</div>
+    </td>
+    <td style="width:20%;">
+      <div class="lbl">Deduções</div>
+      <div class="val-sm">0,00</div>
+    </td>
+  </tr>
+  <tr>
+    <td style="width:20%; border-right:0.75px solid #000;">
+      <div class="lbl">Base ISS</div>
+      <div class="val-sm">{{ number_format((float) ($nota->subtotal ?? $nota->valor_total ?? 0), 2, ',', '.') }}</div>
+    </td>
+    <td style="width:20%; border-right:0.75px solid #000;">
+      <div class="lbl">Outras retenções</div>
+      <div class="val-sm">0,00</div>
+    </td>
+    <td style="width:20%; border-right:0.75px solid #000;">
+      <div class="lbl">Alíquota ISS (%)</div>
+      <div class="val-sm">{{ number_format((float) ($nota->aliquota_iss ?? 0), 2, ',', '.') }}%</div>
+    </td>
+    <td style="width:20%; border-right:0.75px solid #000;">
+      <div class="lbl">Valor líquido</div>
+      <div class="val-sm">{{ number_format((float) ($nota->valor_total ?? 0), 2, ',', '.') }}</div>
+    </td>
+    <td style="width:20%;">
+      <div class="lbl">Total da nota</div>
+      <div class="val" style="font-size:11px;">{{ number_format((float) ($nota->valor_total ?? 0), 2, ',', '.') }}</div>
+    </td>
+  </tr>
+  <tr>
+    <td style="width:100%;" colspan="5">
       <div class="lbl">Forma de pagamento</div>
       <div class="val-sm">{{ $nota->forma_pagamento ?? '-' }}</div>
-    </td>
-    <td style="width:50%;">
-      <div class="lbl">Desconto</div>
-      <div class="val-sm">R$ {{ number_format((float) ($nota->desconto ?? 0), 2, ',', '.') }}</div>
     </td>
   </tr>
 </table>
@@ -176,6 +249,23 @@
   <div class="cod">{{ $nota->chave_acesso ?? $nota->protocolo }}</div>
 </div>
 @endif
+
+<!-- Canhoto de recebimento -->
+<table class="grid" style="margin-top:10px;">
+  <tr>
+    <td style="width:75%; border-right:0.75px solid #000;">
+      <div style="font-size:7.5px; line-height:1.4;">Recebi(emos) de <strong>{{ $emit['nome_fantasia'] ?? $emit['razao_social'] ?? '-' }}</strong> o(s) serviço(s) indicado(s) á nota fiscal eletrônica de serviço de número <strong>{{ $nota->numero ?? '-' }}</strong>.</div>
+      <div style="margin-top:14px; font-size:7px;">
+        ____/____/____ &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;_______________________________<br>
+        Data do recebimento &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;Identificação e assinatura do recebedor
+      </div>
+    </td>
+    <td style="width:25%; text-align:center;">
+      <div class="lbl">Número nota</div>
+      <div class="val" style="font-size:14px;">{{ $nota->numero ?? '-' }}</div>
+    </td>
+  </tr>
+</table>
 
 <div class="footer-note">
   Documento emitido eletronicamente por {{ $emit['nome_fantasia'] ?? $emit['razao_social'] ?? '' }} em {{ now()->format('d/m/Y \à\s H:i') }}
