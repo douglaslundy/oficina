@@ -678,6 +678,69 @@ ignora cStat/xMotivo de propósito (decisão документada no próprio mé
 o XSD não garante uma enumeração fechada de códigos). Não mexi nisso agora
 por estar fora do que foi pedido; registrado aqui pra não se perder.
 
+### 20. Auditoria pedida pelo usuário — "funciona pra TODOS os motores e TODOS os tipos de nota?" — 2 bugs reais achados e corrigidos
+
+Usuário pediu pra verificar se tudo desenvolvido na sessão (XML, e-mail
+com anexo, "ver motivo", "tentar autorizar", excluir homologação, PDF de
+contingência, header de prefeitura, conciliação de entrada) funciona
+igual pros 3 motores (NFEPHP/Spedy/Focus) × 3 tipos (NF-e/NFC-e/NFS-e).
+Fui método por método, não por suposição — 2 bugs reais achados, ambos
+JÁ EXISTENTES antes desta sessão (não introduzidos pelas mudanças de
+hoje), só nunca tinham sido verificados nesse cruzamento específico:
+
+**1. Spedy nunca populava `xml_retorno` — pra NENHUMA nota, de nenhum
+tipo.** `SpedyProvider::resultadoDe()`/`resultadoNfceDe()` liam
+`$json['xml'] ?? null` do corpo de emissão/consulta. Fui checar a doc
+oficial (`docs.spedy.com.br`) pra confirmar antes de "consertar" uma
+suposição: **a Spedy nunca manda o XML inline** — é preciso baixar via
+endpoint dedicado (`GET /{recurso}/{id}/xml`, só depois de autorizada).
+Confirmado no banco de produção: zero notas com `xml_retorno` preenchido
+antes deste fix, mesmo tendo notas Spedy autorizadas de verdade há
+semanas. Corrigido: novo método `xmlAutorizadoDe()` busca o XML de
+verdade nesse endpoint (falha vira `null`, nunca derruba a autorização
+em si). Isso significa que o botão de baixar XML e o e-mail com anexo
+(implementados nesta sessão) NUNCA teriam funcionado pra Spedy sem esse
+fix — a funcionalidade em si estava certa, só faltava a fonte de dado.
+
+**2. NFC-e via NFePHP: bug de roteamento que produziria um documento
+fiscal ERRADO, não só um erro.** Não existe `MotorNfce` neste sistema —
+só `MotorNfe` (NF-e) e `MotorNfse` (serviço). `NfePhpProvider::emitir()`
+só verificava `modelo === 'NFE'`; qualquer outro modelo (incluindo
+`NFCE`) caía no `else` → `MotorNfse`. Como `CriarNotaFiscalService`
+seleciona NFC-e automaticamente (cliente pessoa física + mesmo estado +
+sem forçar NF-e) **sem saber qual provedor a oficina usa**, uma oficina
+em NFEPHP vendendo pra pessoa física no mesmo estado teria uma venda de
+PRODUTO processada como se fosse PRESTAÇÃO DE SERVIÇO — não um erro
+claro, um documento fiscal semanticamente errado. Corrigido:
+`emitir()`/`consultar()`/`cancelar()` agora rejeitam explicitamente
+modelo NFCE com mensagem clara ("força NF-e ou troca de provedor"), em
+vez de silenciosamente misroteirar. Não implementei um `MotorNfce` de
+verdade (fora do escopo pedido — é uma feature nova, não um fix) nem
+mudei a seleção automática de modelo (mudar isso silenciosamente teria
+implicação fiscal/legal que não me cabe decidir sozinho).
+
+**Confirmado funcionando corretamente (sem mudança necessária), por
+evidência real, não suposição:**
+- Focus NFe: já buscava XML via `caminho_xml_nota_fiscal` +
+  `baixarXmlNfe()` corretamente pros 3 modelos, com fallback gracioso —
+  implementação pré-existente já estava certa.
+- NFS-e via NFePHP (`MotorNfse`): o modelo nacional ADN devolve o
+  documento já completo numa única tacada — não tem o problema "falta o
+  protocolo" que a NF-e clássica tinha.
+- Botão "Tentar autorizar"/contingência: só NFEPHP NF-e pode chegar em
+  `CONTINGENCIA` (grep confirmado — nenhum outro motor/tipo produz esse
+  status) — o botão nunca aparece fora desse caso, não precisa de guarda
+  extra.
+- "Ver motivo", excluir homologação, header de prefeitura da NFS-e: são
+  genéricos (dependem só de `mensagem_erro`/`ambiente`/`modelo`, nunca
+  de qual motor específico) — já confirmados universais.
+
+**Testes:** 3 novos em `SpedyProviderTest` (busca o XML pelo id, não
+tenta quando não tem id, falha não derruba autorização) + 3 novos em
+`NfePhpProviderTest` (emitir/consultar/cancelar com modelo NFCE
+rejeitam, nunca chegam no MotorNfse). Suíte Unit sem regressão (315
+passou, mesmas 11 falhas de sempre — subiu de 309 com os 6 novos).
+
 ### 19. Botão de baixar XML + e-mail automático (PDF+XML) na autorização + bug real achado no meio do caminho: XML salvo não tinha o protocolo de autorização
 
 Usuário perguntou se o sistema mandava PDF+XML por e-mail e tinha botão de

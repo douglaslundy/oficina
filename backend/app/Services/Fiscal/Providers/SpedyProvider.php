@@ -81,7 +81,7 @@ class SpedyProvider implements FiscalProvider, ConsultaNotaTerceiroProvider
             );
         }
 
-        return $this->resultadoDe($resp->json(), $nota->referenciaExterna);
+        return $this->resultadoDe($resp->json(), $nota->referenciaExterna, 'service-invoices');
     }
 
     public function consultar(string $referencia, string $modelo = 'NFSE'): EmissaoResultado
@@ -120,8 +120,8 @@ class SpedyProvider implements FiscalProvider, ConsultaNotaTerceiroProvider
         }
 
         return $modelo === 'NFCE'
-            ? $this->resultadoNfceDe($item, $referencia)
-            : $this->resultadoDe($item, $referencia);
+            ? $this->resultadoNfceDe($item, $referencia, $recurso)
+            : $this->resultadoDe($item, $referencia, $recurso);
     }
 
     public function cancelar(string $referencia, string $motivo, string $modelo = 'NFSE'): EmissaoResultado
@@ -606,7 +606,7 @@ class SpedyProvider implements FiscalProvider, ConsultaNotaTerceiroProvider
             );
         }
 
-        return $this->resultadoDe($resp->json(), $nota->referenciaExterna);
+        return $this->resultadoDe($resp->json(), $nota->referenciaExterna, 'product-invoices');
     }
 
     private function emitirNfce(NotaFiscalData $nota): EmissaoResultado
@@ -621,10 +621,10 @@ class SpedyProvider implements FiscalProvider, ConsultaNotaTerceiroProvider
             );
         }
 
-        return $this->resultadoNfceDe($resp->json(), $nota->referenciaExterna);
+        return $this->resultadoNfceDe($resp->json(), $nota->referenciaExterna, 'consumer-invoices');
     }
 
-    private function resultadoNfceDe(array $json, ?string $ref): EmissaoResultado
+    private function resultadoNfceDe(array $json, ?string $ref, string $recurso = 'consumer-invoices'): EmissaoResultado
     {
         $status = $this->mapStatus((string) ($json['status'] ?? 'enqueued'));
 
@@ -643,7 +643,7 @@ class SpedyProvider implements FiscalProvider, ConsultaNotaTerceiroProvider
             chave: $json['accessKey'] ?? null,
             protocolo: null,
             numero: isset($json['number']) ? (string) $json['number'] : null,
-            xml: $json['xml'] ?? null,
+            xml: $this->xmlAutorizadoDe($recurso, $json['id'] ?? null),
             pdfUrl: $json['pdfUrl'] ?? null,
             ref: $ref,
             qrCodeUrl: $json['qrCodeUrl'] ?? ($json['qrcodeUrl'] ?? null),
@@ -681,7 +681,7 @@ class SpedyProvider implements FiscalProvider, ConsultaNotaTerceiroProvider
         };
     }
 
-    private function resultadoDe(array $json, ?string $ref): EmissaoResultado
+    private function resultadoDe(array $json, ?string $ref, string $recurso = 'service-invoices'): EmissaoResultado
     {
         $status = $this->mapStatus((string) ($json['status'] ?? 'enqueued'));
 
@@ -704,10 +704,42 @@ class SpedyProvider implements FiscalProvider, ConsultaNotaTerceiroProvider
             // provedor em vez de inventar um valor (ver spec da Etapa B).
             protocolo: null,
             numero: isset($json['number']) ? (string) $json['number'] : null,
-            xml: $json['xml'] ?? null,
+            xml: $this->xmlAutorizadoDe($recurso, $json['id'] ?? null),
             pdfUrl: $json['pdfUrl'] ?? null,
             ref: $ref,
         );
+    }
+
+    /**
+     * Bug real de produção (2026-09-14, achado ao verificar "botão de baixar
+     * XML funciona pra todos os motores?"): `resultadoDe()`/`resultadoNfceDe()`
+     * liam `$json['xml'] ?? null` — mas a doc oficial da Spedy
+     * (docs.spedy.com.br) confirma que o corpo de emissão/consulta NUNCA
+     * traz o XML inline; é preciso baixar via endpoint dedicado
+     * `GET /{recurso}/{id}/xml` (só funciona depois de autorizada). Isso
+     * significava que TODA nota autorizada via Spedy tinha `xml_retorno`
+     * sempre vazio — confirmado no banco de produção (zero notas com
+     * `xml_retorno` preenchido antes deste fix). Falha ao baixar não pode
+     * derrubar a autorização em si (a nota já foi autorizada de verdade,
+     * só o XML fica ausente) — por isso retorna null em vez de lançar.
+     */
+    private function xmlAutorizadoDe(string $recurso, mixed $id): ?string
+    {
+        if (empty($id)) {
+            return null;
+        }
+
+        $resp = Http::withHeaders(['X-Api-Key' => $this->emissorToken ?? $this->masterKey])
+            ->get("{$this->baseUrl}/{$recurso}/{$id}/xml");
+
+        if ($resp->failed()) {
+            \Illuminate\Support\Facades\Log::warning('Spedy: falha ao baixar XML autorizado.', [
+                'recurso' => $recurso, 'id' => $id, 'status' => $resp->status(),
+            ]);
+            return null;
+        }
+
+        return $resp->body();
     }
 
     public function consultarNotaRecebida(string $chaveAcesso): ConsultaNotaTerceiroResultado

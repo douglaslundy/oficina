@@ -54,8 +54,26 @@ class NfePhpProvider implements FiscalProvider, ConsultaNotaTerceiroProvider
         }
     }
 
+    /**
+     * Bug real de produção (2026-09-14, achado auditando "funciona pra todos
+     * os motores/tipos de nota?"): não existe `MotorNfce` neste sistema — só
+     * `MotorNfe` (modelo 55, NF-e) e `MotorNfse` (serviço). Antes desta
+     * checagem, `modelo === 'NFCE'` caía no `else` e ia pro `MotorNfse` —
+     * ou seja, uma venda de produto pra pessoa física (que
+     * `CriarNotaFiscalService` seleciona automaticamente como NFC-e, SEM
+     * saber qual provedor a oficina usa) seria processada como se fosse uma
+     * PRESTAÇÃO DE SERVIÇO. Rejeitar explicitamente aqui é melhor que
+     * silenciosamente gerar um documento fiscal errado.
+     */
+    private const MODELO_NAO_SUPORTADO = 'NFC-e via NFePHP não é suportado neste sistema (só NF-e e NFS-e). '
+        . 'Force emissão como NF-e ("forçar NF-e" na tela de emissão) ou troque o provedor fiscal desta oficina pra Spedy/Focus NFe.';
+
     public function emitir(NotaFiscalData $nota): EmissaoResultado
     {
+        if ($nota->modelo === 'NFCE') {
+            return EmissaoResultado::erro(self::MODELO_NAO_SUPORTADO, $nota->referenciaExterna);
+        }
+
         return $nota->modelo === 'NFE'
             ? app(MotorNfe::class)->emitir($nota, $this->ambiente)
             : app(MotorNfse::class)->emitir($nota, $this->ambiente);
@@ -63,6 +81,10 @@ class NfePhpProvider implements FiscalProvider, ConsultaNotaTerceiroProvider
 
     public function consultar(string $referencia, string $modelo = 'NFSE'): EmissaoResultado
     {
+        if ($modelo === 'NFCE') {
+            return EmissaoResultado::erro(self::MODELO_NAO_SUPORTADO, $referencia);
+        }
+
         return $modelo === 'NFE'
             ? app(MotorNfe::class)->consultar($referencia, $this->ambiente)
             : app(MotorNfse::class)->consultar($referencia, $this->ambiente);
@@ -70,6 +92,10 @@ class NfePhpProvider implements FiscalProvider, ConsultaNotaTerceiroProvider
 
     public function cancelar(string $referencia, string $motivo, string $modelo = 'NFSE'): EmissaoResultado
     {
+        if ($modelo === 'NFCE') {
+            return EmissaoResultado::erro(self::MODELO_NAO_SUPORTADO, $referencia);
+        }
+
         if ($modelo === 'NFE') {
             // MotorNfe::cancelar() exige o protocolo original (sefazCancela()
             // não aceita só a chave) — NfePhpProvider não tem acesso à

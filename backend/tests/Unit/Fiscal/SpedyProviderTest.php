@@ -90,6 +90,11 @@ class SpedyProviderTest extends TestCase
                 'id' => 'inv-1', 'status' => 'authorized',
                 'accessKey' => 'CHAVE-SP', 'number' => '55',
             ], 201),
+            // Bug real de produção (2026-09-14): a Spedy NUNCA devolve o XML
+            // inline no corpo de emissão/consulta (doc oficial confirmada) —
+            // é preciso baixar via endpoint dedicado. `xml_retorno` ficava
+            // sempre vazio pra toda nota autorizada via Spedy antes deste fix.
+            '*/service-invoices/inv-1/xml' => Http::response('<xml>fake-nfse</xml>', 200),
         ]);
 
         $p = new SpedyProvider('https://sandbox-api.spedy.com.br/v1', 'master', 'tok', 'emp-1');
@@ -98,6 +103,7 @@ class SpedyProviderTest extends TestCase
         $this->assertSame('AUTORIZADA', $r->status);
         $this->assertSame('CHAVE-SP', $r->chave);
         $this->assertSame('55', $r->numero);
+        $this->assertSame('<xml>fake-nfse</xml>', $r->xml);
 
         Http::assertSent(fn ($req) =>
             $req->hasHeader('X-Api-Key', 'tok') &&
@@ -523,6 +529,7 @@ class SpedyProviderTest extends TestCase
             '*/product-invoices' => Http::response([
                 'id' => 'inv-nfe-1', 'status' => 'authorized', 'accessKey' => 'CHAVE-NFE-SP', 'number' => '77',
             ], 201),
+            '*/product-invoices/inv-nfe-1/xml' => Http::response('<xml>fake-nfe</xml>', 200),
         ]);
 
         $p = new SpedyProvider('https://sandbox-api.spedy.com.br/v1', 'master', 'tok', 'emp-1');
@@ -531,6 +538,7 @@ class SpedyProviderTest extends TestCase
         $this->assertSame('AUTORIZADA', $r->status);
         $this->assertSame('CHAVE-NFE-SP', $r->chave);
         $this->assertSame('77', $r->numero);
+        $this->assertSame('<xml>fake-nfe</xml>', $r->xml);
         Http::assertSent(fn ($req) => str_contains($req->url(), '/product-invoices')
             && !str_contains($req->url(), 'consumer-invoices'));
     }
@@ -704,6 +712,71 @@ class SpedyProviderTest extends TestCase
             && !str_contains($req->url(), '/service-invoices/')
             && ($req['integrationId'] ?? null) === 'os-123'
         );
+    }
+
+    /**
+     * Bug real de produção (2026-09-14, achado verificando "o botão de
+     * baixar XML funciona pra todos os motores?"): a doc oficial da Spedy
+     * confirma que o corpo de emissão/consulta NUNCA traz o XML inline — é
+     * preciso baixar via `GET /{recurso}/{id}/xml`, só disponível depois de
+     * autorizada. `resultadoDe()`/`resultadoNfceDe()` liam `$json['xml']`,
+     * um campo que a Spedy nunca envia — `xml_retorno` ficava sempre vazio
+     * pra toda nota autorizada via Spedy (confirmado: zero notas com
+     * `xml_retorno` preenchido no banco de produção antes deste fix).
+     */
+    public function test_consultar_autorizada_baixa_xml_pelo_endpoint_dedicado(): void
+    {
+        Http::fake([
+            // Ordem importa: Http::fake() casa o PRIMEIRO padrão que bater, e
+            // '*/product-invoices*' (wildcard genérico) também bateria com a
+            // URL do /xml se viesse primeiro — o padrão específico precisa
+            // vir antes do genérico.
+            '*/product-invoices/inv-42/xml' => Http::response('<nfeProc>autorizada</nfeProc>', 200),
+            '*/product-invoices*' => Http::response([
+                'items' => [['id' => 'inv-42', 'status' => 'authorized', 'accessKey' => 'CHAVE-X', 'number' => '1']],
+                'totalCount' => 1,
+            ], 200),
+        ]);
+
+        $p = new SpedyProvider('https://sandbox-api.spedy.com.br/v1', 'master', 'tok', 'emp-1');
+        $r = $p->consultar('ref-1', 'NFE');
+
+        $this->assertSame('AUTORIZADA', $r->status);
+        $this->assertSame('<nfeProc>autorizada</nfeProc>', $r->xml);
+    }
+
+    public function test_consultar_autorizada_sem_id_nao_tenta_baixar_xml(): void
+    {
+        Http::fake([
+            '*/product-invoices*' => Http::response([
+                'items' => [['status' => 'authorized', 'accessKey' => 'CHAVE-Y', 'number' => '2']],
+                'totalCount' => 1,
+            ], 200),
+        ]);
+
+        $p = new SpedyProvider('https://sandbox-api.spedy.com.br/v1', 'master', 'tok', 'emp-1');
+        $r = $p->consultar('ref-2', 'NFE');
+
+        $this->assertSame('AUTORIZADA', $r->status);
+        $this->assertNull($r->xml);
+        Http::assertNotSent(fn ($req) => str_contains($req->url(), '/xml'));
+    }
+
+    public function test_consultar_autorizada_falha_ao_baixar_xml_nao_derruba_autorizacao(): void
+    {
+        Http::fake([
+            '*/product-invoices/inv-43/xml' => Http::response(['message' => 'not found'], 404),
+            '*/product-invoices*' => Http::response([
+                'items' => [['id' => 'inv-43', 'status' => 'authorized', 'accessKey' => 'CHAVE-Z', 'number' => '3']],
+                'totalCount' => 1,
+            ], 200),
+        ]);
+
+        $p = new SpedyProvider('https://sandbox-api.spedy.com.br/v1', 'master', 'tok', 'emp-1');
+        $r = $p->consultar('ref-3', 'NFE');
+
+        $this->assertSame('AUTORIZADA', $r->status);
+        $this->assertNull($r->xml);
     }
 
     public function test_consultar_nota_recebida_completa_baixa_e_faz_parse_do_xml(): void
