@@ -662,13 +662,36 @@ class MotorNfe
             $contingency->motive = 'SEFAZ-MG indisponivel no momento da emissao - contingencia EPEC ativada automaticamente pelo sistema';
             $tools->contingency = $contingency;
 
-            // signNFe() com contingency->type != '' chama
-            // ContingencyNFe::adjust() ANTES de assinar — injeta
-            // tpEmis/dhCont/xJust e recalcula a chave de acesso (Factories/
-            // ContingencyNFe.php) — exatamente o que
-            // Tools::sefazEPEC()->correctNFeForContingencyMode() faria na
-            // primeira linha, se fosse alcançável.
-            $xmlContingencia = $tools->signNFe($xml);
+            // BUG REAL DE PRODUÇÃO (2026-09-14): ContingencyNFe::adjust()
+            // (vendor/nfephp-org/sped-nfe/src/Factories/ContingencyNFe.php:62)
+            // monta `dhCont` com `new \DateTime(gmdate('Y-m-d H:i:s',
+            // $contingency->timestamp))` — `gmdate()` gera os dígitos em
+            // GMT/UTC (corretos), mas o construtor de `\DateTime`, sem
+            // timezone explícito na string, interpreta esses dígitos usando
+            // o timezone PADRÃO do processo. Como `config('app.timezone')`
+            // deste projeto é `America/Sao_Paulo` (já setado como default
+            // pelo boot do Laravel), os dígitos GMT são relidos como se já
+            // fossem hora LOCAL — `dhCont` sai gravado 3h à FRENTE do
+            // horário real. Confirmado lendo o XML de uma NF-e real em
+            // contingência (dhEmi=13:30, dhCont=16:30) e a rejeição real da
+            // SEFAZ na retransmissão: "cStat=558: Data de entrada em
+            // contingência posterior a data de recebimento" — consequência
+            // direta desse deslocamento. Não editável (é código do vendor,
+            // seria sobrescrito no próximo `composer install`).
+            //
+            // Workaround: timezone padrão do processo em UTC só durante
+            // esta chamada (que é o único ponto que aciona
+            // ContingencyNFe::adjust()) — com o default já em UTC,
+            // `gmdate()` e o construtor de `\DateTime` concordam, e
+            // `dhCont` sai correto. Restaurado no finally, mesmo se
+            // signNFe() lançar.
+            $tzOriginal = date_default_timezone_get();
+            date_default_timezone_set('UTC');
+            try {
+                $xmlContingencia = $tools->signNFe($xml);
+            } finally {
+                date_default_timezone_set($tzOriginal);
+            }
 
             $dom = new \DOMDocument('1.0', 'UTF-8');
             $dom->preserveWhiteSpace = false;
