@@ -34,8 +34,17 @@ return Application::configure(basePath: dirname(__DIR__))
         );
 
         $middleware->alias([
-            'tenant' => \App\Http\Middleware\InitializeTenancyByHeader::class,
-            'role'   => \App\Http\Middleware\CheckRole::class,
+            'tenant'        => \App\Http\Middleware\InitializeTenancyByHeader::class,
+            'role'          => \App\Http\Middleware\CheckRole::class,
+            // Falha de segurança real corrigida em 2026-09-14: 'tenant'
+            // resolve a oficina só pelo header X-Tenant (enviado pelo
+            // cliente) sem nunca conferir se o usuário autenticado
+            // pertence a ela — qualquer usuário podia trocar o header e
+            // acessar dados de outra oficina. Este middleware roda DEPOIS
+            // de 'auth:sanctum' em toda rota protegida (ver routes/api.php)
+            // e recusa a requisição se o usuário não pertencer à oficina
+            // resolvida pelo header.
+            'tenant.verify' => \App\Http\Middleware\EnsureTenantMatchesUsuario::class,
         ]);
     })
     ->withExceptions(function (Exceptions $exceptions): void {

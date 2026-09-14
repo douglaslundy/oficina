@@ -184,18 +184,18 @@ Route::middleware('tenant')->prefix('auth')->group(function () {
 });
 
 // Auth — protegido
-Route::middleware(['tenant', 'auth:sanctum'])->prefix('auth')->group(function () {
+Route::middleware(['tenant', 'auth:sanctum', 'tenant.verify'])->prefix('auth')->group(function () {
     Route::post('/logout', [LoginController::class, 'logout']);
     Route::get('/me',      [LoginController::class, 'me']);
 });
 
-Route::middleware(['tenant', 'auth:sanctum'])->group(function () {
+Route::middleware(['tenant', 'auth:sanctum', 'tenant.verify'])->group(function () {
     Route::get('/perfil',  [LoginController::class, 'perfil']);
     Route::put('/perfil',  [LoginController::class, 'updatePerfil']);
 });
 
 // ─── Dashboard — todos os roles ───────────────────────────────────────────────
-Route::middleware(['tenant', 'auth:sanctum'])->group(function () {
+Route::middleware(['tenant', 'auth:sanctum', 'tenant.verify'])->group(function () {
     Route::get('dashboard',      [DashboardController::class, 'index']);
     Route::get('plano/limites',  [PlanController::class, 'limites']);
     Route::get('notificacoes/ativas', [\App\Http\Controllers\NotificacaoController::class, 'ativas']);
@@ -217,14 +217,14 @@ Route::middleware(['tenant', 'auth:sanctum'])->group(function () {
 });
 
 // ─── Clientes — leitura: todos; escrita: ADMIN, ATENDENTE ────────────────────
-Route::middleware(['tenant', 'auth:sanctum'])->group(function () {
+Route::middleware(['tenant', 'auth:sanctum', 'tenant.verify'])->group(function () {
     Route::get('clientes',           [ClienteController::class, 'index']);
     Route::get('clientes/{cliente}', [ClienteController::class, 'show']);
     Route::get('clientes/{clienteId}/veiculos', [VeiculoController::class, 'index']);
     Route::get('veiculos/busca', [VeiculoController::class, 'buscar']);
     Route::get('veiculos/{id}', [VeiculoController::class, 'show']);
 });
-Route::middleware(['tenant', 'auth:sanctum', 'role:ADMIN,ATENDENTE'])->group(function () {
+Route::middleware(['tenant', 'auth:sanctum', 'tenant.verify', 'role:ADMIN,ATENDENTE'])->group(function () {
     Route::post('clientes',             [ClienteController::class, 'store']);
     Route::put('clientes/{cliente}',    [ClienteController::class, 'update']);
     Route::delete('clientes/{cliente}', [ClienteController::class, 'destroy']);
@@ -240,10 +240,10 @@ Route::middleware(['tenant', 'auth:sanctum', 'role:ADMIN,ATENDENTE'])->group(fun
 // ANTES de `entradas-nf/{id}`: as duas são GET e o Laravel casa na ordem de
 // registro — com `{id}` primeiro, "recebidas" seria capturado como id. Daí o
 // grupo próprio aqui em vez de junto de `entradas-nf/consultar` mais abaixo.
-Route::middleware(['tenant', 'auth:sanctum', 'role:ADMIN,ATENDENTE'])->group(function () {
+Route::middleware(['tenant', 'auth:sanctum', 'tenant.verify', 'role:ADMIN,ATENDENTE'])->group(function () {
     Route::get('entradas-nf/recebidas', [EntradaNfController::class, 'recebidas']);
 });
-Route::middleware(['tenant', 'auth:sanctum'])->group(function () {
+Route::middleware(['tenant', 'auth:sanctum', 'tenant.verify'])->group(function () {
     Route::get('produtos',            [ProdutoController::class, 'index']);
     Route::get('produtos/pendencias-fiscais', [ProdutoFiscalController::class, 'pendencias']);
     Route::get('produtos/{produto}',  [ProdutoController::class, 'show']);
@@ -252,7 +252,7 @@ Route::middleware(['tenant', 'auth:sanctum'])->group(function () {
     Route::get('entradas-nf/{id}', [EntradaNfController::class, 'show']);
     Route::get('categorias-fiscais', [CategoriaPadraoFiscalController::class, 'index']);
 });
-Route::middleware(['tenant', 'auth:sanctum', 'role:ADMIN,ATENDENTE'])->group(function () {
+Route::middleware(['tenant', 'auth:sanctum', 'tenant.verify', 'role:ADMIN,ATENDENTE'])->group(function () {
     Route::post('produtos',              [ProdutoController::class, 'store']);
     Route::put('produtos/{produto}',     [ProdutoController::class, 'update']);
     Route::delete('produtos/{produto}',  [ProdutoController::class, 'destroy']);
@@ -273,25 +273,25 @@ Route::middleware(['tenant', 'auth:sanctum', 'role:ADMIN,ATENDENTE'])->group(fun
 });
 
 // ─── Serviços — leitura: todos; escrita: ADMIN, ATENDENTE; desativar: ADMIN ───
-Route::middleware(['tenant', 'auth:sanctum'])->group(function () {
+Route::middleware(['tenant', 'auth:sanctum', 'tenant.verify'])->group(function () {
     Route::get('servicos', [ServicoController::class, 'index']);
 });
-Route::middleware(['tenant', 'auth:sanctum', 'role:ADMIN,ATENDENTE'])->group(function () {
+Route::middleware(['tenant', 'auth:sanctum', 'tenant.verify', 'role:ADMIN,ATENDENTE'])->group(function () {
     Route::post('servicos',     [ServicoController::class, 'store']);
     Route::put('servicos/{id}', [ServicoController::class, 'update']);
 });
-Route::middleware(['tenant', 'auth:sanctum', 'role:ADMIN'])->group(function () {
+Route::middleware(['tenant', 'auth:sanctum', 'tenant.verify', 'role:ADMIN'])->group(function () {
     Route::delete('servicos/{id}', [ServicoController::class, 'destroy']);
 });
 
 // ─── OS — leitura: todos; criação/edição: ADMIN, ATENDENTE, MECANICO ─────────
-Route::middleware(['tenant', 'auth:sanctum'])->group(function () {
+Route::middleware(['tenant', 'auth:sanctum', 'tenant.verify'])->group(function () {
     Route::get('os',             [OrdemServicoController::class, 'index']);
     Route::get('os/{id}',        [OrdemServicoController::class, 'show']);
     Route::get('os/{id}/pdf',    [OrdemServicoController::class, 'pdf']);
     Route::get('os/{id}/recibo', [OrdemServicoController::class, 'recibo']);
 });
-Route::middleware(['tenant', 'auth:sanctum', 'role:ADMIN,ATENDENTE,MECANICO'])->group(function () {
+Route::middleware(['tenant', 'auth:sanctum', 'tenant.verify', 'role:ADMIN,ATENDENTE,MECANICO'])->group(function () {
     Route::post('os',         [OrdemServicoController::class, 'store']);
     Route::put('os/{id}',     [OrdemServicoController::class, 'update']);
     Route::post('os/{osId}/itens',                          [OrdemServicoController::class, 'addItem']);
@@ -302,12 +302,12 @@ Route::middleware(['tenant', 'auth:sanctum', 'role:ADMIN,ATENDENTE,MECANICO'])->
     Route::delete('os/{id}/pagamentos/{pagamentoId}',        [OrdemServicoController::class, 'removePagamento']);
     Route::post('os/{os}/orcamento/enviar',                  [OrcamentoController::class, 'enviar']);
 });
-Route::middleware(['tenant', 'auth:sanctum', 'role:ADMIN'])->group(function () {
+Route::middleware(['tenant', 'auth:sanctum', 'tenant.verify', 'role:ADMIN'])->group(function () {
     Route::delete('os/{id}', [OrdemServicoController::class, 'destroy']);
 });
 
 // ─── Notas Fiscais — ADMIN e FINANCEIRO ─────────────────────────────────────
-Route::middleware(['tenant', 'auth:sanctum', 'role:ADMIN,FINANCEIRO'])->group(function () {
+Route::middleware(['tenant', 'auth:sanctum', 'tenant.verify', 'role:ADMIN,FINANCEIRO'])->group(function () {
     Route::get('notas-fiscais',                [NotaFiscalController::class, 'index']);
     Route::get('notas-fiscais/{id}',           [NotaFiscalController::class, 'show']);
     Route::get('notas-fiscais/{id}/pdf',       [NotaFiscalController::class, 'pdf']);
@@ -320,14 +320,14 @@ Route::middleware(['tenant', 'auth:sanctum', 'role:ADMIN,FINANCEIRO'])->group(fu
 });
 
 // ─── Relatórios — ADMIN e FINANCEIRO ─────────────────────────────────────────
-Route::middleware(['tenant', 'auth:sanctum', 'role:ADMIN,FINANCEIRO'])->group(function () {
+Route::middleware(['tenant', 'auth:sanctum', 'tenant.verify', 'role:ADMIN,FINANCEIRO'])->group(function () {
     Route::get('relatorios/os',       [RelatorioController::class, 'os']);
     Route::get('relatorios/clientes', [RelatorioController::class, 'clientes']);
     Route::get('relatorios/estoque',  [RelatorioController::class, 'estoque']);
 });
 
 // ─── Usuários — somente ADMIN ─────────────────────────────────────────────────
-Route::middleware(['tenant', 'auth:sanctum', 'role:ADMIN'])->group(function () {
+Route::middleware(['tenant', 'auth:sanctum', 'tenant.verify', 'role:ADMIN'])->group(function () {
     Route::get('usuarios',          [UsuarioController::class, 'index']);
     Route::get('usuarios/{id}',     [UsuarioController::class, 'show']);
     Route::post('usuarios',         [UsuarioController::class, 'store']);
@@ -335,7 +335,7 @@ Route::middleware(['tenant', 'auth:sanctum', 'role:ADMIN'])->group(function () {
 });
 
 // ─── Configurações — somente ADMIN ───────────────────────────────────────────
-Route::middleware(['tenant', 'auth:sanctum', 'role:ADMIN'])->group(function () {
+Route::middleware(['tenant', 'auth:sanctum', 'tenant.verify', 'role:ADMIN'])->group(function () {
     Route::post('configuracoes/certificado',    [ConfiguracaoController::class, 'uploadCertificado']);
     Route::post('configuracoes/ativar-emissao', [ConfiguracaoController::class, 'ativarEmissao']);
     Route::get('configuracoes',                 [ConfiguracaoController::class, 'show']);
@@ -343,7 +343,7 @@ Route::middleware(['tenant', 'auth:sanctum', 'role:ADMIN'])->group(function () {
 });
 
 // ─── WhatsApp — somente ADMIN ────────────────────────────────────────────────
-Route::middleware(['tenant', 'auth:sanctum', 'role:ADMIN'])->group(function () {
+Route::middleware(['tenant', 'auth:sanctum', 'tenant.verify', 'role:ADMIN'])->group(function () {
     Route::get('whatsapp/config',          [WhatsAppConfigController::class, 'show']);
     Route::post('whatsapp/config',         [WhatsAppConfigController::class, 'upsert']);
     Route::get('whatsapp/status',          [WhatsAppConfigController::class, 'statusInstancia']);
@@ -353,18 +353,18 @@ Route::middleware(['tenant', 'auth:sanctum', 'role:ADMIN'])->group(function () {
 });
 
 // ─── Assinatura — somente ADMIN ──────────────────────────────────────────────
-Route::middleware(['tenant', 'auth:sanctum', 'role:ADMIN'])->group(function () {
+Route::middleware(['tenant', 'auth:sanctum', 'tenant.verify', 'role:ADMIN'])->group(function () {
     Route::post('assinatura/mudar-ciclo', [AssinaturaController::class, 'mudarCiclo']);
     Route::post('assinatura/voto-confianca', [AssinaturaController::class, 'votoConfianca']);
 });
 
 // ─── Minhas Faturas — ADMIN e FINANCEIRO ─────────────────────────────────────
-Route::middleware(['tenant', 'auth:sanctum', 'role:ADMIN,FINANCEIRO'])->group(function () {
+Route::middleware(['tenant', 'auth:sanctum', 'tenant.verify', 'role:ADMIN,FINANCEIRO'])->group(function () {
     Route::get('assinatura/faturas', [AssinaturaController::class, 'faturas']);
 });
 
 // ─── Alertas WhatsApp — ADMIN e ATENDENTE ────────────────────────────────────
-Route::middleware(['tenant', 'auth:sanctum', 'role:ADMIN,ATENDENTE'])->group(function () {
+Route::middleware(['tenant', 'auth:sanctum', 'tenant.verify', 'role:ADMIN,ATENDENTE'])->group(function () {
     Route::get('alertas',               [AlertaConfigController::class, 'index']);
     Route::post('alertas',              [AlertaConfigController::class, 'store']);
     Route::put('alertas/{id}',          [AlertaConfigController::class, 'update']);
@@ -374,14 +374,14 @@ Route::middleware(['tenant', 'auth:sanctum', 'role:ADMIN,ATENDENTE'])->group(fun
 });
 
 // ─── Agendamentos — todos os roles ───────────────────────────────────────────
-Route::middleware(['tenant', 'auth:sanctum'])->group(function () {
+Route::middleware(['tenant', 'auth:sanctum', 'tenant.verify'])->group(function () {
     Route::apiResource('agendamentos', AgendamentoController::class);
     Route::post('agendamentos/{id}/confirmar', [AgendamentoController::class, 'confirmar']);
     Route::post('agendamentos/{id}/cancelar',  [AgendamentoController::class, 'cancelar']);
 });
 
 // ─── Auditoria — somente ADMIN ────────────────────────────────────────────────
-Route::middleware(['tenant', 'auth:sanctum', 'role:ADMIN'])->group(function () {
+Route::middleware(['tenant', 'auth:sanctum', 'tenant.verify', 'role:ADMIN'])->group(function () {
     Route::get('auditoria',      [AuditController::class, 'index']);
     Route::get('auditoria/{id}', [AuditController::class, 'show']);
 });
