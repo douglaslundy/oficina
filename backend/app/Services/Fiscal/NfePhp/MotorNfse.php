@@ -141,7 +141,7 @@ class MotorNfse
                 'toma'     => [$chaveDocTomador => $docTomador, 'xNome' => $nota->tomador['nome'] ?? ''],
                 'serv'     => [
                     'locPrest' => ['cLocPrestacao' => (string) $cfg->codigo_ibge],
-                    'cServ'    => [
+                    'cServ'    => array_filter([
                         // Bug real de produção (2026-09-14): mandar o "14.01"
                         // (formato LC116 clássico, usado por Spedy/Focus) direto
                         // como cTribNac dava "E1235: Falha no esquema XML do
@@ -150,9 +150,16 @@ class MotorNfse
                         // nova do Sistema Nacional NFS-e sem equivalente no
                         // código LC116). Ver CodigoTributacaoNacionalResolver.
                         'cTribNac'  => \App\Services\Fiscal\CodigoTributacaoNacionalResolver::resolver($nota->codigoServicoFederal),
-                        'cTribMun'  => $nota->codigoServicoMunicipal,
+                        // Bug irmão, achado na mesma investigação: TCCodTribMun
+                        // exige exatamente 3 dígitos numéricos — código
+                        // MUNICIPAL (tabela própria de cada cidade, sem fonte
+                        // nacional única pra confirmar), e "1401" (formato
+                        // LC116/Spedy/Focus, 4 dígitos) nunca bate. Campo é
+                        // opcional no schema (minOccurs="0") — omitido em vez
+                        // de chutar um código municipal nunca confirmado.
+                        'cTribMun'  => preg_match('/^\d{3}$/', $nota->codigoServicoMunicipal) ? $nota->codigoServicoMunicipal : null,
                         'xDescServ' => $nota->descricao,
-                    ],
+                    ], static fn ($v) => $v !== null),
                 ],
                 'valores' => [
                     'vServPrest' => ['vServ' => $nota->valorServicos],

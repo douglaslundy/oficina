@@ -95,7 +95,14 @@ class MotorNfseMontarDpsTest extends TestCase
         // (CodigoTributacaoNacionalResolver, confirmado na tabela oficial
         // gov.br/nfse).
         $this->assertSame('140101', $inf->servico->codigoServico->codigoTributacaoNacional);
-        $this->assertSame('1401', $inf->servico->codigoServico->codigoTributacaoMunicipal);
+        // Bug irmão, achado na mesma investigação: cTribMun (TCCodTribMun)
+        // exige exatamente 3 dígitos numéricos — é um código MUNICIPAL (cada
+        // cidade tem a própria tabela, sem fonte nacional única pra
+        // confirmar), e o "1401" que este sistema sempre usa (formato
+        // LC116/Spedy/Focus, 4 dígitos) nunca bate com esse padrão. Campo é
+        // opcional no schema (minOccurs="0") — omitido em vez de chutar um
+        // código municipal que ninguém confirmou.
+        $this->assertNull($inf->servico->codigoServico->codigoTributacaoMunicipal);
         $this->assertSame('Troca de óleo', $inf->servico->codigoServico->descricaoServico);
         $this->assertSame((string) $cfg->codigo_ibge, $inf->servico->localPrestacao->codigoLocalPrestacao);
 
@@ -104,6 +111,29 @@ class MotorNfseMontarDpsTest extends TestCase
         $this->assertSame(TributacaoIssqn::OperacaoTributavel, $inf->valores->tributacao->tributacaoIssqn);
         $this->assertSame(TipoRetencaoIssqn::NaoRetido, $inf->valores->tributacao->tipoRetencaoIssqn);
         $this->assertSame(5.0, $inf->valores->tributacao->aliquota);
+    }
+
+    public function test_ctribmun_valido_de_3_digitos_e_enviado(): void
+    {
+        // Quando o código municipal REALMENTE tem o formato exigido (3
+        // dígitos — TCCodTribMun), deve ser enviado normalmente.
+        $cfg = $this->configuracaoSimplesNacional();
+        $nota = new NotaFiscalData(
+            tipo: 'NFSE',
+            tomador: ['nome' => 'Cliente Teste', 'cpf_cnpj' => '12345678909'],
+            descricao: 'Troca de óleo',
+            valorServicos: 150.00,
+            aliquotaIss: 5.0,
+            issRetido: false,
+            codigoServicoFederal: '14.01',
+            codigoServicoMunicipal: '104',
+            naturezaOperacao: 'Prestação de Serviços',
+            referenciaExterna: 'nfse-ctribmun',
+        );
+
+        $dps = (new MotorNfse())->montarDps($nota, $cfg, 'HOMOLOGACAO', 1);
+
+        $this->assertSame('104', $dps->infDps->servico->codigoServico->codigoTributacaoMunicipal);
     }
 
     public function test_iss_retido_marca_retido_pelo_tomador_nao_nao_retido(): void
