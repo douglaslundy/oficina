@@ -55,7 +55,10 @@
            {CIDADE}-{UF}" + "SECRETARIA MUNICIPAL DE FAZENDA" aqui; o nome da
            oficina (prestador) já aparece embaixo, na seção "Prestador de
            Serviços" — não deve se repetir no topo. --}}
-      <div class="nome">PREFEITURA MUNICIPAL DE {{ strtoupper(trim(($emit['cidade'] ?? '-') . '-' . ($emit['uf'] ?? ''))) }}</div>
+      {{-- strtoupper() nativo não é multibyte-safe (deixa acento minúsculo,
+           ex. "ILICíNEA" em vez de "ILICÍNEA") — mb_strtoupper() com UTF-8
+           explícito é obrigatório pra nome de cidade brasileiro. --}}
+      <div class="nome">PREFEITURA MUNICIPAL DE {{ mb_strtoupper(trim(($emit['cidade'] ?? '-') . '-' . ($emit['uf'] ?? '')), 'UTF-8') }}</div>
       <div class="sub">Secretaria Municipal de Fazenda</div>
       <div class="sub">Nota Fiscal de Serviços Eletrônica — NFS-e</div>
     </td>
