@@ -110,7 +110,10 @@ class MotorNfseMontarDpsTest extends TestCase
         $this->assertSame(150.0, $inf->valores->valorServicoPrestado->valorServico);
         $this->assertSame(TributacaoIssqn::OperacaoTributavel, $inf->valores->tributacao->tributacaoIssqn);
         $this->assertSame(TipoRetencaoIssqn::NaoRetido, $inf->valores->tributacao->tipoRetencaoIssqn);
-        $this->assertSame(5.0, $inf->valores->tributacao->aliquota);
+        // Bug real de produção (2026-09-14, 5ª camada): Simples Nacional sem
+        // retenção não pode informar pAliq (ver test_simples_nacional_nao_
+        // retido_nao_manda_paliq abaixo, com a mensagem completa da ADN).
+        $this->assertNull($inf->valores->tributacao->aliquota);
         // Bug real de produção (2026-09-14, 3ª camada de validação da mesma
         // investigação): `totTrib` é OBRIGATÓRIO dentro de `trib` (só
         // `tribFed` é opcional) — SEFAZ/ADN rejeitava com "E1235: elemento
@@ -200,6 +203,60 @@ class MotorNfseMontarDpsTest extends TestCase
 
         $this->assertSame(OpcaoSimplesNacional::NaoOptante, $dps->infDps->prestador->regimeTributario->opcaoSimplesNacional);
         $this->assertNull($dps->infDps->prestador->regimeTributario->regimeApuracaoTributosSn);
+    }
+
+    public function test_simples_nacional_nao_retido_nao_manda_paliq(): void
+    {
+        // Bug real de produção (2026-09-14, 5ª camada de validação da mesma
+        // investigação): a ADN rejeitou com "E0625: Não é permitido
+        // informar alíquota quando não há indicação de retenção do ISSQN
+        // (tpRetISSQN = 1) para o prestador de serviço ME/EPP (opSimpNac =
+        // 3)... com apuração do ISSQN pelo simples nacional (regApTribISSQN
+        // = 1)" — confirmado ao vivo contra o ambiente de homologação real
+        // do governo. Pra Simples Nacional (regApTribSN=1) sem retenção
+        // (tpRetISSQN=1), a alíquota é calculada pela própria ADN a partir
+        // da tabela do Simples Nacional — informar pAliq é proibido, não
+        // opcional.
+        $dps = (new MotorNfse())->montarDps($this->notaServico(), $this->configuracaoSimplesNacional(), 'HOMOLOGACAO', 1);
+
+        $this->assertNull($dps->infDps->valores->tributacao->aliquota);
+    }
+
+    public function test_simples_nacional_retido_ainda_manda_paliq(): void
+    {
+        // A regra da ADN só proíbe pAliq no caso SEM retenção — com
+        // retenção (tpRetISSQN=2, "Retido pelo Tomador") a alíquota
+        // continua sendo informada normalmente pelo prestador.
+        $cfg = $this->configuracaoSimplesNacional();
+        $nota = new NotaFiscalData(
+            tipo: 'NFSE',
+            tomador: ['nome' => 'Cliente Teste', 'cpf_cnpj' => '12345678909'],
+            descricao: 'Troca de óleo',
+            valorServicos: 150.00,
+            aliquotaIss: 5.0,
+            issRetido: true,
+            codigoServicoFederal: '14.01',
+            codigoServicoMunicipal: '1401',
+            naturezaOperacao: 'Prestação de Serviços',
+            referenciaExterna: 'nfse-retido',
+        );
+
+        $dps = (new MotorNfse())->montarDps($nota, $cfg, 'HOMOLOGACAO', 1);
+
+        $this->assertSame(5.0, $dps->infDps->valores->tributacao->aliquota);
+    }
+
+    public function test_regime_normal_nao_retido_ainda_manda_paliq(): void
+    {
+        // A regra da ADN é específica do Simples Nacional (regApTribSN=1) —
+        // Regime Normal (Lucro Presumido/Real) continua informando pAliq
+        // mesmo sem retenção.
+        $cfg = $this->configuracaoSimplesNacional();
+        $cfg->regime_tributario = 'Lucro Presumido';
+
+        $dps = (new MotorNfse())->montarDps($this->notaServico(), $cfg, 'HOMOLOGACAO', 1);
+
+        $this->assertSame(5.0, $dps->infDps->valores->tributacao->aliquota);
     }
 
     public function test_ambiente_producao_usa_tpamb_1(): void

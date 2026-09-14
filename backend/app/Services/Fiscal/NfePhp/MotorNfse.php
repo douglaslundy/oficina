@@ -112,6 +112,9 @@ class MotorNfse
 
         $idDps = IdGenerator::generateDpsId($cfg->cnpj ?? '', (string) $cfg->codigo_ibge, $serie, $numero);
 
+        $regTrib = $this->regimeTributarioPrestador($cfg->regime_tributario ?? '');
+        $tpRetISSQN = $nota->issRetido ? 2 : 1;
+
         return new DpsData([
             '@attributes' => ['versao' => '1.01'], // versão usada nos exemplos oficiais do pacote
             'infDPS' => [
@@ -135,7 +138,7 @@ class MotorNfse
                     // Usar o valor bruto do CrtResolver aqui seria uma inversão silenciosa
                     // (empresa do Simples reportada como "Não Optante" e vice-versa) — por
                     // isso a tradução explícita em regimeTributarioPrestador().
-                    'regTrib' => $this->regimeTributarioPrestador($cfg->regime_tributario ?? ''),
+                    'regTrib' => $regTrib,
                     // Bug real de produção (2026-09-14): a ADN rejeitou com
                     // "E0128: O endereço nacional do prestador do serviço não
                     // deve ser informado na DPS quando o próprio prestador for
@@ -173,13 +176,23 @@ class MotorNfse
                 'valores' => [
                     'vServPrest' => ['vServ' => $nota->valorServicos],
                     'trib' => [
-                        'tribMun' => [
+                        'tribMun' => array_filter([
                             'tribISSQN'  => 1, // Operação tributável
                             // Corrigido: o brief tinha "issRetido ? 1 : 2", invertido — 1 é
                             // "Não Retido" e 2 é "Retido pelo Tomador" (Nfse\Enums\TipoRetencaoIssqn).
-                            'tpRetISSQN' => $nota->issRetido ? 2 : 1,
-                            'pAliq'      => $nota->aliquotaIss,
-                        ],
+                            'tpRetISSQN' => $tpRetISSQN,
+                            // Bug real de produção (2026-09-14): a ADN rejeitou
+                            // com "E0625: Não é permitido informar alíquota
+                            // quando não há indicação de retenção do ISSQN...
+                            // para o prestador... com apuração do ISSQN pelo
+                            // simples nacional" — confirmado ao vivo. Pra
+                            // Simples Nacional (regApTribSN=1) sem retenção, a
+                            // alíquota é calculada pela própria ADN a partir da
+                            // tabela do Simples Nacional; informá-la é proibido.
+                            'pAliq' => ($regTrib['regApTribSN'] ?? null) === 1 && $tpRetISSQN === 1
+                                ? null
+                                : $nota->aliquotaIss,
+                        ], static fn ($v) => $v !== null),
                         // Bug real de produção (2026-09-14): `totTrib` é
                         // OBRIGATÓRIO dentro de `trib` (só `tribFed` é
                         // opcional) — SEFAZ/ADN rejeitava com "elemento 'trib'
