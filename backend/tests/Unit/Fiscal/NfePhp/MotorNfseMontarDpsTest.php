@@ -111,6 +111,19 @@ class MotorNfseMontarDpsTest extends TestCase
         $this->assertSame(TributacaoIssqn::OperacaoTributavel, $inf->valores->tributacao->tributacaoIssqn);
         $this->assertSame(TipoRetencaoIssqn::NaoRetido, $inf->valores->tributacao->tipoRetencaoIssqn);
         $this->assertSame(5.0, $inf->valores->tributacao->aliquota);
+        // Bug real de produção (2026-09-14, 3ª camada de validação da mesma
+        // investigação): `totTrib` é OBRIGATÓRIO dentro de `trib` (só
+        // `tribFed` é opcional) — SEFAZ/ADN rejeitava com "E1235: elemento
+        // 'trib' com conteúdo incompleto, esperava tribFed/totTrib". A
+        // própria doc do XSD diz que `indTotTrib` "possui valor fixo igual a
+        // zero" — não é um chute, é o único valor válido pra essa opção do
+        // xs:choice (nenhuma estimativa de tributos informada, Decreto
+        // 8.264/2014), evitando ter que estimar vTotTrib/pTotTrib sem dado
+        // real pra isso.
+        $this->assertSame(
+            \Nfse\Enums\IndicadorTotalTributos::Nenhum,
+            $inf->valores->tributacao->indicadorTotalTributos,
+        );
     }
 
     public function test_ctribmun_valido_de_3_digitos_e_enviado(): void

@@ -163,13 +163,25 @@ class MotorNfse
                 ],
                 'valores' => [
                     'vServPrest' => ['vServ' => $nota->valorServicos],
-                    'trib' => ['tribMun' => [
-                        'tribISSQN'  => 1, // Operação tributável
-                        // Corrigido: o brief tinha "issRetido ? 1 : 2", invertido — 1 é
-                        // "Não Retido" e 2 é "Retido pelo Tomador" (Nfse\Enums\TipoRetencaoIssqn).
-                        'tpRetISSQN' => $nota->issRetido ? 2 : 1,
-                        'pAliq'      => $nota->aliquotaIss,
-                    ]],
+                    'trib' => [
+                        'tribMun' => [
+                            'tribISSQN'  => 1, // Operação tributável
+                            // Corrigido: o brief tinha "issRetido ? 1 : 2", invertido — 1 é
+                            // "Não Retido" e 2 é "Retido pelo Tomador" (Nfse\Enums\TipoRetencaoIssqn).
+                            'tpRetISSQN' => $nota->issRetido ? 2 : 1,
+                            'pAliq'      => $nota->aliquotaIss,
+                        ],
+                        // Bug real de produção (2026-09-14): `totTrib` é
+                        // OBRIGATÓRIO dentro de `trib` (só `tribFed` é
+                        // opcional) — SEFAZ/ADN rejeitava com "elemento 'trib'
+                        // com conteúdo incompleto". `indTotTrib=0` é o único
+                        // valor válido pra essa opção do xs:choice (a própria
+                        // doc do XSD diz "possui valor fixo igual a zero") —
+                        // "nenhuma estimativa de tributos informada" (Decreto
+                        // 8.264/2014), sem precisar estimar vTotTrib/pTotTrib
+                        // sem dado real pra isso.
+                        'totTrib' => ['indTotTrib' => 0],
+                    ],
                 ],
             ],
         ]);
