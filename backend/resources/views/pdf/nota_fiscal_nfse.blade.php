@@ -49,7 +49,14 @@
 <table class="grid">
   <tr>
     <td class="h-title" style="width:70%; border-right:0.75px solid #000;">
-      <div class="nome">{{ $emit['nome_fantasia'] ?? $emit['razao_social'] ?? '-' }}</div>
+      {{-- Cabeçalho da NFS-e é da PREFEITURA (documento municipal, não do
+           prestador) — modelo oficial de referência (doc_documentos_fiscais/
+           modelo_nota/NotaServico.pdf) mostra "PREFEITURA MUNICIPAL DE
+           {CIDADE}-{UF}" + "SECRETARIA MUNICIPAL DE FAZENDA" aqui; o nome da
+           oficina (prestador) já aparece embaixo, na seção "Prestador de
+           Serviços" — não deve se repetir no topo. --}}
+      <div class="nome">PREFEITURA MUNICIPAL DE {{ strtoupper(trim(($emit['cidade'] ?? '-') . '-' . ($emit['uf'] ?? ''))) }}</div>
+      <div class="sub">Secretaria Municipal de Fazenda</div>
       <div class="sub">Nota Fiscal de Serviços Eletrônica — NFS-e</div>
     </td>
     <td style="width:30%; text-align:right;">
