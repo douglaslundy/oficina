@@ -21,6 +21,7 @@ class EnviarAlertaEmailJob implements ShouldQueue
 
     /**
      * @param string[] $destinatarios
+     * @param array<int, array{conteudo: string, filename: string, mime: string}> $anexos
      */
     public function __construct(
         private readonly string $oficina_id,
@@ -29,13 +30,14 @@ class EnviarAlertaEmailJob implements ShouldQueue
         private readonly string $corpo,
         private readonly string $tipo = 'ALERTA',
         private readonly ?string $destinatarioTipo = null,
+        private readonly array $anexos = [],
     ) {}
 
     public function handle(EmailService $email): void
     {
         TenancyContext::set($this->oficina_id);
         try {
-            $resultado = $email->enviar($this->destinatarios, $this->assunto, $this->corpo);
+            $resultado = $email->enviar($this->destinatarios, $this->assunto, $this->corpo, $this->anexos);
 
             AlertaLog::create([
                 'oficina_id'        => $this->oficina_id,

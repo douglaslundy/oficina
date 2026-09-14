@@ -77,6 +77,53 @@ XML;
         $this->assertSame('42', $resultado->numero);
     }
 
+    /**
+     * Pedido explícito do usuário (2026-09-14): "o XML deve ser nos moldes
+     * fiscais que o mercado exige com todas as informações necessárias".
+     * Achado real ao investigar: `xml_retorno` salvava só a NF-e ASSINADA
+     * que ENVIAMOS pra SEFAZ — nunca o `nfeProc` (NFe + protNFe), que é o
+     * documento oficial completo que qualquer ERP/contador exige (prova a
+     * autorização; um XML sem `protNFe` não prova nada). Corrigido via
+     * `NFePHP\NFe\Complements::toAuthorize()` — helper do próprio vendor,
+     * nunca "inventado" à mão. Este teste usa um NFe MINIMAMENTE assinado
+     * (com `Signature/DigestValue`, exigido pelo helper pra cross-checar
+     * contra o `digVal` do protocolo) pra provar a junção de verdade —
+     * os outros testes desta classe usam `<xml-enviado/>` (sem assinatura),
+     * que cai no fallback (catch) e continua devolvendo o XML como veio,
+     * sem quebrar.
+     */
+    public function test_processar_resposta_autorizacao_monta_nfeproc_com_protocolo_anexado(): void
+    {
+        $xmlEnviado = <<<'XML'
+<NFe xmlns="http://www.portalfiscal.inf.br/nfe"><infNFe Id="NFe31260800000000000000550010000000011234567890" versao="4.00"><ide><nNF>42</nNF></ide></infNFe><Signature xmlns="http://www.w3.org/2000/09/xmldsig#"><SignedInfo><DigestValue>DIGESTABC123</DigestValue></SignedInfo></Signature></NFe>
+XML;
+        $respostaXml = <<<'XML'
+<retEnviNFe xmlns="http://www.portalfiscal.inf.br/nfe">
+  <cStat>103</cStat>
+  <protNFe versao="4.00">
+    <infProt>
+      <cStat>100</cStat>
+      <xMotivo>Autorizado o uso da NF-e</xMotivo>
+      <chNFe>31260800000000000000550010000000011234567890</chNFe>
+      <nProt>135260000000000</nProt>
+      <digVal>DIGESTABC123</digVal>
+    </infProt>
+  </protNFe>
+</retEnviNFe>
+XML;
+
+        $motor  = new MotorNfe();
+        $metodo = new \ReflectionMethod($motor, 'processarRespostaAutorizacao');
+        $metodo->setAccessible(true);
+        $resultado = $metodo->invoke($motor, $respostaXml, 'ref-1', $xmlEnviado, '42');
+
+        $this->assertSame('AUTORIZADA', $resultado->status);
+        $this->assertStringContainsString('<nfeProc', $resultado->xml);
+        $this->assertStringContainsString('<NFe', $resultado->xml);
+        $this->assertStringContainsString('<protNFe', $resultado->xml);
+        $this->assertStringContainsString('<nProt>135260000000000</nProt>', $resultado->xml);
+    }
+
     public function test_processar_resposta_autorizacao_rejeitada_nao_vira_autorizada(): void
     {
         $respostaXml = <<<'XML'

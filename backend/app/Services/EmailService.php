@@ -20,9 +20,10 @@ class EmailService
      * Envia um e-mail usando o SMTP configurado na plataforma (SaaS).
      *
      * @param string[] $destinatarios
+     * @param array<int, array{conteudo: string, filename: string, mime: string}> $anexos
      * @return array{ok: bool, error?: string}
      */
-    public function enviar(array $destinatarios, string $assunto, string $corpo): array
+    public function enviar(array $destinatarios, string $assunto, string $corpo, array $anexos = []): array
     {
         $cfg = SaasConfig::get();
         if (!$cfg->smtpConfigurado()) {
@@ -47,6 +48,7 @@ class EmailService
                     corpo: $corpo,
                     fromAddress: (string) $cfg->smtp_from_address,
                     fromName: (string) $cfg->smtp_from_name,
+                    anexos: $anexos,
                 )
             );
             return ['ok' => true];

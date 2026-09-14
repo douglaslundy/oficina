@@ -109,6 +109,34 @@ export default function HistoricoNFPage() {
     }
   }
 
+  // Pedido explícito do usuário (2026-09-14): botão de baixar o XML da nota
+  // (até aqui só existia baixar o PDF).
+  async function baixarXml(nota: NotaFiscal) {
+    try {
+      const token = localStorage.getItem('auth_token')
+      const res = await fetch(`${window.location.origin}/api/notas-fiscais/${nota.id}/xml`, {
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'X-Tenant': localStorage.getItem('oficina_slug') ?? '',
+        },
+      })
+      if (!res.ok) {
+        const body = await res.json().catch(() => null)
+        toast(body?.message ?? 'XML não disponível para esta nota.', 'danger')
+        return
+      }
+      const blob = await res.blob()
+      const url  = URL.createObjectURL(blob)
+      const a    = document.createElement('a')
+      a.href     = url
+      a.download = `NF-${nota.numero}.xml`
+      a.click()
+      URL.revokeObjectURL(url)
+    } catch {
+      toast('Erro ao baixar XML.', 'danger')
+    }
+  }
+
   async function confirmarCancelamento() {
     if (!cancelModal) return
     if (motivo.length < 10) { toast('O motivo deve ter no mínimo 10 caracteres.', 'danger'); return }
@@ -294,6 +322,15 @@ export default function HistoricoNFPage() {
                           style={{ background: 'none', border: '1px solid var(--border)', color: 'var(--muted)', borderRadius: 6, padding: '4px 10px', cursor: 'pointer', fontSize: 13 }}
                         >
                           📄 PDF
+                        </button>
+                      )}
+                      {nota.status === 'AUTORIZADA' && nota.numero && (
+                        <button
+                          onClick={() => baixarXml(nota)}
+                          title="Baixar o XML autorizado da nota (nfeProc/NFSe, com protocolo de autorização)"
+                          style={{ background: 'none', border: '1px solid var(--border)', color: 'var(--muted)', borderRadius: 6, padding: '4px 10px', cursor: 'pointer', fontSize: 13 }}
+                        >
+                          {'</>'} XML
                         </button>
                       )}
                       {nota.status === 'CONTINGENCIA' && (

@@ -5,6 +5,7 @@ namespace App\Services\Fiscal;
 
 use App\Models\NotaFiscal;
 use App\Services\AlertaDispatchService;
+use App\Services\Fiscal\Pdf\NotaFiscalDocumentoService;
 use App\Services\PlanLimitService;
 
 /**
@@ -20,6 +21,7 @@ class AplicarResultadoNotaService
     public function __construct(
         private readonly PlanLimitService $planLimit,
         private readonly AlertaDispatchService $alertas,
+        private readonly NotaFiscalDocumentoService $documentos,
     ) {}
 
     /**
@@ -49,8 +51,12 @@ class AplicarResultadoNotaService
         ]);
 
         if ($resultado['status'] === 'AUTORIZADA' && $ambiente === 'PRODUCAO') {
-            $notaFresh = $nota->fresh()->loadMissing('cliente');
+            $notaFresh = $nota->fresh()->loadMissing(['cliente', 'itens']);
             $this->planLimit->registrarNotaSeExcedente($notaFresh);
+            // Pedido explícito do usuário (2026-09-14): o e-mail de "NF
+            // Autorizada" pro cliente deve levar o PDF e o XML da nota, não
+            // só o texto. montarAnexosEmail() nunca lança — falha de render
+            // vira "manda sem anexo", nunca derruba a emissão.
             $this->alertas->dispatch('NF_AUTORIZADA', [
                 'nf_numero'         => $notaFresh->numero,
                 'cliente'           => $notaFresh->cliente?->nome ?? '-',
@@ -58,7 +64,7 @@ class AplicarResultadoNotaService
                 'chave_acesso'      => $notaFresh->chave_acesso ?? '-',
                 '_telefone_cliente' => $notaFresh->cliente?->telefone ?? '',
                 '_email_cliente'    => $notaFresh->cliente?->email ?? '',
-            ]);
+            ], anexos: $this->documentos->montarAnexosEmail($notaFresh));
         }
 
         return $nota->fresh();

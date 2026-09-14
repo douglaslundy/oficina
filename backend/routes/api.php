@@ -311,6 +311,7 @@ Route::middleware(['tenant', 'auth:sanctum', 'tenant.verify', 'role:ADMIN,FINANC
     Route::get('notas-fiscais',                [NotaFiscalController::class, 'index']);
     Route::get('notas-fiscais/{id}',           [NotaFiscalController::class, 'show']);
     Route::get('notas-fiscais/{id}/pdf',       [NotaFiscalController::class, 'pdf']);
+    Route::get('notas-fiscais/{id}/xml',       [NotaFiscalController::class, 'xml']);
     Route::post('notas-fiscais',               [NotaFiscalController::class, 'store']);
     Route::post('notas-fiscais/{id}/emitir',   [NotaFiscalController::class, 'emitir']);
     Route::get('notas-fiscais/{id}/status',    [NotaFiscalController::class, 'status']);

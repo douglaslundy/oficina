@@ -678,6 +678,76 @@ ignora cStat/xMotivo de propósito (decisão документada no próprio mé
 o XSD não garante uma enumeração fechada de códigos). Não mexi nisso agora
 por estar fora do que foi pedido; registrado aqui pra não se perder.
 
+### 19. Botão de baixar XML + e-mail automático (PDF+XML) na autorização + bug real achado no meio do caminho: XML salvo não tinha o protocolo de autorização
+
+Usuário perguntou se o sistema mandava PDF+XML por e-mail e tinha botão de
+baixar XML — nenhum dos dois existia (confirmado por leitura de código,
+não suposição: `AlertaDispatchService`/`EnviarAlertaEmailJob`/`EmailService`
+só mandavam texto, sem suporte a anexo nenhum; zero rota/botão de XML pra
+nota de saída). Usuário pediu pra implementar os dois.
+
+**Refatoração de base:** extraído `NotaFiscalDocumentoService` (novo) de
+`NotaFiscalController` — antes a lógica de montar PDF (DANFE via
+DanfeRenderer pra NFEPHP, ou os 3 templates locais) vivia só no
+controller; agora é reusável tanto pelo endpoint de download quanto pelo
+e-mail automático. Único ponto de verdade evita repetir o tipo de
+divergência já visto nesta sessão (bug da NFS-e que tentava buscar PDF
+de endpoint descontinuado em vez de cair no template certo).
+
+**1. Botão de baixar XML:** novo endpoint `GET /notas-fiscais/{id}/xml`
+(serve `xml_retorno` já salvo, com `Content-Disposition: attachment`).
+Botão "XML" no Histórico Fiscal, ao lado do PDF — só pra notas
+AUTORIZADAS (não contingência: nessa fase o XML salvo ainda não tem
+protocolo real, ver achado abaixo).
+
+**2. Bug real achado ao validar o pedido do usuário ("o XML deve ser nos
+moldes fiscais que o mercado exige com todas as informações
+necessárias"):** o `xml_retorno` salvo pra NF-e/NFC-e via NFePHP
+(`MotorNfe::processarRespostaAutorizacao()`) era só a **NF-e ASSINADA QUE
+ENVIAMOS** pra SEFAZ (`$xmlEnviado`) — nunca o `nfeProc` (NFe + protNFe),
+que é o documento oficial completo exigido pelo mercado. Um XML sem
+`protNFe` embutido não PROVA que a nota foi autorizada — nenhum
+ERP/contador aceita isso como XML definitivo/fiscal. Corrigido usando
+`NFePHP\NFe\Complements::toAuthorize()` — helper do PRÓPRIO vendor
+(nfephp-org/sped-nfe) feito exatamente pra essa junção, nunca construído
+à mão. Fallback silencioso pro XML sem protocolo se a junção falhar por
+algum motivo raro (assinatura ausente/malformada) — nunca trava uma
+autorização que já aconteceu por causa disso.
+
+Só afeta NF-e/NFC-e via NFePHP (`MotorNfe`). Confirmado que NÃO afeta os
+outros 2 casos, por evidência real, não suposição:
+- **NFS-e via NFePHP** (`MotorNfse`): o modelo nacional (ADN) já devolve
+  o documento completo assinado numa tacada só (`nfseXmlGZipB64` — "NFS-e
+  em formato Xml", não um par requisição+protocolo separado como a NF-e
+  clássica) — confirmado lendo a spec da API oficial embutida no vendor
+  `nfse-nacional/nfse-php`.
+- **Spedy/Focus**: essas APIs terceirizam a comunicação com a SEFAZ pro
+  cliente delas — o campo `xml`/`caminho_xml_nota_fiscal` que devolvem já
+  é o produto final que vendem, presumivelmente completo (não
+  verificável no código, mas é o próprio propósito comercial dessas
+  APIs); fora do escopo desta correção.
+
+**3. E-mail automático (PDF+XML) na nota autorizada:** o alerta
+`NF_AUTORIZADA` já existia (texto via WhatsApp/e-mail) — estendido pra
+anexar os documentos reais quando o canal é EMAIL. Plumbing: `AlertaMail`
+ganhou `$anexos` (usa `attachData()` do próprio Mailable do Laravel);
+`EmailService::enviar()`, `EnviarAlertaEmailJob` e
+`AlertaDispatchService::dispatch()/enviarAlerta()` repassam o array de
+anexos até lá. `NotaFiscalDocumentoService::montarAnexosEmail()` monta
+PDF+XML — nunca lança (falha de render vira "manda sem PDF", não derruba
+a emissão nem o alerta). Os 2 pontos que disparam `NF_AUTORIZADA`
+(`AplicarResultadoNotaService::aplicar()` e
+`NotaFiscalController::retransmitirContingencia()`) agora passam os
+anexos.
+
+**Testes:** 7 novos testes Unit (`NotaFiscalDocumentoServiceTest` — xml()
+puro sem DB, `montarAnexosEmail()` com mock parcial provando que falha de
+PDF não derruba o XML; `MotorNfeEmitirTest` — novo teste com NFe
+minimamente assinada, prova que o `nfeProc` resultante tem `<NFe`,
+`<protNFe` e o `<nProt>` corretos) + 2 Feature (`GET .../xml` 200/404).
+Suíte Unit sem regressão (309 passou, mesmas 11 falhas pré-existentes —
+subiu de 302 porque os 7 novos rodam sem DB).
+
 ### 18. "Consultar chave já lançada" bloqueava ANTES de oferecer a conciliação — a própria feature que o usuário queria já existia, só não era alcançada
 
 Usuário reportou: digitar a chave de acesso de uma nota e pedir pra

@@ -159,6 +159,40 @@ class NotaFiscalTest extends TestCase
         $response->assertStatus(422);
     }
 
+    /**
+     * Pedido explícito do usuário (2026-09-14): botão de baixar o XML da
+     * nota (até aqui só existia baixar PDF).
+     */
+    public function test_baixar_xml_de_nota_autorizada(): void
+    {
+        $token   = $this->loginAdmin();
+        $cliente = $this->criarCliente();
+        $nota = NotaFiscal::create([
+            'cliente_id' => $cliente->id, 'modelo' => 'NF-e', 'natureza_operacao' => 'Venda de Mercadoria',
+            'subtotal' => 100, 'valor_total' => 100, 'status' => 'AUTORIZADA', 'ambiente' => 'HOMOLOGACAO',
+            'numero' => 5, 'xml_retorno' => '<NFe>conteudo</NFe>',
+        ]);
+
+        $response = $this->withToken($token)->get("/api/notas-fiscais/{$nota->id}/xml");
+
+        $response->assertStatus(200);
+        $this->assertSame('application/xml', $response->headers->get('content-type'));
+        $this->assertStringContainsString('NFe-5.xml', $response->headers->get('content-disposition'));
+        $this->assertSame('<NFe>conteudo</NFe>', $response->getContent());
+    }
+
+    public function test_baixar_xml_de_nota_sem_xml_salvo_retorna_404(): void
+    {
+        $token   = $this->loginAdmin();
+        $cliente = $this->criarCliente();
+        $nota = NotaFiscal::create([
+            'cliente_id' => $cliente->id, 'modelo' => 'NF-e', 'natureza_operacao' => 'Venda de Mercadoria',
+            'subtotal' => 100, 'valor_total' => 100, 'status' => 'RASCUNHO', 'ambiente' => 'HOMOLOGACAO',
+        ]);
+
+        $this->withToken($token)->get("/api/notas-fiscais/{$nota->id}/xml")->assertStatus(404);
+    }
+
     public function test_listar_notas_fiscais(): void
     {
         $token = $this->loginAdmin();

@@ -9,7 +9,6 @@ use App\Services\AlertaDispatchService;
 use App\Services\Fiscal\AplicarResultadoNotaService;
 use App\Services\NfeService;
 use App\Services\PlanLimitService;
-use Barryvdh\DomPDF\Facade\Pdf;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Http\Resources\Json\AnonymousResourceCollection;
@@ -169,7 +168,7 @@ class NotaFiscalController extends Controller
             ]);
 
             if ($ambiente === 'PRODUCAO') {
-                $notaFresh = $nota->fresh()->loadMissing('cliente');
+                $notaFresh = $nota->fresh()->loadMissing(['cliente', 'itens']);
                 $this->planLimit->registrarNotaSeExcedente($notaFresh);
                 $this->alertas->dispatch('NF_AUTORIZADA', [
                     'nf_numero'         => $notaFresh->numero,
@@ -178,7 +177,7 @@ class NotaFiscalController extends Controller
                     'chave_acesso'      => $notaFresh->chave_acesso ?? '-',
                     '_telefone_cliente' => $notaFresh->cliente?->telefone ?? '',
                     '_email_cliente'    => $notaFresh->cliente?->email ?? '',
-                ]);
+                ], anexos: app(\App\Services\Fiscal\Pdf\NotaFiscalDocumentoService::class)->montarAnexosEmail($notaFresh));
             }
         } elseif ($resultado->status === 'CANCELADA') {
             $nota->update(['status' => 'CANCELADA', 'contingencia_desde' => null]);
@@ -259,102 +258,33 @@ class NotaFiscalController extends Controller
 
     public function pdf(string $id): \Illuminate\Http\Response
     {
-        $nota = NotaFiscal::with(['cliente', 'itens'])->findOrFail($id);
+        $nota    = NotaFiscal::with(['cliente', 'itens'])->findOrFail($id);
+        $arquivo = app(\App\Services\Fiscal\Pdf\NotaFiscalDocumentoService::class)->gerarPdf($nota);
 
-        // NF-e emitida via NFePHP: o DANFE é montado localmente a partir do
-        // XML já autorizado (DanfeRenderer), diferente da NFS-e abaixo, que
-        // busca o PDF pronto direto da API oficial do ambiente nacional —
-        // NF-e via NFePHP não tem um endpoint equivalente pra isso, então
-        // renderizamos nós mesmos.
-        if ($nota->provedor === 'NFEPHP' && in_array($nota->modelo, ['NF-e', 'NFC-e'], true) && in_array($nota->status, ['AUTORIZADA', 'CONTINGENCIA'], true)) {
-            $dados = app(\App\Services\Fiscal\Pdf\DanfeRenderer::class)->dadosParaTemplate($nota);
-            $pdf = Pdf::loadView('pdf.danfe', $dados)->setPaper('a4', 'portrait');
-
-            return $pdf->download('DANFE-' . ($nota->numero ?? $nota->id) . '.pdf');
-        }
-
-        // Bug real corrigido em 2026-09-14 ("erro ao baixar a NFS-e"): NFS-e
-        // via NFePHP tentava baixar o PDF pronto da API oficial do ambiente
-        // nacional (`MotorNfse::baixarDanfse()`) — mas essa API foi
-        // DESCONTINUADA pelo governo em 01/07/2026 (aviso que já estava
-        // documentado no docblock do próprio método, escrito antes dessa
-        // data). Reproduzido ao vivo: `GET /danfse/{chave}` → 404 pra
-        // qualquer nota, mesmo autorizada há horas — não é falha de rede
-        // nem chave errada, é o endpoint que não existe mais. Cai direto
-        // pro render local (`pdf.nota_fiscal_nfse`, mesmo template usado
-        // pra Spedy/Focus), exatamente como o docblock original já
-        // antecipava que seria necessário.
-
-        $empresa = \App\Models\Configuracao::first()?->toArray() ?? [];
-
-        $arquivo = $this->montarPdfArquivo($nota, $empresa);
-
-        return $arquivo['pdf']->download($arquivo['filename']);
+        return response($arquivo['conteudo'], 200, [
+            'Content-Type'        => 'application/pdf',
+            'Content-Disposition' => 'attachment; filename="' . $arquivo['filename'] . '"',
+        ]);
     }
 
     /**
-     * Escolhe o template certo — cupom 80mm pra NFC-e, DANFE-style A4 pra NF-e
-     * (produto), layout de NFS-e municipal pra NFS-e (serviço) — e monta o
-     * PDF. Compartilhado entre pdf() e downloadZip() (achado da revisão final
-     * de branch: downloadZip() usava sempre o template A4, mesmo pra NFC-e).
-     *
-     * Refatoração 2026-09-14: os dois templates A4 (NF-e/NFS-e) eram um único
-     * `pdf.nota_fiscal` genérico, sem tabela de itens pra NF-e e com a
-     * identidade visual da plataforma (MecânicaPro, âmbar) em vez da do
-     * emitente — layout de referência (`doc_documentos_fiscais/modelo_nota`)
-     * usado pra alinhar com o padrão real de DANFE/NFS-e brasileiro.
-     *
-     * @return array{pdf: \Barryvdh\DomPDF\PDF, filename: string}
+     * Pedido explícito do usuário (2026-09-14): botão de baixar o XML da nota
+     * (até aqui só existia baixar o PDF). O XML já ficava salvo em
+     * `xml_retorno` desde a autorização — só faltava expor.
      */
-    private function montarPdfArquivo(NotaFiscal $nota, array $empresa): array
+    public function xml(string $id): \Illuminate\Http\Response|JsonResponse
     {
-        if ($nota->modelo === 'NFC-e') {
-            $qrCodeDataUri = $this->gerarQrCodeDataUri($nota);
-            $pdf = Pdf::loadView('pdf.nota_fiscal_nfce', compact('nota', 'empresa', 'qrCodeDataUri'))
-                ->setPaper([0, 0, 226.77, $this->alturaCupomNfce($nota)], 'portrait');
+        $nota    = NotaFiscal::findOrFail($id);
+        $arquivo = app(\App\Services\Fiscal\Pdf\NotaFiscalDocumentoService::class)->xml($nota);
 
-            return ['pdf' => $pdf, 'filename' => 'NFCe-' . ($nota->numero ?? $nota->id) . '.pdf'];
+        if ($arquivo === null) {
+            return response()->json(['message' => 'XML não disponível para esta nota.'], 404);
         }
 
-        if ($nota->modelo === 'NF-e') {
-            $pdf = Pdf::loadView('pdf.nota_fiscal_nfe', compact('nota', 'empresa'))
-                ->setPaper('a4', 'portrait');
-
-            return ['pdf' => $pdf, 'filename' => 'NFe-' . ($nota->numero ?? $nota->id) . '.pdf'];
-        }
-
-        $pdf = Pdf::loadView('pdf.nota_fiscal_nfse', compact('nota', 'empresa'))
-            ->setPaper('a4', 'portrait');
-
-        return ['pdf' => $pdf, 'filename' => 'NFSe-' . ($nota->numero ?? $nota->id) . '.pdf'];
-    }
-
-    // ~260pt de cabeçalho/rodapé/totais fixos + ~14pt por item + ~110pt pro QR code
-    // quando presente. Altura dinâmica porque o cupom térmico não tem página de
-    // tamanho fixo como o A4.
-    private function alturaCupomNfce(NotaFiscal $nota): float
-    {
-        return 260.0 + ($nota->itens->count() * 14) + ($nota->qrcode_url ? 110.0 : 0.0);
-    }
-
-    private function gerarQrCodeDataUri(NotaFiscal $nota): ?string
-    {
-        if (empty($nota->qrcode_url)) {
-            return null;
-        }
-
-        // endroid/qr-code 6.x: a API antiga fluente (Builder::create()->writer()->
-        // data()->size()->margin()->build()) foi substituída por argumentos
-        // nomeados no construtor — Builder é uma classe readonly sem factory
-        // estática nem setters encadeáveis nesta major version.
-        $qrCode = (new \Endroid\QrCode\Builder\Builder(
-            writer: new \Endroid\QrCode\Writer\PngWriter(),
-            data: $nota->qrcode_url,
-            size: 200,
-            margin: 0,
-        ))->build();
-
-        return $qrCode->getDataUri();
+        return response($arquivo['conteudo'], 200, [
+            'Content-Type'        => 'application/xml',
+            'Content-Disposition' => 'attachment; filename="' . $arquivo['filename'] . '"',
+        ]);
     }
 
     public function downloadZip(Request $request): \Symfony\Component\HttpFoundation\BinaryFileResponse|JsonResponse
@@ -366,6 +296,7 @@ class NotaFiscalController extends Controller
 
         $notas   = NotaFiscal::with(['cliente', 'itens'])->whereIn('id', $request->ids)->get();
         $empresa = \App\Models\Configuracao::first()?->toArray() ?? [];
+        $doc     = app(\App\Services\Fiscal\Pdf\NotaFiscalDocumentoService::class);
 
         if ($notas->isEmpty()) {
             return response()->json(['message' => 'Nenhuma nota encontrada.'], 404);
@@ -381,7 +312,7 @@ class NotaFiscalController extends Controller
         }
 
         foreach ($notas as $nota) {
-            $arquivo = $this->montarPdfArquivo($nota, $empresa);
+            $arquivo = $doc->montarPdfArquivo($nota, $empresa);
             $zip->addFromString($arquivo['filename'], $arquivo['pdf']->output());
         }
 

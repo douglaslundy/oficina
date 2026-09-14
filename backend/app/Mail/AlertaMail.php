@@ -11,18 +11,28 @@ class AlertaMail extends Mailable
 {
     use Queueable, SerializesModels;
 
+    /**
+     * @param array<int, array{conteudo: string, filename: string, mime: string}> $anexos
+     */
     public function __construct(
         public string $assunto,
         public string $corpo,
         public string $fromAddress,
         public string $fromName,
+        public array $anexos = [],
     ) {}
 
     public function build(): self
     {
-        return $this->from($this->fromAddress, $this->fromName)
+        $mail = $this->from($this->fromAddress, $this->fromName)
             ->subject($this->assunto)
             ->html($this->renderHtml());
+
+        foreach ($this->anexos as $anexo) {
+            $mail->attachData($anexo['conteudo'], $anexo['filename'], ['mime' => $anexo['mime']]);
+        }
+
+        return $mail;
     }
 
     private function renderHtml(): string

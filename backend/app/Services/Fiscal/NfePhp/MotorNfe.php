@@ -15,6 +15,7 @@ use App\Services\NotaEntradaXmlParser;
 use Illuminate\Support\Facades\Log;
 use NFePHP\Common\Certificate;
 use NFePHP\Common\Exception\SoapException;
+use NFePHP\NFe\Complements;
 use NFePHP\NFe\Factories\Contingency;
 use NFePHP\NFe\Make;
 use NFePHP\NFe\Tools;
@@ -585,11 +586,33 @@ class MotorNfe
 
             // 100 = Autorizado o uso da NF-e (único código de sucesso real).
             if ($cStat === '100') {
+                // Bug real reportado pelo usuário (2026-09-14): o `xml_retorno`
+                // salvo era só a NF-e ASSINADA que ENVIAMOS (`$xmlEnviado`),
+                // nunca o `nfeProc` (NFe + protNFe) que é o documento
+                // oficial/completo exigido pelo mercado — sem o protocolo de
+                // autorização embutido, o XML baixado não prova que a nota
+                // foi autorizada pela SEFAZ (nenhum ERP/contador aceita isso
+                // como XML definitivo). `Complements::toAuthorize()` é o
+                // próprio helper do vendor pra essa junção — nunca construído
+                // à mão. Fallback pro XML enviado (sem protocolo) só se a
+                // junção falhar por algum motivo: melhor entregar um XML
+                // incompleto do que travar uma autorização que já aconteceu.
+                // Sem Log:: aqui de propósito: este método é parsing puro,
+                // testado via reflection SEM bootstrap do Laravel (ver
+                // docblock da classe de teste) — uma falha na junção cai
+                // silenciosamente pro XML sem protocolo, que ainda é um
+                // resultado funcionalmente correto (só menos completo).
+                try {
+                    $xmlCompleto = Complements::toAuthorize($xmlEnviado, $respostaXml);
+                } catch (\Throwable) {
+                    $xmlCompleto = $xmlEnviado;
+                }
+
                 return EmissaoResultado::autorizada(
                     chave: $chNFe,
                     protocolo: $nProt,
                     numero: $numeroReal,
-                    xml: $xmlEnviado,
+                    xml: $xmlCompleto,
                     pdfUrl: null,
                     ref: $ref,
                 );

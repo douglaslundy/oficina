@@ -22,8 +22,11 @@ class AlertaDispatchService
      * @param string $tipo  Uma das constantes de AlertaConfig::TIPOS_PRE_DEFINIDOS()
      * @param array  $vars  Variáveis para substituição no template: ['cliente' => 'João', ...]
      * @param array  $extras Telefones extras além dos configurados no alerta
+     * @param array<int, array{conteudo: string, filename: string, mime: string}> $anexos
+     *   Só vale pro canal EMAIL (WhatsApp não anexa arquivo por aqui) — usado
+     *   hoje só por NF_AUTORIZADA, pra mandar PDF+XML da nota junto.
      */
-    public function dispatch(string $tipo, array $vars = [], array $extras = []): void
+    public function dispatch(string $tipo, array $vars = [], array $extras = [], array $anexos = []): void
     {
         $oficinaId = TenancyContext::get();
         if (!$oficinaId) return;
@@ -38,7 +41,7 @@ class AlertaDispatchService
 
         foreach ($alertas as $alerta) {
             if ($this->condicoesCasam((array)($alerta->condicoes ?? []), $vars)) {
-                $this->enviarAlerta($alerta, $oficinaId, $tipo, $vars, $extras);
+                $this->enviarAlerta($alerta, $oficinaId, $tipo, $vars, $extras, $anexos);
             }
         }
     }
@@ -64,7 +67,7 @@ class AlertaDispatchService
         return true;
     }
 
-    private function enviarAlerta(AlertaConfig $alerta, string $oficinaId, string $tipo, array $vars, array $extras): void
+    private function enviarAlerta(AlertaConfig $alerta, string $oficinaId, string $tipo, array $vars, array $extras, array $anexos = []): void
     {
         // Canais do alerta interseccionados com o que está disponível (plano OU grant).
         $permitidos = $this->ent->canaisDisponiveis($oficinaId);
@@ -112,6 +115,7 @@ class AlertaDispatchService
                     corpo:            $mensagem,
                     tipo:             $tipo,
                     destinatarioTipo: $origem,
+                    anexos:           $anexos,
                 )->onQueue('whatsapp');
             }
         }
