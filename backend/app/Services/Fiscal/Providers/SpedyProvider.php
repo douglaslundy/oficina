@@ -126,13 +126,38 @@ class SpedyProvider implements FiscalProvider, ConsultaNotaTerceiroProvider
 
     public function cancelar(string $referencia, string $motivo, string $modelo = 'NFSE'): EmissaoResultado
     {
+        // BUG REAL DE PRODUÇÃO (2026-09-14, mesma classe do bug antigo do
+        // consultar()): a nossa referência interna nunca é o ID real da
+        // Spedy — DELETE direto por ela dá 404 sempre. Confirmado
+        // empiricamente no sandbox: DELETE pelo `id` real (achado via
+        // GET ?integrationId=) funciona e retorna "Cancelamento da nota
+        // fiscal está em processamento.". Busca o id real primeiro.
         $recurso = $this->recursoPorModelo($modelo);
+
+        $lookup = Http::withHeaders(['X-Api-Key' => $this->emissorToken ?? $this->masterKey])
+            ->get("{$this->baseUrl}/{$recurso}", ['integrationId' => $this->integrationIdDe($referencia)]);
+
+        if ($lookup->failed()) {
+            return EmissaoResultado::rejeitada($lookup->json('message') ?? 'Erro ao localizar a nota para cancelamento (Spedy).', $referencia);
+        }
+
+        $item = ($lookup->json('items') ?? [])[0] ?? null;
+        if ($item === null || empty($item['id'])) {
+            // Nota emitida antes deste fix nunca foi tagueada com
+            // integrationId na Spedy — não tem como localizar o id real
+            // automaticamente. Mensagem clara em vez do genérico "Erro ao
+            // cancelar", pra não confundir com uma falha de rede/API.
+            return EmissaoResultado::rejeitada(
+                'Nota não encontrada na Spedy para cancelamento — pode ser anterior à correção de referência (emitida antes de 2026-09-14). Cancele manualmente pelo painel da Spedy.',
+                $referencia,
+            );
+        }
 
         // Campo confirmado como `reason` na doc (docs.spedy.com.br/api-reference/
         // {nfs-e,nfc-e,nf-e}/cancelar-*.md) — `justification` era um chute anterior,
-        // nunca validado em sandbox real, corrigido nesta sessão.
+        // nunca validado em sandbox real, corrigido em sessão anterior.
         $resp = Http::withHeaders(['X-Api-Key' => $this->emissorToken ?? $this->masterKey])
-            ->delete("{$this->baseUrl}/{$recurso}/{$referencia}", [
+            ->delete("{$this->baseUrl}/{$recurso}/{$item['id']}", [
                 'reason' => $motivo,
             ]);
 

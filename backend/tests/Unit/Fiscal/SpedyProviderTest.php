@@ -142,48 +142,109 @@ class SpedyProviderTest extends TestCase
         $this->assertSame('spedy-key-1', $r->token);
     }
 
-    public function test_cancelar_sucesso(): void
+    /**
+     * BUG REAL DE PRODUÇÃO (2026-09-14, achado registrado em TAREFAS.md desde
+     * a Rodada 40 seção 1, confirmado agora): `cancelar()` fazia
+     * `DELETE /{recurso}/{referencia}` usando a nossa referência interna
+     * (`nf-<uuid>`) como se fosse o ID real da Spedy — igual ao bug antigo do
+     * `consultar()`. Confirmado batendo direto no sandbox: `DELETE` pela
+     * nossa referência dá 404; `DELETE` pelo `id` real da Spedy (obtido via
+     * `GET ?integrationId=`) funciona e retorna
+     * "Cancelamento da nota fiscal está em processamento.". Fix: busca o
+     * `id` real primeiro (mesmo filtro do `consultar()`), só então cancela.
+     */
+    public function test_cancelar_busca_o_id_real_antes_de_deletar(): void
     {
-        Http::fake(['*/service-invoices/inv-1' => Http::response([], 200)]);
+        Http::fake([
+            '*/service-invoices?*' => Http::response([
+                'items' => [['id' => 'spedy-real-id-1', 'integrationId' => 'inv-1', 'status' => 'authorized']],
+            ], 200),
+            '*/service-invoices/spedy-real-id-1' => Http::response([], 200),
+        ]);
 
         $p = new SpedyProvider('https://sandbox-api.spedy.com.br/v1', 'master', 'tok', 'emp-1');
         $r = $p->cancelar('inv-1', 'Serviço não prestado conforme acordado');
 
         $this->assertSame('CANCELADA', $r->status);
+        Http::assertSent(fn ($req) =>
+            str_contains($req->url(), '/service-invoices')
+            && !str_contains($req->url(), '/service-invoices/')
+            && ($req['integrationId'] ?? null) === 'inv-1'
+        );
+        Http::assertSent(fn ($req) =>
+            str_contains($req->url(), '/service-invoices/spedy-real-id-1')
+            && $req->method() === 'DELETE'
+        );
     }
 
     public function test_cancelar_manda_o_campo_reason_nao_justification(): void
     {
         // docs.spedy.com.br/api-reference/nfs-e/cancelar-nfs-e.md confirma
         // o campo `reason` (nao `justification`, que era um chute anterior).
-        Http::fake(['*/service-invoices/inv-1' => Http::response([], 200)]);
+        Http::fake([
+            '*/service-invoices?*' => Http::response(['items' => [['id' => 'spedy-real-id-1']]], 200),
+            '*/service-invoices/spedy-real-id-1' => Http::response([], 200),
+        ]);
 
         $p = new SpedyProvider('https://sandbox-api.spedy.com.br/v1', 'master', 'tok', 'emp-1');
         $p->cancelar('inv-1', 'Serviço não prestado');
 
-        Http::assertSent(fn ($req) => $req['reason'] === 'Serviço não prestado' && !isset($req['justification']));
+        Http::assertSent(fn ($req) => ($req['reason'] ?? null) === 'Serviço não prestado' && !isset($req['justification']));
     }
 
     public function test_cancelar_nfce_usa_consumer_invoices(): void
     {
-        Http::fake(['*/consumer-invoices/inv-nfce-1' => Http::response([], 200)]);
+        Http::fake([
+            '*/consumer-invoices?*' => Http::response(['items' => [['id' => 'spedy-real-nfce-1']]], 200),
+            '*/consumer-invoices/spedy-real-nfce-1' => Http::response([], 200),
+        ]);
 
         $p = new SpedyProvider('https://sandbox-api.spedy.com.br/v1', 'master', 'tok', 'emp-1');
         $r = $p->cancelar('inv-nfce-1', 'Erro na emissão', 'NFCE');
 
         $this->assertSame('CANCELADA', $r->status);
-        Http::assertSent(fn ($req) => str_contains($req->url(), '/consumer-invoices/inv-nfce-1') && $req->method() === 'DELETE');
+        Http::assertSent(fn ($req) => str_contains($req->url(), '/consumer-invoices/spedy-real-nfce-1') && $req->method() === 'DELETE');
     }
 
     public function test_cancelar_nfe_usa_product_invoices(): void
     {
-        Http::fake(['*/product-invoices/inv-nfe-1' => Http::response([], 200)]);
+        Http::fake([
+            '*/product-invoices?*' => Http::response(['items' => [['id' => 'spedy-real-nfe-1']]], 200),
+            '*/product-invoices/spedy-real-nfe-1' => Http::response([], 200),
+        ]);
 
         $p = new SpedyProvider('https://sandbox-api.spedy.com.br/v1', 'master', 'tok', 'emp-1');
         $r = $p->cancelar('inv-nfe-1', 'Erro na emissão', 'NFE');
 
         $this->assertSame('CANCELADA', $r->status);
-        Http::assertSent(fn ($req) => str_contains($req->url(), '/product-invoices/inv-nfe-1') && $req->method() === 'DELETE');
+        Http::assertSent(fn ($req) => str_contains($req->url(), '/product-invoices/spedy-real-nfe-1') && $req->method() === 'DELETE');
+    }
+
+    public function test_cancelar_sem_encontrar_a_nota_retorna_rejeitada_com_mensagem_clara(): void
+    {
+        // Nota emitida ANTES do fix de integrationId nunca foi tagueada na
+        // Spedy — o filtro não encontra nada. Precisa de mensagem clara
+        // (não a genérica "Erro ao cancelar"), já que a causa é diferente
+        // (nota antiga, não uma falha de rede).
+        Http::fake(['*/product-invoices?*' => Http::response(['items' => []], 200)]);
+
+        $p = new SpedyProvider('https://sandbox-api.spedy.com.br/v1', 'master', 'tok', 'emp-1');
+        $r = $p->cancelar('inv-nfe-antiga', 'Erro na emissão', 'NFE');
+
+        $this->assertSame('REJEITADA', $r->status);
+        $this->assertStringContainsString('não encontrada', (string) $r->mensagemErro);
+        Http::assertNotSent(fn ($req) => $req->method() === 'DELETE');
+    }
+
+    public function test_cancelar_falha_ao_localizar_nao_vira_cancelada(): void
+    {
+        Http::fake(['*/product-invoices?*' => Http::response(['message' => 'Unauthorized'], 401)]);
+
+        $p = new SpedyProvider('https://sandbox-api.spedy.com.br/v1', 'master', 'tok', 'emp-1');
+        $r = $p->cancelar('inv-nfe-1', 'Erro na emissão', 'NFE');
+
+        $this->assertSame('REJEITADA', $r->status);
+        Http::assertNotSent(fn ($req) => $req->method() === 'DELETE');
     }
 
     public function test_status_desconhecido_loga_warning(): void
