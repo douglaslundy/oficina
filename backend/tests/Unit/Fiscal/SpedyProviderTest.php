@@ -65,6 +65,24 @@ class SpedyProviderTest extends TestCase
         $this->assertSame('os-123', $payload['integrationId']);
     }
 
+    public function test_payload_nfe_trunca_integration_id_para_36_caracteres(): void
+    {
+        // BUG REAL DE PRODUÇÃO (2026-09-14, descoberto minutos depois do
+        // deploy do fix de reconciliação): a Spedy rejeita a CRIAÇÃO da nota
+        // com HTTP 400 "The field IntegrationId must be a string with a
+        // maximum length of 36." — a nossa referência interna é sempre
+        // `nf-<uuid>` (39 chars: prefixo "nf-" + UUID de 36), estourando o
+        // limite. Confirmado batendo direto na Spedy real via tinker.
+        // Fix: manda só os últimos 36 chars (o UUID em si, sem o prefixo).
+        $p = new SpedyProvider('https://sandbox-api.spedy.com.br/v1', 'master', 'tok', 'emp-1');
+        $payload = $p->montarPayloadNfe($this->notaNfeSimplesNacional([
+            'referenciaExterna' => 'nf-be23a656-74fd-49b0-b46f-f0e696aa3b95',
+        ]));
+
+        $this->assertSame('be23a656-74fd-49b0-b46f-f0e696aa3b95', $payload['integrationId']);
+        $this->assertLessThanOrEqual(36, strlen($payload['integrationId']));
+    }
+
     public function test_emitir_autorizada(): void
     {
         Http::fake([

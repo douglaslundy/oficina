@@ -94,7 +94,7 @@ class SpedyProvider implements FiscalProvider, ConsultaNotaTerceiroProvider
         $recurso = $this->recursoPorModelo($modelo);
 
         $resp = Http::withHeaders(['X-Api-Key' => $this->emissorToken ?? $this->masterKey])
-            ->get("{$this->baseUrl}/{$recurso}", ['integrationId' => $referencia]);
+            ->get("{$this->baseUrl}/{$recurso}", ['integrationId' => $this->integrationIdDe($referencia)]);
 
         if ($resp->failed()) {
             // Falha ao CONSULTAR (rede, auth, 5xx) não é o mesmo que "rejeitada
@@ -153,6 +153,26 @@ class SpedyProvider implements FiscalProvider, ConsultaNotaTerceiroProvider
         };
     }
 
+    /**
+     * BUG REAL DE PRODUÇÃO (2026-09-14): a Spedy rejeita a criação da nota
+     * com HTTP 400 "The field IntegrationId must be a string with a maximum
+     * length of 36." — a nossa referência interna é sempre `nf-<uuid>` (39
+     * chars: prefixo "nf-" + UUID de 36), estourando o limite. Confirmado
+     * batendo direto na Spedy real via tinker (2 NF-e reais rejeitadas antes
+     * de qualquer processamento fiscal, minutos depois do deploy do fix de
+     * reconciliação). Os últimos 36 chars da referência são sempre o UUID
+     * puro (o prefixo "nf-" é sempre 3 chars, vindo de
+     * IniciarEmissaoNotaService/NfeService), então pegar os últimos 36
+     * funciona pra qualquer referência gerada por este sistema, com ou sem
+     * prefixo. Usado tanto ao criar (integrationId no payload) quanto ao
+     * consultar (filtro ?integrationId=) — os dois lados precisam mandar o
+     * MESMO valor truncado pra Spedy conseguir casar um com o outro.
+     */
+    private function integrationIdDe(string $referencia): string
+    {
+        return substr($referencia, -36);
+    }
+
     public function montarPayloadEmpresa(EmissorData $e): array
     {
         return [
@@ -192,7 +212,7 @@ class SpedyProvider implements FiscalProvider, ConsultaNotaTerceiroProvider
             // como um ID dela) — toda nota fica PROCESSANDO pra sempre no
             // nosso banco mesmo já autorizada lá. `integrationId` é o campo
             // que consultar() usa como filtro (?integrationId=) pra achá-la.
-            'integrationId'       => $n->referenciaExterna,
+            'integrationId'       => $this->integrationIdDe($n->referenciaExterna),
             'sendEmailToCustomer' => false,
             'description'         => $n->descricao,
             'federalServiceCode'  => $n->codigoServicoFederal,
@@ -255,7 +275,7 @@ class SpedyProvider implements FiscalProvider, ConsultaNotaTerceiroProvider
         return array_filter([
             // integrationId: mesmo fix de reconciliação de montarPayloadNfse()
             // — ver comentário lá.
-            'integrationId'   => $n->referenciaExterna,
+            'integrationId'   => $this->integrationIdDe($n->referenciaExterna),
             // series/number: mesmo achado de montarPayloadNfe() — não
             // confirmado empiricamente pra consumer-invoices especificamente,
             // mas o schema raiz é o mesmo SefazInvoiceItemDto-family da NF-e,
@@ -358,7 +378,7 @@ class SpedyProvider implements FiscalProvider, ConsultaNotaTerceiroProvider
         return array_filter([
             // integrationId: mesmo fix de reconciliação de montarPayloadNfse()
             // — ver comentário lá.
-            'integrationId'   => $n->referenciaExterna,
+            'integrationId'   => $this->integrationIdDe($n->referenciaExterna),
             // series/number: ver docblock acima — omitidos (null) quando
             // NotaFiscalData não os carrega (ex.: chamada direta em teste).
             'series'          => $n->serieNf,
