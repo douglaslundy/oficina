@@ -28,7 +28,11 @@ class ConfiguracaoController extends Controller
             'inscricao_estadual'    => ['nullable', 'string', 'max:30'],
             'inscricao_municipal'   => ['nullable', 'string', 'max:20'],
             'regime_tributario'     => ['nullable', 'string', 'max:30'],
-            'cep'                   => ['nullable', 'string', 'max:9'],
+            // Mesmo fix de ClienteController (2026-09-14): CEP inválido (não
+            // 8 dígitos) só quebrava muito mais tarde, na emissão de NF-e —
+            // e aqui é pior, corrompe TODA nota emitida por esta oficina,
+            // não só as de um cliente.
+            'cep'                   => ['nullable', 'string', 'max:9', 'regex:/^\d{5}-?\d{3}$/'],
             'endereco'              => ['nullable', 'string', 'max:200'],
             'logradouro'            => ['nullable', 'string', 'max:150'],
             'numero'                => ['nullable', 'string', 'max:20'],

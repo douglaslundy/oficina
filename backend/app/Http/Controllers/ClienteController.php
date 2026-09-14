@@ -60,7 +60,13 @@ class ClienteController extends Controller
             'cpf_cnpj'       => ['required', 'string', 'unique:clientes,cpf_cnpj', $rule],
             'telefone'       => ['nullable', 'string', 'max:15'],
             'email'          => ['nullable', 'email', 'max:120'],
-            'cep'            => ['nullable', 'string', 'max:9'],
+            // Bug real de produção (2026-09-14): um CEP de 7 dígitos (faltando
+            // um dígito) foi aceito sem validação nenhuma e só quebrou muito
+            // mais tarde, na emissão de NF-e (Spedy rejeitava com um erro
+            // genérico de geração de XML, sem relação óbvia com "CEP"). CEP
+            // brasileiro válido tem sempre 8 dígitos — aceita com ou sem o
+            // hífen de formatação (NNNNN-NNN).
+            'cep'            => ['nullable', 'string', 'max:9', 'regex:/^\d{5}-?\d{3}$/'],
             'endereco'       => ['nullable', 'string', 'max:200'],
             'bairro'         => ['nullable', 'string', 'max:80'],
             'cidade'         => ['nullable', 'string', 'max:80'],
@@ -99,7 +105,13 @@ class ClienteController extends Controller
             'cpf_cnpj'       => ['sometimes', 'required', 'string', "unique:clientes,cpf_cnpj,{$id}", $rule],
             'telefone'       => ['nullable', 'string', 'max:15'],
             'email'          => ['nullable', 'email', 'max:120'],
-            'cep'            => ['nullable', 'string', 'max:9'],
+            // Bug real de produção (2026-09-14): um CEP de 7 dígitos (faltando
+            // um dígito) foi aceito sem validação nenhuma e só quebrou muito
+            // mais tarde, na emissão de NF-e (Spedy rejeitava com um erro
+            // genérico de geração de XML, sem relação óbvia com "CEP"). CEP
+            // brasileiro válido tem sempre 8 dígitos — aceita com ou sem o
+            // hífen de formatação (NNNNN-NNN).
+            'cep'            => ['nullable', 'string', 'max:9', 'regex:/^\d{5}-?\d{3}$/'],
             'endereco'       => ['nullable', 'string', 'max:200'],
             'bairro'         => ['nullable', 'string', 'max:80'],
             'cidade'         => ['nullable', 'string', 'max:80'],

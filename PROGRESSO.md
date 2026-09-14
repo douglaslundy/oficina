@@ -279,6 +279,68 @@ em `TAREFAS.md`** — não corrigido nesta rodada (exigiria descobrir a causa
 real do erro de registro, possivelmente re-enviar dados/certificado, fora
 do escopo do pedido original do usuário).
 
+### 8. CORREÇÃO à seção 2 — a diferença ERA ligada ao cliente, e eu errei ao descartar isso
+Usuário contestou a conclusão da seção 2 ("as rejeitadas são do mesmo
+cliente, as aprovadas de outro — verifique e corrija"). Ele estava certo, eu
+errei: minha investigação anterior só comparou cidade/UF/`codigo_ibge`
+entre os dois clientes (ambos batiam) e concluiu "sem diferença" — **sem
+nunca comparar os campos crus dígito a dígito**. Reexaminando com esse
+cuidado:
+
+```
+numero | status     | cliente            | cep
+2-6    | ...        | ABRAÃO VINICIUS    | 37175000  (8 dígitos, correto)
+7,9,11 | REJEITADA  | BRUNO SYLVA SOUSA  | 3717500   (7 dígitos!)
+```
+
+**Causa raiz real:** `clientes.cep` do BRUNO SYLVA SOUSA tinha **7 dígitos**
+em vez de 8 (`3717500`, faltando o último `0` — o CEP correto de Ilicínea/MG,
+confirmado via ViaCEP, é `37175-000`, o mesmo CEP rural genérico já usado
+pelo ABRAÃO). Esse CEP inválido ia direto pro payload da Spedy
+(`SpedyProvider::enderecoDestinatario()`: `preg_replace('/\D/','',$tomador['cep'])`,
+sem checagem de tamanho) e quebrava a geração do XML da NF-e do lado da
+Spedy — daí o erro genérico e enganoso "Erro ao gerar XML da nota fiscal.
+Verifique os dados e tente novamente." (SPD003), sem nenhuma pista de que o
+problema era o CEP.
+
+**Por que passou pela validação:** `ClienteController::store()`/`update()`
+e `ConfiguracaoController::update()` validavam `cep` só com
+`['nullable','string','max:9']` — **nenhuma checagem de formato/tamanho
+mínimo**. Um CEP de 1 a 9 caracteres quaisquer passava. O frontend
+(`ClienteForm.tsx`) tinha o mesmo problema: `z.string().optional()`, sem
+regex. O autopreenchimento via ViaCEP só dispara com exatamente 8 dígitos
+digitados — um CEP incompleto simplesmente não aciona o autofill e o
+usuário preenche o resto manualmente (city veio em minúsculo, `"ilicinea"`,
+diferente do `"Ilicínea"` que o ViaCEP devolve — sinal de que foi tudo
+digitado à mão, não outro bug).
+
+**Correção (TDD):**
+- `backend/app/Http/Controllers/ClienteController.php`: `cep` ganha
+  `regex:/^\d{5}-?\d{3}$/` (aceita `NNNNNNNN` ou `NNNNN-NNN`, continua
+  opcional). +3 testes em `ClienteTest` (rejeita 7 dígitos, aceita 8/com
+  hífen, aceita sem CEP).
+- `backend/app/Http/Controllers/ConfiguracaoController.php`: mesmo fix —
+  aqui o risco é maior (CEP do EMITENTE corrompido afeta TODA nota da
+  oficina, não só as de um cliente).
+- `frontend/components/forms/ClienteForm.tsx`: mesmo regex via
+  `z.refine()`, com mensagem de erro exibida no campo.
+- **Dado corrigido em produção**: `clientes.cep` do BRUNO SYLVA SOUSA →
+  `37175000` (confirmado via ViaCEP antes de gravar — mesmo CEP rural do
+  ABRAÃO, mesmo DDD 35 do telefone dele). `cidade` normalizada pra
+  `"Ilicínea"` (estava `"ilicinea"`, cosmético, não bloqueava nada).
+
+**Verificação:** `php -l` limpo nos 2 controllers, `npx tsc --noEmit` e
+`npm run build` limpos no frontend. Suíte Unit: 298 testes, mesmas 10
+falhas pré-existentes (não relacionadas — ClienteTest é Feature/Postgres,
+não roda nesta máquina, mas segue o mesmo padrão de teste já validado no
+projeto).
+
+**Lição prática:** ao investigar "aprovada pra um cliente, não pra outro",
+não basta comparar campos "de alto nível" (cidade, UF, código IBGE) — é
+preciso comparar TODOS os campos usados no payload, dígito a dígito, entre
+os dois registros. Essa é exatamente a classe de erro que a ausência de
+validação de formato permite passar despercebida por meses.
+
 ## Rodada 39 continuação 2 **primeira NF-e de peça autorizada
 de verdade pela SEFAZ via Spedy** neste projeto, depois de 5 bugs reais
 achados e corrigidos em sequência (campos tributáveis, numeração,

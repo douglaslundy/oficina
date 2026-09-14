@@ -12,7 +12,14 @@ const schema = z.object({
   cpf_cnpj: z.string().refine(v => validarCPFouCNPJ(v), 'CPF ou CNPJ inválido — verifique os dígitos informados'),
   telefone: z.string().optional(),
   email:    z.string().optional(),
-  cep:      z.string().optional(),
+  // Bug real de produção (2026-09-14): CEP de 7 dígitos foi aceito sem
+  // validação alguma e só quebrou bem mais tarde, na emissão de NF-e (Spedy
+  // rejeitava com erro genérico de geração de XML). CEP brasileiro válido
+  // tem sempre 8 dígitos.
+  cep: z.string().optional().refine(
+    v => !v || /^\d{5}-?\d{3}$/.test(v),
+    'CEP inválido — deve ter 8 dígitos',
+  ),
   endereco: z.string().optional(),
   bairro:   z.string().optional(),
   cidade:   z.string().optional(),
@@ -195,6 +202,7 @@ export function ClienteForm({ initialData, onSuccess }: ClienteFormProps) {
         <div>
           <label style={labelStyle}>CEP</label>
           <input {...register('cep')} style={inputStyle} placeholder="00000-000" />
+          {errors.cep && <p style={{ color: 'var(--danger)', fontSize: 12, marginTop: 4 }}>{errors.cep.message}</p>}
         </div>
         <div style={{ gridColumn: '1 / -1' }}>
           <label style={labelStyle}>Endereço</label>

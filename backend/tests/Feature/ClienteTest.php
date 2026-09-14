@@ -59,4 +59,53 @@ class ClienteTest extends TestCase
         $response->assertStatus(200)
                  ->assertJsonStructure(['data', 'meta' => ['total', 'per_page']]);
     }
+
+    /**
+     * Bug real de produção (2026-09-14): um CEP com 7 dígitos (faltando um
+     * dígito) foi aceito sem validação alguma, e só quebrou muito mais tarde
+     * — na emissão de NF-e via Spedy, com um erro genérico e sem relação
+     * óbvia ("Erro ao gerar XML da nota fiscal. Verifique os dados e tente
+     * novamente."). O CEP nunca tinha validação de formato, só `max:9`
+     * (aceitava qualquer string curta). Um CEP brasileiro válido tem sempre
+     * 8 dígitos (formato NNNNN-NNN).
+     */
+    public function test_rejeitar_cliente_com_cep_de_7_digitos(): void
+    {
+        $token = $this->loginAdmin();
+
+        $response = $this->withToken($token)->postJson('/api/clientes', [
+            'nome'     => 'Cliente CEP Inválido',
+            'cpf_cnpj' => '529.982.247-25',
+            'cep'      => '3717500',
+        ]);
+
+        $response->assertStatus(422)
+                 ->assertJsonValidationErrors(['cep']);
+    }
+
+    public function test_aceitar_cliente_com_cep_de_8_digitos_ou_formatado(): void
+    {
+        $token = $this->loginAdmin();
+
+        $response = $this->withToken($token)->postJson('/api/clientes', [
+            'nome'     => 'Cliente CEP Válido',
+            'cpf_cnpj' => '529.982.247-25',
+            'cep'      => '37175-000',
+        ]);
+
+        $response->assertStatus(201);
+    }
+
+    public function test_aceitar_cliente_sem_cep(): void
+    {
+        // CEP continua opcional (cadastro sem endereço, ex. venda de balcão).
+        $token = $this->loginAdmin();
+
+        $response = $this->withToken($token)->postJson('/api/clientes', [
+            'nome'     => 'Cliente Sem CEP',
+            'cpf_cnpj' => '529.982.247-25',
+        ]);
+
+        $response->assertStatus(201);
+    }
 }
