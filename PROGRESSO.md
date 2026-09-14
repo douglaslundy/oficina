@@ -341,6 +341,41 @@ preciso comparar TODOS os campos usados no payload, dígito a dígito, entre
 os dois registros. Essa é exatamente a classe de erro que a ausência de
 validação de formato permite passar despercebida por meses.
 
+### 9. REGRESSÃO própria corrigida no mesmo dia: `integrationId` estourava limite de 36 chars
+Minutos depois do deploy da seção 1, o usuário tentou emitir 2 NF-e reais
+(numero 12 e 13) e ambas foram rejeitadas **sem nem bater na Spedy de
+verdade** (nenhum registro do lado de lá). Como `emitirNfe()` não loga nada
+em falha, reproduzi a chamada exata via tinker contra o sandbox real:
+
+```
+STATUS: 400
+BODY: {"errors":[{"message":"The field IntegrationId must be a string
+       with a maximum length of 36.","path":"IntegrationId"}]}
+```
+
+**Causa:** o `integrationId` que a seção 1 desta rodada passou a mandar é a
+nossa `referencia_externa` inteira, sempre no formato `nf-<uuid>` (3 +
+36 = 39 chars) — 3 chars acima do limite da Spedy. Eu não tinha checado
+esse limite antes de deployar.
+
+**Fix:** `SpedyProvider::integrationIdDe()` manda só os últimos 36
+caracteres (o UUID puro, sem o prefixo `nf-`) — usado tanto ao criar
+(payload) quanto ao consultar (filtro), pra Spedy conseguir casar os dois
+lados. TDD (`SpedyProviderTest` 50→51 testes), suíte Unit 299 testes/mesmas
+10 falhas pré-existentes. **Testado ao vivo contra a Spedy real antes de
+considerar resolvido** (mesmo método já padrão neste projeto): reproduzi a
+emissão da nota `be23a656` (uma das 2 rejeitadas) com o código corrigido —
+`STATUS: 200`, `"status":"enqueued"`, `integrationId` ecoado de volta
+corretamente pela Spedy.
+
+**Notas 12 e 13 continuam REJEITADA no banco** (rejeição foi minha, não da
+SEFAZ) — não reconciliei automaticamente porque o retry normal (botão
+"emitir" de novo na tela, `IniciarEmissaoNotaService::iniciar()` permite
+retry de qualquer status que não seja AUTORIZADA/PROCESSANDO) já resolve
+sozinho, alocando um número novo. Não mexi direto no banco desta vez.
+
+**Deploy:** commit `9e9b05c`, confirmado na VPS.
+
 ## Rodada 39 continuação 2 **primeira NF-e de peça autorizada
 de verdade pela SEFAZ via Spedy** neste projeto, depois de 5 bugs reais
 achados e corrigidos em sequência (campos tributáveis, numeração,
