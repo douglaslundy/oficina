@@ -608,6 +608,60 @@ local sem regressão nova a cada commit, e os 2 achados de maior risco
 (isolamento entre tenants e certificado) confirmados AO VIVO em produção
 antes e depois do deploy — não só por teste automatizado.
 
+### 17. Bug real corrigido — "erro ao conciliar nota" de entrada era ambiente de emissão vazando pra consulta de nota de terceiro
+
+Usuário reportou: "Tentei conciliar uma nota e deu erro, verifique o motivo
+e corrija." Investigado com `superpowers:systematic-debugging` — causa
+raiz confirmada por evidência ao vivo, não suposição.
+
+**Evidência (Fase 1):** todas as 10 `NotaEntrada` já lançadas na stuntmotos
+(datas de julho a setembro) tinham `fiscal_erro_consulta = "Nota não
+encontrada no provedor ainda."`, atualizadas minutos antes pela varredura
+que o usuário disparou. Uniforme em TODAS as notas, de idades bem
+diferentes — descartou de cara "é questão de esperar sincronizar" (a
+mensagem genérica sugeria isso, mas o padrão não bate: nota de julho
+"ainda não sincronizada" em setembro não faz sentido).
+
+**Causa raiz confirmada (Fase 3, testada ao vivo antes de corrigir):**
+`EntradaNfController`/`ConciliarFiscalNotaEntradaJob` resolvem o provider
+fiscal via `FiscalProviderManager::forTenant()`, que usa o
+`ambiente_fiscal` configurado pra EMISSÃO própria da oficina
+(`HOMOLOGACAO`, de propósito — usuário ainda testando o sistema, não quer
+emitir nota real sem querer). Esse mesmo ambiente estava sendo usado pra
+CONSULTAR nota de TERCEIRO (compra de fornecedor) — mas a Distribuição DFe
+de homologação da SEFAZ é uma base isolada, sem nenhum dado de produção.
+Uma nota de compra real, emitida por um fornecedor de verdade, nunca
+existe lá. Testado ao vivo com uma chave real (stuntmotos): consultando em
+HOMOLOGACAO → `cStat=217 "NF-e inexistente"`; a MESMA chave, MESMO
+certificado, consultando em PRODUÇÃO → `COMPLETA`, 3 itens, fornecedor
+real (WURTH DO BRASIL PECAS DE FIXACAO LTDA).
+
+**Fix:** `NfePhpProvider::consultarNotaRecebida()`/`::listarNotasRecebidas()`
+agora ignoram `$this->ambiente` de propósito e sempre usam `'PRODUCAO'` —
+`$this->ambiente` continua controlando emissão própria normalmente
+(`emitir()`/`consultar()`/`cancelar()`, inalterados). **Decisão importante:**
+considerei aplicar o mesmo princípio a Spedy/Focus (mesma classe
+conceitual de bug — notas recebidas reais também não existem no sandbox
+deles), mas RECUEI: não tinha evidência empírica pra esses dois provedores
+(só verifiquei NFePHP ao vivo), e forçar PRODUÇÃO ali exigiria uma
+credencial de emissor PRODUÇÃO separada que o tenant de teste não tem
+registrada — quebraria os testes `EntradaNfConsultaTest` já passando sem
+prova de que é o mesmo problema. Fix escopado ao que foi realmente
+verificado (Iron Law do systematic-debugging: root cause confirmado, não
+extrapolado).
+
+Testes atualizados (`NfePhpProviderTest.php`, Unit, sem DB): as duas
+asserções que provavam "ambiente repassado como veio" agora provam
+"sempre PRODUÇÃO mesmo construído com HOMOLOGACAO" — suíte Unit local sem
+regressão (302 passou, mesmas 11 falhas pré-existentes de sempre).
+Verificação real: reproduzido o bug ao vivo ANTES do fix (cStat=217) e
+confirmado o comportamento correto (COMPLETA) testando o parâmetro
+`'PRODUCAO'` diretamente contra a SEFAZ real antes de decidir a correção —
+não só depois.
+
+**Arquivos:** `backend/app/Services/Fiscal/Providers/NfePhpProvider.php`,
+`backend/tests/Unit/Fiscal/NfePhpProviderTest.php`.
+
 ### 16. Botão "Ver motivo" (rejeição) + botão "Tentar autorizar" (contingência) + PDF liberado pra contingência
 
 Duas idas e voltas com o usuário sobre a mesma tela (Histórico Fiscal):

@@ -88,10 +88,24 @@ class NfePhpProvider implements FiscalProvider, ConsultaNotaTerceiroProvider
      * Spedy/Focus, aqui não há provedor intermediário: o MotorNfe fala
      * direto com o webservice nacional de Distribuição DFe usando o
      * certificado A1 da própria oficina.
+     *
+     * SEMPRE em PRODUÇÃO, nunca `$this->ambiente` — bug real de produção
+     * (2026-09-14): a Distribuição DFe de HOMOLOGAÇÃO é uma base isolada da
+     * SEFAZ, sem nenhum dado real. Uma nota de compra genuína, emitida por
+     * um fornecedor de verdade, NUNCA existe lá — não é questão de esperar
+     * sincronizar, é estrutural. `$this->ambiente` existe pra proteger o
+     * usuário de emitir sem querer um documento fiscal REAL enquanto ainda
+     * testa o sistema; não tem nada a ver com LER uma nota de compra que o
+     * fornecedor já emitiu de verdade. Confirmado ao vivo (stuntmotos,
+     * ambiente_fiscal=HOMOLOGACAO): a mesma chave devolveu `cStat=217 "NF-e
+     * inexistente"` consultando em HOMOLOGACAO e "COMPLETA" (3 itens,
+     * fornecedor WURTH DO BRASIL) consultando em PRODUÇÃO, com o MESMO
+     * certificado — todas as notas de entrada já lançadas batiam "Nota não
+     * encontrada" só por causa disso, não por falha real da SEFAZ.
      */
     public function consultarNotaRecebida(string $chaveAcesso): ConsultaNotaTerceiroResultado
     {
-        return app(MotorNfe::class)->consultarNotaRecebida($chaveAcesso, $this->ambiente);
+        return app(MotorNfe::class)->consultarNotaRecebida($chaveAcesso, 'PRODUCAO');
     }
 
     /**
@@ -102,7 +116,8 @@ class NfePhpProvider implements FiscalProvider, ConsultaNotaTerceiroProvider
         // $desde fica sem uso: a Distribuição DFe só ordena/pagina por NSU
         // incremental, não filtra por data de emissão — mesma limitação já
         // documentada em FocusNfeProvider::listarNotasRecebidas(). Mantido
-        // na assinatura por exigência da interface.
-        return app(MotorNfe::class)->listarNotasRecebidas($cnpjOficina, $this->ambiente);
+        // na assinatura por exigência da interface. Ambiente sempre
+        // PRODUÇÃO — mesmo motivo de consultarNotaRecebida() acima.
+        return app(MotorNfe::class)->listarNotasRecebidas($cnpjOficina, 'PRODUCAO');
     }
 }

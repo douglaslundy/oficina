@@ -212,7 +212,17 @@ class NfePhpProviderTest extends TestCase
         );
     }
 
-    public function test_consultar_nota_recebida_despacha_para_motor_nfe_com_o_ambiente(): void
+    /**
+     * Bug real de produção (2026-09-14): a consulta de nota de TERCEIRO
+     * (nota de entrada, compra de fornecedor) sempre vai pra PRODUÇÃO,
+     * MESMO quando a oficina está com `ambiente_fiscal=HOMOLOGACAO` pra sua
+     * própria emissão — a Distribuição DFe de homologação é uma base
+     * isolada da SEFAZ sem nenhum dado real, então uma nota de compra
+     * genuína NUNCA existe lá. Confirmado ao vivo (stuntmotos): a mesma
+     * chave devolveu cStat=217 "NF-e inexistente" em HOMOLOGACAO e
+     * "COMPLETA" (fornecedor real) em PRODUÇÃO, com o mesmo certificado.
+     */
+    public function test_consultar_nota_recebida_sempre_usa_producao_mesmo_com_oficina_em_homologacao(): void
     {
         $chave = str_repeat('7', 44);
         $esperado = ConsultaNotaTerceiroResultado::aguardandoManifestacao();
@@ -221,12 +231,14 @@ class NfePhpProviderTest extends TestCase
         $mock->shouldReceive('consultarNotaRecebida')->once()->with($chave, 'PRODUCAO')->andReturn($esperado);
         $this->app->instance(MotorNfe::class, $mock);
 
-        $provider = new NfePhpProvider('PRODUCAO');
+        // Provider construído com HOMOLOGACAO (ambiente de EMISSÃO da
+        // oficina) — a consulta de nota de terceiro ignora isso de propósito.
+        $provider = new NfePhpProvider('HOMOLOGACAO');
 
         $this->assertSame($esperado, $provider->consultarNotaRecebida($chave));
     }
 
-    public function test_listar_notas_recebidas_despacha_para_motor_nfe_com_o_ambiente(): void
+    public function test_listar_notas_recebidas_sempre_usa_producao_mesmo_com_oficina_em_homologacao(): void
     {
         $esperado = [new ConsultaNotaTerceiroResumo(
             chaveAcesso: str_repeat('8', 44),
@@ -238,7 +250,7 @@ class NfePhpProviderTest extends TestCase
         )];
 
         $mock = Mockery::mock(MotorNfe::class);
-        $mock->shouldReceive('listarNotasRecebidas')->once()->with('12345678000199', 'HOMOLOGACAO')->andReturn($esperado);
+        $mock->shouldReceive('listarNotasRecebidas')->once()->with('12345678000199', 'PRODUCAO')->andReturn($esperado);
         $this->app->instance(MotorNfe::class, $mock);
 
         $provider = new NfePhpProvider('HOMOLOGACAO');

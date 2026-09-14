@@ -82,6 +82,22 @@ de PIS/COFINS pra esse endpoint não foi confirmada. Precisa de uma
 rodada de teste dedicada (emitir NFC-e de teste, ler o erro real, repetir
 o mesmo método usado pra NF-e: WebFetch na doc + reemissão via tinker).
 
+## ✅ CONCLUÍDA 2026-09-14 — "erro ao conciliar nota" de entrada (NÃO era o bloqueio antigo da Spedy)
+
+Usuário reportou erro ao tentar conciliar uma nota de entrada. Causa raiz
+real (ver `PROGRESSO.md` seção 17): `NfePhpProvider::consultarNotaRecebida()`/
+`listarNotasRecebidas()` usavam o `ambiente_fiscal` de EMISSÃO da oficina
+(HOMOLOGACAO) pra consultar nota de TERCEIRO — mas Distribuição DFe de
+homologação nunca tem nota real de fornecedor. Confirmado ao vivo: mesma
+chave, mesmo certificado, `cStat=217` em HOMOLOGACAO vs `COMPLETA` em
+PRODUÇÃO. **Não é o mesmo bloqueio antigo da Spedy** (empresa já
+cadastrada, sem key recuperável — esse continua bloqueado, ver "PRÓXIMA
+TAREFA OBRIGATÓRIA" abaixo, e só afeta quem usa Spedy; stuntmotos usa
+NFEPHP pra emissão). Fix escopado só a NFePHP — Spedy/Focus não foram
+tocados por falta de evidência empírica equivalente (ver PROGRESSO.md pra
+o raciocínio completo de por que não estendi o mesmo fix pra eles sem
+prova).
+
 ## ✅ CONCLUÍDA 2026-09-14 — rodada de 6 pedidos (label NFePHP, download NFS-e, contingência, botão OS, conciliação, excluir nota)
 
 Ver `PROGRESSO.md` seção 15 pro relato completo. Resumo: 5 bugs reais
