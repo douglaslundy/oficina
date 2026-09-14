@@ -73,6 +73,37 @@ class ConfiguracaoNfceTest extends TestCase
         $this->assertSame('segredo-csc-456', Crypt::decryptString($config->csc_token_homologacao_encrypted));
     }
 
+    /**
+     * Bug real de produção (2026-09-14, achado ao testar o switch em
+     * produção): update() devolvia $config INTEIRO, cru — nunca passava
+     * pelo mesmo filtro que show() já tinha. Expunha o PFX do certificado
+     * inteiro, a senha cifrada e o token CSC recém-adicionado, todos em
+     * texto (o ciphertext, mas mesmo assim não deveria sair do backend).
+     */
+    public function test_update_nunca_expoe_secrets_cifrados_na_resposta(): void
+    {
+        $token = $this->loginAdmin();
+        Configuracao::create([
+            'razao_social' => 'Oficina X',
+            'certificado_pfx_encrypted' => 'blob-pfx-fake',
+            'certificado_senha_encrypted' => Crypt::encryptString('senha-cert'),
+        ]);
+
+        $response = $this->withToken($token)->putJson('/api/configuracoes', [
+            'csc_id_homologacao'    => '1',
+            'csc_token_homologacao' => 'segredo-csc-789',
+        ]);
+
+        $response->assertStatus(200);
+        $body = $response->getContent();
+        $this->assertStringNotContainsString('blob-pfx-fake', $body);
+        $this->assertStringNotContainsString('senha-cert', $body);
+        $this->assertStringNotContainsString('segredo-csc-789', $body);
+        $response->assertJsonMissing(['certificado_pfx_encrypted'])
+            ->assertJsonMissing(['certificado_senha_encrypted'])
+            ->assertJsonMissing(['csc_token_homologacao_encrypted']);
+    }
+
     public function test_update_rejeita_modelo_venda_padrao_invalido(): void
     {
         $token = $this->loginAdmin();

@@ -13,16 +13,32 @@ class ConfiguracaoController extends Controller
     public function show(): JsonResponse
     {
         $config = Configuracao::first() ?? new Configuracao();
+        return response()->json($this->sanitizar($config));
+    }
+
+    /**
+     * Bug real de produção (2026-09-14, achado ao testar o switch de NFC-e
+     * recém-criado): `update()` devolvia `$config` inteiro, cru — nunca
+     * passava pelo mesmo filtro que `show()` já aplicava. Isso expunha em
+     * texto (o ciphertext, não o segredo em si, mas mesmo assim nunca
+     * deveria sair do backend) o PFX do certificado A1 inteiro, a senha
+     * cifrada E — o motivo de eu ter reparado nisso agora — o token CSC
+     * recém-adicionado. Extraído num método só, reusado pelos dois
+     * endpoints, pra nunca mais divergir.
+     */
+    private function sanitizar(Configuracao $config): array
+    {
         $data = $config->toArray();
         $data['tem_certificado'] = !empty($config->certificado_pfx_encrypted);
-        unset($data['certificado_pfx_encrypted']);
-        // CSC é um secret fiscal (mesma categoria da senha do certificado) —
-        // nunca devolvido em texto puro pro frontend, só se está configurado
-        // ou não (mesmo padrão de tem_certificado).
         $data['tem_csc_homologacao'] = !empty($config->csc_token_homologacao_encrypted);
         $data['tem_csc_producao']    = !empty($config->csc_token_producao_encrypted);
-        unset($data['csc_token_homologacao_encrypted'], $data['csc_token_producao_encrypted']);
-        return response()->json($data);
+        unset(
+            $data['certificado_pfx_encrypted'],
+            $data['certificado_senha_encrypted'],
+            $data['csc_token_homologacao_encrypted'],
+            $data['csc_token_producao_encrypted'],
+        );
+        return $data;
     }
 
     public function update(Request $request): JsonResponse
@@ -95,7 +111,7 @@ class ConfiguracaoController extends Controller
             $config = Configuracao::create($validated);
         }
 
-        return response()->json(['message' => 'Configurações atualizadas.', 'data' => $config]);
+        return response()->json(['message' => 'Configurações atualizadas.', 'data' => $this->sanitizar($config)]);
     }
 
     public function uploadCertificado(Request $request, \App\Services\Fiscal\CertificadoValidator $validator): JsonResponse
