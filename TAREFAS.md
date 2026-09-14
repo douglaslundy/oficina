@@ -29,10 +29,32 @@ no payload + `consultar()` por filtro + falha de consulta nunca mais vira
 REJEITADA). 2 commits, 49 testes Unit (era 48), suíte completa sem regressão
 (mesmas 10 falhas pré-existentes de sempre).
 
-**Pendente (não é código, é dado):** reconciliar manualmente as 10 NF-e reais
-presas como REJEITADA na stuntmotos com a Spedy, agora que o fix está no ar —
-aguardando confirmação do usuário antes de mutar registros fiscais de produção
-(ver PROGRESSO.md Rodada 40).
+**✅ Reconciliação manual concluída 2026-09-14** (usuário confirmou): das 10,
+**3 estavam AUTORIZADAS de verdade** (o sistema mentia "REJEITADA") e 7 eram
+genuinamente rejeitadas por motivos reais. Ver PROGRESSO.md Rodada 40, seção 6
+(inclui 2 erros próprios corrigidos na hora: `numero` e `chave_acesso`
+sobrescritos incorretamente pro caso das notas mais antigas).
+
+## PRÓXIMA TAREFA OBRIGATÓRIA (registrada 2026-09-14, ainda não iniciada)
+
+**Investigar e corrigir por que a stuntmotos nunca completou o registro de
+emissor na Spedy** (`emissores_fiscais.status = 'ERRO'`, `ultimo_erro`:
+"Erro ao registrar emissor na Spedy." — sem detalhe salvo, `emissorToken`
+vazio). Confirmado 2x nesta sessão (investigação principal E um fork
+independente, sem coordenação entre os dois, chegando à mesma conclusão de
+formas diferentes): toda emissão/consulta "normal" de NF-e da stuntmotos cai
+na `masterKey` da plataforma em vez de um token escopado à empresa — funciona
+o suficiente pra testar (Spedy atrela as notas à "STUNT MOTOS LTDA" mesmo
+assim), mas é um risco real de isolamento multi-tenant se uma 2ª oficina real
+começar a usar Spedy (ambas compartilhariam a mesma credencial). Também
+bloqueia a reconciliação de `NotaEntrada` pendentes (`consultarNotaRecebida()`
+recusa cair no masterKey por design, corretamente — ver achado do fork,
+PROGRESSO.md Rodada 40 seção 5): 14 notas de entrada não puderam ter os
+dados fiscais do produto atualizados por causa disso.
+**Próximo passo:** capturar o erro HTTP real da Spedy no momento do registro
+(hoje `RegistroResultado::erro()` só guarda `$resp->json('message')`, sem
+status code nem corpo completo — pode precisar de log mais detalhado pra
+diagnosticar) e tentar `registrarEmissor()` de novo com esses dados.
 
 <details>
 <summary>Texto original da tarefa (referência)</summary>

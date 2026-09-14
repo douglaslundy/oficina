@@ -164,6 +164,121 @@ NFePHP, e se já estavam corrigidas neles. Li os 3 motores por completo:
 **Verificação:** suíte Unit completa — 298 testes, 10 falhas (as mesmas
 pré-existentes de sempre), zero regressão nova.
 
+### 5. Reconciliação fiscal de notas de entrada já importadas — bloqueada por falta de registro do emissor
+Pedido do usuário (no meio do deploy): rodar a conciliação fiscal (Rodada 34)
+nas `NotaEntrada` importadas antes de o cadastro de produto ter campos
+fiscais, pra atualizar `ncm`/`cest`/`origem`/`tributacao_icms` retroativamente.
+Executado por um fork nesta sessão, direto em produção (VPS, tenant
+stuntmotos), com evidência real em cada passo (sem rodar testes de feature
+contra o container de produção).
+
+**Universo:** 14 `NotaEntrada` da stuntmotos com `chave_acesso` preenchida e
+`fiscal_conferida_em` nula (de 2026-07-06 a 2026-09-10) — exatamente o que
+`EntradaNfController::conciliarPendentes()` seleciona.
+
+**Teste isolado (1 nota, `ConciliarFiscalNotaEntradaJob::handle()` rodado
+sincronamente via tinker, não pela fila) revelou um bloqueio real de
+infraestrutura, não um bug:** `SpedyProvider::consultarNotaRecebida()`
+devolveu `"Esta oficina ainda não está registrada na Spedy."` — a stuntmotos
+nunca completou o registro de emissor na Spedy (`emissores_fiscais.status =
+'ERRO'` pra ela, sem `emissorToken`), e o provider tem um guard de segurança
+proposital que recusa cair pro master key da plataforma nesse endpoint
+específico (master key não é escopada por empresa — usá-la vazaria notas de
+outros tenants). **Não tentei contornar essa credencial** — é exatamente o
+comportamento correto e intencional do guard.
+
+**Não rodei as outras 13**: é o mesmo tenant, sem registro de emissor —
+o resultado seria idêntico pras 14. Rodar em lote só geraria 14 escritas
+idênticas de diagnóstico sem nenhum dado fiscal novo aplicado.
+
+**Efeito colateral real, único, esperado**: a nota de teste
+(`42465ab9-f8da-49f7-af6c-e445358ce5da`) ficou com
+`fiscal_erro_consulta = "Esta oficina ainda não está registrada na Spedy."`
+e `fiscal_ultima_consulta_em` preenchido — exatamente o que o job grava
+quando não consegue conferir (não é um efeito colateral indesejado, é a
+funcionalidade normal registrando a tentativa). `fiscal_conferida_em`
+continua nulo. Nenhum produto ou estoque foi tocado (o job retorna antes de
+chegar no laço de itens quando `$resultado->status !== 'COMPLETA'`).
+
+**Pré-requisito real pra desbloquear isto**: completar o registro do emissor
+da stuntmotos na Spedy (`registrarEmissor()` — hoje com `status = 'ERRO'`,
+sem mensagem detalhada de causa salva além de "Erro ao registrar emissor na
+Spedy."). Vale a pena investigar esse erro de registro numa rodada dedicada
+— ele também é a provável causa raiz de por que `emissorToken` está vazio
+pra stuntmotos, o que por sua vez é o que fez a Rodada 40 (seção 3, achado
+extra) precisar cair no `masterKey` da plataforma pra emissão/consulta de
+NF-e "normais" (fora do fluxo de notas recebidas, que tem o guard — emissão/
+consulta comuns não têm o mesmo guard, o que é um risco de isolamento
+multi-tenant a revisar).
+
+### 6. Reconciliação manual dos 10 registros reais (confirmada pelo usuário)
+Usuário confirmou pra reconciliar. Como as 10 notas foram criadas ANTES do
+fix da seção 1 (nunca receberam `integrationId`), o comando oficial
+`nfe:reconciliar-processando` não conseguiu achá-las de volta (rodei
+mesmo assim, primeiro: recoloquei as 10 em PROCESSANDO e rodei o comando —
+resultado "0 falhas de consulta" (confirma que o 404 sumiu de vez), mas
+"10 ainda em processamento", porque a busca por `integrationId` não encontra
+nada pra uma nota que nunca foi tagueada com ele).
+
+**Resolvido por correspondência manual, com evidência, não por adivinhação:**
+listei os 19 `product-invoices` reais da Spedy (sandbox, mesma masterKey) e
+casei cada uma das 10 notas presas pela combinação valor (R$ 82,62,
+idêntico em todas — reemissões de teste da mesma OS/venda) + horário de
+emissão (diferença de 2 a 15 segundos, dentro do esperado pra latência de
+rede) + nome do destinatário. Confiança alta em todos os 10 matches.
+Confirmado também que essas notas são todas **HOMOLOGAÇÃO** (sem peso
+legal) — não documentos fiscais reais de produção.
+
+**Resultado real (bem diferente do que o sistema mostrava — as 10 constavam
+como REJEITADA):**
+- **3 estavam AUTORIZADAS de verdade** (numero 6, 8, 10 — chave de acesso e
+  protocolo reais aplicados): o sistema vinha mentindo pro usuário que 3
+  NF-e legítimas e autorizadas pela SEFAZ tinham sido rejeitadas.
+- **7 eram genuinamente REJEITADAS**, cada uma por um motivo real e
+  diferente (bate exatamente com a cronologia de bugs já documentada na
+  Rodada 39: "Endereço do cliente obrigatório", 3× erro de schema XML
+  nNF=0/qTrib — bugs já corrigidos há muito, mais 3× "Erro ao gerar XML da
+  nota fiscal" código SPD003 da própria Spedy, não uma rejeição da SEFAZ em
+  si).
+
+Aplicado via `AplicarResultadoNotaService::aplicar()` (o MESMO serviço que
+o sistema usa em produção pra isso — não uma query SQL improvisada). Ambiente
+HOMOLOGACAO não dispara billing/alerta (guardado por `if ($ambiente ===
+'PRODUCAO')` em `AplicarResultadoNotaService`).
+
+**2 erros meus, encontrados e corrigidos na hora antes de fechar (verificação
+própria, não pedida pelo usuário):**
+1. O array de resultado passou `numero => $item['number']` sem checar — pra
+   as 4 notas mais antigas (bugs de numeração já corrigidos), o `number` da
+   Spedy também era `0` (mesmo bug histórico), e isso sobrescreveu o nosso
+   `numero` interno (2,3,4,5) pra `0`. Restaurado via UPDATE escopado por id.
+2. O array passou `chave => $item['accessKey']` incondicionalmente — mas a
+   chave de acesso de uma NF-e é calculável mesmo pra notas REJEITADAS (é
+   derivada de CNPJ+série+número etc., existe no JSON da Spedy mesmo sem
+   autorização da SEFAZ). Isso violava a convenção do próprio sistema
+   (`EmissaoResultado::rejeitada()` SEMPRE usa `chave: null` — outras partes
+   do código, como o template do DANFE, assumem que só nota AUTORIZADA tem
+   chave). Corrigido: `chave_acesso` zerado pras 7 REJEITADAS.
+
+**Estado final verificado** (`SELECT numero, status, chave_acesso,
+mensagem_erro`): 3 AUTORIZADA com chave real, 7 REJEITADA sem chave e com a
+mensagem real de cada uma — nenhum resquício da mensagem genérica "Erro ao
+consultar (Spedy)."
+
+### 7. Achado adicional, confirmado 2x (investigação principal + fork independente): emissor da stuntmotos nunca foi registrado na Spedy
+`emissores_fiscais.status = 'ERRO'` pra stuntmotos (`ultimo_erro`: "Erro ao
+registrar emissor na Spedy.", sem detalhe, `emissorToken` vazio). Isso
+explica por que TODA emissão/consulta da stuntmotos (fora do fluxo de notas
+recebidas, que já tem guard) roda sob a `masterKey` da plataforma em vez de
+um token escopado à empresa — funcionou o suficiente pra testar (as notas
+saem atreladas à "STUNT MOTOS LTDA" mesmo assim, confirmado no JSON da
+Spedy), mas é uma lacuna real: se este SaaS ganhar uma 2ª oficina real
+usando Spedy, ambas cairiam na mesma masterKey compartilhada — risco de
+isolamento multi-tenant. **Registrado como próxima investigação prioritária
+em `TAREFAS.md`** — não corrigido nesta rodada (exigiria descobrir a causa
+real do erro de registro, possivelmente re-enviar dados/certificado, fora
+do escopo do pedido original do usuário).
+
 ## Rodada 39 continuação 2 **primeira NF-e de peça autorizada
 de verdade pela SEFAZ via Spedy** neste projeto, depois de 5 bugs reais
 achados e corrigidos em sequência (campos tributáveis, numeração,
