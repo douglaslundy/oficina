@@ -53,6 +53,18 @@ class SpedyProviderTest extends TestCase
         $this->assertSame('Prestação de Serviços', $payload['operationNature']);
     }
 
+    public function test_payload_nfse_manda_integration_id_para_reconciliacao(): void
+    {
+        // Bug de reconciliação (registrado 2026-09-10, PROGRESSO.md/TAREFAS.md):
+        // sem mandar a nossa referência na criação, consultar() nunca consegue
+        // achar a nota de volta na Spedy — toda NFS-e emitida via Spedy fica
+        // PROCESSANDO pra sempre no nosso banco mesmo já autorizada lá.
+        $p = new SpedyProvider('https://sandbox-api.spedy.com.br/v1', 'master', 'tok', 'emp-1');
+        $payload = $p->montarPayloadNfse($this->nota());
+
+        $this->assertSame('os-123', $payload['integrationId']);
+    }
+
     public function test_emitir_autorizada(): void
     {
         Http::fake([
@@ -248,6 +260,16 @@ class SpedyProviderTest extends TestCase
         $this->assertTrue($item['makeupTotal']);
     }
 
+    public function test_payload_nfe_manda_integration_id_para_reconciliacao(): void
+    {
+        // Mesmo bug de reconciliação do teste da NFS-e — a NF-e via
+        // product-invoices também nunca mandava a nossa referência.
+        $p = new SpedyProvider('https://sandbox-api.spedy.com.br/v1', 'master', 'tok', 'emp-1');
+        $payload = $p->montarPayloadNfe($this->notaNfeSimplesNacional());
+
+        $this->assertSame('os-999', $payload['integrationId']);
+    }
+
     public function test_payload_nfe_manda_endereco_do_destinatario(): void
     {
         // A Spedy rejeita NF-e (modelo 55) com "Endereço do cliente é
@@ -330,6 +352,16 @@ class SpedyProviderTest extends TestCase
         $this->assertArrayNotHasKey('number', $payload);
     }
 
+    public function test_payload_nfce_manda_integration_id_para_reconciliacao(): void
+    {
+        // Mesmo bug de reconciliação — consumer-invoices também nunca mandava
+        // a nossa referência.
+        $p = new SpedyProvider('https://sandbox-api.spedy.com.br/v1', 'master', 'tok', 'emp-1');
+        $payload = $p->montarPayloadNfce($this->notaNfce());
+
+        $this->assertSame('os-nfce-1', $payload['integrationId']);
+    }
+
     public function test_payload_nfce_manda_endereco_quando_o_cliente_tem(): void
     {
         $p = new SpedyProvider('https://sandbox-api.spedy.com.br/v1', 'master', 'tok', 'emp-1');
@@ -398,20 +430,60 @@ class SpedyProviderTest extends TestCase
             && !str_contains($req->url(), 'consumer-invoices'));
     }
 
-    public function test_consultar_nfe_usa_product_invoices(): void
+    public function test_consultar_nfe_filtra_por_integration_id(): void
     {
+        // Bug de reconciliação (2026-09-10): consultar() batia em
+        // GET /product-invoices/{referencia_externa}, mas a Spedy nunca
+        // conhece a nossa referência interna como ID dela — 404 sempre.
+        // Confirmado empiricamente no sandbox: GET ?integrationId=X filtra
+        // de verdade. Corrigido pra filtrar em vez de tentar path/{id}.
         Http::fake([
-            '*/product-invoices/inv-nfe-1' => Http::response([
-                'status' => 'authorized', 'accessKey' => 'CHAVE-NFE-2', 'number' => '78',
+            '*/product-invoices*' => Http::response([
+                'items' => [['status' => 'authorized', 'accessKey' => 'CHAVE-NFE-2', 'number' => '78']],
+                'totalCount' => 1,
             ], 200),
         ]);
 
         $p = new SpedyProvider('https://sandbox-api.spedy.com.br/v1', 'master', 'tok', 'emp-1');
-        $r = $p->consultar('inv-nfe-1', 'NFE');
+        $r = $p->consultar('os-999', 'NFE');
 
         $this->assertSame('AUTORIZADA', $r->status);
         $this->assertSame('CHAVE-NFE-2', $r->chave);
-        Http::assertSent(fn ($req) => str_contains($req->url(), '/product-invoices/inv-nfe-1'));
+        Http::assertSent(fn ($req) =>
+            str_contains($req->url(), '/product-invoices')
+            && !str_contains($req->url(), '/product-invoices/')
+            && ($req['integrationId'] ?? null) === 'os-999'
+        );
+    }
+
+    public function test_consultar_falha_http_mantem_processando_em_vez_de_rejeitada(): void
+    {
+        // Bug real confirmado em produção (stuntmotos, 10 NF-e): falha ao
+        // CONSULTAR (rede, 401, 5xx) virava REJEITADA local com a mensagem
+        // genérica "Erro ao consultar (Spedy)." — sem a SEFAZ ter dito nada.
+        // Mesma classe de defeito já corrigida em MotorNfse::consultar()
+        // (Rodada 37, PROGRESSO.md): falha de consulta nunca pode virar um
+        // status fiscal substantivo, só "ainda não sei" (PROCESSANDO, que o
+        // scheduler/polling tentam de novo depois).
+        Http::fake(['*/product-invoices*' => Http::response(['message' => 'Unauthorized'], 401)]);
+
+        $p = new SpedyProvider('https://sandbox-api.spedy.com.br/v1', 'master', 'tok', 'emp-1');
+        $r = $p->consultar('os-999', 'NFE');
+
+        $this->assertSame('PROCESSANDO', $r->status);
+    }
+
+    public function test_consultar_nfe_sem_item_na_listagem_retorna_processando(): void
+    {
+        // A criação é assíncrona na Spedy — a nota pode ainda não aparecer na
+        // listagem por integrationId no instante da consulta. Isso não é erro
+        // nem rejeição, é "ainda processando" (o próximo poll tenta de novo).
+        Http::fake(['*/product-invoices*' => Http::response(['items' => [], 'totalCount' => 0], 200)]);
+
+        $p = new SpedyProvider('https://sandbox-api.spedy.com.br/v1', 'master', 'tok', 'emp-1');
+        $r = $p->consultar('os-ainda-nao-existe', 'NFE');
+
+        $this->assertSame('PROCESSANDO', $r->status);
     }
 
     private function notaNfce(array $tomadorExtra = []): NotaFiscalData
@@ -487,20 +559,46 @@ class SpedyProviderTest extends TestCase
         Http::assertSent(fn ($req) => str_contains($req->url(), '/consumer-invoices'));
     }
 
-    public function test_consultar_nfce_usa_recurso_correto(): void
+    public function test_consultar_nfce_filtra_por_integration_id(): void
     {
         Http::fake([
-            '*/consumer-invoices/inv-nfce-1' => Http::response([
-                'status' => 'authorized', 'accessKey' => 'CHAVE-NFCE-SP', 'number' => '9',
+            '*/consumer-invoices*' => Http::response([
+                'items' => [['status' => 'authorized', 'accessKey' => 'CHAVE-NFCE-SP', 'number' => '9']],
+                'totalCount' => 1,
             ], 200),
         ]);
 
         $p = new SpedyProvider('https://sandbox-api.spedy.com.br/v1', 'master', 'tok', 'emp-1');
-        $r = $p->consultar('inv-nfce-1', 'NFCE');
+        $r = $p->consultar('os-nfce-1', 'NFCE');
 
         $this->assertSame('AUTORIZADA', $r->status);
         $this->assertSame('CHAVE-NFCE-SP', $r->chave);
-        Http::assertSent(fn ($req) => str_contains($req->url(), '/consumer-invoices/inv-nfce-1'));
+        Http::assertSent(fn ($req) =>
+            str_contains($req->url(), '/consumer-invoices')
+            && !str_contains($req->url(), '/consumer-invoices/')
+            && ($req['integrationId'] ?? null) === 'os-nfce-1'
+        );
+    }
+
+    public function test_consultar_nfse_filtra_por_integration_id(): void
+    {
+        Http::fake([
+            '*/service-invoices*' => Http::response([
+                'items' => [['status' => 'authorized', 'accessKey' => 'CHAVE-SP-2', 'number' => '15']],
+                'totalCount' => 1,
+            ], 200),
+        ]);
+
+        $p = new SpedyProvider('https://sandbox-api.spedy.com.br/v1', 'master', 'tok', 'emp-1');
+        $r = $p->consultar('os-123', 'NFSE');
+
+        $this->assertSame('AUTORIZADA', $r->status);
+        $this->assertSame('CHAVE-SP-2', $r->chave);
+        Http::assertSent(fn ($req) =>
+            str_contains($req->url(), '/service-invoices')
+            && !str_contains($req->url(), '/service-invoices/')
+            && ($req['integrationId'] ?? null) === 'os-123'
+        );
     }
 
     public function test_consultar_nota_recebida_completa_baixa_e_faz_parse_do_xml(): void

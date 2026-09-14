@@ -19,7 +19,23 @@ de PIS/COFINS pra esse endpoint não foi confirmada. Precisa de uma
 rodada de teste dedicada (emitir NFC-e de teste, ler o erro real, repetir
 o mesmo método usado pra NF-e: WebFetch na doc + reemissão via tinker).
 
-## PRÓXIMA TAREFA OBRIGATÓRIA (registrada 2026-09-10, ainda não iniciada)
+## ✅ CONCLUÍDA 2026-09-14 — reconciliação de status Spedy (era a PRÓXIMA TAREFA OBRIGATÓRIA)
+
+Ver `PROGRESSO.md` Rodada 40 pro relato completo (implementação + investigação do
+pedido do usuário sobre "notas aprovadas mas constam rejeitadas" e "aprovada pra
+um cliente, não pra outro"). Resumo: as duas perguntas eram o MESMO bug — não
+havia diferença real ligada ao cliente. Corrigido `SpedyProvider` (integrationId
+no payload + `consultar()` por filtro + falha de consulta nunca mais vira
+REJEITADA). 2 commits, 49 testes Unit (era 48), suíte completa sem regressão
+(mesmas 10 falhas pré-existentes de sempre).
+
+**Pendente (não é código, é dado):** reconciliar manualmente as 10 NF-e reais
+presas como REJEITADA na stuntmotos com a Spedy, agora que o fix está no ar —
+aguardando confirmação do usuário antes de mutar registros fiscais de produção
+(ver PROGRESSO.md Rodada 40).
+
+<details>
+<summary>Texto original da tarefa (referência)</summary>
 
 **Corrigir a reconciliação de status de emissão via Spedy — notas ficam
 PROCESSANDO pra sempre mesmo quando a Spedy já autorizou.**
@@ -59,6 +75,8 @@ limite semanal de uso perto do fim. Ver [[project-roadmap-fiscal-3-etapas]]
 na memória (seção Spedy) e `PROGRESSO.md` Rodada 39 pra todo o contexto de
 investigação (incluindo o bug irmão, já corrigido: NF-e/NFC-e não mandavam
 endereço do destinatário, commit `c1a5728`).
+
+</details>
 
 ## Achados da análise Focus/NFePHP (2026-09-10, registrados — não corrigidos ainda)
 
@@ -117,6 +135,24 @@ perto do fim). Achados, por ordem de risco:
 Ver `PROGRESSO.md` Rodada 39 pro detalhe completo da investigação
 (inclusive as consultas diretas à API da Spedy que confirmaram o item 1 da
 seção acima "PRÓXIMA TAREFA OBRIGATÓRIA").
+
+## Achados da Rodada 40 (2026-09-14) — registrados, não corrigidos ainda
+
+1. **`FocusNfeProvider::consultar()` tem a MESMA falha "consulta falhou ⇒
+   REJEITADA"** já corrigida no `SpedyProvider` nesta rodada (ver
+   `PROGRESSO.md` Rodada 40). Não corrigido agora porque a Focus não tem
+   nenhuma credencial cadastrada (achado antigo, item 3 acima) — ninguém é
+   afetado hoje. Corrigir junto quando alguém configurar Focus de verdade.
+2. **`SpedyProvider::cancelar()` ainda usa `DELETE /{recurso}/{referencia}`
+   por path** (não por filtro `integrationId`) — mesma classe de problema do
+   `consultar()` antigo: `referencia_externa` salvo é sempre a nossa
+   referência interna, nunca o `id` real da Spedy, então cancelar uma nota
+   já AUTORIZADA provavelmente também dá 404. **Não corrigido nesta rodada**
+   porque exigiria confirmar empiricamente (sandbox real) se a Spedy aceita
+   filtrar por `integrationId` também no DELETE ou se exige o `id` real via
+   um GET prévio — nenhuma nota chegou a ser cancelada de verdade ainda
+   neste projeto, então não há evidência de produção como havia pra
+   `consultar()`. Precisa de uma rodada dedicada com teste ao vivo.
 
 ## Fila (nesta ordem)
 

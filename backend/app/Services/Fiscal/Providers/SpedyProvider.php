@@ -86,18 +86,42 @@ class SpedyProvider implements FiscalProvider, ConsultaNotaTerceiroProvider
 
     public function consultar(string $referencia, string $modelo = 'NFSE'): EmissaoResultado
     {
+        // Bug de reconciliação (2026-09-10, TAREFAS.md): GET /{recurso}/{referencia}
+        // usando a nossa referência interna sempre dava 404 — a Spedy não conhece
+        // esse valor como um ID dela. Confirmado empiricamente no sandbox real:
+        // GET ?integrationId=X filtra de verdade pelo campo que montarPayloadNfse()/
+        // Nfce()/Nfe() agora mandam na criação (`integrationId`).
         $recurso = $this->recursoPorModelo($modelo);
 
         $resp = Http::withHeaders(['X-Api-Key' => $this->emissorToken ?? $this->masterKey])
-            ->get("{$this->baseUrl}/{$recurso}/{$referencia}");
+            ->get("{$this->baseUrl}/{$recurso}", ['integrationId' => $referencia]);
 
         if ($resp->failed()) {
-            return EmissaoResultado::rejeitada($resp->json('message') ?? 'Erro ao consultar (Spedy).', $referencia);
+            // Falha ao CONSULTAR (rede, auth, 5xx) não é o mesmo que "rejeitada
+            // pela SEFAZ" — virar REJEITADA aqui já corrompeu 10 NF-e reais em
+            // produção com essa mensagem genérica, sem a SEFAZ ter dito nada.
+            // Mesma classe de bug já corrigida em MotorNfse::consultar()
+            // (Rodada 37): falha de consulta fica PROCESSANDO (retentável pelo
+            // polling do frontend e pelo comando agendado), nunca vira um
+            // status fiscal substantivo.
+            \Illuminate\Support\Facades\Log::warning(
+                'Spedy: falha ao consultar status da nota — mantendo PROCESSANDO.',
+                ['referencia' => $referencia, 'modelo' => $modelo, 'status_http' => $resp->status(), 'corpo' => $resp->body()],
+            );
+            return EmissaoResultado::processando($referencia);
+        }
+
+        $item = ($resp->json('items') ?? [])[0] ?? null;
+        if ($item === null) {
+            // Criação assíncrona na Spedy: a nota pode ainda não aparecer na
+            // listagem por integrationId no instante da consulta — não é
+            // rejeição, é "ainda processando" (próximo poll tenta de novo).
+            return EmissaoResultado::processando($referencia);
         }
 
         return $modelo === 'NFCE'
-            ? $this->resultadoNfceDe($resp->json(), $referencia)
-            : $this->resultadoDe($resp->json(), $referencia);
+            ? $this->resultadoNfceDe($item, $referencia)
+            : $this->resultadoDe($item, $referencia);
     }
 
     public function cancelar(string $referencia, string $motivo, string $modelo = 'NFSE'): EmissaoResultado
@@ -162,6 +186,13 @@ class SpedyProvider implements FiscalProvider, ConsultaNotaTerceiroProvider
     {
         return [
             'status'              => 'enqueued',
+            // Bug de reconciliação (2026-09-10, ver TAREFAS.md): sem mandar a
+            // nossa referência aqui, consultar() nunca consegue achar a nota
+            // de volta na Spedy (ela não conhece a nossa referência interna
+            // como um ID dela) — toda nota fica PROCESSANDO pra sempre no
+            // nosso banco mesmo já autorizada lá. `integrationId` é o campo
+            // que consultar() usa como filtro (?integrationId=) pra achá-la.
+            'integrationId'       => $n->referenciaExterna,
             'sendEmailToCustomer' => false,
             'description'         => $n->descricao,
             'federalServiceCode'  => $n->codigoServicoFederal,
@@ -222,6 +253,9 @@ class SpedyProvider implements FiscalProvider, ConsultaNotaTerceiroProvider
         )), 2);
 
         return array_filter([
+            // integrationId: mesmo fix de reconciliação de montarPayloadNfse()
+            // — ver comentário lá.
+            'integrationId'   => $n->referenciaExterna,
             // series/number: mesmo achado de montarPayloadNfe() — não
             // confirmado empiricamente pra consumer-invoices especificamente,
             // mas o schema raiz é o mesmo SefazInvoiceItemDto-family da NF-e,
@@ -322,6 +356,9 @@ class SpedyProvider implements FiscalProvider, ConsultaNotaTerceiroProvider
         )), 2);
 
         return array_filter([
+            // integrationId: mesmo fix de reconciliação de montarPayloadNfse()
+            // — ver comentário lá.
+            'integrationId'   => $n->referenciaExterna,
             // series/number: ver docblock acima — omitidos (null) quando
             // NotaFiscalData não os carrega (ex.: chamada direta em teste).
             'series'          => $n->serieNf,

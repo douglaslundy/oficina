@@ -1,7 +1,144 @@
 # Progresso do Projeto
 
 ## Última atualização
-2026-09-11 — Rodada 39 continuação 2: **primeira NF-e de peça autorizada
+2026-09-14 — Rodada 40: corrigida a reconciliação de status Spedy (era a
+PRÓXIMA TAREFA OBRIGATÓRIA) + investigação do pedido do usuário sobre notas
+"aprovadas mas constam rejeitadas" e "aprovada pra um cliente, não pra
+outro" — as duas perguntas eram o MESMO bug, sem evidência de diferença
+real ligada ao cliente. Ver seção "Rodada 40" abaixo. Reconciliação manual
+dos 10 registros reais afetados na stuntmotos **pendente de confirmação do
+usuário** (mutação de dado fiscal de produção).
+
+## Rodada 40 (2026-09-14) — reconciliação Spedy + investigação "aprovada pra um cliente, não pra outro"
+
+Pedido do usuário: executar a tarefa pendente, analisar notas aprovadas que
+constam como rejeitadas, analisar por que notas de venda de produto são
+aprovadas pra um cliente e não pra outro, e corrigir com base em critérios
+de segurança da informação.
+
+### 1. Tarefa pendente executada — reconciliação de status Spedy
+Root cause já estava diagnosticado em `TAREFAS.md` (Rodada 39): `SpedyProvider`
+nunca manda a nossa `referencia_externa` de um jeito que a Spedy reconheça, e
+depois `consultar()` faz `GET /{recurso}/{referencia_externa}` — 404 sempre,
+porque a Spedy não conhece essa referência como um ID dela. Confirmei lendo o
+código atual (bate exatamente com o diagnóstico registrado) antes de mexer
+(`superpowers:systematic-debugging`).
+
+**Fix (TDD, `SpedyProviderTest`: 48→50 testes, +2 líquido — 8 novos, 6
+reescritos pro novo formato):**
+- `montarPayloadNfse()`/`montarPayloadNfce()`/`montarPayloadNfe()` agora
+  mandam `integrationId: referenciaExterna` na criação.
+- `consultar()` trocou de `GET /{recurso}/{referencia}` (path) pra
+  `GET /{recurso}?integrationId={referencia}` (filtro), pegando `items[0]`.
+  Sem item na listagem (criação assíncrona, ainda não propagou) → `PROCESSANDO`,
+  nunca erro.
+- **Achado extra durante a correção, não estava no plano original**: quando
+  `consultar()` FALHA de verdade (rede, 401, 5xx), o código antigo virava
+  `REJEITADA` com mensagem genérica "Erro ao consultar (Spedy)." — confundindo
+  "não consegui checar" com "a SEFAZ rejeitou". **Esta é a causa direta dos 10
+  registros reais corrompidos em produção** (ver seção 2 abaixo), não só o
+  404 do bug original. Mesma classe de defeito já corrigida em
+  `MotorNfse::consultar()` (Rodada 37, "trata falha de rede como não
+  cancelado"), nunca replicada aqui. Corrigido: falha de consulta agora
+  mantém `PROCESSANDO` (retentável), nunca vira status fiscal substantivo.
+  Log de warning adicionado pra visibilidade.
+
+**Arquivos:** `backend/app/Services/Fiscal/Providers/SpedyProvider.php`,
+`backend/tests/Unit/Fiscal/SpedyProviderTest.php`.
+
+**Verificação:** `php -l` limpo. `phpunit tests/Unit/Fiscal/SpedyProviderTest.php`
+verde (49 testes — depois subiu pra 49 com o teste do 2º achado). Suíte Unit
+completa: 297 testes, 10 falhas — **as mesmas 10 pré-existentes de sempre**
+(ConciliarFiscal/EmitirNotaFiscalJob = precisam Postgres; CertificadoStore =
+OpenSSL Windows), zero regressão nova.
+
+**Escopo consciente do que NÃO foi mexido** (documentado em `TAREFAS.md`,
+seção "Achados da Rodada 40"): `montarPayloadOrder()`/`emitirViaOrders()`
+(modo `AUTOMATICO_PROVEDOR`) não recebeu `integrationId` — esse caminho já
+autocorrige via um mecanismo diferente (usa o `id` real que a Spedy devolve
+na criação como referência daquele momento em diante) e nunca autorizou
+nenhuma nota de verdade ainda (bloqueado no certificado A1), então não há
+evidência de produção de que esteja quebrado — mexer nele sem confirmação
+empírica seria adivinhação. `FocusNfeProvider::consultar()` tem a mesma
+falha "consulta falhou ⇒ REJEITADA", mas a Focus não tem credencial
+cadastrada (ninguém afetado hoje). `SpedyProvider::cancelar()` ainda é
+path-based (mesma classe de risco, nunca testado — nenhuma nota foi
+cancelada de verdade neste projeto ainda). Todos os 3 registrados em
+`TAREFAS.md` como achados pra retomar, não como bugs corrigidos.
+
+### 2. Investigação — "notas aprovadas mas constam rejeitadas" / "aprovada pra 1 cliente, não pro outro"
+Consultei o Postgres de produção (stuntmotos) direto, só leitura
+(`SELECT`, sem mutar nada — ver [[reference-prod-api]]):
+
+```
+modelo | status     | mensagem_erro                      | count
+NF-e   | REJEITADA  | Erro ao consultar (Spedy).          | 10
+NFC-e  | REJEITADA  | Erro na emissão de NFC-e (Spedy).   | 1
+NFS-e  | AUTORIZADA |                                      | 1
+```
+
+**As 10 NF-e "REJEITADA"** são TODAS o mesmo artefato do bug de reconciliação
+(mensagem genérica idêntica em todas, nunca uma mensagem real da SEFAZ) —
+inclusive a nota `b48d2f16` já citada na Rodada 39 como "não reconciliada
+desta vez". Só existem 2 clientes com NF-e neste tenant (ABRAÃO VINICIUS e
+BRUNO SYLVA SOUSA), **ambos na mesma cidade da oficina** (Ilicínea/MG) —
+**nenhuma evidência de que a diferença seja ligada ao cliente**: as 10 notas
+de AMBOS os clientes estão igualmente corrompidas pela mesma causa (a
+consulta de status falhava e virava REJEITADA, não importa de quem era a
+nota — é uma corrida/timing, não um dado do cliente).
+
+**A 1 NFC-e "REJEITADA" de verdade** é a mesma tentativa `0187ee63` já
+documentada na Rodada 39/"Sobra" (`consumer-invoices` retornava 0 itens,
+provavelmente falta o grupo PIS/COFINS no payload da NFC-e — item já
+registrado em `TAREFAS.md`, não é novo, não é ligado ao cliente: é um gap
+estrutural do payload que afetaria QUALQUER cliente numa NFC-e).
+
+**Conclusão:** não há evidência, nos dados reais de produção, de que a
+aprovação de nota de venda de produto dependa de QUAL cliente foi
+solicitado. A percepção de "aprovada pra um, não pro outro" é totalmente
+explicada pelo mesmo bug de reconciliação corrigido na seção 1 — dependendo
+de QUANDO o `consultar()` rodava (polling do frontend com a tela aberta,
+ou o comando agendado `nfe:reconciliar-processando` a cada 15min) para uma
+nota específica, ela podia "virar" REJEITADA por essa falha de consulta,
+enquanto outra nota (ainda não consultada, ou autorizada de forma síncrona
+na resposta imediata da emissão) permanecia com o status certo — dando a
+falsa impressão de tratamento diferente por cliente. **Não escrevi um "fix"
+pra diferença-por-cliente porque não existe uma — seria corrigir um sintoma
+sem causa raiz confirmada** (`superpowers:systematic-debugging`: "NO FIXES
+WITHOUT ROOT CAUSE").
+
+**Risco real e distinto, já registrado (não confirmado como causa deste
+caso específico):** `NfeService::montarNotaData()` sempre manda o
+`codigo_ibge` da PRÓPRIA OFICINA como código do município do destinatário
+(`clientes` não tem essa coluna — achado da Rodada 39, item 2 de "Achados
+Focus/NFePHP"). Isso PODERIA causar rejeição real e específica por cliente
+(cliente de outra cidade → `cMun` não bate com `UF`/cidade reais) — mas
+não é o que aconteceu aqui, porque os 2 únicos clientes com nota de produto
+neste tenant moram na mesma cidade da oficina (o `codigo_ibge` errado
+"acerta por coincidência"). Continua registrado como risco pra corrigir
+antes de qualquer cliente de outro município emitir nota — ver
+`TAREFAS.md`.
+
+### 3. Ação corretiva sob critérios de segurança da informação
+Enquadrando como violação de **integridade** (não confidencialidade nem
+disponibilidade): o sistema persistia um status fiscal (REJEITADA) que não
+correspondia à realidade verificável na fonte de verdade (a Spedy/SEFAZ) —
+um dado de compliance incorreto é um risco de integridade tão real quanto um
+vazamento é de confidencialidade. Ação executada: eliminar a causa raiz (2
+correções acima) + nunca mais permitir que uma falha de leitura (consulta)
+seja gravada como um fato fiscal substantivo (fail-safe: estado
+desconhecido fica "processando", nunca vira "rejeitado" nem "aprovado" por
+adivinhação).
+
+**Pendente, não executado**: reconciliar os 10 registros reais já
+corrompidos na stuntmotos (recolocar em PROCESSANDO + rodar
+`nfe:reconciliar-processando` pra buscar o status real na Spedy agora que o
+fix está no ar) — é mutação de dado de produção (documento fiscal), então
+aguardando confirmação explícita do usuário antes de executar, apesar do
+pedido genérico de "execute as ações" (ver guidelines de ações
+consequentes/difíceis de reverter).
+
+## Rodada 39 continuação 2 **primeira NF-e de peça autorizada
 de verdade pela SEFAZ via Spedy** neste projeto, depois de 5 bugs reais
 achados e corrigidos em sequência (campos tributáveis, numeração,
 isFinalCustomer, CEST, PIS/COFINS — commits `58b4137`..`6659c0d`), cada
