@@ -28,6 +28,7 @@ export default function HistoricoNFPage() {
   const [excluirModal, setExcluirModal] = useState<{ id: string; numero: number | null } | null>(null)
   const [excluindo, setExcluindo]       = useState(false)
   const [modeloFiltro, setModeloFiltro] = useState('')
+  const [motivoModal, setMotivoModal]   = useState<{ numero: number | null; mensagem: string } | null>(null)
 
   const fetchNotas = useCallback(() => {
     setLoading(true)
@@ -248,11 +249,19 @@ export default function HistoricoNFPage() {
                   <td style={tdStyle}>
                     <span style={{ color: 'var(--muted)', fontSize: 13 }}>{nota.modelo}</span>
                   </td>
-                  <td style={tdStyle} title={nota.status === 'REJEITADA' && nota.mensagem_erro ? nota.mensagem_erro : undefined}>
+                  <td style={tdStyle}>
                     <StatusPill status={nota.status} />
                   </td>
                   <td style={tdStyle}>
                     <div style={{ display: 'flex', gap: 8 }}>
+                      {nota.status === 'REJEITADA' && (
+                        <button
+                          onClick={() => setMotivoModal({ numero: nota.numero, mensagem: nota.mensagem_erro || 'Nenhuma mensagem de erro registrada para esta nota.' })}
+                          style={{ background: 'none', border: '1px solid var(--danger)', color: 'var(--danger)', borderRadius: 6, padding: '4px 10px', cursor: 'pointer', fontSize: 13, whiteSpace: 'nowrap' }}
+                        >
+                          ⚠ Ver motivo
+                        </button>
+                      )}
                       {nota.status === 'AUTORIZADA' && nota.numero && (
                         <button
                           onClick={() => baixarPdf(nota)}
@@ -372,6 +381,34 @@ export default function HistoricoNFPage() {
                 }}
               >
                 {excluindo ? 'Excluindo...' : 'Confirmar Exclusão'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+      {/* Motivo de rejeição modal */}
+      {motivoModal && (
+        <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.6)', zIndex: 1000, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+          <div style={{ background: 'var(--card)', border: '1px solid var(--border)', borderRadius: 12, padding: 32, width: 480, maxWidth: '90vw' }}>
+            <h3 className="font-display" style={{ fontSize: 20, fontWeight: 800, color: 'var(--danger)', marginBottom: 8 }}>
+              Nota Fiscal Rejeitada {motivoModal.numero ? `— #${motivoModal.numero}` : ''}
+            </h3>
+            <p style={{ color: 'var(--muted)', fontSize: 13, marginBottom: 6 }}>
+              Justificativa retornada pela SEFAZ (ou pelo provedor fiscal):
+            </p>
+            <div style={{
+              background: 'rgba(229,57,53,.06)', border: '1px solid var(--danger)', borderRadius: 8,
+              padding: '12px 14px', color: 'var(--text)', fontSize: 14, lineHeight: 1.5,
+              whiteSpace: 'pre-wrap', wordBreak: 'break-word',
+            }}>
+              {motivoModal.mensagem}
+            </div>
+            <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: 24 }}>
+              <button
+                onClick={() => setMotivoModal(null)}
+                style={{ background: 'var(--accent)', color: '#000', border: 'none', borderRadius: 8, padding: '8px 20px', cursor: 'pointer', fontSize: 14, fontWeight: 700 }}
+              >
+                Fechar
               </button>
             </div>
           </div>
