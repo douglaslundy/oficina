@@ -51,6 +51,46 @@ class OrdemServicoTest extends TestCase
         ]);
     }
 
+    /**
+     * Bug real achado em auditoria (2026-09-14): `$total += quantidade *
+     * valor_unitario` em loop, sem `round()`, pode gerar ruído de
+     * subcentavo (ex.: 33,33 + 33,33 + 33,34 = 99,99999999999999 em vez de
+     * 100,00 exato). Isso fazia `min($totalPago, $total)` gravar
+     * `valor_pago` com o valor "sujo", e `ClienteStatusService::recalcular()`
+     * (`valor_pago < valor_total`) podia marcar o cliente como DEVEDOR
+     * mesmo com o pagamento completo — uma fração de centavo invisível ao
+     * usuário.
+     */
+    public function test_total_da_os_nao_acumula_ruido_de_ponto_flutuante(): void
+    {
+        [$token, $mecId, $cliId] = $this->setupEntities();
+        $produto1 = $this->criarProduto(10);
+        $produto2 = $this->criarProduto(10);
+        $produto3 = $this->criarProduto(10);
+
+        $response = $this->withToken($token)->postJson('/api/os', [
+            'cliente_id' => $cliId, 'mecanico_id' => $mecId,
+            'problema_relatado' => 'Teste arredondamento', 'status' => 'ABERTA', 'km_atual' => 1000,
+            'itens' => [
+                ['tipo' => 'PECA', 'produto_id' => $produto1->id, 'descricao' => 'Item 1', 'quantidade' => 1, 'valor_unitario' => 33.33],
+                ['tipo' => 'PECA', 'produto_id' => $produto2->id, 'descricao' => 'Item 2', 'quantidade' => 1, 'valor_unitario' => 33.33],
+                ['tipo' => 'PECA', 'produto_id' => $produto3->id, 'descricao' => 'Item 3', 'quantidade' => 1, 'valor_unitario' => 33.34],
+            ],
+            'pagamentos' => [['forma_pagamento' => 'Dinheiro', 'valor' => 100.00]],
+        ]);
+
+        $response->assertStatus(201);
+        $osId = $response->json('data.id');
+
+        $os = \App\Models\OrdemServico::find($osId);
+        $this->assertSame(100.0, (float) $os->valor_total);
+        // Antes do fix: valor_pago podia ficar "sujo" (99.99999999999999),
+        // menor que valor_total (100.0 exato salvo pelo Postgres) —
+        // marcando o cliente como DEVEDOR mesmo com pagamento completo.
+        $this->assertSame(100.0, (float) $os->valor_pago);
+        $this->assertGreaterThanOrEqual((float) $os->valor_total, (float) $os->valor_pago);
+    }
+
     public function test_estoque_baixa_ao_inserir_peca_na_os(): void
     {
         [$token, $mecId, $cliId] = $this->setupEntities();

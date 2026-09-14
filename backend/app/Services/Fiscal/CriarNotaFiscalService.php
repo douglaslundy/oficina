@@ -85,14 +85,21 @@ class CriarNotaFiscalService
             }
         }
 
+        // Achado de auditoria (2026-09-14): soma/subtração de float sem
+        // round() explícito pode gerar ruído de subcentavo — mesma classe
+        // de bug já corrigida em OrdemServicoController::store() (onde
+        // causava cliente marcado DEVEDOR por engano). Arredondado aqui
+        // também, mesmo que a coluna NUMERIC do Postgres já corrija no
+        // INSERT — evita valores inconsistentes em qualquer comparação/
+        // validação feita em PHP antes de persistir.
         $subtotal = $ehVenda
-            ? collect($dados['itens'] ?? [])->sum(fn ($i) => $i['quantidade'] * $i['valor_unitario'])
-            : (float) ($dados['subtotal'] ?? 0);
+            ? round(collect($dados['itens'] ?? [])->sum(fn ($i) => $i['quantidade'] * $i['valor_unitario']), 2)
+            : round((float) ($dados['subtotal'] ?? 0), 2);
 
-        $desconto   = (float) ($dados['desconto'] ?? 0);
+        $desconto   = round((float) ($dados['desconto'] ?? 0), 2);
         $aliquota   = (float) ($dados['aliquota_iss'] ?? 5.00);
-        $valorIss   = $ehVenda ? 0.0 : (($subtotal - $desconto) * $aliquota) / 100;
-        $valorTotal = ($subtotal - $desconto) + $valorIss;
+        $valorIss   = $ehVenda ? 0.0 : round((($subtotal - $desconto) * $aliquota) / 100, 2);
+        $valorTotal = round(($subtotal - $desconto) + $valorIss, 2);
 
         $serie = '001';
         if ($ehVenda) {

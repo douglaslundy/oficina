@@ -158,6 +158,15 @@ class OrdemServicoController extends Controller
                     $this->estoqueService->darSaidaItem($os, $criado);
                     $total += $item['quantidade'] * $item['valor_unitario'];
                 }
+                // Achado de auditoria (2026-09-14): soma de float sem
+                // round() pode gerar ruído de subcentavo (ex.: 33.33+33.33+
+                // 33.34 = 99.99999999999999). Sem arredondar aqui, o
+                // `min($totalPago, $total)' logo abaixo e o
+                // `ClienteStatusService::recalcular()` (`valor_pago <
+                // valor_total`) podiam divergir por uma fração invisível ao
+                // usuário, marcando cliente como DEVEDOR mesmo com o
+                // pagamento completo.
+                $total = round($total, 2);
 
                 // Processar pagamentos múltiplos
                 $totalPago = 0;
@@ -169,6 +178,7 @@ class OrdemServicoController extends Controller
                     ]);
                     $totalPago += (float) $pag['valor'];
                 }
+                $totalPago = round($totalPago, 2);
 
                 // Para VENDA_BALCAO não-a-prazo: forçar valor_pago = valor_total
                 // para eliminar divergência de ponto flutuante JS vs PHP
