@@ -96,7 +96,19 @@ class EstoqueService
 
         DB::transaction(function () use ($os, $item) {
             $produto = Produto::lockForUpdate()->findOrFail($item->produto_id);
-            $qty = (int) $item->quantidade;
+            // Bug real achado em auditoria (2026-09-14): (int) TRUNCA em vez
+            // de arredondar — quantidade fracionária (os_itens.quantidade é
+            // decimal(8,2), aceita frações de propósito, ex. 0,5L de óleo)
+            // menor que 1 virava 0, e o estoque nunca era baixado/devolvido
+            // pra essa venda, embora o cliente fosse cobrado normalmente.
+            // produtos.qty_atual/movimentacoes_estoque.quantidade são
+            // colunas INTEGER (sem suporte a fração real no schema atual) —
+            // ceil() garante que toda quantidade positiva baixe/devolva
+            // pelo menos 1 unidade, nunca silenciosamente zero. Não é exato
+            // (0,5L vira 1 unidade cheia), mas nunca mais "some" o
+            // movimento. Fix completo exigiria migrar essas colunas pra
+            // decimal — registrado como recomendação, não feito às cegas.
+            $qty = (int) ceil($item->quantidade);
 
             if ($produto->qty_atual < $qty) {
                 throw new \RuntimeException("Estoque insuficiente para: {$produto->nome}");
@@ -148,7 +160,8 @@ class EstoqueService
 
         DB::transaction(function () use ($os, $item) {
             $produto = Produto::lockForUpdate()->findOrFail($item->produto_id);
-            $qty = (int) $item->quantidade;
+            // Mesmo fix de darSaidaItem() — ver comentário lá.
+            $qty = (int) ceil($item->quantidade);
 
             $produto->increment('qty_atual', $qty);
 

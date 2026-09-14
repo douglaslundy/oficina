@@ -33,7 +33,13 @@ class CertificadoStoreTest extends TestCase
         return $pfxOut;
     }
 
-    private function configuracaoComCertificado(string $senha = 'senha123'): Configuracao
+    /**
+     * Formato ANTIGO (pré 2026-09-14): AES-256-CBC cifrado "na mão", sem
+     * autenticação. Ainda precisa continuar decifrável (fallback de
+     * leitura) pra não travar certificados já armazenados em produção
+     * antes do fix de segurança — ver RegistrarEmissorService::decifrarPfx().
+     */
+    private function configuracaoComCertificadoFormatoAntigo(string $senha = 'senha123'): Configuracao
     {
         $pfx = $this->gerarPfxDeTeste($senha);
         $key = substr(hash('sha256', config('app.key'), true), 0, 32);
@@ -46,9 +52,27 @@ class CertificadoStoreTest extends TestCase
         return $cfg;
     }
 
-    public function test_obter_decifra_pfx_e_senha(): void
+    /**
+     * Formato NOVO (fix de segurança 2026-09-14): `Crypt::encryptString()`
+     * (AES-256-CBC-HMAC autenticado), o que `ConfiguracaoController::
+     * uploadCertificado()` já usa pra todo upload novo.
+     */
+    private function configuracaoComCertificadoFormatoNovo(string $senha = 'senha123'): Configuracao
     {
-        $cfg = $this->configuracaoComCertificado('minhasenha');
+        $pfx = $this->gerarPfxDeTeste($senha);
+
+        $cfg = new Configuracao();
+        $cfg->certificado_pfx_encrypted = \Illuminate\Support\Facades\Crypt::encryptString($pfx);
+        $cfg->certificado_senha_encrypted = \Illuminate\Support\Facades\Crypt::encryptString($senha);
+        return $cfg;
+    }
+
+    public function test_obter_decifra_pfx_e_senha_formato_antigo(): void
+    {
+        // Achado de segurança (2026-09-14): certificados já armazenados
+        // antes do fix (ex.: stuntmotos em produção) precisam continuar
+        // funcionando — fallback de leitura, nunca mais escrito nesse formato.
+        $cfg = $this->configuracaoComCertificadoFormatoAntigo('minhasenha');
         $store = new CertificadoStore();
 
         $resultado = $store->obter($cfg);
@@ -56,6 +80,17 @@ class CertificadoStoreTest extends TestCase
         $this->assertSame('minhasenha', $resultado['senha']);
         $this->assertNotEmpty($resultado['pfx']);
         // Confirma que o PFX decifrado é válido de verdade (abre com a senha certa).
+        $this->assertTrue(openssl_pkcs12_read($resultado['pfx'], $certs, 'minhasenha'));
+    }
+
+    public function test_obter_decifra_pfx_e_senha_formato_novo(): void
+    {
+        $cfg = $this->configuracaoComCertificadoFormatoNovo('minhasenha');
+        $store = new CertificadoStore();
+
+        $resultado = $store->obter($cfg);
+
+        $this->assertSame('minhasenha', $resultado['senha']);
         $this->assertTrue(openssl_pkcs12_read($resultado['pfx'], $certs, 'minhasenha'));
     }
 
@@ -70,7 +105,7 @@ class CertificadoStoreTest extends TestCase
 
     public function test_como_arquivo_temporario_apaga_arquivo_depois(): void
     {
-        $cfg = $this->configuracaoComCertificado('minhasenha');
+        $cfg = $this->configuracaoComCertificadoFormatoNovo('minhasenha');
         $store = new CertificadoStore();
         $caminhoCapturado = null;
 
@@ -87,7 +122,7 @@ class CertificadoStoreTest extends TestCase
 
     public function test_como_arquivo_temporario_apaga_arquivo_mesmo_se_callback_lancar(): void
     {
-        $cfg = $this->configuracaoComCertificado('minhasenha');
+        $cfg = $this->configuracaoComCertificadoFormatoNovo('minhasenha');
         $store = new CertificadoStore();
         $caminhoCapturado = null;
 

@@ -143,8 +143,24 @@ class RegistrarEmissorService
         return ['ok' => true, 'mensagem' => 'Emissor registrado com sucesso.'];
     }
 
+    /**
+     * Achado de segurança (auditoria 2026-09-14): o formato antigo cifrava
+     * com AES-256-CBC "na mão" (chave derivada de um único SHA-256 do
+     * APP_KEY, sem autenticação/HMAC). Certificados já armazenados em
+     * produção com esse formato (ex.: stuntmotos) continuam decifráveis
+     * aqui — só como fallback de LEITURA, nunca mais escrito — pra não
+     * travar o acesso a eles. Todo upload novo (`ConfiguracaoController::
+     * uploadCertificado()`) já sai no formato novo (`Crypt::encryptString()`,
+     * autenticado), tentado primeiro.
+     */
     public static function decifrarPfx(string $stored): string
     {
+        try {
+            return Crypt::decryptString($stored);
+        } catch (\Illuminate\Contracts\Encryption\DecryptException $e) {
+            // Formato antigo — fallback só de leitura, ver docblock acima.
+        }
+
         $raw = base64_decode($stored);
         $iv  = substr($raw, 0, 16);
         $enc = substr($raw, 16);

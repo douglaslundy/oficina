@@ -92,10 +92,18 @@ class ConfiguracaoController extends Controller
             return response()->json(['message' => $resultado['erro'] ?? 'Certificado inválido.'], 422);
         }
 
-        $key       = substr(hash('sha256', config('app.key'), true), 0, 32);
-        $iv        = random_bytes(16);
-        $encrypted = openssl_encrypt($conteudo, 'aes-256-cbc', $key, OPENSSL_RAW_DATA, $iv);
-        $stored    = base64_encode($iv . $encrypted);
+        // Achado de segurança (auditoria 2026-09-14): antes cifrava com
+        // AES-256-CBC "na mão", derivando a chave de um único SHA-256 do
+        // APP_KEY, sem autenticação (sem HMAC/tag) — um blob adulterado no
+        // banco não seria detectado antes de tentar usá-lo pra assinar
+        // documentos fiscais. `Crypt::encryptString()` (já usado 2 linhas
+        // abaixo pra senha do certificado, curiosamente não pra chave
+        // privada em si) usa AES-256-CBC-HMAC autenticado — mesma proteção,
+        // sem chave derivada à mão. `RegistrarEmissorService::decifrarPfx()`
+        // aceita os dois formatos (o antigo só como fallback de leitura,
+        // pra não travar certificados já armazenados) — todo upload novo
+        // já sai no formato novo.
+        $stored = \Illuminate\Support\Facades\Crypt::encryptString($conteudo);
 
         $config = Configuracao::firstOrCreate([]);
         $config->update([

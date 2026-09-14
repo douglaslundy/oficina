@@ -127,6 +127,42 @@ class EstoqueServiceTest extends TestCase
         ]);
     }
 
+    /**
+     * Bug real achado em auditoria (2026-09-14): `darSaidaItem()`/
+     * `devolverItem()` faziam `(int) $item->quantidade`, truncando (não
+     * arredondando) qualquer quantidade fracionária. `os_itens.quantidade`
+     * é `decimal(8,2)` e aceita frações de propósito (ex.: 0,5 L de óleo,
+     * produto com `unidade='L'`) — com `(int) 0.5 = 0`, o estoque NUNCA era
+     * baixado pra vendas fracionárias menores que 1 unidade, embora o
+     * cliente fosse cobrado normalmente. `produtos.qty_atual`/
+     * `movimentacoes_estoque.quantidade` são colunas INTEGER no banco (não
+     * suportam fração de verdade) — o fix aqui é a mitigação segura
+     * possível sem migração de schema: arredondar pra CIMA (nunca pra
+     * zero), garantindo que toda venda fracionária baixe pelo menos 1
+     * unidade em vez de nenhuma. Não é 100% exato (0,5 L baixa 1 unidade
+     * inteira, não meia) mas nunca mais "some" silenciosamente.
+     */
+    public function test_dar_saida_item_com_quantidade_fracionaria_nunca_baixa_zero(): void
+    {
+        $admin = $this->criarAdmin();
+        Auth::login($admin);
+
+        $produto = Produto::create([
+            'nome' => 'Óleo 15W40', 'sku' => 'OLEO01', 'categoria' => 'Óleo/Fluidos',
+            'unidade' => 'L', 'qty_atual' => 10, 'qty_minima' => 3, 'preco_venda' => 40,
+        ]);
+
+        $os = $this->criarOs($admin, [[
+            'tipo' => 'PECA', 'produto_id' => $produto->id, 'descricao' => 'Óleo (0,5L)',
+            'quantidade' => 0.5, 'valor_unitario' => 20,
+        ]]);
+
+        $this->service->darSaidaItem($os, $os->itens()->first());
+
+        // Antes do fix: (int) 0.5 === 0 → qty_atual continuava 10 (bug).
+        $this->assertLessThan(10, $produto->fresh()->qty_atual);
+    }
+
     public function test_baixar_estoque_insuficiente(): void
     {
         $admin = $this->criarAdmin();
