@@ -217,7 +217,7 @@ class OrdemServicoController extends Controller
 
     public function show(string $id): OrdemServicoResource
     {
-        $os = OrdemServico::with(['cliente', 'mecanico', 'itens.produto', 'pagamentos'])->findOrFail($id);
+        $os = OrdemServico::with(['cliente', 'mecanico', 'itens.produto', 'pagamentos', 'notasFiscais'])->findOrFail($id);
 
         activity()
             ->performedOn($os)

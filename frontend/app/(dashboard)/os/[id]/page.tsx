@@ -48,6 +48,7 @@ interface OsData {
   data_vencimento_pagamento?: string
   itens?: OsItem[]
   pagamentos?: OsPagamento[]
+  notas_fiscais?: { id: string; numero: number | null; modelo: string; status: string; ambiente?: string }[]
 }
 
 function toInputDate(val?: string | null): string | undefined {
@@ -153,6 +154,41 @@ export default function OSDetailPage() {
       const msg = (e as { response?: { data?: { message?: string } } })?.response?.data?.message
       toast(msg ?? 'Erro ao gerar as notas fiscais da OS.', 'danger')
     } finally { setEmitindoNotas(false) }
+  }
+
+  const [baixandoNotas, setBaixandoNotas] = useState(false)
+
+  // Achado de UX (2026-09-14): a tela continuava oferecendo "Gerar notas
+  // fiscais" mesmo depois de já geradas — gerar de novo criaria notas
+  // duplicadas. Com pelo menos 1 nota já vinculada à OS, troca pra baixar
+  // as que já existem em vez de tentar gerar outra vez.
+  async function baixarNotasFiscais() {
+    const notas = os?.notas_fiscais ?? []
+    if (!notas.length) return
+    setBaixandoNotas(true)
+    try {
+      const token = localStorage.getItem('auth_token')
+      const slug  = localStorage.getItem('oficina_slug')
+      for (const nota of notas) {
+        const response = await fetch(
+          `${window.location.origin}/api/notas-fiscais/${nota.id}/pdf`,
+          { headers: { Authorization: `Bearer ${token}`, 'X-Tenant': slug ?? '' } }
+        )
+        if (!response.ok) {
+          toast(`Erro ao baixar a nota ${nota.modelo} nº ${nota.numero ?? '-'}.`, 'danger')
+          continue
+        }
+        const blob = await response.blob()
+        const url  = URL.createObjectURL(blob)
+        const a = document.createElement('a')
+        a.href = url
+        a.download = `${nota.modelo}-${nota.numero ?? nota.id}.pdf`
+        a.click()
+        URL.revokeObjectURL(url)
+      }
+    } finally {
+      setBaixandoNotas(false)
+    }
   }
 
   async function concluirOS() {
@@ -331,11 +367,19 @@ export default function OSDetailPage() {
           </button>
         )}
         {os.status === 'CONCLUIDA' && (
-          <button onClick={emitirNotas} disabled={emitindoNotas}
-            title="Gera a NF-e das peças e a NFS-e dos serviços desta OS"
-            style={{ padding: '6px 14px', background: 'var(--info)', border: 'none', color: '#fff', borderRadius: 8, cursor: emitindoNotas ? 'not-allowed' : 'pointer', fontSize: 13, fontWeight: 700 }}>
-            {emitindoNotas ? '⟳ Gerando...' : '🧾 Gerar notas fiscais'}
-          </button>
+          (os.notas_fiscais ?? []).length > 0 ? (
+            <button onClick={baixarNotasFiscais} disabled={baixandoNotas}
+              title="Baixa o PDF de cada nota fiscal já gerada para esta OS"
+              style={{ padding: '6px 14px', background: 'var(--info)', border: 'none', color: '#fff', borderRadius: 8, cursor: baixandoNotas ? 'not-allowed' : 'pointer', fontSize: 13, fontWeight: 700 }}>
+              {baixandoNotas ? '⟳ Baixando...' : '📥 Baixar notas fiscais'}
+            </button>
+          ) : (
+            <button onClick={emitirNotas} disabled={emitindoNotas}
+              title="Gera a NF-e das peças e a NFS-e dos serviços desta OS"
+              style={{ padding: '6px 14px', background: 'var(--info)', border: 'none', color: '#fff', borderRadius: 8, cursor: emitindoNotas ? 'not-allowed' : 'pointer', fontSize: 13, fontWeight: 700 }}>
+              {emitindoNotas ? '⟳ Gerando...' : '🧾 Gerar notas fiscais'}
+            </button>
+          )
         )}
       </div>
       <div style={{ background: 'var(--card)', borderRadius: 12, border: '1px solid var(--border)', padding: 32 }}>

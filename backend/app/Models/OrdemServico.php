@@ -67,6 +67,7 @@ class OrdemServico extends Model
     public function mecanico(): BelongsTo { return $this->belongsTo(Usuario::class, 'mecanico_id'); }
     public function itens(): HasMany { return $this->hasMany(OsItem::class, 'os_id'); }
     public function pagamentos(): HasMany { return $this->hasMany(OsPagamento::class, 'os_id'); }
+    public function notasFiscais(): HasMany { return $this->hasMany(NotaFiscal::class, 'os_id'); }
 
     public function getSaldoDevedorAttribute(): float
     {

@@ -54,6 +54,17 @@ class OrdemServicoResource extends JsonResource
                 'valor_unitario' => $i->valor_unitario,
                 'valor_total'    => $i->valor_total,
             ])),
+            // Achado de UX (2026-09-14): tela de OS não sabia se as notas
+            // fiscais já tinham sido geradas — botão "Gerar notas fiscais"
+            // continuava aparecendo mesmo depois de já existirem, sem opção
+            // de baixar o PDF direto dali.
+            'notas_fiscais'    => $this->whenLoaded('notasFiscais', fn() => $this->notasFiscais->map(fn($nf) => [
+                'id'       => $nf->id,
+                'numero'   => $nf->numero,
+                'modelo'   => $nf->modelo,
+                'status'   => $nf->status,
+                'ambiente' => $nf->ambiente,
+            ])),
             'criado_em'        => $this->criado_em?->format('d/m/Y H:i'),
         ];
     }
