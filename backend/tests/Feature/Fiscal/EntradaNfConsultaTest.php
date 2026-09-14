@@ -121,17 +121,84 @@ XML, 200),
         Http::assertNothingSent();
     }
 
-    public function test_consultar_chave_ja_lancada_retorna_422_sem_consultar_provedor(): void
+    /**
+     * Bug real reportado pelo usuário (2026-09-14): consultar uma chave já
+     * lançada bloqueava com 422 ANTES de sequer consultar o provedor —
+     * impedindo o fluxo de conciliação/atualização de dados fiscais que já
+     * existe e funciona pra quem faz upload do XML (ver `EntradaNfTest`,
+     * `test_parse_avisa_nota_ja_lancada` e correlatos). Agora `consultar()`
+     * segue até `montarPreview()`, que já sabe calcular `ja_lancada` e
+     * `atualizacao_fiscal_disponivel` corretamente — só bloqueia de verdade
+     * lá na frente, em `atualizarFiscal()`, se não houver nada pra
+     * atualizar.
+     */
+    public function test_consultar_chave_ja_lancada_ainda_consulta_o_provedor_pra_permitir_conciliacao(): void
     {
         [$token, $oficina] = $this->loginAdmin('SPEDY');
         \App\Models\NotaEntrada::create(['chave_acesso' => '35260712345678000199550010000012340000000001', 'valor_total' => 10]);
-        Http::fake();
+
+        Http::fake([
+            '*/inbound-product-invoices?*' => Http::response([
+                'items' => [['id' => 'inv-1', 'accessKey' => '35260712345678000199550010000012340000000001', 'isComplete' => true]],
+            ], 200),
+            '*/inbound-product-invoices/inv-1/xml' => Http::response(<<<XML
+<?xml version="1.0" encoding="UTF-8"?>
+<nfeProc xmlns="http://www.portalfiscal.inf.br/nfe" versao="4.00">
+  <NFe><infNFe Id="NFe35260712345678000199550010000012340000000001" versao="4.00">
+    <ide><nNF>1234</nNF><serie>1</serie><dhEmi>2026-07-01T09:15:32-03:00</dhEmi></ide>
+    <emit><CNPJ>12345678000199</CNPJ><xNome>Fornecedor QR</xNome></emit>
+    <det nItem="1"><prod><cEAN>SEM GTIN</cEAN><xProd>ITEM QR</xProd><qCom>1.0000</qCom><vUnCom>10.0000</vUnCom></prod></det>
+  </infNFe></NFe>
+</nfeProc>
+XML, 200),
+        ]);
 
         $this->withToken($token)->withHeaders(['X-Tenant' => $oficina->slug])
             ->postJson('/api/entradas-nf/consultar', ['chave_acesso' => '35260712345678000199550010000012340000000001'])
-            ->assertStatus(422);
+            ->assertStatus(200)
+            ->assertJsonPath('ja_lancada', true);
 
-        Http::assertNothingSent();
+        Http::assertSent(fn ($request) => str_contains($request->url(), 'inbound-product-invoices'));
+    }
+
+    public function test_consultar_chave_ja_lancada_sinaliza_atualizacao_fiscal_disponivel(): void
+    {
+        [$token, $oficina] = $this->loginAdmin('SPEDY');
+        \App\Models\NotaEntrada::create(['chave_acesso' => '35260712345678000199550010000012340000000001', 'valor_total' => 10]);
+        \App\Models\Produto::create([
+            'nome' => 'Filtro de Óleo Existente', 'sku' => 'FLT-EXIST', 'categoria' => 'Filtros',
+            'codigo_barras' => '7891234567890', 'qty_atual' => 3, 'qty_minima' => 5, 'preco_venda' => 40,
+            // sem ncm/tributacao_icms cadastrados ainda — é exatamente o
+            // cenário real que o usuário reportou: produto criado antes de
+            // existir cadastro fiscal, precisa da conciliação pra preencher.
+        ]);
+
+        Http::fake([
+            '*/inbound-product-invoices?*' => Http::response([
+                'items' => [['id' => 'inv-1', 'accessKey' => '35260712345678000199550010000012340000000001', 'isComplete' => true]],
+            ], 200),
+            '*/inbound-product-invoices/inv-1/xml' => Http::response(<<<XML
+<?xml version="1.0" encoding="UTF-8"?>
+<nfeProc xmlns="http://www.portalfiscal.inf.br/nfe" versao="4.00">
+  <NFe><infNFe Id="NFe35260712345678000199550010000012340000000001" versao="4.00">
+    <ide><nNF>1234</nNF><serie>1</serie><dhEmi>2026-07-01T09:15:32-03:00</dhEmi></ide>
+    <emit><CNPJ>12345678000199</CNPJ><xNome>Fornecedor QR</xNome></emit>
+    <det nItem="1">
+      <prod><cEAN>7891234567890</cEAN><xProd>FILTRO DE OLEO XPTO</xProd><qCom>10.0000</qCom><vUnCom>15.5000</vUnCom><NCM>84212300</NCM></prod>
+      <imposto><ICMS><ICMS00><orig>0</orig><CST>00</CST></ICMS00></ICMS></imposto>
+    </det>
+  </infNFe></NFe>
+</nfeProc>
+XML, 200),
+        ]);
+
+        $response = $this->withToken($token)->withHeaders(['X-Tenant' => $oficina->slug])
+            ->postJson('/api/entradas-nf/consultar', ['chave_acesso' => '35260712345678000199550010000012340000000001'])
+            ->assertStatus(200);
+
+        $this->assertTrue($response->json('ja_lancada'));
+        $this->assertTrue($response->json('atualizacao_fiscal_disponivel'));
+        $this->assertTrue($response->json('itens.0.sera_atualizado'));
     }
 
     public function test_recebidas_lista_com_ja_lancada_calculado(): void

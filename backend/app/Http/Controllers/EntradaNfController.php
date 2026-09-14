@@ -338,9 +338,15 @@ class EntradaNfController extends Controller
     {
         $validated = $request->validate(['chave_acesso' => ['required', 'string', 'size:44']]);
 
-        if (NotaEntrada::where('chave_acesso', $validated['chave_acesso'])->exists()) {
-            return response()->json(['message' => 'Esta nota fiscal já foi lançada anteriormente.'], 422);
-        }
+        // Bug real reportado pelo usuário (2026-09-14): este bloqueio
+        // precoce impedia QUALQUER consulta de uma chave já lançada,
+        // mesmo quando o objetivo é justamente reconciliar dados fiscais
+        // pendentes (fluxo que já existe e funciona pra quem faz upload do
+        // XML — ver parse()/montarPreview(), que já calculam `ja_lancada`,
+        // `sera_atualizado` e `atualizacao_fiscal_disponivel` corretamente).
+        // Removido: deixa cair no mesmo `montarPreview()` de sempre, que já
+        // sabe lidar com nota já lançada — só bloqueia de verdade lá na
+        // frente, em `atualizarFiscal()`, se não houver nada pra atualizar.
 
         $provider = $providerManager->forTenant();
         if (!$provider instanceof ConsultaNotaTerceiroProvider) {
