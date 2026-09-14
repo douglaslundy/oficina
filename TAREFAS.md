@@ -4,6 +4,25 @@
 > pequeno) antes de codar, seguindo `superpowers:brainstorming`. Ordem
 > escolhida por risco/dependência crescente, não pela ordem em que foi pedida.
 
+## ⚠️ PAUSADO — deploy do fix de `totTrib` (NFePHP/NFS-e) aguardando autorização
+
+Usuário pediu explicitamente pra não fazer deploy e aguardar instruções, no
+meio da correção do 3º bug de schema da primeira emissão real via NFePHP
+(ver `PROGRESSO.md` seção 12). Estado exato:
+- Commits `967b9c6` (cTribNac) e `2bf1748` (cTribMun) **já estão
+  deployados** (deploy rodou antes do pedido de pausa).
+- Commit `a7e03c2` (fix do `totTrib`, obrigatório no grupo `trib`) está
+  **só local** — nem `git push` foi feito ainda.
+- A nota de teste (`6e84e509`, stuntmotos, HOMOLOGACAO) **ainda não
+  autorizou de verdade** — o 3º fix nunca foi testado ao vivo (deploy
+  pausado antes de poder confirmar). Pode haver uma 4ª camada de erro
+  ainda não descoberta (mesmo padrão da saga Spedy — normal, não é sinal
+  de problema).
+- **Próximo passo, só quando autorizado**: `git push`, deploy, reemitir a
+  nota `6e84e509` via tinker, e continuar corrigindo camada por camada até
+  autorizar de verdade (ou até esgotar o escopo do que dá pra descobrir
+  sem mais informação).
+
 ## Sobra da Rodada 39 continuação 2 (2026-09-11) — NFC-e via Spedy não testada até autorizar
 
 A NF-e (peça, B2B/consumidor final) já AUTORIZA de verdade via Spedy

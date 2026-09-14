@@ -436,6 +436,83 @@ onde a linha é "N/A", é porque aquele motor nunca teve o defeito
 correspondente (arquitetura diferente o suficiente pra não ser afetado),
 não porque ficou pra trás.
 
+### 12. Primeira emissão real via NFePHP/NFS-e nacional — 3 bugs reais de schema em sequência (mesmo padrão da saga Spedy)
+Usuário reportou "a nota via NFePHP deu erro" + "não encontrei a opção de
+homologação com a NFePHP". Investigação em 2 frentes:
+
+**Homologação — não é bug, é confusão de UI leg gítima.** Confirmado:
+`ambiente_fiscal` é um campo ÚNICO em "Dados da Empresa" compartilhado
+pelos 3 provedores (Spedy/Focus/NFePHP) — não existe nem precisa existir
+uma opção separada por provedor. Confirmado nos dados reais: `ambiente=
+HOMOLOGACAO` pras duas oficinas, e `MotorNfse::contexto()` mapeia
+corretamente pra `TipoAmbiente::Homologacao`, que a lib resolve pro
+endpoint oficial de testes do governo
+(`sefin.producaorestrita.nfse.gov.br` — "Produção Restrita" é o nome
+oficial do ambiente de homologação do Sistema Nacional NFS-e). A nota que
+falhou NÃO foi enviada à produção real. Achado extra: `saas_config.
+provedor_fiscal_padrao` estava setado pra `NFEPHP` (mudado em algum
+momento pelo usuário via SaaS Admin — é onde o provedor é escolhido,
+não em "Dados da Empresa", que só tem o ambiente).
+
+**Erro real — primeira tentativa de verdade de NFS-e via NFePHP neste
+projeto inteiro** (confirmado em `TAREFAS.md`: nunca tinha sido emitida
+uma NF-e/NFS-e real via NFePHP até este momento). Mesmo padrão da saga
+Spedy de NF-e (Rodada 39): a SEFAZ/ADN valida o XML em camadas, cada fix
+revelando o próximo problema — 3 bugs reais em sequência, cada um
+**confirmado contra o schema oficial (XSD bundlado no vendor) e/ou a
+tabela oficial do governo antes de corrigir, nunca um chute**:
+
+1. **`cTribNac` com o código LC116 antigo ("14.01"), formato errado.**
+   Erro real: `E1235: Falha no esquema XML do DF-e... TSCodTribNac...
+   Pattern constraint failed`. Confirmado no XSD: exige 6 dígitos
+   numéricos (2 item + 2 subitem + 2 "desdobro nacional" — subdivisão NOVA
+   do Sistema Nacional NFS-e sem equivalente no código LC116 clássico que
+   Spedy/Focus usam). Consultei a tabela oficial
+   (gov.br/nfse/pt-br/mei-e-demais-empresas/codigos-de-tributacao-nacional-nbs)
+   e confirmei o código real do item 14.01 (único usado por este sistema,
+   oficina mecânica): **140101**. `CodigoTributacaoNacionalResolver` novo
+   (mesmo padrão do `CrtResolver`: código desconhecido lança exceção,
+   nunca um default silencioso). Commit `967b9c6`.
+2. **`cTribMun` ("1401", 4 dígitos) também violava o schema** (`TCCodTribMun`
+   exige exatamente 3 dígitos). Diferente do cTribNac, é um código
+   MUNICIPAL — cada cidade tem a própria tabela, sem fonte nacional única
+   pra confirmar o valor certo de Ilicínea/MG. Campo é opcional no schema
+   (`minOccurs="0"`) — em vez de chutar um código nunca confirmado, passou
+   a ser omitido quando não bate no formato exigido. Commit `2bf1748`.
+3. **Grupo `totTrib` nunca era enviado** (só `tribMun` dentro de `trib`) —
+   `totTrib` é OBRIGATÓRIO (só `tribFed` é opcional). Erro real: "elemento
+   'trib' com conteúdo incompleto". `indTotTrib=0` é o único valor válido
+   pra essa opção do `xs:choice` — a própria documentação do XSD diz
+   "possui valor fixo igual a zero" (Decreto 8.264/2014, "nenhuma
+   estimativa de tributos informada"), evitando estimar `vTotTrib`/
+   `pTotTrib` sem dado real disponível. Commit `a7e03c2`.
+
+**Método usado (idêntico ao da saga Spedy):** reproduzir a emissão real
+via tinker contra o ambiente de homologação oficial do governo depois de
+CADA fix, ler o erro real (nunca confiar em suposição), confirmar a causa
+no XSD bundlado no vendor (`vendor/nfse-nacional/nfse-php/references/
+schemas/*.xsd`) ou em fonte oficial do governo antes de codar.
+
+**Verificação:** `php -l` limpo, suíte Unit 305 testes (mesmas 10 falhas
+pré-existentes de sempre) depois de cada um dos 3 commits.
+
+**⚠️ NÃO DEPLOYADO — usuário pediu explicitamente pra aguardar instruções
+antes do deploy** (mensagem recebida no meio da correção do 3º bug).
+Commits `967b9c6` e `2bf1748` JÁ estão deployados (deploy rodou antes do
+pedido de pausa); commit `a7e03c2` (fix do `totTrib`) está só local,
+**nem commitado no GitHub ainda** — aguardando autorização pra
+`git push` + deploy. A nota de teste (`6e84e509`) ainda não chegou a
+autorizar de verdade — o 3º bug (totTrib) só foi corrigido no código
+local, nunca testado ao vivo (deploy pausado antes de poder confirmar).
+
+**Sobra conhecida, não urgente:** o mesmo código LC116 "14.01" fixo em
+todo o sistema (nunca configurável por serviço) também é usado como
+`cTribNac` implicitamente correto só porque este sistema SÓ atende
+oficina mecânica — se um dia outro tipo de serviço for adicionado,
+`CodigoTributacaoNacionalResolver::MAPA` precisa ganhar a entrada
+correspondente (vai lançar exceção clara em vez de emitir algo errado,
+então é seguro, só não é automático).
+
 ## Rodada 39 continuação 2 **primeira NF-e de peça autorizada
 de verdade pela SEFAZ via Spedy** neste projeto, depois de 5 bugs reais
 achados e corrigidos em sequência (campos tributáveis, numeração,
