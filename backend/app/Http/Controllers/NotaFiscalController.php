@@ -170,6 +170,30 @@ class NotaFiscalController extends Controller
         return response()->json(['message' => 'NF cancelada com sucesso.']);
     }
 
+    /**
+     * Exclui uma nota fiscal — permitido SOMENTE pra notas emitidas em
+     * ambiente de HOMOLOGAÇÃO (pedido explícito do usuário, 2026-09-14).
+     * Uma nota de PRODUÇÃO é um documento fiscal real (mesmo cancelada,
+     * seu registro precisa ser preservado — cancelamento já existe pra
+     * isso); exclusão física só faz sentido pra lixo de teste/homologação
+     * que nunca teve valor legal. `notas_fiscais_itens` cai em cascata
+     * (FK `onDelete('cascade')`, migration 2026_08_02_000001).
+     */
+    public function destroy(string $id): JsonResponse
+    {
+        $nota = NotaFiscal::findOrFail($id);
+
+        if ($nota->ambiente !== 'HOMOLOGACAO') {
+            return response()->json([
+                'message' => 'Só é possível excluir notas fiscais emitidas em ambiente de homologação.',
+            ], 422);
+        }
+
+        $nota->delete();
+
+        return response()->json(['message' => 'Nota fiscal excluída com sucesso.']);
+    }
+
     public function pdf(string $id): \Illuminate\Http\Response
     {
         $nota = NotaFiscal::with(['cliente', 'itens'])->findOrFail($id);

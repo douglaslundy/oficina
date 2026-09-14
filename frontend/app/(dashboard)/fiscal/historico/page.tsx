@@ -14,6 +14,7 @@ interface NotaFiscal {
   modelo: string
   status: string
   mensagem_erro?: string | null
+  ambiente?: string | null
 }
 
 export default function HistoricoNFPage() {
@@ -24,6 +25,8 @@ export default function HistoricoNFPage() {
   const [cancelModal, setCancelModal]   = useState<{ id: string } | null>(null)
   const [motivo, setMotivo]             = useState('')
   const [cancelando, setCancelando]     = useState(false)
+  const [excluirModal, setExcluirModal] = useState<{ id: string; numero: number | null } | null>(null)
+  const [excluindo, setExcluindo]       = useState(false)
   const [modeloFiltro, setModeloFiltro] = useState('')
 
   const fetchNotas = useCallback(() => {
@@ -117,6 +120,26 @@ export default function HistoricoNFPage() {
       toast('Erro ao cancelar NF.', 'danger')
     } finally {
       setCancelando(false)
+    }
+  }
+
+  // Pedido explícito do usuário (2026-09-14): excluir só é permitido pra
+  // notas de HOMOLOGAÇÃO (validação replicada aqui e, de verdade, no
+  // backend — NotaFiscalController::destroy() é quem realmente garante
+  // isso, esta checagem no frontend é só pra não nem oferecer o botão).
+  async function confirmarExclusao() {
+    if (!excluirModal) return
+    setExcluindo(true)
+    try {
+      await api.delete(`/notas-fiscais/${excluirModal.id}`)
+      toast('Nota fiscal excluída.', 'success')
+      setExcluirModal(null)
+      fetchNotas()
+    } catch (e: unknown) {
+      const msg = (e as { response?: { data?: { message?: string } } })?.response?.data?.message
+      toast(msg ?? 'Erro ao excluir nota fiscal.', 'danger')
+    } finally {
+      setExcluindo(false)
     }
   }
 
@@ -247,6 +270,15 @@ export default function HistoricoNFPage() {
                           Cancelar
                         </button>
                       )}
+                      {nota.ambiente === 'HOMOLOGACAO' && (
+                        <button
+                          onClick={() => setExcluirModal({ id: nota.id, numero: nota.numero })}
+                          title="Excluir — só disponível para notas emitidas em ambiente de homologação"
+                          style={{ background: 'none', border: '1px solid var(--muted)', color: 'var(--muted)', borderRadius: 6, padding: '4px 10px', cursor: 'pointer', fontSize: 13, whiteSpace: 'nowrap' }}
+                        >
+                          🗑️ Excluir
+                        </button>
+                      )}
                     </div>
                   </td>
                 </tr>
@@ -305,6 +337,41 @@ export default function HistoricoNFPage() {
                 }}
               >
                 {cancelando ? 'Cancelando...' : 'Confirmar Cancelamento'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Excluir modal */}
+      {excluirModal && (
+        <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.6)', zIndex: 1000, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+          <div style={{ background: 'var(--card)', border: '1px solid var(--border)', borderRadius: 12, padding: 32, width: 440, maxWidth: '90vw' }}>
+            <h3 className="font-display" style={{ fontSize: 20, fontWeight: 800, color: 'var(--text)', marginBottom: 8 }}>
+              Excluir Nota Fiscal
+            </h3>
+            <p style={{ color: 'var(--muted)', fontSize: 14, marginBottom: 20 }}>
+              Esta ação não pode ser desfeita. A nota nº {excluirModal.numero ?? '-'} (homologação, sem valor fiscal) será apagada permanentemente.
+            </p>
+            <div style={{ display: 'flex', gap: 12, justifyContent: 'flex-end' }}>
+              <button
+                onClick={() => setExcluirModal(null)}
+                disabled={excluindo}
+                style={{ background: 'none', border: '1px solid var(--border)', color: 'var(--muted)', borderRadius: 8, padding: '8px 20px', cursor: 'pointer', fontSize: 14 }}
+              >
+                Voltar
+              </button>
+              <button
+                onClick={confirmarExclusao}
+                disabled={excluindo}
+                style={{
+                  background: 'var(--danger)', color: '#fff', border: 'none', borderRadius: 8,
+                  padding: '8px 20px', fontSize: 14,
+                  cursor: excluindo ? 'not-allowed' : 'pointer',
+                  opacity: excluindo ? 0.6 : 1,
+                }}
+              >
+                {excluindo ? 'Excluindo...' : 'Confirmar Exclusão'}
               </button>
             </div>
           </div>

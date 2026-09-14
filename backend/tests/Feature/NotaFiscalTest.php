@@ -53,6 +53,41 @@ class NotaFiscalTest extends TestCase
                  ->assertJsonPath('data.status', 'RASCUNHO');
     }
 
+    /**
+     * Pedido explícito do usuário (2026-09-14): botão de excluir nota
+     * fiscal, permitido SOMENTE pra notas de homologação — nunca produção
+     * (documento fiscal real, mesmo cancelada precisa manter o registro).
+     */
+    public function test_excluir_nota_fiscal_de_homologacao(): void
+    {
+        $token   = $this->loginAdmin();
+        $cliente = $this->criarCliente();
+        $nota = NotaFiscal::create([
+            'cliente_id' => $cliente->id, 'modelo' => 'NFS-e', 'natureza_operacao' => 'Prestação de Serviços',
+            'subtotal' => 100, 'valor_total' => 100, 'status' => 'AUTORIZADA', 'ambiente' => 'HOMOLOGACAO',
+        ]);
+
+        $response = $this->withToken($token)->deleteJson("/api/notas-fiscais/{$nota->id}");
+
+        $response->assertStatus(200);
+        $this->assertDatabaseMissing('notas_fiscais', ['id' => $nota->id]);
+    }
+
+    public function test_nao_permite_excluir_nota_fiscal_de_producao(): void
+    {
+        $token   = $this->loginAdmin();
+        $cliente = $this->criarCliente();
+        $nota = NotaFiscal::create([
+            'cliente_id' => $cliente->id, 'modelo' => 'NFS-e', 'natureza_operacao' => 'Prestação de Serviços',
+            'subtotal' => 100, 'valor_total' => 100, 'status' => 'AUTORIZADA', 'ambiente' => 'PRODUCAO',
+        ]);
+
+        $response = $this->withToken($token)->deleteJson("/api/notas-fiscais/{$nota->id}");
+
+        $response->assertStatus(422);
+        $this->assertDatabaseHas('notas_fiscais', ['id' => $nota->id]);
+    }
+
     public function test_listar_notas_fiscais(): void
     {
         $token = $this->loginAdmin();

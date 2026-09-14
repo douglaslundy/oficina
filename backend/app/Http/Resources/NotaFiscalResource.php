@@ -45,6 +45,10 @@ class NotaFiscalResource extends JsonResource
             'valor_iss'         => $this->valor_iss,
             'valor_total'       => $this->valor_total,
             'status'            => $this->status,
+            // Exposto pro frontend decidir quando mostrar o botão de
+            // excluir (só permitido pra notas de homologação — ver
+            // NotaFiscalController::destroy()).
+            'ambiente'          => $this->ambiente,
             'chave_acesso'      => $this->chave_acesso,
             'mensagem_erro'     => $this->mensagem_erro,
             'pdf_url'           => $this->pdf_url,

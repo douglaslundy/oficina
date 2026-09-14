@@ -315,6 +315,7 @@ Route::middleware(['tenant', 'auth:sanctum', 'tenant.verify', 'role:ADMIN,FINANC
     Route::post('notas-fiscais/{id}/emitir',   [NotaFiscalController::class, 'emitir']);
     Route::get('notas-fiscais/{id}/status',    [NotaFiscalController::class, 'status']);
     Route::post('notas-fiscais/{id}/cancelar', [NotaFiscalController::class, 'cancelar']);
+    Route::delete('notas-fiscais/{id}',        [NotaFiscalController::class, 'destroy']);
     Route::post('notas-fiscais/download-zip',  [NotaFiscalController::class, 'downloadZip']);
     Route::post('notas-fiscais/inutilizar-numeracao', [NotaFiscalController::class, 'inutilizarNumeracao']);
 });
