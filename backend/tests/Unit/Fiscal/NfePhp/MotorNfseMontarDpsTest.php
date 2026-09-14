@@ -264,7 +264,18 @@ class MotorNfseMontarDpsTest extends TestCase
         $dps = (new MotorNfse())->montarDps($this->notaServico(), $this->configuracaoSimplesNacional(), 'HOMOLOGACAO', 1);
 
         $this->assertNull($dps->infDps->valores->tributacao->indicadorTotalTributos);
-        $this->assertNotNull($dps->infDps->valores->tributacao->percentualTotalTributosSN);
+        // Bug REAL na lib vendor (2026-09-14, confirmado lendo
+        // DpsXmlBuilder.php linha ~378): usa `if ($valor)` — truthy — em vez
+        // de `!== null` pra decidir se inclui `pTotTribSN` no XML. `0.0`
+        // (nosso valor original) é falsy em PHP, então a lib pulava o
+        // elemento inteiro e o schema rejeitava "trib com conteúdo
+        // incompleto" — mesmo bug já corrigido, agora dentro de código de
+        // terceiro que não dá pra editar (seria sobrescrito no próximo
+        // `composer install`). Workaround do nosso lado: manda 0.001 (não é
+        // falsy em PHP) que a própria lib formata com `number_format(...,2)`
+        // pra "0.00" no XML final — o valor transmitido pro governo é
+        // idêntico ao que já era a intenção original, só engana o `if()`.
+        $this->assertSame(0.001, $dps->infDps->valores->tributacao->percentualTotalTributosSN);
     }
 
     public function test_regime_normal_continua_usando_indtotrib(): void

@@ -203,12 +203,24 @@ class MotorNfse
                         // tributos não pode ser informado" — confirmado ao
                         // vivo. Pra ME/EPP (Simples Nacional) usa `pTotTribSN`
                         // em vez disso, a variante do mesmo xs:choice dedicada
-                        // a esse regime. 0% aqui não afeta o valor real da
-                        // nota (é só a estimativa informativa da Lei
-                        // 12.741/2012) — mesmo espírito de "não estimar sem
-                        // dado real" do indTotTrib=0 que já usávamos.
+                        // a esse regime.
+                        //
+                        // 0.001 (não 0!) por causa de um bug REAL na lib
+                        // vendor (DpsXmlBuilder.php ~linha 378): decide se
+                        // inclui `pTotTribSN` com `if ($valor)` — truthy — em
+                        // vez de `!== null`. `0.0` é falsy em PHP, a lib
+                        // pulava o elemento inteiro e a ADN rejeitava de novo
+                        // com "trib incompleto" (mesmo erro do fix anterior,
+                        // reaparecendo por uma causa diferente — confirmado
+                        // lendo o código da lib, não suposição). Não dá pra
+                        // editar o vendor (seria sobrescrito no próximo
+                        // `composer install`); a própria lib formata o valor
+                        // com number_format(...,2) antes de mandar pro XML,
+                        // então 0.001 vira "0.00" no XML final — idêntico ao
+                        // valor que já era a intenção original, só engana o
+                        // truthy check.
                         'totTrib' => in_array($regTrib['opSimpNac'] ?? null, [2, 3], true)
-                            ? ['pTotTribSN' => 0]
+                            ? ['pTotTribSN' => 0.001]
                             : ['indTotTrib' => 0],
                     ],
                 ],
