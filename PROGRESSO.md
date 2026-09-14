@@ -678,6 +678,49 @@ ignora cStat/xMotivo de propósito (decisão документada no próprio mé
 o XSD não garante uma enumeração fechada de códigos). Não mexi nisso agora
 por estar fora do que foi pedido; registrado aqui pra não se perder.
 
+### 18. "Consultar chave já lançada" bloqueava ANTES de oferecer a conciliação — a própria feature que o usuário queria já existia, só não era alcançada
+
+Usuário reportou: digitar a chave de acesso de uma nota e pedir pra
+consultar dava "já foi lançada anteriormente" em vez de oferecer
+atualizar os dados fiscais dos produtos (conciliação). Investigando,
+achei que essa feature **já existia e já funcionava** — só não pelo
+caminho que ele estava usando.
+
+**Causa raiz:** `EntradaNfController::consultar()` (rota usada quando o
+usuário DIGITA a chave manualmente) tinha um bloqueio bem no início:
+```php
+if (NotaEntrada::where('chave_acesso', ...)->exists()) {
+    return response()->json(['message' => 'Esta nota fiscal já foi lançada anteriormente.'], 422);
+}
+```
+Isso cortava o fluxo ANTES de sequer consultar o provedor fiscal. Só que
+`montarPreview()` (usado pelo UPLOAD de XML, `parse()`) já calculava tudo
+que precisa pra oferecer a conciliação — `ja_lancada`, `sera_atualizado`
+por item (via `ProdutoFiscalService::haveriaMudanca()`) e
+`atualizacao_fiscal_disponivel` — e o frontend (`produtos/entrada-nf/
+page.tsx`) já tinha telas prontas pra esse modo (`modoAtualizacaoFiscal`,
+botão "Atualizar dados fiscais"). Ou seja: a feature pedida já estava
+100% implementada pro fluxo de upload de XML — só faltava o fluxo de
+"digitar a chave" (`consultar()`) não bloquear antes de chegar lá.
+
+**Correção:** removido o bloqueio precoce. `consultar()` agora sempre
+consulta o provedor e cai em `montarPreview()`, igual `parse()` sempre
+fez — o bloqueio de verdade (nada pra atualizar) só acontece mais à
+frente, em `atualizarFiscal()`, que já tratava isso corretamente.
+
+**Testes:** reescrito o teste que travava o bug antigo como comportamento
+esperado (`test_consultar_chave_ja_lancada_retorna_422_sem_consultar_
+provedor` → removido) por 2 novos que provam o fix: consulta ao provedor
+acontece mesmo com nota já lançada, e `atualizacao_fiscal_disponivel`
+aparece certo quando há dado fiscal pra atualizar. Suíte Unit sem
+regressão (302/11 de sempre).
+
+**Verificado ao vivo em produção** contra chaves reais da stuntmotos:
+chave já reconciliada → `200 { ja_lancada: true, atualizacao_fiscal_
+disponivel: false }` (nada mais pra atualizar, correto); chave fora do
+prazo de retenção da Distribuição DFe → `404` com mensagem honesta da
+SEFAZ, não mais o bloqueio genérico de "já lançada". Commit `4b0a592`.
+
 ### 17. Cabeçalho do PDF de NFS-e mostrava a oficina, deveria mostrar a prefeitura
 
 Usuário comparou o PDF gerado com os modelos oficiais de referência que
