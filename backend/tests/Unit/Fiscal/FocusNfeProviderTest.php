@@ -259,6 +259,23 @@ class FocusNfeProviderTest extends TestCase
         Http::assertSent(fn ($req) => str_contains($req->url(), 'ref=os-123'));
     }
 
+    public function test_consultar_falha_http_mantem_processando_em_vez_de_rejeitada(): void
+    {
+        // Mesma classe de bug real corrigida no SpedyProvider (Rodada 40,
+        // PROGRESSO.md): falha ao CONSULTAR (rede, 401, 5xx) não pode virar
+        // REJEITADA — confundiria "não consegui checar" com "a SEFAZ/
+        // Prefeitura rejeitou". Aqui na Focus a referência já é reconhecida
+        // de verdade (mandada como `?ref=` na criação), então isto não é o
+        // bug de reconciliação da Spedy — é só a falta desta mesma rede de
+        // segurança para falhas transitórias de consulta.
+        Http::fake(['*/v2/nfse/os-123' => Http::response(['mensagem' => 'Unauthorized'], 401)]);
+
+        $p = new FocusNfeProvider('https://homologacao.focusnfe.com.br', 'master', 'HOMOLOGACAO', 'tok');
+        $r = $p->consultar('os-123');
+
+        $this->assertSame('PROCESSANDO', $r->status);
+    }
+
     public function test_consultar_autorizado(): void
     {
         Http::fake([

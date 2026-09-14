@@ -136,14 +136,27 @@ Ver `PROGRESSO.md` Rodada 39 pro detalhe completo da investigação
 (inclusive as consultas diretas à API da Spedy que confirmaram o item 1 da
 seção acima "PRÓXIMA TAREFA OBRIGATÓRIA").
 
-## Achados da Rodada 40 (2026-09-14) — registrados, não corrigidos ainda
+## Achados da Rodada 40 (2026-09-14)
 
-1. **`FocusNfeProvider::consultar()` tem a MESMA falha "consulta falhou ⇒
-   REJEITADA"** já corrigida no `SpedyProvider` nesta rodada (ver
-   `PROGRESSO.md` Rodada 40). Não corrigido agora porque a Focus não tem
-   nenhuma credencial cadastrada (achado antigo, item 3 acima) — ninguém é
-   afetado hoje. Corrigir junto quando alguém configurar Focus de verdade.
-2. **`SpedyProvider::cancelar()` ainda usa `DELETE /{recurso}/{referencia}`
+Usuário pediu explicitamente pra checar se as mesmas regras/correções valiam
+pros outros 2 motores (Focus, NFePHP) e se já estavam corrigidos neles.
+Resultado da varredura nos 3:
+
+- **NFePHP (`MotorNfe`/`MotorNfse`) já estava CORRETO nas duas classes de
+  bug** — não precisou de fix. (1) Não tem o problema de referência/ID: fala
+  direto com a SEFAZ/ambiente nacional usando a chave de acesso + protocolo
+  próprios, sem um ID de terceiro pra se perder. (2) Falha ao consultar já
+  virava `EmissaoResultado::erro(...)` (nunca `rejeitada(...)`) — corrigido
+  antes, na Rodada 37 (`MotorNfse::consultar()`/`resultadoAposVerificarCancelamento()`).
+- **✅ `FocusNfeProvider::consultar()` CORRIGIDO nesta rodada** — tinha a
+  mesma falha "consulta falhou ⇒ REJEITADA" do `SpedyProvider` (ver
+  `PROGRESSO.md` Rodada 40). **Não** tinha o bug de referência/ID: a Focus já
+  recebe a nossa `referenciaExterna` como `ref` na própria criação
+  (`POST /v2/nfse?ref=...`) e a usa depois como path (`GET /v2/nfse/{ref}`)
+  — arquitetura diferente da Spedy, que nunca teve essa concordância. TDD
+  (`FocusNfeProviderTest`: 29→30 testes), suíte Unit completa sem regressão
+  (298 testes, mesmas 10 falhas pré-existentes).
+- **`SpedyProvider::cancelar()` ainda usa `DELETE /{recurso}/{referencia}`
    por path** (não por filtro `integrationId`) — mesma classe de problema do
    `consultar()` antigo: `referencia_externa` salvo é sempre a nossa
    referência interna, nunca o `id` real da Spedy, então cancelar uma nota

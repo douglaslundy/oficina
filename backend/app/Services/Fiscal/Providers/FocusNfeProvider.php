@@ -222,7 +222,16 @@ class FocusNfeProvider implements FiscalProvider, ConsultaNotaTerceiroProvider
             ->get("{$this->baseUrl}/v2/{$recurso}/{$referencia}");
 
         if ($resp->failed()) {
-            return EmissaoResultado::rejeitada($resp->json('mensagem') ?? 'Erro ao consultar (Focus).', $referencia);
+            // Falha ao CONSULTAR (rede, auth, 5xx) não é o mesmo que "rejeitada
+            // pela SEFAZ/Prefeitura" — mesmo bug real já corrigido no
+            // SpedyProvider (Rodada 40, PROGRESSO.md): confundir os dois já
+            // corrompeu 10 NF-e reais lá. Mantém PROCESSANDO (retentável),
+            // nunca um status fiscal substantivo por adivinhação.
+            \Illuminate\Support\Facades\Log::warning(
+                'Focus NFe: falha ao consultar status da nota — mantendo PROCESSANDO.',
+                ['referencia' => $referencia, 'modelo' => $modelo, 'status_http' => $resp->status(), 'corpo' => $resp->body()],
+            );
+            return EmissaoResultado::processando($referencia);
         }
 
         return match ($modelo) {

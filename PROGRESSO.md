@@ -138,6 +138,32 @@ aguardando confirmação explícita do usuário antes de executar, apesar do
 pedido genérico de "execute as ações" (ver guidelines de ações
 consequentes/difíceis de reverter).
 
+### 4. Checagem cross-engine (pedido do usuário, no meio do deploy)
+Usuário pediu, durante o deploy, pra checar se as mesmas duas correções
+(referência/ID + "falha de consulta ≠ rejeitada") valiam também pra Focus e
+NFePHP, e se já estavam corrigidas neles. Li os 3 motores por completo:
+
+- **NFePHP (`MotorNfe::consultar()`/`MotorNfse::consultar()`) já estava
+  100% correto nas duas frentes** — não precisou de nenhum fix. Não tem o
+  problema de referência/ID (fala direto com a SEFAZ/ambiente nacional
+  usando chave+protocolo próprios, sem ID de terceiro no meio) e já
+  devolvia `ERRO` (nunca `REJEITADA`) em falha de consulta desde a Rodada
+  37 (`resultadoAposVerificarCancelamento()`).
+- **Focus tinha a MESMA falha "consulta falhou ⇒ REJEITADA" da Spedy — mas
+  NÃO tinha o bug de referência/ID.** A arquitetura da Focus já resolve
+  isso nativamente: recebe a nossa `referenciaExterna` como `ref` na
+  própria URL de criação (`POST /v2/nfse?ref=...`) e reusa esse mesmo
+  valor como path na consulta (`GET /v2/nfse/{ref}`) — a Focus sempre soube
+  quem é quem. Corrigido (TDD): falha HTTP em `consultar()` agora mantém
+  `PROCESSANDO` em vez de virar `REJEITADA`, igual ao fix da Spedy.
+  `FocusNfeProviderTest` 29→30 testes.
+
+**Arquivo:** `backend/app/Services/Fiscal/Providers/FocusNfeProvider.php`,
+`backend/tests/Unit/Fiscal/FocusNfeProviderTest.php`.
+
+**Verificação:** suíte Unit completa — 298 testes, 10 falhas (as mesmas
+pré-existentes de sempre), zero regressão nova.
+
 ## Rodada 39 continuação 2 **primeira NF-e de peça autorizada
 de verdade pela SEFAZ via Spedy** neste projeto, depois de 5 bugs reais
 achados e corrigidos em sequência (campos tributáveis, numeração,
