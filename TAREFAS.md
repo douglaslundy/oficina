@@ -35,26 +35,32 @@ genuinamente rejeitadas por motivos reais. Ver PROGRESSO.md Rodada 40, seção 6
 (inclui 2 erros próprios corrigidos na hora: `numero` e `chave_acesso`
 sobrescritos incorretamente pro caso das notas mais antigas).
 
-## PRÓXIMA TAREFA OBRIGATÓRIA (registrada 2026-09-14, ainda não iniciada)
+## PRÓXIMA TAREFA OBRIGATÓRIA (registrada 2026-09-14, causa real já descoberta)
 
 **Investigar e corrigir por que a stuntmotos nunca completou o registro de
-emissor na Spedy** (`emissores_fiscais.status = 'ERRO'`, `ultimo_erro`:
-"Erro ao registrar emissor na Spedy." — sem detalhe salvo, `emissorToken`
-vazio). Confirmado 2x nesta sessão (investigação principal E um fork
-independente, sem coordenação entre os dois, chegando à mesma conclusão de
-formas diferentes): toda emissão/consulta "normal" de NF-e da stuntmotos cai
-na `masterKey` da plataforma em vez de um token escopado à empresa — funciona
-o suficiente pra testar (Spedy atrela as notas à "STUNT MOTOS LTDA" mesmo
-assim), mas é um risco real de isolamento multi-tenant se uma 2ª oficina real
-começar a usar Spedy (ambas compartilhariam a mesma credencial). Também
-bloqueia a reconciliação de `NotaEntrada` pendentes (`consultarNotaRecebida()`
-recusa cair no masterKey por design, corretamente — ver achado do fork,
-PROGRESSO.md Rodada 40 seção 5): 14 notas de entrada não puderam ter os
-dados fiscais do produto atualizados por causa disso.
-**Próximo passo:** capturar o erro HTTP real da Spedy no momento do registro
-(hoje `RegistroResultado::erro()` só guarda `$resp->json('message')`, sem
-status code nem corpo completo — pode precisar de log mais detalhado pra
-diagnosticar) e tentar `registrarEmissor()` de novo com esses dados.
+emissor na Spedy** (`emissores_fiscais.status = 'ERRO'`, `emissorToken`
+vazio) — confirmado 2x nesta sessão (investigação principal + um fork
+independente), causando emissão/consulta "normal" da stuntmotos sempre
+cair na `masterKey` da plataforma (risco de isolamento multi-tenant) e
+bloqueando a reconciliação de `NotaEntrada` pendentes (14 notas).
+
+**✅ Causa real descoberta 2026-09-14 (Rodada 40, seção 10)**, depois de
+corrigir o bug de extração de mensagem de erro do `SpedyProvider`
+(`mensagemErroDe()` — antes só lia uma chave de nível raiz, escondendo
+todo erro real): reexecutando `registrarEmissor()` pra stuntmotos, a
+mensagem real é **"O CNPJ já possui uma conta vinculada."** — a empresa
+já existe do lado da Spedy (provavelmente cadastrada direto pelo painel
+deles, fora do nosso fluxo, em algum momento anterior), e
+`registrarEmissor()` sempre tenta um `POST /companies` (criar nova),
+nunca detecta/reaproveita uma empresa já existente com o mesmo CNPJ.
+
+**Próximo passo (ainda não implementado):** descobrir se a API da Spedy
+tem um endpoint de busca de empresa por CNPJ/documento (não confirmado
+ainda — precisa WebFetch na doc ou teste empírico) pra buscar a empresa
+existente e recuperar/gerar a API key dela, em vez de tentar criar uma
+nova. Se não existir tal endpoint, a alternativa é o usuário pegar a API
+key direto no painel web da Spedy (fora do nosso sistema) e colar no
+cadastro — mais simples, mas manual.
 
 <details>
 <summary>Texto original da tarefa (referência)</summary>

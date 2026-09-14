@@ -376,6 +376,66 @@ sozinho, alocando um número novo. Não mexi direto no banco desta vez.
 
 **Deploy:** commit `9e9b05c`, confirmado na VPS.
 
+### 10. Erro ao cancelar nota (pedido do usuário) — mesma classe de bug do `consultar()`, nunca corrigida em `cancelar()`
+Usuário reportou "porque está dando erro ao cancelar uma nota". Reproduzi
+via tinker antes de propor qualquer fix: `DELETE /product-invoices/nf-<uuid>`
+(nossa referência interna) → **HTTP 404**, corpo vazio. Mesma causa raiz do
+bug de reconciliação da seção 1 desta rodada — `cancelar()` nunca tinha
+recebido o fix, só `consultar()`.
+
+**Fix (TDD, `SpedyProviderTest` 52→53 testes):** `cancelar()` agora busca o
+`id` real da Spedy via `GET ?integrationId=` (mesmo filtro do `consultar()`)
+antes de fazer o `DELETE`. Confirmado empiricamente no sandbox: `DELETE`
+pelo `id` real → HTTP 200, `"Cancelamento da nota fiscal está em
+processamento."`. Nota emitida antes do fix de `integrationId`
+(2026-09-14, seção 4) nunca foi tagueada na Spedy e não pode ser localizada
+automaticamente — mensagem clara orientando cancelamento manual pelo
+painel, em vez do genérico "Erro ao cancelar".
+
+**Achado extra durante a investigação, corrigido junto:** tanto
+`SpedyProvider` (9 pontos) quanto `FocusNfeProvider` (5 pontos, mais 3 que
+já tinham o fix parcial) só liam uma chave `message`/`mensagem` de nível
+**raiz** da resposta de erro — mas o formato real de erro 400 da Spedy é
+`{"errors":[{"message":"..."}]}` (aninhado), então TODA mensagem real
+sempre caía no fallback genérico. Isso explica por que o cancelamento
+mostrava só "Erro ao cancelar (Spedy)." sem pista nenhuma do motivo real.
+Centralizado em `mensagemErroDe()` nos dois providers.
+
+**Bônus concreto do fix de mensagem**: reexecutei `registrarEmissor()` pra
+stuntmotos (achado pendente, seção 7) e a causa real finalmente apareceu:
+**"O CNPJ já possui uma conta vinculada."** — a empresa já existe do lado
+da Spedy (provavelmente cadastrada direto pelo painel deles em algum
+momento), e nosso fluxo tenta criar uma empresa NOVA em vez de detectar/
+vincular a existente. Atualiza `TAREFAS.md` com a causa real (antes era
+"causa desconhecida").
+
+**Verificação:** `php -l` limpo nos 2 providers. Suíte Unit: 302 testes,
+mesmas 10 falhas pré-existentes. **Testado ao vivo contra a Spedy real**:
+cancelamento de uma nota recém-emitida e autorizada → sucesso real
+(protocolo/mensagem de cancelamento confirmados na consulta seguinte); nota
+recém-emitida ainda REJEITADA (teste com número duplicado de propósito) →
+mensagem real específica da SEFAZ ("Rejeicao: Duplicidade de NF-e...")
+aparece corretamente em vez do genérico de antes.
+
+**Deploy:** commits `befc921` (cancelar) + `fd75d3d` (mensagem de erro),
+confirmados na VPS.
+
+### 11. Parity check pedido pelo usuário — todas as correções de hoje, motor por motor
+| Correção de hoje | Spedy | Focus | NFePHP |
+|---|---|---|---|
+| `integrationId` no payload de criação (reconciliação) | ✅ fix aplicado | N/A — arquitetura já manda nossa `ref` nativamente, sempre funcionou | N/A — fala direto com SEFAZ via chave/protocolo, sem ID de terceiro |
+| `consultar()` por filtro em vez de path | ✅ fix aplicado | N/A (mesmo motivo acima) | N/A (mesmo motivo acima) |
+| Falha de consulta ≠ REJEITADA | ✅ fix aplicado | ✅ fix aplicado | ✅ já estava correto (desde Rodada 37) |
+| `integrationId` truncado a 36 chars | ✅ fix aplicado | N/A (não usa esse campo) | N/A |
+| `cancelar()` busca id real antes de deletar | ✅ fix aplicado | N/A — já cancela pela nossa própria `ref` (funciona nativamente) | N/A (usa chave/protocolo, não um ID de terceiro) |
+| Extração de mensagem de erro (`errors[0].message`) | ✅ fix aplicado (9 pontos) | ✅ fix aplicado (5 pontos; 3 já tinham) | N/A — já sempre inclui `$e->getMessage()`/`cStat` real, nunca teve mensagem genérica |
+| Validação de CEP (8 dígitos) | ✅ (é dado do cliente/empresa, não código do provider — vale pros 3 igualmente) |||
+
+**Conclusão:** nenhuma correção de hoje ficou faltando em nenhum motor —
+onde a linha é "N/A", é porque aquele motor nunca teve o defeito
+correspondente (arquitetura diferente o suficiente pra não ser afetado),
+não porque ficou pra trás.
+
 ## Rodada 39 continuação 2 **primeira NF-e de peça autorizada
 de verdade pela SEFAZ via Spedy** neste projeto, depois de 5 bugs reais
 achados e corrigidos em sequência (campos tributáveis, numeração,
