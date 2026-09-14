@@ -153,8 +153,13 @@ class NotaFiscalController extends Controller
             return response()->json(['message' => 'Só é possível retransmitir notas em contingência.'], 422);
         }
 
-        $ambiente  = app(\App\Services\Fiscal\FiscalProviderManager::class)->ambienteDaOficina();
-        $resultado = app(\App\Services\Fiscal\NfePhp\MotorNfe::class)->retransmitir($nota, $ambiente);
+        $ambiente = app(\App\Services\Fiscal\FiscalProviderManager::class)->ambienteDaOficina();
+        // NFC-e agora também pode entrar em CONTINGENCIA (offline, via
+        // MotorNfce — ver docblock da classe) — não só NF-e (EPEC).
+        $motor = $nota->modelo === 'NFC-e'
+            ? app(\App\Services\Fiscal\NfePhp\MotorNfce::class)
+            : app(\App\Services\Fiscal\NfePhp\MotorNfe::class);
+        $resultado = $motor->retransmitir($nota, $ambiente);
 
         if ($resultado->status === 'AUTORIZADA') {
             $nota->update([
@@ -193,17 +198,19 @@ class NotaFiscalController extends Controller
         $nota = NotaFiscal::findOrFail($id);
         $request->validate(['motivo' => ['required', 'string', 'min:10']]);
 
-        if ($nota->provedor === 'NFEPHP' && $nota->modelo === 'NF-e' && $nota->status === 'AUTORIZADA') {
+        if ($nota->provedor === 'NFEPHP' && in_array($nota->modelo, ['NF-e', 'NFC-e'], true) && $nota->status === 'AUTORIZADA') {
             if (empty($nota->chave_acesso) || empty($nota->protocolo)) {
-                return response()->json(['message' => 'NF-e sem chave de acesso ou protocolo — não é possível cancelar via NFePHP.'], 422);
+                return response()->json(['message' => 'Nota sem chave de acesso ou protocolo — não é possível cancelar via NFePHP.'], 422);
             }
 
-            $ambiente  = $nota->ambiente ?? 'HOMOLOGACAO';
-            $resultado = app(\App\Services\Fiscal\NfePhp\MotorNfe::class)
-                ->cancelar($nota->chave_acesso, $request->motivo, $nota->protocolo, $ambiente);
+            $ambiente = $nota->ambiente ?? 'HOMOLOGACAO';
+            $motor    = $nota->modelo === 'NF-e'
+                ? app(\App\Services\Fiscal\NfePhp\MotorNfe::class)
+                : app(\App\Services\Fiscal\NfePhp\MotorNfce::class);
+            $resultado = $motor->cancelar($nota->chave_acesso, $request->motivo, $nota->protocolo, $ambiente);
 
             if ($resultado->status !== 'CANCELADA') {
-                return response()->json(['message' => $resultado->mensagemErro ?? 'Falha ao cancelar NF-e.'], 422);
+                return response()->json(['message' => $resultado->mensagemErro ?? 'Falha ao cancelar nota.'], 422);
             }
         }
 

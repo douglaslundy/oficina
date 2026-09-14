@@ -10,6 +10,7 @@ use App\Services\Fiscal\Data\ConsultaNotaTerceiroResultado;
 use App\Services\Fiscal\Data\ConsultaNotaTerceiroResumo;
 use App\Services\Fiscal\Data\EmissaoResultado;
 use App\Services\Fiscal\Data\NotaFiscalData;
+use App\Services\Fiscal\NfePhp\Concerns\ProcessaRespostaSefaz;
 use App\Services\NfeService;
 use App\Services\NotaEntradaXmlParser;
 use Illuminate\Support\Facades\Log;
@@ -65,6 +66,13 @@ use NFePHP\NFe\Tools;
  */
 class MotorNfe
 {
+    // processarRespostaAutorizacao()/extrairCStatEvento()/
+    // processarRespostaCancelamento()/processarRespostaConsulta() — extraído
+    // pra ProcessaRespostaSefaz (2026-09-14) pra ser reusado por MotorNfce
+    // sem duplicar (mesmo schema nacional retEnviNFe/protNFe/retConsSitNFe/
+    // retEnvEvento pros modelos 55 e 65).
+    use ProcessaRespostaSefaz;
+
     public function __construct(
         private readonly CertificadoStore $certificados = new CertificadoStore(),
         private readonly NfeService $numeracao = new NfeService(),
@@ -523,111 +531,6 @@ class MotorNfe
     }
 
     /**
-     * Parsing da resposta de sefazEnviaLote() (indSinc=1) — string XML
-     * (confirmado: Tools::sefazEnviaLote() retorna string, o corpo cru da
-     * resposta HTTP/SOAP, sem descartar o envelope SOAP externo).
-     *
-     * Estrutura confirmada contra o XSD oficial do leiaute
-     * (schemes/PL_009_V4/leiauteNFe_v4.00.xsd, complexType TRetEnviNFe /
-     * TProtNFe): retEnviNFe tem um cStat de LOTE direto, e um `protNFe`
-     * opcional cujo `infProt` tem o cStat/chNFe/nProt/xMotivo do
-     * PROCESSAMENTO SÍNCRONO da nota em si — que é o que importa aqui. A
-     * hipótese original do brief pra esse xpath já batia com o XSD
-     * verificado; mantido como estava. `//nfe:...` (busca em qualquer
-     * profundidade) funciona aqui mesmo com o envelope SOAP em volta, porque
-     * XPath com `//` não se importa com a árvore de ancestrais fora do
-     * namespace pesquisado.
-     *
-     * Corrigido — bug real encontrado rodando os testes (não só leitura de
-     * código, igual ao espírito da Task 3): `SimpleXMLElement::
-     * registerXPathNamespace()` registra o prefixo só NO OBJETO em que foi
-     * chamado, não é herdado por sub-elementos retornados por `->xpath()`.
-     * O brief original chamava `registerXPathNamespace()` uma vez em $sxml
-     * e depois `$protNFe->xpath('.//nfe:cStat')` num objeto FILHO diferente
-     * (`$protNFe`, retornado pelo primeiro xpath) — sem o prefixo `nfe`
-     * registrado nele, a busca aninhada sempre voltava vazia, e todo
-     * cStat/chNFe/nProt do protNFe virava string vazia (nunca "100", então
-     * a nota sempre caía no branch de REJEITADA em vez de reconhecer
-     * autorização real). Corrigido registrando o namespace de novo em
-     * `$protNFe` antes das buscas aninhadas.
-     *
-     * CORRIGIDO — Finding 3 do fix wave pós-revisão da Etapa C2
-     * (2026-08-11): `numero` na chamada de `autorizada()` era hardcoded
-     * `null` com um comentário dizendo "controller mantém o valor
-     * existente" — mas o "valor existente" no controller vinha de
-     * `NfeService::proximoNumeroNf()` (contador do Spedy/Focus!), chamado
-     * ANTES mesmo de saber que o NFePHP ia processar esta nota. Resultado:
-     * toda emissão de NF-e via NFePHP queimava DOIS números de DOIS
-     * contadores diferentes e persistia o ERRADO. `$numeroReal` agora é
-     * obrigatório (não opcional — método privado, único chamador é
-     * `emitir()`, que sempre tem o valor de `$numeroNfe` alocado antes de
-     * transmitir; um parâmetro sem default força esse dado nunca ser
-     * esquecido silenciosamente numa chamada futura). Passado também pros
-     * ramos de `rejeitada()` — o número já foi alocado e queimado mesmo
-     * quando a SEFAZ rejeita (ver Finding 4, `EmissaoResultado::
-     * rejeitada()`/`NotaFiscalData::numeroReservado`).
-     */
-    private function processarRespostaAutorizacao(string $respostaXml, ?string $ref, string $xmlEnviado, string $numeroReal): EmissaoResultado
-    {
-        $sxml = @simplexml_load_string($respostaXml);
-        if ($sxml === false) {
-            return EmissaoResultado::erro('Resposta da SEFAZ não pôde ser interpretada.', $ref, $numeroReal);
-        }
-        $sxml->registerXPathNamespace('nfe', 'http://www.portalfiscal.inf.br/nfe');
-
-        $cStatLote = (string) ($sxml->xpath('//nfe:cStat')[0] ?? '');
-        $protNFe   = $sxml->xpath('//nfe:protNFe') [0] ?? null;
-
-        if ($protNFe !== null) {
-            $protNFe->registerXPathNamespace('nfe', 'http://www.portalfiscal.inf.br/nfe');
-            $cStat = (string) ($protNFe->xpath('.//nfe:cStat')[0] ?? '');
-            $chNFe = (string) ($protNFe->xpath('.//nfe:chNFe')[0] ?? '');
-            $nProt = (string) ($protNFe->xpath('.//nfe:nProt')[0] ?? '');
-
-            // 100 = Autorizado o uso da NF-e (único código de sucesso real).
-            if ($cStat === '100') {
-                // Bug real reportado pelo usuário (2026-09-14): o `xml_retorno`
-                // salvo era só a NF-e ASSINADA que ENVIAMOS (`$xmlEnviado`),
-                // nunca o `nfeProc` (NFe + protNFe) que é o documento
-                // oficial/completo exigido pelo mercado — sem o protocolo de
-                // autorização embutido, o XML baixado não prova que a nota
-                // foi autorizada pela SEFAZ (nenhum ERP/contador aceita isso
-                // como XML definitivo). `Complements::toAuthorize()` é o
-                // próprio helper do vendor pra essa junção — nunca construído
-                // à mão. Fallback pro XML enviado (sem protocolo) só se a
-                // junção falhar por algum motivo: melhor entregar um XML
-                // incompleto do que travar uma autorização que já aconteceu.
-                // Sem Log:: aqui de propósito: este método é parsing puro,
-                // testado via reflection SEM bootstrap do Laravel (ver
-                // docblock da classe de teste) — uma falha na junção cai
-                // silenciosamente pro XML sem protocolo, que ainda é um
-                // resultado funcionalmente correto (só menos completo).
-                try {
-                    $xmlCompleto = Complements::toAuthorize($xmlEnviado, $respostaXml);
-                } catch (\Throwable) {
-                    $xmlCompleto = $xmlEnviado;
-                }
-
-                return EmissaoResultado::autorizada(
-                    chave: $chNFe,
-                    protocolo: $nProt,
-                    numero: $numeroReal,
-                    xml: $xmlCompleto,
-                    pdfUrl: null,
-                    ref: $ref,
-                );
-            }
-
-            $xMotivo = (string) ($protNFe->xpath('.//nfe:xMotivo')[0] ?? 'Rejeitada pela SEFAZ.');
-            return EmissaoResultado::rejeitada("cStat={$cStat}: {$xMotivo}", $ref, $numeroReal);
-        }
-
-        // Sem protNFe — lote rejeitado antes mesmo de processar a nota
-        // individual (erro de schema, duplicidade, etc.).
-        return EmissaoResultado::rejeitada("Lote rejeitado (cStat={$cStatLote}).", $ref, $numeroReal);
-    }
-
-    /**
      * Contingência EPEC — tenta registrar o evento de emissão em
      * contingência quando a transmissão normal falha por comunicação.
      *
@@ -836,49 +739,6 @@ class MotorNfe
     }
 
     /**
-     * Extrai o cStat do REGISTRO DO EVENTO (retEvento/infEvento/cStat) da
-     * resposta de sefazEvento(), isolado num método próprio pra ser
-     * testável sem I/O (mesmo padrão de processarRespostaAutorizacao()).
-     *
-     * Corrigido: retEnvEvento tem um cStat de LOTE direto (status do
-     * recebimento do lote de eventos) além do cStat aninhado em
-     * retEvento/infEvento (status do REGISTRO DO EVENTO em si — o que
-     * realmente importa aqui). Confirmado em
-     * schemes/PL_009_V4/leiauteEvento_v1.00.xsd (TRetEnvEvento tem cStat
-     * próprio + retEvento[]/TRetEvento/infEvento/cStat) e no próprio código
-     * do pacote (Complements::addEnvEventoProtocol(), que extrai
-     * especificamente retEvento->infEvento->cStat, não o cStat de nível de
-     * lote). Um xpath genérico //nfe:cStat pegaria o cStat do LOTE primeiro
-     * (ordem do documento), classificando errado — por isso a busca abaixo
-     * é restrita a dentro de retEvento.
-     *
-     * @return string|null null quando a resposta não é XML válido; string
-     *   vazia quando é XML válido mas não tem retEvento/cStat (tratado como
-     *   "não reconhecido" pelo chamador, nunca como sucesso).
-     *
-     * Corrigido — mesmo bug real encontrado (e corrigido) em
-     * processarRespostaAutorizacao(): registerXPathNamespace() não é
-     * herdado por sub-elementos retornados por xpath(); precisa ser
-     * chamado de novo em $retEvento antes da busca aninhada, senão
-     * `.//nfe:cStat` sempre volta vazio.
-     */
-    private function extrairCStatEvento(string $respostaXml): ?string
-    {
-        $sxml = @simplexml_load_string($respostaXml);
-        if ($sxml === false) {
-            return null;
-        }
-        $sxml->registerXPathNamespace('nfe', 'http://www.portalfiscal.inf.br/nfe');
-
-        $retEvento = $sxml->xpath('//nfe:retEvento')[0] ?? null;
-        if ($retEvento === null) {
-            return '';
-        }
-        $retEvento->registerXPathNamespace('nfe', 'http://www.portalfiscal.inf.br/nfe');
-        return (string) ($retEvento->xpath('.//nfe:cStat')[0] ?? '');
-    }
-
-    /**
      * Consulta a situação atual de uma NF-e pela chave de acesso
      * (sefazConsultaChave() / NfeConsultaProtocolo) — nunca decide
      * autorizada/cancelada sem essa confirmação explícita da SEFAZ. Usado
@@ -918,51 +778,6 @@ class MotorNfe
     }
 
     /**
-     * Parsing puro (sem I/O) da resposta de sefazConsultaChave() —
-     * separado do método público pra ser testável via reflection, mesmo
-     * padrão de processarRespostaAutorizacao().
-     *
-     * Confirmado contra schemes/PL_009_V4/leiauteConsSitNFe_v4.00.xsd
-     * (TRetConsSitNFe): cStat é um campo DIRETO da resposta (aparece antes
-     * de protNFe/retCancNFe/procEventoNFe na sequência do XSD) — representa
-     * a SITUAÇÃO ATUAL da NF-e segundo a Tabela de Status da Consulta
-     * Protocolo (100 = Autorizado; 101/151 = Cancelamento homologado
-     * dentro/fora do prazo; 217/218 = NF-e não consta / já cancelada na
-     * base da SEFAZ), e não um "cStat de lote" que precede um cStat de
-     * evento com peso semântico diferente (como em retEnvEvento — ver
-     * processarRespostaCancelamento() abaixo). `//nfe:cStat` já pega o
-     * campo certo porque é o primeiro cStat em ordem de documento; nProt só
-     * existe aninhado em protNFe/infProt (ou retCancNFe/infCanc), então
-     * `//nfe:nProt` também resolve sem ambiguidade quando presente.
-     */
-    private function processarRespostaConsulta(string $respostaXml, string $chave): EmissaoResultado
-    {
-        $sxml = @simplexml_load_string($respostaXml);
-        if ($sxml === false) {
-            return EmissaoResultado::erro('Resposta da consulta não pôde ser interpretada.', $chave);
-        }
-        $sxml->registerXPathNamespace('nfe', 'http://www.portalfiscal.inf.br/nfe');
-
-        $cStat = (string) ($sxml->xpath('//nfe:cStat')[0] ?? '');
-
-        return match (true) {
-            $cStat === '100' => EmissaoResultado::autorizada(
-                chave: $chave,
-                protocolo: (string) ($sxml->xpath('//nfe:nProt')[0] ?? ''),
-                numero: null,
-                xml: null,
-                pdfUrl: null,
-                ref: $chave,
-            ),
-            in_array($cStat, ['101', '151'], true) => EmissaoResultado::cancelada($chave),
-            default => EmissaoResultado::erro(
-                "NF-e em status não reconhecido (cStat={$cStat}); não classificamos como autorizada sem confirmação.",
-                $chave,
-            ),
-        };
-    }
-
-    /**
      * Cancela uma NF-e (evento de cancelamento) — exige o protocolo da
      * autorização original, não só a chave (assinatura de
      * Tools::sefazCancela(string $chave, string $xJust, string $nProt,
@@ -991,54 +806,6 @@ class MotorNfe
         } catch (\Throwable $e) {
             return EmissaoResultado::erro('Falha ao cancelar NF-e: ' . $e->getMessage(), $chave);
         }
-    }
-
-    /**
-     * Parsing puro (sem I/O) da resposta de sefazCancela() — separado do
-     * método público pra ser testável via reflection.
-     *
-     * CORRIGIDO vs. o brief: confirmado em Tools::sefazCancela() (Tools.php
-     * ~600-615) que ele só monta o tagAdic de <nProt>/<xJust> e DELEGA pra
-     * sefazEvento() — mesmo transporte que tentarEpec() já usa pro evento
-     * EPEC (Tools::EVT_CANCELA vs Tools::EVT_EPEC, mesmo método por baixo).
-     * A resposta é portanto um retEnvEvento, com o MESMO formato de dois
-     * cStat (um de LOTE, outro aninhado em retEvento/infEvento) que
-     * extrairCStatEvento() já existe pra tratar corretamente — confirmado
-     * contra schemes/PL_009_V4/leiauteEvento_v1.00.xsd (TRetEnvEvento tem
-     * cStat próprio, "status da registro do Evento" a nível de lote, ANTES
-     * de retEvento na sequência) e contra o próprio uso interno do vendor
-     * (Complements::addEnvEventoProtocol(), que explicitamente extrai o
-     * cStat de DENTRO de retEvento, nunca um xpath genérico). O brief
-     * original fazia um xpath plano `//nfe:cStat` direto na resposta —
-     * exatamente o bug já corrigido (e coberto por teste,
-     * MotorNfeEmitirTest::test_extrair_cstat_evento_ignora_cstat_de_lote_
-     * usa_cstat_do_evento) em extrairCStatEvento(). Sem essa correção,
-     * cancelar() reportaria "não confirmado" mesmo em cancelamentos
-     * registrados com sucesso, porque o cStat de lote (tipicamente ~128,
-     * "Lote de Evento Processado") nunca bate com os códigos de sucesso do
-     * EVENTO. Corrigido reutilizando extrairCStatEvento() em vez de
-     * duplicar o parsing.
-     *
-     * Códigos de sucesso 135/136 = evento registrado (vinculado ou não) —
-     * mesma tabela usada por tentarEpec(). 155 = específico de
-     * EVT_CANCELA, confirmado no próprio vendor: Complements::
-     * addEnvEventoProtocol() monta $cStatValids = ['135','136'] e só
-     * adiciona '155' quando $tpEvento == Tools::EVT_CANCELA
-     * (Complements.php ~314-317) — a hipótese do brief pros 3 códigos já
-     * batia com o vendor real.
-     */
-    private function processarRespostaCancelamento(string $respostaXml, string $chave): EmissaoResultado
-    {
-        $cStat = $this->extrairCStatEvento($respostaXml);
-        if ($cStat === null) {
-            return EmissaoResultado::erro('Resposta do cancelamento não pôde ser interpretada.', $chave);
-        }
-
-        if (in_array($cStat, ['135', '136', '155'], true)) {
-            return EmissaoResultado::cancelada($chave);
-        }
-
-        return EmissaoResultado::erro("Cancelamento não confirmado (cStat={$cStat}).", $chave);
     }
 
     /**

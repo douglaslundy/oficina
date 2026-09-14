@@ -21,6 +21,17 @@ class NfeService
         return $this->proximoNumeroPorContador('proximo_numero_nfce');
     }
 
+    /**
+     * Contador PRÓPRIO da NFC-e via NFePHP (MotorNfce) — nunca compartilhado
+     * com `proximo_numero_nfce` (Spedy/Focus). Mesmo raciocínio já aplicado
+     * à NF-e via NFePHP (`proximo_numero_nfe`, separado de
+     * `proximo_numero_nf`).
+     */
+    public function proximoNumeroNfceNfephp(): int
+    {
+        return $this->proximoNumeroPorContador('proximo_numero_nfce_nfephp');
+    }
+
     private function proximoNumeroPorContador(string $coluna): int
     {
         return DB::transaction(function () use ($coluna) {
@@ -91,7 +102,7 @@ class NfeService
         // NFEPHP porque Spedy/Focus atribuem o número deles mesmos — um
         // `$nota->numero` vindo desses provedores não significa "reservado
         // pra reenviar", significa "já emitido por eles".
-        $numeroJaReservado = ($modeloInterno === 'NFE' && $nota->provedor === 'NFEPHP' && $nota->numero !== null)
+        $numeroJaReservado = (in_array($modeloInterno, ['NFE', 'NFCE'], true) && $nota->provedor === 'NFEPHP' && $nota->numero !== null)
             ? (string) $nota->numero
             : null;
 

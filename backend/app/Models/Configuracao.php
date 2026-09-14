@@ -29,6 +29,9 @@ class Configuracao extends Model
         'serie_nfe', 'proximo_numero_nfe',
         'logradouro', 'numero', 'bairro',
         'calculo_tributario_modo',
+        'csc_id_homologacao', 'csc_token_homologacao_encrypted',
+        'csc_id_producao', 'csc_token_producao_encrypted',
+        'modelo_venda_padrao', 'proximo_numero_nfce_nfephp',
     ];
 
     protected $casts = [

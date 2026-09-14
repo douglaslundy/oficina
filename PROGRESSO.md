@@ -678,6 +678,106 @@ ignora cStat/xMotivo de propósito (decisão документada no próprio mé
 o XSD não garante uma enumeração fechada de códigos). Não mexi nisso agora
 por estar fora do que foi pedido; registrado aqui pra não se perder.
 
+### 21. Motor de NFC-e completo pra NFePHP + switch de documento padrão pra venda de produtos
+
+Pedido explícito do usuário, direto após a auditoria da seção 20 ter
+achado que NFC-e via NFePHP simplesmente não existia (rejeitava com
+mensagem clara em vez de misrotear pro motor de serviço): "implemente um
+motor de NFC-e completo pra NFePHP e crie um switch na página de
+configurações fiscais... torne o NF-e como padrão".
+
+**1. `MotorNfce` (novo, `app/Services/Fiscal/NfePhp/MotorNfce.php`)** —
+mesma biblioteca `Make`/`Tools` do `MotorNfe` (modelo 65 em vez de 55).
+Achados confirmados lendo o vendor `nfephp-org/sped-nfe`, não supostos:
+- **QR Code é automático:** `Tools::signNFe()` (Common/Tools.php ~389)
+  já detecta `modelo == 65` e injeta o QRCode sozinho depois de assinar —
+  não precisei chamar `QRCode::putQRTag()` na mão. Só precisei garantir
+  que `CSC`/`CSCid` cheguem no `config.json` passado ao construtor de
+  `Tools` (`addQRCode()` lê `$this->config->CSC/CSCid`, lança
+  `RuntimeException` clara se faltarem).
+- **Contingência é OFFLINE, não EPEC:** o próprio vendor recusa EPEC pra
+  modelo 65 (`checkContingencyForWebServices()` lança "Não existe serviço
+  de contingência SVCRS/SVCAN para NFCe"). A contingência real de NFC-e é
+  local — monta e assina com `tpEmis=9` (sem nenhuma chamada de rede; o
+  QRCode automaticamente sai na variante offline), entrega o DANFCE na
+  hora, retransmite depois via `sefazEnviaLote()` normal — muito mais
+  simples que o hack de EPEC que `MotorNfe` precisou.
+- Extraído `ProcessaRespostaSefaz` (trait, `Concerns/`) de `MotorNfe` —
+  parsing de resposta da SEFAZ (autorização/consulta/cancelamento) é o
+  MESMO schema nacional pra modelo 55 e 65, reusado sem duplicar (evita a
+  classe de bug "duas cópias que divergem" já vista antes nesta sessão).
+  `MotorNfe` foi refatorado pra usar a trait também — suíte completa
+  rodada depois pra confirmar zero regressão.
+- Numeração PRÓPRIA (`proximo_numero_nfce_nfephp`, nova coluna) — nunca
+  compartilhada com `proximo_numero_nfce` (Spedy/Focus), mesmo raciocínio
+  já aplicado à NF-e via NFePHP (`proximo_numero_nfe` separado de
+  `proximo_numero_nf`).
+
+**2 bugs reais pegos por um teste que roda `schemaValidate()` de verdade
+contra o XSD oficial do vendor** (mesma técnica já usada em
+`MotorNfeMontarNfeTest`, replicada aqui) — sem esse teste, os dois só
+apareceriam batendo de frente com a SEFAZ real:
+- Faltava `<transp>` antes de `<pag>` — a suposição inicial era "venda de
+  balcão não tem frete, não precisa" — ERRADO, o XSD (mesmo
+  `nfe_v4.00.xsd`, não existe `nfce_v4.00.xsd` separado no vendor) exige
+  `<transp>` na sequência independente do modelo. Sem isso, **toda**
+  emissão de NFC-e seria rejeitada por schema, sempre. Corrigido com
+  `modFrete=9` (sem frete), mesmo valor que `MotorNfe` já usa.
+- Suposição própria também errada, corrigida antes de virar código: eu
+  tinha assumido que `indIEDest` "não existe no schema de NFC-e" e
+  escrevi um teste pra provar isso — `schemaValidate()` mostrou que é o
+  MESMO XSD pros dois modelos e o campo é aceito normalmente (a Make já
+  inclui por padrão). Removida a asserção antes de comitar — não é um
+  bug de produção, só uma suposição minha que o próprio teste contra o
+  schema real corrigiu antes de virar código.
+
+**Bug real corrigido em `NotaFiscalDocumentoService::gerarPdf()`:** a
+condição que roteava pro `DanfeRenderer` (DANFE A4 completo) incluía
+`NFC-e`, mas nunca era alcançável até agora — se tivesse ficado assim,
+uma NFC-e autorizada via NFePHP teria saído com o layout ERRADO (DANFE
+cheio em vez do cupom 80mm). Restrito a NF-e; NFC-e (qualquer provedor)
+cai no template de cupom já usado por Spedy/Focus. Também corrigido: o
+QR Code extraído do XML assinado (`<infNFeSupl><qrCode>`) agora é
+propagado como `qrcode_url` no resultado — sem isso o cupom renderizaria
+sem a imagem do QR Code.
+
+**2. Switch de documento padrão** (`Configuracao.modelo_venda_padrao`,
+NF-e por default) — página Empresa, seção "Configurações Fiscais".
+Decisão de design: só se aplica a cliente PESSOA FÍSICA, dentro do
+estado, sem "forçar NF-e" marcado — pessoa jurídica continua SEMPRE
+NF-e (regra preexistente, não mexida: PJ tipicamente é contribuinte de
+ICMS e precisa da nota cheia pra aproveitar crédito, coisa que NFC-e não
+suporta). `mesmoEstado` continua bloqueio de verdade (NFC-e nunca pode
+ser interestadual — `idDest` sempre 1), não uma preferência substituível
+pelo switch. Substitui a antiga seleção 100% automática (PF+mesmo
+estado sempre virava NFC-e, sem a oficina poder desligar isso).
+
+**3. Campos de CSC** (Código de Segurança do Contribuinte) — 2 pares
+(homologação/produção, secrets distintos cadastrados separadamente no
+portal da SEFAZ), token cifrado com `Crypt::encryptString()` (mesmo
+padrão da senha do certificado A1). Só aparecem na tela quando o switch
+está em NFC-e; nota explicando que Spedy/Focus não precisam preencher
+(eles cuidam do QR Code por conta própria).
+
+**Testes:** suíte cresceu de 315 para 324 (Unit) — `MotorNfceMontarNfceTest`
+(8 testes, incluindo validação de schema XSD real — foi esse que achou os
+2 bugs acima), 3 novos em `NfePhpProviderTest` (dispatch pro MotorNfce em
+vez de rejeitar), 1 em `NfeServiceMontagemTest` (retentativa reserva
+número), testes de `ConfiguracaoNfceTest` (Feature, não roda localmente —
+cifra do CSC, switch, validação). `NotaFiscalNfceTest` (Feature, 9 testes)
+atualizado pra refletir NF-e como padrão — configura
+`modelo_venda_padrao=NFC-e` explicitamente onde antes dependia só do
+cliente ser pessoa física.
+
+**Não testado ao vivo contra a SEFAZ real ainda** — diferente de NF-e/
+NFS-e (que passaram por várias rodadas de teste real em homologação antes
+de autorizar de verdade), este motor só foi verificado localmente (XML
+estruturalmente válido contra o XSD oficial, dispatch correto, contadores
+isolados). Uma primeira emissão real vai precisar de CSC configurado de
+verdade (a stuntmotos ainda não tem) e, provavelmente, mais uma rodada de
+ajustes empíricos — mesmo padrão que NF-e/NFS-e precisaram (5-7 bugs cada
+até autorizar pela primeira vez).
+
 ### 20. Auditoria pedida pelo usuário — "funciona pra TODOS os motores e TODOS os tipos de nota?" — 2 bugs reais achados e corrigidos
 
 Usuário pediu pra verificar se tudo desenvolvido na sessão (XML, e-mail

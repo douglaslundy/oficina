@@ -39,12 +39,14 @@ class IniciarEmissaoNotaService
         $ambiente = Configuracao::first()?->ambiente_fiscal ?? 'HOMOLOGACAO';
         $ref      = $nota->referencia_externa ?: ('nf-' . $nota->id);
 
-        // NF-e via NFEPHP tem numeração PRÓPRIA (Configuracao::proximo_numero_nfe),
-        // independente do contador Spedy/Focus e do de NFC-e. Pra NFEPHP + NF-e
-        // preservamos $nota->numero existente (retry reusa número reservado).
+        // NF-e/NFC-e via NFEPHP têm numeração PRÓPRIA (Configuracao::
+        // proximo_numero_nfe/proximo_numero_nfce_nfephp), independente dos
+        // contadores de Spedy/Focus. Pra NFEPHP preservamos $nota->numero
+        // existente (retry reusa número reservado) — MotorNfe/MotorNfce
+        // alocam um número novo internamente só quando ainda não há um.
         // A checagem de "mesmo provedor" usa $nota->provedor (o de QUANDO o
         // número foi reservado), lido ANTES do update() abaixo.
-        if ($provedor === 'NFEPHP' && $nota->modelo === 'NF-e') {
+        if ($provedor === 'NFEPHP' && in_array($nota->modelo, ['NF-e', 'NFC-e'], true)) {
             $numeroInicial = ($nota->provedor === 'NFEPHP') ? $nota->numero : null;
         } elseif ($nota->modelo === 'NFC-e') {
             $numeroInicial = $this->nfeService->proximoNumeroNfce();

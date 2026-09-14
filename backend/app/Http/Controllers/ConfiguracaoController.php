@@ -16,6 +16,12 @@ class ConfiguracaoController extends Controller
         $data = $config->toArray();
         $data['tem_certificado'] = !empty($config->certificado_pfx_encrypted);
         unset($data['certificado_pfx_encrypted']);
+        // CSC é um secret fiscal (mesma categoria da senha do certificado) —
+        // nunca devolvido em texto puro pro frontend, só se está configurado
+        // ou não (mesmo padrão de tem_certificado).
+        $data['tem_csc_homologacao'] = !empty($config->csc_token_homologacao_encrypted);
+        $data['tem_csc_producao']    = !empty($config->csc_token_producao_encrypted);
+        unset($data['csc_token_homologacao_encrypted'], $data['csc_token_producao_encrypted']);
         return response()->json($data);
     }
 
@@ -53,12 +59,34 @@ class ConfiguracaoController extends Controller
             'certificado_base64'    => ['nullable', 'string'],
             'markup_padrao_entrada_nf'   => ['nullable', 'numeric', 'min:0', 'max:1000'],
             'atualizar_custo_entrada_nf' => ['nullable', 'boolean'],
+            // Pedido explícito do usuário (2026-09-14): switch de qual
+            // documento fiscal usar pra venda de produtos, com NF-e como
+            // padrão (ver CriarNotaFiscalService::criar()) — e CSC/CSCId
+            // (Código de Segurança do Contribuinte), exigidos pelo motor de
+            // NFC-e (MotorNfce) pra montar o QR Code. Pares distintos por
+            // ambiente porque a SEFAZ cadastra CSC separado pra homologação
+            // e produção.
+            'modelo_venda_padrao'   => ['nullable', 'in:NF-e,NFC-e'],
+            'csc_id_homologacao'    => ['nullable', 'string', 'max:10'],
+            'csc_token_homologacao' => ['nullable', 'string'],
+            'csc_id_producao'       => ['nullable', 'string', 'max:10'],
+            'csc_token_producao'    => ['nullable', 'string'],
         ]);
 
         if (!empty($validated['certificado_base64'])) {
             $validated['certificado_pfx_encrypted'] = Crypt::encryptString($validated['certificado_base64']);
         }
         unset($validated['certificado_base64']);
+
+        if (!empty($validated['csc_token_homologacao'])) {
+            $validated['csc_token_homologacao_encrypted'] = Crypt::encryptString($validated['csc_token_homologacao']);
+        }
+        unset($validated['csc_token_homologacao']);
+
+        if (!empty($validated['csc_token_producao'])) {
+            $validated['csc_token_producao_encrypted'] = Crypt::encryptString($validated['csc_token_producao']);
+        }
+        unset($validated['csc_token_producao']);
 
         $config = Configuracao::first();
         if ($config) {

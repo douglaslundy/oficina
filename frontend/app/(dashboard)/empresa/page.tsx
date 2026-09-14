@@ -15,6 +15,16 @@ export default function EmpresaPage() {
   const [uploadingCert, setUploadingCert] = useState(false)
   const [ativando, setAtivando] = useState(false)
 
+  // Pedido explícito do usuário (2026-09-14): switch de qual documento
+  // fiscal usar pra venda de produtos + CSC/CSCId pra NFC-e via NFePHP.
+  // CSC é secret (mesma categoria de senha de certificado) — nunca volta em
+  // texto puro do backend, só um booleano "tem_csc_X"; token plaintext fica
+  // em estado separado do `form`, só enviado se o usuário digitar algo novo.
+  const [temCscHomologacao, setTemCscHomologacao] = useState(false)
+  const [temCscProducao, setTemCscProducao] = useState(false)
+  const [cscTokenHomologacao, setCscTokenHomologacao] = useState('')
+  const [cscTokenProducao, setCscTokenProducao] = useState('')
+
   const [inutSerie, setInutSerie] = useState('')
   const [inutInicial, setInutInicial] = useState('')
   const [inutFinal, setInutFinal] = useState('')
@@ -35,6 +45,8 @@ export default function EmpresaPage() {
       setForm(r.data)
       setTemCertificado(r.data.tem_certificado ?? false)
       setCertValidade(r.data.certificado_validade ?? null)
+      setTemCscHomologacao(r.data.tem_csc_homologacao ?? false)
+      setTemCscProducao(r.data.tem_csc_producao ?? false)
     }).catch(() => {})
   }, [])
 
@@ -44,7 +56,13 @@ export default function EmpresaPage() {
   async function salvar() {
     setSaving(true)
     try {
-      await api.put('/configuracoes', form)
+      const payload: FormState = { ...form }
+      if (cscTokenHomologacao) payload.csc_token_homologacao = cscTokenHomologacao
+      if (cscTokenProducao) payload.csc_token_producao = cscTokenProducao
+
+      await api.put('/configuracoes', payload)
+      if (cscTokenHomologacao) { setTemCscHomologacao(true); setCscTokenHomologacao('') }
+      if (cscTokenProducao) { setTemCscProducao(true); setCscTokenProducao('') }
       toast('Dados da empresa salvos!', 'success')
     } catch {
       toast('Erro ao salvar.', 'danger')
@@ -179,6 +197,57 @@ export default function EmpresaPage() {
             <label style={lStyle}>CNAE Principal</label>
             <input value={form.cnae ?? ''} onChange={set('cnae')} style={iStyle} placeholder="4520001" />
           </div>
+
+          <div style={{ gridColumn: '1 / -1' }}>
+            <label style={lStyle}>Documento fiscal padrão para venda de produtos</label>
+            <select value={form.modelo_venda_padrao ?? 'NF-e'} onChange={set('modelo_venda_padrao')} style={iStyle}>
+              <option value="NF-e">NF-e (Nota Fiscal Eletrônica)</option>
+              <option value="NFC-e">NFC-e (Nota Fiscal de Consumidor Eletrônica)</option>
+            </select>
+            <p style={{ color: 'var(--muted)', fontSize: 12, marginTop: 6, lineHeight: 1.5 }}>
+              Vale só pra venda de produto a cliente pessoa física, dentro do seu estado, sem
+              marcar &quot;forçar NF-e&quot; na emissão — nesses dois casos a nota sempre sai como
+              NF-e (venda pra empresa, ou fora do estado, ou forçada), porque NFC-e não pode ser
+              interestadual. Padrão: NF-e.
+            </p>
+          </div>
+
+          {form.modelo_venda_padrao === 'NFC-e' && (
+            <div style={{ gridColumn: '1 / -1' }}>
+              <label style={lStyle}>CSC — Código de Segurança do Contribuinte (NFC-e)</label>
+              <p style={{ color: 'var(--muted)', fontSize: 12, margin: '0 0 12px', lineHeight: 1.5 }}>
+                Só necessário se esta oficina emite NFC-e via NFePHP (monta o QR Code do cupom) —
+                se você usa Spedy ou Focus NFe como provedor, pode ignorar estes campos, eles já
+                cuidam disso por conta própria. Cadastre em &quot;Meu Perfil &gt; NFC-e &gt;
+                Configurar CSC&quot; no portal da SEFAZ-MG — são pares distintos pra homologação e
+                produção.
+              </p>
+              <div className="rform-2" style={{ display: 'grid', gap: 16, marginBottom: 12 }}>
+                <div>
+                  <label style={{ ...lStyle, fontSize: 12 }}>CSCId — Homologação</label>
+                  <input value={form.csc_id_homologacao ?? ''} onChange={set('csc_id_homologacao')} style={iStyle} placeholder="1" />
+                </div>
+                <div>
+                  <label style={{ ...lStyle, fontSize: 12 }}>
+                    Token CSC — Homologação {temCscHomologacao && <span style={{ color: 'var(--success)' }}>✓ configurado</span>}
+                  </label>
+                  <input type="password" value={cscTokenHomologacao} onChange={e => setCscTokenHomologacao(e.target.value)} style={iStyle} placeholder={temCscHomologacao ? '••••••••' : ''} />
+                </div>
+              </div>
+              <div className="rform-2" style={{ display: 'grid', gap: 16 }}>
+                <div>
+                  <label style={{ ...lStyle, fontSize: 12 }}>CSCId — Produção</label>
+                  <input value={form.csc_id_producao ?? ''} onChange={set('csc_id_producao')} style={iStyle} placeholder="1" />
+                </div>
+                <div>
+                  <label style={{ ...lStyle, fontSize: 12 }}>
+                    Token CSC — Produção {temCscProducao && <span style={{ color: 'var(--success)' }}>✓ configurado</span>}
+                  </label>
+                  <input type="password" value={cscTokenProducao} onChange={e => setCscTokenProducao(e.target.value)} style={iStyle} placeholder={temCscProducao ? '••••••••' : ''} />
+                </div>
+              </div>
+            </div>
+          )}
 
           <div style={{ gridColumn: '1 / -1' }}>
             <label style={lStyle}>Cálculo da tributação (CFOP / CST / ICMS / ISS)</label>

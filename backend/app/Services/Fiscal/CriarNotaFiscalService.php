@@ -60,13 +60,25 @@ class CriarNotaFiscalService
                 throw new EmissaoBloqueadaException('Complete a UF do cliente antes de emitir NF-e.');
             }
 
-            // Seleção automática NFC-e/NF-e — mesma regra do store():
-            // PF (CPF, 11 dígitos), sem forcar_nfe e dentro do estado → NFC-e.
+            // Pedido explícito do usuário (2026-09-14): switch em
+            // Configuracao.modelo_venda_padrao decide NF-e/NFC-e pra venda
+            // de produtos, com NF-e como padrão. Restrito a cliente PESSOA
+            // FÍSICA — pessoa jurídica continua SEMPRE NF-e (regra
+            // preexistente, não é o switch: PJ normalmente é contribuinte
+            // de ICMS e precisa da nota "cheia" pra aproveitar crédito, o
+            // que NFC-e não suporta direito). `mesmoEstado` continua um
+            // bloqueio DE VERDADE (não uma preferência): NFC-e é sempre
+            // idDest=1, operação interna — SEFAZ rejeita NFC-e
+            // interestadual, então fora do estado é sempre NF-e,
+            // independente do switch. `forcar_nfe` (override pontual já
+            // existente) continua tendo prioridade sobre o switch.
             $cpfCnpjLimpo   = preg_replace('/\D/', '', (string) $cliente->cpf_cnpj);
             $ehPessoaFisica = strlen((string) $cpfCnpjLimpo) === 11;
             $forcarNfe      = (bool) ($dados['forcar_nfe'] ?? false);
             $mesmoEstado    = strtoupper((string) $cliente->uf) === strtoupper((string) $configuracao->uf);
-            $modelo         = ($ehPessoaFisica && ! $forcarNfe && $mesmoEstado) ? 'NFC-e' : 'NF-e';
+            $modelo         = ($ehPessoaFisica && ! $forcarNfe && $mesmoEstado && $configuracao->modelo_venda_padrao === 'NFC-e')
+                ? 'NFC-e'
+                : 'NF-e';
 
             foreach ($dados['itens'] ?? [] as $item) {
                 $produto = Produto::findOrFail($item['produto_id']);

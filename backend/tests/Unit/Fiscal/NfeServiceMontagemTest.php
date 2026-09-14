@@ -71,6 +71,29 @@ class NfeServiceMontagemTest extends TestCase
     }
 
     /**
+     * Pedido explícito do usuário (2026-09-14, motor de NFC-e via NFePHP):
+     * mesma proteção de retentativa que já existia só pra NF-e agora vale
+     * pra NFC-e também — MotorNfce::emitir() reusa o número em vez de
+     * queimar um novo a cada retentativa.
+     */
+    public function test_monta_nota_data_detecta_numero_reservado_em_retentativa_nfce_nfephp(): void
+    {
+        $cliente = new Cliente([
+            'nome' => 'Fulano', 'cpf_cnpj' => '12345678900',
+        ]);
+        $nota = new NotaFiscal([
+            'valor_total' => 90.0, 'natureza_operacao' => 'Venda de Mercadoria',
+            'referencia_externa' => 'nfce-retry', 'modelo' => 'NFC-e', 'provedor' => 'NFEPHP', 'numero' => 3,
+        ]);
+        $nota->setRelation('cliente', $cliente);
+        $nota->setRelation('itens', collect());
+
+        $data = (new NfeService())->montarNotaData($nota);
+
+        $this->assertSame('3', $data->numeroReservado);
+    }
+
+    /**
      * Contraprova do teste acima: um `numero` vindo de Spedy/Focus (qualquer
      * provedor != NFEPHP) NÃO significa "reservado pra reenviar" — esses
      * provedores atribuem o número deles mesmos, não o contador

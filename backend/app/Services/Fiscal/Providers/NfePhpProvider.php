@@ -11,6 +11,7 @@ use App\Services\Fiscal\Data\EmissaoResultado;
 use App\Services\Fiscal\Data\EmissorData;
 use App\Services\Fiscal\Data\NotaFiscalData;
 use App\Services\Fiscal\Data\RegistroResultado;
+use App\Services\Fiscal\NfePhp\MotorNfce;
 use App\Services\Fiscal\NfePhp\MotorNfe;
 use App\Services\Fiscal\NfePhp\MotorNfse;
 
@@ -55,55 +56,41 @@ class NfePhpProvider implements FiscalProvider, ConsultaNotaTerceiroProvider
     }
 
     /**
-     * Bug real de produção (2026-09-14, achado auditando "funciona pra todos
-     * os motores/tipos de nota?"): não existe `MotorNfce` neste sistema — só
-     * `MotorNfe` (modelo 55, NF-e) e `MotorNfse` (serviço). Antes desta
-     * checagem, `modelo === 'NFCE'` caía no `else` e ia pro `MotorNfse` —
-     * ou seja, uma venda de produto pra pessoa física (que
-     * `CriarNotaFiscalService` seleciona automaticamente como NFC-e, SEM
-     * saber qual provedor a oficina usa) seria processada como se fosse uma
-     * PRESTAÇÃO DE SERVIÇO. Rejeitar explicitamente aqui é melhor que
-     * silenciosamente gerar um documento fiscal errado.
+     * Pedido explícito do usuário (2026-09-14): motor de NFC-e completo pra
+     * NFePHP — `MotorNfce` (modelo 65). Até então `modelo === 'NFCE'` caía
+     * no `else` e ia pro `MotorNfse`, processando venda de produto como se
+     * fosse prestação de serviço (achado da auditoria anterior, corrigido
+     * primeiro com uma rejeição explícita — agora com o motor de verdade).
      */
-    private const MODELO_NAO_SUPORTADO = 'NFC-e via NFePHP não é suportado neste sistema (só NF-e e NFS-e). '
-        . 'Force emissão como NF-e ("forçar NF-e" na tela de emissão) ou troque o provedor fiscal desta oficina pra Spedy/Focus NFe.';
-
     public function emitir(NotaFiscalData $nota): EmissaoResultado
     {
-        if ($nota->modelo === 'NFCE') {
-            return EmissaoResultado::erro(self::MODELO_NAO_SUPORTADO, $nota->referenciaExterna);
-        }
-
-        return $nota->modelo === 'NFE'
-            ? app(MotorNfe::class)->emitir($nota, $this->ambiente)
-            : app(MotorNfse::class)->emitir($nota, $this->ambiente);
+        return match ($nota->modelo) {
+            'NFE'  => app(MotorNfe::class)->emitir($nota, $this->ambiente),
+            'NFCE' => app(MotorNfce::class)->emitir($nota, $this->ambiente),
+            default => app(MotorNfse::class)->emitir($nota, $this->ambiente),
+        };
     }
 
     public function consultar(string $referencia, string $modelo = 'NFSE'): EmissaoResultado
     {
-        if ($modelo === 'NFCE') {
-            return EmissaoResultado::erro(self::MODELO_NAO_SUPORTADO, $referencia);
-        }
-
-        return $modelo === 'NFE'
-            ? app(MotorNfe::class)->consultar($referencia, $this->ambiente)
-            : app(MotorNfse::class)->consultar($referencia, $this->ambiente);
+        return match ($modelo) {
+            'NFE'  => app(MotorNfe::class)->consultar($referencia, $this->ambiente),
+            'NFCE' => app(MotorNfce::class)->consultar($referencia, $this->ambiente),
+            default => app(MotorNfse::class)->consultar($referencia, $this->ambiente),
+        };
     }
 
     public function cancelar(string $referencia, string $motivo, string $modelo = 'NFSE'): EmissaoResultado
     {
-        if ($modelo === 'NFCE') {
-            return EmissaoResultado::erro(self::MODELO_NAO_SUPORTADO, $referencia);
-        }
-
-        if ($modelo === 'NFE') {
-            // MotorNfe::cancelar() exige o protocolo original (sefazCancela()
-            // não aceita só a chave) — NfePhpProvider não tem acesso à
-            // NotaFiscal aqui (só à referência/motivo, mesma limitação da
-            // interface genérica). O controller precisa buscar o protocolo
-            // e usar uma via alternativa — ver Task 7 pra como isso é
-            // resolvido no NotaFiscalController::cancelar().
-            throw new \RuntimeException('Cancelamento de NF-e via NfePHP requer o protocolo original — chame MotorNfe::cancelar() diretamente a partir do controller, não via FiscalProvider::cancelar().');
+        // MotorNfe::cancelar()/MotorNfce::cancelar() exigem o protocolo
+        // original (sefazCancela() não aceita só a chave) — NfePhpProvider
+        // não tem acesso à NotaFiscal aqui (só à referência/motivo, mesma
+        // limitação da interface genérica). O controller precisa buscar o
+        // protocolo e chamar o motor direto — ver
+        // NotaFiscalController::cancelar().
+        if ($modelo === 'NFE' || $modelo === 'NFCE') {
+            $motor = $modelo === 'NFE' ? 'MotorNfe' : 'MotorNfce';
+            throw new \RuntimeException("Cancelamento de {$modelo} via NFePHP requer o protocolo original — chame {$motor}::cancelar() diretamente a partir do controller, não via FiscalProvider::cancelar().");
         }
 
         return app(MotorNfse::class)->cancelar($referencia, $motivo, $this->ambiente);

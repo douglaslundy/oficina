@@ -58,9 +58,15 @@ class NotaFiscalNfceTest extends TestCase
         ], $extra);
     }
 
-    public function test_cliente_pessoa_fisica_gera_nfce_automaticamente(): void
+    /**
+     * Pedido explícito do usuário (2026-09-14): NF-e virou o padrão — NFC-e
+     * pra pessoa física só acontece se a oficina configurar
+     * `modelo_venda_padrao = 'NFC-e'` (antes era automático, sem opção de
+     * desativar).
+     */
+    public function test_cliente_pessoa_fisica_gera_nfce_quando_configurado_como_padrao(): void
     {
-        $this->criarConfiguracao();
+        $this->criarConfiguracao(['modelo_venda_padrao' => 'NFC-e']);
         $token   = $this->loginAdmin();
         $cliente = Cliente::create(['nome' => 'Fulano', 'cpf_cnpj' => '87748248800', 'uf' => 'MG']);
         $produto = $this->criarProduto();
@@ -84,7 +90,9 @@ class NotaFiscalNfceTest extends TestCase
 
     public function test_forcar_nfe_com_cliente_pessoa_fisica_gera_nfe(): void
     {
-        $this->criarConfiguracao();
+        // modelo_venda_padrao=NFC-e de propósito — prova que forcar_nfe
+        // vence mesmo com o switch configurado pra NFC-e.
+        $this->criarConfiguracao(['modelo_venda_padrao' => 'NFC-e']);
         $token   = $this->loginAdmin();
         $cliente = Cliente::create(['nome' => 'Fulano', 'cpf_cnpj' => '87748248800', 'uf' => 'MG']);
         $produto = $this->criarProduto();
@@ -108,7 +116,7 @@ class NotaFiscalNfceTest extends TestCase
 
     public function test_nfce_dentro_do_estado_usa_cfop_5102(): void
     {
-        $this->criarConfiguracao(['uf' => 'MG']);
+        $this->criarConfiguracao(['uf' => 'MG', 'modelo_venda_padrao' => 'NFC-e']);
         $token   = $this->loginAdmin();
         $cliente = Cliente::create(['nome' => 'Fulano', 'cpf_cnpj' => '87748248800', 'uf' => 'MG']);
         $produto = $this->criarProduto();
@@ -126,7 +134,7 @@ class NotaFiscalNfceTest extends TestCase
         // Venda a consumidor final PF de outra UF: NFC-e é presencial/intrastate por
         // definição legal, então cai pra NF-e (mesmo escape hatch de forcar_nfe) em
         // vez de gerar uma NFC-e interestadual com CFOP e local_destino contraditórios.
-        $this->criarConfiguracao(['uf' => 'MG']);
+        $this->criarConfiguracao(['uf' => 'MG', 'modelo_venda_padrao' => 'NFC-e']);
         $token   = $this->loginAdmin();
         $cliente = Cliente::create(['nome' => 'Fulano', 'cpf_cnpj' => '87748248800', 'uf' => 'SP']);
         $produto = $this->criarProduto();
@@ -153,7 +161,7 @@ class NotaFiscalNfceTest extends TestCase
         // (store() 404/422 e o teste falha rio abaixo).
         $token = $this->loginAdmin();
         TenancyContext::set($oficina->id, $oficina->slug);
-        $this->criarConfiguracao(['uf' => 'MG']);
+        $this->criarConfiguracao(['uf' => 'MG', 'modelo_venda_padrao' => 'NFC-e']);
         $cliente = Cliente::create(['nome' => 'Fulano', 'cpf_cnpj' => '87748248800', 'uf' => 'MG']);
         $produto = $this->criarProduto();
         TenancyContext::clear();
@@ -196,7 +204,7 @@ class NotaFiscalNfceTest extends TestCase
         $headers = ['X-Tenant' => $oficina->slug];
 
         TenancyContext::set($oficina->id, $oficina->slug);
-        $this->criarConfiguracao(['uf' => 'MG']);
+        $this->criarConfiguracao(['uf' => 'MG', 'modelo_venda_padrao' => 'NFC-e']);
         $clientePf = Cliente::create(['nome' => 'PF', 'cpf_cnpj' => '87748248800', 'uf' => 'MG']);
         $clientePj = Cliente::create(['nome' => 'PJ', 'cpf_cnpj' => (string) mt_rand(10000000000000, 99999999999999), 'uf' => 'MG']);
         $produto   = $this->criarProduto();
@@ -235,7 +243,7 @@ class NotaFiscalNfceTest extends TestCase
         $token   = $this->loginAdmin();
         $headers = ['X-Tenant' => $oficina->slug];
         TenancyContext::set($oficina->id, $oficina->slug);
-        $this->criarConfiguracao(['uf' => 'MG']);
+        $this->criarConfiguracao(['uf' => 'MG', 'modelo_venda_padrao' => 'NFC-e']);
         $cliente = Cliente::create(['nome' => 'Fulano', 'cpf_cnpj' => '87748248800', 'uf' => 'MG']);
         $produto = $this->criarProduto();
         TenancyContext::clear();
@@ -269,7 +277,7 @@ class NotaFiscalNfceTest extends TestCase
         $token   = $this->loginAdmin();
         $headers = ['X-Tenant' => $oficina->slug];
         TenancyContext::set($oficina->id, $oficina->slug);
-        $this->criarConfiguracao(['uf' => 'MG']);
+        $this->criarConfiguracao(['uf' => 'MG', 'modelo_venda_padrao' => 'NFC-e']);
         $cliente = Cliente::create(['nome' => 'Fulano', 'cpf_cnpj' => '87748248800', 'uf' => 'MG']);
         $produto = $this->criarProduto();
         TenancyContext::clear();
@@ -307,7 +315,7 @@ class NotaFiscalNfceTest extends TestCase
         $token   = $this->loginAdmin();
         $headers = ['X-Tenant' => $oficina->slug];
         TenancyContext::set($oficina->id, $oficina->slug);
-        $this->criarConfiguracao(['uf' => 'MG']);
+        $this->criarConfiguracao(['uf' => 'MG', 'modelo_venda_padrao' => 'NFC-e']);
         $cliente = Cliente::create(['nome' => 'Fulano', 'cpf_cnpj' => '87748248800', 'uf' => 'MG']);
         $produto = $this->criarProduto();
         TenancyContext::clear();

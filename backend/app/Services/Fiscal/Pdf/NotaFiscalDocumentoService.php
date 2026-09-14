@@ -21,10 +21,17 @@ class NotaFiscalDocumentoService
     /** @return array{conteudo: string, filename: string} */
     public function gerarPdf(NotaFiscal $nota): array
     {
-        // NF-e/NFC-e emitida via NFePHP: o DANFE é montado localmente a
-        // partir do XML já autorizado (DanfeRenderer) — não tem PDF pronto
-        // vindo de nenhum provedor pra esse caso.
-        if ($nota->provedor === 'NFEPHP' && in_array($nota->modelo, ['NF-e', 'NFC-e'], true) && in_array($nota->status, ['AUTORIZADA', 'CONTINGENCIA'], true)) {
+        // NF-e emitida via NFePHP: o DANFE é montado localmente a partir do
+        // XML já autorizado (DanfeRenderer) — não tem PDF pronto vindo de
+        // nenhum provedor pra esse caso. NFC-e (qualquer provedor,
+        // incluindo NFePHP/MotorNfce) NÃO entra aqui de propósito — o
+        // documento correto pra NFC-e é o cupom 80mm (`montarPdfArquivo()`
+        // abaixo, mesmo template já usado por Spedy/Focus), nunca o DANFE
+        // A4 de NF-e. Achado ao implementar MotorNfce (2026-09-14): antes
+        // dessa correção esta condição já incluía 'NFC-e', mas nunca era
+        // alcançável (NFEPHP não tinha motor de NFC-e) — agora que tem,
+        // teria produzido o layout errado (DANFE cheio em vez de cupom).
+        if ($nota->provedor === 'NFEPHP' && $nota->modelo === 'NF-e' && in_array($nota->status, ['AUTORIZADA', 'CONTINGENCIA'], true)) {
             $dados = app(DanfeRenderer::class)->dadosParaTemplate($nota);
             $pdf   = Pdf::loadView('pdf.danfe', $dados)->setPaper('a4', 'portrait');
 

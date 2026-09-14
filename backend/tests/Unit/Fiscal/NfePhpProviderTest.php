@@ -9,6 +9,7 @@ use App\Services\Fiscal\Data\ConsultaNotaTerceiroResumo;
 use App\Services\Fiscal\Data\EmissaoResultado;
 use App\Services\Fiscal\Data\EmissorData;
 use App\Services\Fiscal\Data\NotaFiscalData;
+use App\Services\Fiscal\NfePhp\MotorNfce;
 use App\Services\Fiscal\NfePhp\MotorNfe;
 use App\Services\Fiscal\NfePhp\MotorNfse;
 use App\Services\Fiscal\Providers\NfePhpProvider;
@@ -123,14 +124,12 @@ class NfePhpProviderTest extends TestCase
     }
 
     /**
-     * Bug real de produção (2026-09-14): não existe MotorNfce — antes desta
-     * checagem, modelo NFCE caía no `else` de emitir() e ia pro MotorNfse,
-     * processando uma venda de produto como se fosse prestação de serviço.
-     * `CriarNotaFiscalService` seleciona NFC-e automaticamente (PF + mesmo
-     * estado) sem saber qual provedor a oficina usa — então isso É
-     * alcançável em produção pra qualquer oficina em NFEPHP.
+     * Pedido explícito do usuário (2026-09-14): motor de NFC-e completo pra
+     * NFePHP — modelo NFCE agora despacha pro MotorNfce de verdade, nunca
+     * mais pro MotorNfse (bug real corrigido antes com uma rejeição
+     * explícita, agora com o motor de verdade implementado).
      */
-    public function test_emitir_com_modelo_nfce_rejeita_em_vez_de_ir_para_motor_nfse(): void
+    public function test_emitir_com_modelo_nfce_despacha_para_motor_nfce_nunca_para_motor_nfse(): void
     {
         $nota = new NotaFiscalData(
             tipo: 'NFSE', tomador: ['nome' => 'Cliente PF', 'cpf_cnpj' => '12345678900'],
@@ -138,45 +137,46 @@ class NfePhpProviderTest extends TestCase
             codigoServicoFederal: '', codigoServicoMunicipal: '',
             naturezaOperacao: 'Venda de Mercadoria', referenciaExterna: 'nfce-1', modelo: 'NFCE',
         );
+        $esperado = EmissaoResultado::processando($nota->referenciaExterna);
 
         $mockNfse = Mockery::mock(MotorNfse::class);
         $mockNfse->shouldNotReceive('emitir');
         $this->app->instance(MotorNfse::class, $mockNfse);
-        $mockNfe = Mockery::mock(MotorNfe::class);
-        $mockNfe->shouldNotReceive('emitir');
-        $this->app->instance(MotorNfe::class, $mockNfe);
+        $mockNfce = Mockery::mock(MotorNfce::class);
+        $mockNfce->shouldReceive('emitir')->once()->with($nota, 'HOMOLOGACAO')->andReturn($esperado);
+        $this->app->instance(MotorNfce::class, $mockNfce);
 
         $provider  = new NfePhpProvider('HOMOLOGACAO');
         $resultado = $provider->emitir($nota);
 
-        $this->assertSame('ERRO', $resultado->status);
-        $this->assertStringContainsString('NFC-e via NFePHP não é suportado', $resultado->mensagemErro);
+        $this->assertSame($esperado, $resultado);
     }
 
-    public function test_consultar_com_modelo_nfce_rejeita_em_vez_de_ir_para_motor_nfse(): void
+    public function test_consultar_com_modelo_nfce_despacha_para_motor_nfce(): void
     {
+        $esperado = EmissaoResultado::autorizada('CHAVE', 'PROT', null, null, null, 'ref-nfce');
+
         $mockNfse = Mockery::mock(MotorNfse::class);
         $mockNfse->shouldNotReceive('consultar');
         $this->app->instance(MotorNfse::class, $mockNfse);
+        $mockNfce = Mockery::mock(MotorNfce::class);
+        $mockNfce->shouldReceive('consultar')->once()->with('ref-nfce', 'HOMOLOGACAO')->andReturn($esperado);
+        $this->app->instance(MotorNfce::class, $mockNfce);
 
         $provider  = new NfePhpProvider('HOMOLOGACAO');
         $resultado = $provider->consultar('ref-nfce', 'NFCE');
 
-        $this->assertSame('ERRO', $resultado->status);
-        $this->assertStringContainsString('NFC-e via NFePHP não é suportado', $resultado->mensagemErro);
+        $this->assertSame($esperado, $resultado);
     }
 
-    public function test_cancelar_com_modelo_nfce_rejeita_em_vez_de_ir_para_motor_nfse(): void
+    public function test_cancelar_com_modelo_nfce_lanca_excecao_direcionando_para_motor_nfce(): void
     {
-        $mockNfse = Mockery::mock(MotorNfse::class);
-        $mockNfse->shouldNotReceive('cancelar');
-        $this->app->instance(MotorNfse::class, $mockNfse);
+        $p = new NfePhpProvider('HOMOLOGACAO');
 
-        $provider  = new NfePhpProvider('HOMOLOGACAO');
-        $resultado = $provider->cancelar('ref-nfce', 'Motivo', 'NFCE');
+        $this->expectException(\RuntimeException::class);
+        $this->expectExceptionMessage('MotorNfce::cancelar()');
 
-        $this->assertSame('ERRO', $resultado->status);
-        $this->assertStringContainsString('NFC-e via NFePHP não é suportado', $resultado->mensagemErro);
+        $p->cancelar(str_repeat('1', 44), 'Erro de digitação', 'NFCE');
     }
 
     public function test_emitir_com_modelo_nfse_continua_despachando_para_motor_nfse(): void
