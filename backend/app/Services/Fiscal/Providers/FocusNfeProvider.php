@@ -27,6 +27,18 @@ class FocusNfeProvider implements FiscalProvider, ConsultaNotaTerceiroProvider
         return $this->ambiente === 'PRODUCAO';
     }
 
+    /**
+     * Mesmo achado do SpedyProvider (2026-09-14, investigação do erro de
+     * cancelamento): a Focus também pode devolver erros no formato
+     * `{"erros":[{"mensagem":"..."}]}`, sem uma chave `mensagem` de nível
+     * raiz — só 3 dos 8 pontos deste arquivo já tratavam isso. Centralizado
+     * aqui pra nenhum outro escapar.
+     */
+    private function mensagemErroDe(\Illuminate\Http\Client\Response $resp, string $default): string
+    {
+        return $resp->json('mensagem') ?? $resp->json('erros.0.mensagem') ?? $default;
+    }
+
     public function registrarEmissor(EmissorData $e): RegistroResultado
     {
         // Certificado é enviado junto no cadastro da empresa (ver enviarCertificado/registro combinado no service).
@@ -34,7 +46,7 @@ class FocusNfeProvider implements FiscalProvider, ConsultaNotaTerceiroProvider
             ->post("{$this->baseUrl}/v2/empresas", $this->montarPayloadEmpresa($e));
 
         if ($resp->failed()) {
-            return RegistroResultado::erro($resp->json('mensagem') ?? 'Erro ao registrar empresa na Focus.');
+            return RegistroResultado::erro($this->mensagemErroDe($resp, 'Erro ao registrar empresa na Focus.'));
         }
 
         $id    = (string) ($resp->json('id') ?? $e->cnpjLimpo());
@@ -55,7 +67,7 @@ class FocusNfeProvider implements FiscalProvider, ConsultaNotaTerceiroProvider
             ]);
 
         if ($resp->failed()) {
-            throw new \RuntimeException('Erro ao enviar certificado para a Focus: ' . ($resp->json('mensagem') ?? ''));
+            throw new \RuntimeException('Erro ao enviar certificado para a Focus: ' . $this->mensagemErroDe($resp, ''));
         }
     }
 
@@ -85,7 +97,7 @@ class FocusNfeProvider implements FiscalProvider, ConsultaNotaTerceiroProvider
 
         if ($resp->status() >= 400) {
             return EmissaoResultado::rejeitada(
-                $resp->json('mensagem') ?? ($resp->json('erros.0.mensagem') ?? 'Erro na emissão (Focus).'),
+                $this->mensagemErroDe($resp, 'Erro na emissão (Focus).'),
                 $nota->referenciaExterna,
             );
         }
@@ -100,7 +112,7 @@ class FocusNfeProvider implements FiscalProvider, ConsultaNotaTerceiroProvider
 
         if ($resp->status() >= 400) {
             return EmissaoResultado::rejeitada(
-                $resp->json('mensagem') ?? ($resp->json('erros.0.mensagem') ?? 'Erro na emissão de NF-e (Focus).'),
+                $this->mensagemErroDe($resp, 'Erro na emissão de NF-e (Focus).'),
                 $nota->referenciaExterna,
             );
         }
@@ -115,7 +127,7 @@ class FocusNfeProvider implements FiscalProvider, ConsultaNotaTerceiroProvider
 
         if ($resp->status() >= 400) {
             return EmissaoResultado::rejeitada(
-                $resp->json('mensagem') ?? ($resp->json('erros.0.mensagem') ?? 'Erro na emissão de NFC-e (Focus).'),
+                $this->mensagemErroDe($resp, 'Erro na emissão de NFC-e (Focus).'),
                 $nota->referenciaExterna,
             );
         }
@@ -263,7 +275,7 @@ class FocusNfeProvider implements FiscalProvider, ConsultaNotaTerceiroProvider
             ]);
 
         if ($resp->failed()) {
-            return EmissaoResultado::rejeitada($resp->json('mensagem') ?? 'Erro ao cancelar (Focus).', $referencia);
+            return EmissaoResultado::rejeitada($this->mensagemErroDe($resp, 'Erro ao cancelar (Focus).'), $referencia);
         }
 
         return EmissaoResultado::cancelada($referencia);
@@ -512,7 +524,7 @@ class FocusNfeProvider implements FiscalProvider, ConsultaNotaTerceiroProvider
                 'Focus NFe: falha ao consultar nota recebida.',
                 ['chave_acesso' => $chaveAcesso, 'status' => $resp->status(), 'corpo' => $resp->body()],
             );
-            return ConsultaNotaTerceiroResultado::erro($resp->json('mensagem') ?? 'Erro ao consultar nota na Focus.');
+            return ConsultaNotaTerceiroResultado::erro($this->mensagemErroDe($resp, 'Erro ao consultar nota na Focus.'));
         }
 
         $json = $resp->json();
@@ -546,7 +558,7 @@ class FocusNfeProvider implements FiscalProvider, ConsultaNotaTerceiroProvider
             ->get("{$this->baseUrl}/v2/nfes_recebidas", ['cnpj' => $cnpjLimpo]);
 
         if ($resp->failed()) {
-            $mensagem = (string) ($resp->json('mensagem') ?? 'Erro ao listar notas recebidas na Focus.');
+            $mensagem = $this->mensagemErroDe($resp, 'Erro ao listar notas recebidas na Focus.');
             \Illuminate\Support\Facades\Log::warning(
                 'Focus NFe: falha ao listar notas recebidas.',
                 ['cnpj' => $cnpjLimpo, 'status' => $resp->status(), 'corpo' => $resp->body()],

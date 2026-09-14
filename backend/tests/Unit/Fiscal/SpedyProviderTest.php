@@ -236,6 +236,32 @@ class SpedyProviderTest extends TestCase
         Http::assertNotSent(fn ($req) => $req->method() === 'DELETE');
     }
 
+    public function test_cancelar_extrai_mensagem_real_do_formato_errors_da_spedy(): void
+    {
+        // Achado real ao investigar o pedido do usuário ("porque está dando
+        // erro ao cancelar"): a Spedy devolve erros 400 no formato
+        // {"errors":[{"message":"...","path":"..."}]} — mas o código só lia
+        // uma chave `message` de nível raiz, que não existe nesse formato,
+        // então SEMPRE caía no fallback genérico ("Erro ao cancelar
+        // (Spedy)."), escondendo o motivo real (confirmado batendo direto
+        // no sandbox: "A nota fiscal não pode ser cancelada."). Mesmo bug
+        // afetava emitir()/registrarEmissor() — inclusive explica por que o
+        // registro de emissor da stuntmotos nunca teve detalhe do erro real.
+        Http::fake([
+            '*/product-invoices?*' => Http::response(['items' => [['id' => 'spedy-real-id-1']]], 200),
+            '*/product-invoices/spedy-real-id-1' => Http::response(
+                ['errors' => [['message' => 'A nota fiscal não pode ser cancelada.', 'path' => null]]],
+                400,
+            ),
+        ]);
+
+        $p = new SpedyProvider('https://sandbox-api.spedy.com.br/v1', 'master', 'tok', 'emp-1');
+        $r = $p->cancelar('inv-1', 'Motivo qualquer', 'NFE');
+
+        $this->assertSame('REJEITADA', $r->status);
+        $this->assertSame('A nota fiscal não pode ser cancelada.', $r->mensagemErro);
+    }
+
     public function test_cancelar_falha_ao_localizar_nao_vira_cancelada(): void
     {
         Http::fake(['*/product-invoices?*' => Http::response(['message' => 'Unauthorized'], 401)]);

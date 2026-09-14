@@ -29,7 +29,7 @@ class SpedyProvider implements FiscalProvider, ConsultaNotaTerceiroProvider
             ->post("{$this->baseUrl}/companies", $this->montarPayloadEmpresa($e));
 
         if ($resp->failed()) {
-            return RegistroResultado::erro($resp->json('message') ?? 'Erro ao registrar emissor na Spedy.');
+            return RegistroResultado::erro($this->mensagemErroDe($resp, 'Erro ao registrar emissor na Spedy.'));
         }
 
         $id  = (string) $resp->json('id');
@@ -47,7 +47,7 @@ class SpedyProvider implements FiscalProvider, ConsultaNotaTerceiroProvider
             ]);
 
         if ($resp->failed()) {
-            throw new \RuntimeException('Erro ao enviar certificado para a Spedy: ' . ($resp->json('message') ?? ''));
+            throw new \RuntimeException('Erro ao enviar certificado para a Spedy: ' . $this->mensagemErroDe($resp, ''));
         }
     }
 
@@ -76,7 +76,7 @@ class SpedyProvider implements FiscalProvider, ConsultaNotaTerceiroProvider
 
         if ($resp->failed()) {
             return EmissaoResultado::rejeitada(
-                $resp->json('message') ?? 'Erro na emissão (Spedy).',
+                $this->mensagemErroDe($resp, 'Erro na emissão (Spedy).'),
                 $nota->referenciaExterna,
             );
         }
@@ -162,7 +162,7 @@ class SpedyProvider implements FiscalProvider, ConsultaNotaTerceiroProvider
             ]);
 
         if ($resp->failed()) {
-            return EmissaoResultado::rejeitada($resp->json('message') ?? 'Erro ao cancelar (Spedy).', $referencia);
+            return EmissaoResultado::rejeitada($this->mensagemErroDe($resp, 'Erro ao cancelar (Spedy).'), $referencia);
         }
 
         return EmissaoResultado::cancelada($referencia);
@@ -196,6 +196,21 @@ class SpedyProvider implements FiscalProvider, ConsultaNotaTerceiroProvider
     private function integrationIdDe(string $referencia): string
     {
         return substr($referencia, -36);
+    }
+
+    /**
+     * Achado real ao investigar erro de cancelamento (2026-09-14): a Spedy
+     * devolve erros 400 no formato `{"errors":[{"message":"...",
+     * "path":"..."}]}` — uma chave `message` de nível raiz (o que todo
+     * `$resp->json('message')` deste arquivo lia) não existe nesse formato,
+     * então toda mensagem real da Spedy virava o fallback genérico. Isso
+     * também explica por que `emissores_fiscais.ultimo_erro` da stuntmotos
+     * nunca teve detalhe (`registrarEmissor()` tem o mesmo padrão) — a causa
+     * real do registro nunca chegou a ser vista.
+     */
+    private function mensagemErroDe(\Illuminate\Http\Client\Response $resp, string $default): string
+    {
+        return $resp->json('message') ?? $resp->json('errors.0.message') ?? $default;
     }
 
     public function montarPayloadEmpresa(EmissorData $e): array
@@ -490,7 +505,7 @@ class SpedyProvider implements FiscalProvider, ConsultaNotaTerceiroProvider
 
         if ($resp->failed()) {
             return EmissaoResultado::rejeitada(
-                $resp->json('message') ?? 'Erro ao criar a venda na Spedy (/orders).',
+                $this->mensagemErroDe($resp, 'Erro ao criar a venda na Spedy (/orders).'),
                 $nota->referenciaExterna,
             );
         }
@@ -586,7 +601,7 @@ class SpedyProvider implements FiscalProvider, ConsultaNotaTerceiroProvider
 
         if ($resp->failed()) {
             return EmissaoResultado::rejeitada(
-                $resp->json('message') ?? 'Erro na emissão de NF-e (Spedy).',
+                $this->mensagemErroDe($resp, 'Erro na emissão de NF-e (Spedy).'),
                 $nota->referenciaExterna,
             );
         }
@@ -601,7 +616,7 @@ class SpedyProvider implements FiscalProvider, ConsultaNotaTerceiroProvider
 
         if ($resp->failed()) {
             return EmissaoResultado::rejeitada(
-                $resp->json('message') ?? 'Erro na emissão de NFC-e (Spedy).',
+                $this->mensagemErroDe($resp, 'Erro na emissão de NFC-e (Spedy).'),
                 $nota->referenciaExterna,
             );
         }
@@ -713,7 +728,7 @@ class SpedyProvider implements FiscalProvider, ConsultaNotaTerceiroProvider
                 'Spedy: falha ao consultar nota recebida.',
                 ['chave_acesso' => $chaveAcesso, 'status' => $resp->status(), 'corpo' => $resp->body()],
             );
-            return ConsultaNotaTerceiroResultado::erro($resp->json('message') ?? 'Erro ao consultar nota na Spedy.');
+            return ConsultaNotaTerceiroResultado::erro($this->mensagemErroDe($resp, 'Erro ao consultar nota na Spedy.'));
         }
 
         $itens = $resp->json('items') ?? [];
@@ -773,7 +788,7 @@ class SpedyProvider implements FiscalProvider, ConsultaNotaTerceiroProvider
             ->get("{$this->baseUrl}/inbound-product-invoices", $query);
 
         if ($resp->failed()) {
-            $mensagem = (string) ($resp->json('message') ?? 'Erro ao listar notas recebidas na Spedy.');
+            $mensagem = $this->mensagemErroDe($resp, 'Erro ao listar notas recebidas na Spedy.');
             \Illuminate\Support\Facades\Log::warning(
                 'Spedy: falha ao listar notas recebidas.',
                 ['url' => "{$this->baseUrl}/inbound-product-invoices", 'status' => $resp->status(), 'corpo' => $resp->body()],
