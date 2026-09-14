@@ -88,6 +88,77 @@ class NotaFiscalTest extends TestCase
         $this->assertDatabaseHas('notas_fiscais', ['id' => $nota->id]);
     }
 
+    /**
+     * Pedido explícito do usuário (2026-09-14): botão pra tentar autorizar
+     * uma NF-e presa em CONTINGÊNCIA na hora, sem esperar a varredura
+     * agendada `nfe:reconciliar-contingencia` (roda de hora em hora).
+     */
+    public function test_retransmitir_nota_em_contingencia_com_sucesso(): void
+    {
+        $token   = $this->loginAdmin();
+        $cliente = $this->criarCliente();
+        $nota = NotaFiscal::create([
+            'cliente_id' => $cliente->id, 'modelo' => 'NF-e', 'provedor' => 'NFEPHP',
+            'natureza_operacao' => 'Venda de Mercadoria', 'subtotal' => 100, 'valor_total' => 100,
+            'status' => 'CONTINGENCIA', 'ambiente' => 'HOMOLOGACAO',
+            'chave_acesso' => '31260950388509000121550010000000014082390387',
+            'xml_retorno' => '<NFe/>', 'contingencia_desde' => now()->subHours(2),
+        ]);
+
+        $this->mock(\App\Services\Fiscal\NfePhp\MotorNfe::class, function ($m) {
+            $m->shouldReceive('retransmitir')->once()
+              ->andReturn(\App\Services\Fiscal\Data\EmissaoResultado::autorizada(
+                  '31260950388509000121550010000000014082390387', 'PROT123', '1', '<NFe>autorizada</NFe>', null
+              ));
+        });
+
+        $response = $this->withToken($token)->postJson("/api/notas-fiscais/{$nota->id}/retransmitir");
+
+        $response->assertStatus(200)->assertJsonPath('data.status', 'AUTORIZADA');
+        $this->assertDatabaseHas('notas_fiscais', ['id' => $nota->id, 'status' => 'AUTORIZADA', 'protocolo' => 'PROT123']);
+        $this->assertNull(NotaFiscal::find($nota->id)->contingencia_desde);
+    }
+
+    public function test_retransmitir_falha_preserva_contingencia_desde_para_nao_perder_prazo_epec(): void
+    {
+        $token         = $this->loginAdmin();
+        $cliente       = $this->criarCliente();
+        $desdeOriginal = now()->subHours(5);
+        $nota = NotaFiscal::create([
+            'cliente_id' => $cliente->id, 'modelo' => 'NF-e', 'provedor' => 'NFEPHP',
+            'natureza_operacao' => 'Venda de Mercadoria', 'subtotal' => 100, 'valor_total' => 100,
+            'status' => 'CONTINGENCIA', 'ambiente' => 'HOMOLOGACAO',
+            'chave_acesso' => '31260950388509000121550010000000014082390387',
+            'xml_retorno' => '<NFe/>', 'contingencia_desde' => $desdeOriginal,
+        ]);
+
+        $this->mock(\App\Services\Fiscal\NfePhp\MotorNfe::class, function ($m) {
+            $m->shouldReceive('retransmitir')->once()
+              ->andReturn(\App\Services\Fiscal\Data\EmissaoResultado::erro('SEFAZ ainda indisponível.'));
+        });
+
+        $response = $this->withToken($token)->postJson("/api/notas-fiscais/{$nota->id}/retransmitir");
+
+        $response->assertStatus(200)->assertJsonPath('data.status', 'CONTINGENCIA');
+        $notaFresh = NotaFiscal::find($nota->id);
+        $this->assertNotNull($notaFresh->contingencia_desde);
+        $this->assertEquals($desdeOriginal->timestamp, $notaFresh->contingencia_desde->timestamp);
+    }
+
+    public function test_nao_permite_retransmitir_nota_que_nao_esta_em_contingencia(): void
+    {
+        $token   = $this->loginAdmin();
+        $cliente = $this->criarCliente();
+        $nota = NotaFiscal::create([
+            'cliente_id' => $cliente->id, 'modelo' => 'NF-e', 'natureza_operacao' => 'Venda de Mercadoria',
+            'subtotal' => 100, 'valor_total' => 100, 'status' => 'AUTORIZADA', 'ambiente' => 'HOMOLOGACAO',
+        ]);
+
+        $response = $this->withToken($token)->postJson("/api/notas-fiscais/{$nota->id}/retransmitir");
+
+        $response->assertStatus(422);
+    }
+
     public function test_listar_notas_fiscais(): void
     {
         $token = $this->loginAdmin();

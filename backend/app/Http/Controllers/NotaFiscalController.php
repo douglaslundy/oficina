@@ -126,6 +126,69 @@ class NotaFiscalController extends Controller
         return $this->aplicarResultado->aplicar($nota, $resultado, $ambiente);
     }
 
+    /**
+     * Retransmissão manual de NF-e presa em CONTINGÊNCIA (EPEC) — até aqui só
+     * existia a varredura agendada `nfe:reconciliar-contingencia` (roda de
+     * hora em hora); usuário pediu uma forma de tentar autorizar na hora, sem
+     * esperar o próximo ciclo.
+     *
+     * Reusa `MotorNfe::retransmitir()` (mesmo método do comando agendado —
+     * reenvia o XML já salvo, nunca remonta, pra não mudar a chave de acesso
+     * já impressa no DANFE de contingência entregue ao cliente).
+     *
+     * NÃO usa `AplicarResultadoNotaService::aplicar()` aqui de propósito:
+     * aquele serviço sempre zera `contingencia_desde` quando o resultado não
+     * é CONTINGENCIA — correto pro fluxo normal de emissão (onde o campo só
+     * é setado ao ENTRAR em contingência), mas errado aqui: se a
+     * retransmissão falhar de novo (ERRO/REJEITADA) a nota CONTINUA em
+     * contingência e o relógio dos 7 dias legais do EPEC (`PrazoContingencia`)
+     * não pode ser resetado a cada tentativa manual. Mesmo raciocínio já
+     * aplicado em `ReconciliarContingenciaNfe` — só zera em AUTORIZADA/
+     * CANCELADA (resolução final), preserva em qualquer outro caso.
+     */
+    public function retransmitirContingencia(string $id): JsonResponse
+    {
+        $nota = NotaFiscal::with(['cliente', 'itens'])->findOrFail($id);
+
+        if ($nota->status !== 'CONTINGENCIA') {
+            return response()->json(['message' => 'Só é possível retransmitir notas em contingência.'], 422);
+        }
+
+        $ambiente  = app(\App\Services\Fiscal\FiscalProviderManager::class)->ambienteDaOficina();
+        $resultado = app(\App\Services\Fiscal\NfePhp\MotorNfe::class)->retransmitir($nota, $ambiente);
+
+        if ($resultado->status === 'AUTORIZADA') {
+            $nota->update([
+                'status'             => 'AUTORIZADA',
+                'chave_acesso'       => $resultado->chave ?: $nota->chave_acesso,
+                'protocolo'          => $resultado->protocolo ?: $nota->protocolo,
+                'xml_retorno'        => $resultado->xml ?: $nota->xml_retorno,
+                'mensagem_erro'      => null,
+                'contingencia_desde' => null,
+                'emitido_em'         => now(),
+            ]);
+
+            if ($ambiente === 'PRODUCAO') {
+                $notaFresh = $nota->fresh()->loadMissing('cliente');
+                $this->planLimit->registrarNotaSeExcedente($notaFresh);
+                $this->alertas->dispatch('NF_AUTORIZADA', [
+                    'nf_numero'         => $notaFresh->numero,
+                    'cliente'           => $notaFresh->cliente?->nome ?? '-',
+                    'valor'             => 'R$ ' . number_format((float) $notaFresh->valor_total, 2, ',', '.'),
+                    'chave_acesso'      => $notaFresh->chave_acesso ?? '-',
+                    '_telefone_cliente' => $notaFresh->cliente?->telefone ?? '',
+                    '_email_cliente'    => $notaFresh->cliente?->email ?? '',
+                ]);
+            }
+        } elseif ($resultado->status === 'CANCELADA') {
+            $nota->update(['status' => 'CANCELADA', 'contingencia_desde' => null]);
+        } else {
+            $nota->update(['mensagem_erro' => $resultado->mensagemErro]);
+        }
+
+        return response()->json(['data' => new NotaFiscalResource($nota->fresh()->load('cliente'))]);
+    }
+
     public function cancelar(Request $request, string $id): JsonResponse
     {
         $nota = NotaFiscal::findOrFail($id);

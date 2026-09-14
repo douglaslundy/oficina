@@ -608,6 +608,51 @@ local sem regressão nova a cada commit, e os 2 achados de maior risco
 (isolamento entre tenants e certificado) confirmados AO VIVO em produção
 antes e depois do deploy — não só por teste automatizado.
 
+### 16. Botão "Ver motivo" (rejeição) + botão "Tentar autorizar" (contingência) + PDF liberado pra contingência
+
+Duas idas e voltas com o usuário sobre a mesma tela (Histórico Fiscal):
+
+**1. "Ver motivo" pra notas REJEITADAS:** o usuário tentou emitir uma nota,
+voltou REJEITADA, e não tinha como saber o porquê — `mensagem_erro` já
+existia na API mas só aparecia como `title` (tooltip) em cima do pill de
+status, invisível e inacessível em touch. Agora é um botão dedicado que
+abre modal com a mensagem completa da SEFAZ/provedor. (A nota específica
+que originou a pergunta já tinha sido excluída pelo próprio usuário antes
+de eu terminar — confirmado pelo log de auditoria: causa real era GTIN/
+cEAN do produto sem preenchimento, `cStat=883`.)
+
+**2. "Tentar autorizar" pra notas em CONTINGÊNCIA — endpoint novo, não
+existia:** usuário perguntou "como autorizar" uma nota em contingência.
+Até aqui a ÚNICA forma de sair de CONTINGENCIA era esperar a varredura
+agendada `nfe:reconciliar-contingencia` (roda 1x por hora,
+`routes/console.php`) — não tinha botão nem endpoint manual. Criado
+`POST /notas-fiscais/{id}/retransmitir` (`NotaFiscalController::
+retransmitirContingencia()`), reusando `MotorNfe::retransmitir()` (mesmo
+método do comando agendado — reenvia o XML já salvo, nunca remonta, pra
+não mudar a chave de acesso já impressa no DANFE entregue ao cliente).
+
+**Decisão importante:** NÃO reusei `AplicarResultadoNotaService::aplicar()`
+aqui — aquele serviço sempre zera `contingencia_desde` quando o resultado
+não é CONTINGENCIA, correto pro fluxo normal de emissão (campo só é
+setado ao ENTRAR em contingência), mas ERRADO aqui: se a retransmissão
+falhar de novo (SEFAZ ainda fora do ar), a nota CONTINUA em contingência
+e o relógio dos 7 dias legais do EPEC (`PrazoContingencia`) não pode
+resetar a cada tentativa manual — só zera em AUTORIZADA/CANCELADA
+(resolução final), preserva em qualquer outro caso, mesmo raciocínio já
+usado em `ReconciliarContingenciaNfe`.
+
+**3. PDF liberado pra CONTINGENCIA:** o botão "📄 PDF" no histórico só
+aparecia pra status AUTORIZADA, mas o backend já sabia renderizar DANFE
+de contingência (selo "DOCUMENTO EMITIDO EM CONTINGÊNCIA (EPEC)") desde
+antes — só faltava o botão aparecer. Corrigido.
+
+Testes novos (Feature, `NotaFiscalTest.php`): sucesso (AUTORIZADA, zera
+contingencia_desde), falha preserva contingencia_desde (não reseta prazo
+EPEC), e bloqueio pra nota que não está em contingência. Não puderam
+rodar localmente (dependem de Postgres, mesma limitação de sempre) —
+suíte Unit sem regressão (302 passou, 11 falhas pré-existentes de
+sempre). Verificação real: descrita abaixo.
+
 ### 15. Rodada de 6 pedidos do usuário — 5 bugs reais corrigidos, 1 bloqueio confirmado (não solucionável só por código)
 Usuário pediu, numa única mensagem: remover "(NFePHP)" do PDF, corrigir
 erro ao baixar NFS-e, investigar por que NF-e mostrava Contingência,

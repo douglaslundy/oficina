@@ -29,6 +29,7 @@ export default function HistoricoNFPage() {
   const [excluindo, setExcluindo]       = useState(false)
   const [modeloFiltro, setModeloFiltro] = useState('')
   const [motivoModal, setMotivoModal]   = useState<{ numero: number | null; mensagem: string } | null>(null)
+  const [retransmitindo, setRetransmitindo] = useState<string | null>(null)
 
   const fetchNotas = useCallback(() => {
     setLoading(true)
@@ -141,6 +142,30 @@ export default function HistoricoNFPage() {
       toast(msg ?? 'Erro ao excluir nota fiscal.', 'danger')
     } finally {
       setExcluindo(false)
+    }
+  }
+
+  // Pedido explícito do usuário (2026-09-14): botão pra tentar autorizar uma
+  // NF-e presa em CONTINGÊNCIA na hora, sem esperar a varredura agendada
+  // (`nfe:reconciliar-contingencia`, roda de hora em hora).
+  async function retransmitir(nota: NotaFiscal) {
+    setRetransmitindo(nota.id)
+    try {
+      const r = await api.post(`/notas-fiscais/${nota.id}/retransmitir`)
+      const novoStatus = r.data.data.status
+      if (novoStatus === 'AUTORIZADA') {
+        toast(`NF #${r.data.data.numero} autorizada!`, 'success')
+      } else if (novoStatus === 'CANCELADA') {
+        toast('Nota já havia sido cancelada — status reconciliado.', 'info')
+      } else {
+        toast('SEFAZ ainda não autorizou. Continua em contingência — tente novamente em instantes.', 'info')
+      }
+      fetchNotas()
+    } catch (e: unknown) {
+      const msg = (e as { response?: { data?: { message?: string } } })?.response?.data?.message
+      toast(msg ?? 'Erro ao tentar retransmitir a nota.', 'danger')
+    } finally {
+      setRetransmitindo(null)
     }
   }
 
@@ -262,12 +287,29 @@ export default function HistoricoNFPage() {
                           ⚠ Ver motivo
                         </button>
                       )}
-                      {nota.status === 'AUTORIZADA' && nota.numero && (
+                      {(nota.status === 'AUTORIZADA' || nota.status === 'CONTINGENCIA') && nota.numero && (
                         <button
                           onClick={() => baixarPdf(nota)}
+                          title={nota.status === 'CONTINGENCIA' ? 'DANFE em contingência — documento provisório, ainda aguardando autorização definitiva' : undefined}
                           style={{ background: 'none', border: '1px solid var(--border)', color: 'var(--muted)', borderRadius: 6, padding: '4px 10px', cursor: 'pointer', fontSize: 13 }}
                         >
                           📄 PDF
+                        </button>
+                      )}
+                      {nota.status === 'CONTINGENCIA' && (
+                        <button
+                          onClick={() => retransmitir(nota)}
+                          disabled={retransmitindo === nota.id}
+                          title="Tenta autorizar a nota agora, sem esperar a varredura automática (roda de hora em hora)"
+                          style={{
+                            background: 'none', border: '1px solid var(--accent)',
+                            color: retransmitindo === nota.id ? 'var(--muted)' : 'var(--accent)',
+                            borderRadius: 6, padding: '4px 10px',
+                            cursor: retransmitindo === nota.id ? 'not-allowed' : 'pointer',
+                            fontSize: 13, whiteSpace: 'nowrap',
+                          }}
+                        >
+                          {retransmitindo === nota.id ? '⟳ Tentando...' : '🔄 Tentar autorizar'}
                         </button>
                       )}
                       {nota.status === 'AUTORIZADA' && (
