@@ -186,28 +186,17 @@ class NotaFiscalController extends Controller
             return $pdf->download('DANFE-' . ($nota->numero ?? $nota->id) . '.pdf');
         }
 
-        // NFS-e emitida via NFePHP: o PDF (DANFSe) é obtido pronto direto da
-        // API oficial do ambiente nacional (Motor::baixarDanfse()), em vez de
-        // renderizar o template local pdf.nota_fiscal — que só reflete os
-        // dados salvos localmente, não o layout oficial assinado. Guard
-        // inclui 'modelo' === 'NFS-e' porque o branch de NF-e acima já
-        // intercepta antes o caso NF-e/NFC-e via NFePHP, então este só
-        // é alcançado para NFS-e — mas o check aqui permanece
-        // defensivo/explícito em vez de depender só da ordem dos branches.
-        if ($nota->provedor === 'NFEPHP' && $nota->modelo === 'NFS-e' && $nota->status === 'AUTORIZADA' && $nota->chave_acesso) {
-            try {
-                $pdfBinario = app(\App\Services\Fiscal\NfePhp\MotorNfse::class)
-                    ->baixarDanfse($nota->chave_acesso, $nota->ambiente ?? 'HOMOLOGACAO');
-
-                return response($pdfBinario, 200, [
-                    'Content-Type' => 'application/pdf',
-                    'Content-Disposition' => 'attachment; filename="NFSe-' . ($nota->numero ?? $nota->id) . '.pdf"',
-                ]);
-            } catch (\Throwable $e) {
-                \Illuminate\Support\Facades\Log::warning('Falha ao baixar DANFSe da biblioteca NFePHP, caindo para erro explícito.', ['erro' => $e->getMessage(), 'nota_id' => $nota->id]);
-                abort(502, 'Não foi possível obter o PDF da NFS-e no momento. Tente novamente em instantes.');
-            }
-        }
+        // Bug real corrigido em 2026-09-14 ("erro ao baixar a NFS-e"): NFS-e
+        // via NFePHP tentava baixar o PDF pronto da API oficial do ambiente
+        // nacional (`MotorNfse::baixarDanfse()`) — mas essa API foi
+        // DESCONTINUADA pelo governo em 01/07/2026 (aviso que já estava
+        // documentado no docblock do próprio método, escrito antes dessa
+        // data). Reproduzido ao vivo: `GET /danfse/{chave}` → 404 pra
+        // qualquer nota, mesmo autorizada há horas — não é falha de rede
+        // nem chave errada, é o endpoint que não existe mais. Cai direto
+        // pro render local (`pdf.nota_fiscal_nfse`, mesmo template usado
+        // pra Spedy/Focus), exatamente como o docblock original já
+        // antecipava que seria necessário.
 
         $empresa = \App\Models\Configuracao::first()?->toArray() ?? [];
 

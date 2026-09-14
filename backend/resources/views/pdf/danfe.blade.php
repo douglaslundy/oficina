@@ -67,7 +67,7 @@
     </td>
     <td class="h-title" style="width:24%; border-right:0.75px solid #000;">
       <div class="danfe">DANFE</div>
-      <div class="sub">Documento Auxiliar da<br>Nota Fiscal Eletrônica<br>(NFePHP)</div>
+      <div class="sub">Documento Auxiliar da<br>Nota Fiscal Eletrônica</div>
       <div style="font-size:7px; margin-top:8px;">Nº {{ str_pad((string) ($nota->numero ?? 0), 9, '0', STR_PAD_LEFT) }}</div>
       <div style="font-size:7px;">Série {{ $nota->serie ?? '1' }}</div>
     </td>

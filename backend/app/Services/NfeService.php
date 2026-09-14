@@ -197,7 +197,25 @@ class NfeService
             default => 'NFSE',
         };
 
-        $resultado = $provider->consultar($nota->referencia_externa ?? ('nf-' . $nota->id), $modeloInterno);
+        // Bug real de produção (2026-09-14): NFEPHP fala DIRETO com a SEFAZ/
+        // ADN usando a chave de acesso real (44 dígitos) — não a nossa
+        // referência interna (`nf-<uuid>`), que só faz sentido pra Spedy/
+        // Focus (reconciliação por `integrationId`, ver SpedyProvider).
+        // Mandar a referência interna pro MotorNfe/MotorNfse dava "Consulta
+        // chave: chave "nf-<uuid>" invalida!" — confirmado ao vivo, era a
+        // causa real de uma NF-e mostrando CONTINGÊNCIA com mensagem de
+        // erro de consulta, mesmo já tendo entrado em contingência
+        // corretamente por fora. Sem chave ainda (nota genuinamente sem
+        // resposta síncrona ainda), não há o que consultar — mantém
+        // PROCESSANDO sem tentar, em vez de mandar um valor que a SEFAZ vai
+        // recusar de qualquer forma.
+        if ($nota->provedor === 'NFEPHP') {
+            $resultado = empty($nota->chave_acesso)
+                ? \App\Services\Fiscal\Data\EmissaoResultado::processando($nota->referencia_externa)
+                : $provider->consultar($nota->chave_acesso, $modeloInterno);
+        } else {
+            $resultado = $provider->consultar($nota->referencia_externa ?? ('nf-' . $nota->id), $modeloInterno);
+        }
 
         return [
             'status'             => $resultado->status,
