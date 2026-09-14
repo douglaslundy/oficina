@@ -4,24 +4,29 @@
 > pequeno) antes de codar, seguindo `superpowers:brainstorming`. Ordem
 > escolhida por risco/dependência crescente, não pela ordem em que foi pedida.
 
-## ⚠️ PAUSADO — deploy do fix de `totTrib` (NFePHP/NFS-e) aguardando autorização
+## ✅ CONCLUÍDA 2026-09-14 — primeira emissão real via NFePHP/NFS-e, autorizada de verdade
 
-Usuário pediu explicitamente pra não fazer deploy e aguardar instruções, no
-meio da correção do 3º bug de schema da primeira emissão real via NFePHP
-(ver `PROGRESSO.md` seção 12). Estado exato:
-- Commits `967b9c6` (cTribNac) e `2bf1748` (cTribMun) **já estão
-  deployados** (deploy rodou antes do pedido de pausa).
-- Commit `a7e03c2` (fix do `totTrib`, obrigatório no grupo `trib`) está
-  **só local** — nem `git push` foi feito ainda.
-- A nota de teste (`6e84e509`, stuntmotos, HOMOLOGACAO) **ainda não
-  autorizou de verdade** — o 3º fix nunca foi testado ao vivo (deploy
-  pausado antes de poder confirmar). Pode haver uma 4ª camada de erro
-  ainda não descoberta (mesmo padrão da saga Spedy — normal, não é sinal
-  de problema).
-- **Próximo passo, só quando autorizado**: `git push`, deploy, reemitir a
-  nota `6e84e509` via tinker, e continuar corrigindo camada por camada até
-  autorizar de verdade (ou até esgotar o escopo do que dá pra descobrir
-  sem mais informação).
+Era a pausa registrada aqui (usuário liberou o deploy e pediu pra continuar
+testando). 7 bugs reais de schema/regra de negócio corrigidos em sequência
+(commits `967b9c6`, `2bf1748`, `a7e03c2`, `6a16ef0`, `ab516c8`, `7d7ee5a`,
+`e49c6e0`), todos deployados e testados ao vivo contra o ambiente de
+homologação oficial do governo. Resultado final confirmado:
+```
+status=AUTORIZADA
+chave=NFS31305072250388509000121000000000000126093928413131
+numero=1
+```
+Detalhe completo dos 7 bugs em `PROGRESSO.md` seção 12. O último (nº 7) era
+um bug real na própria biblioteca vendor (`nfse-nacional/nfse-php`,
+`DpsXmlBuilder.php`), contornado sem editar o vendor.
+
+**Sobra conhecida, não urgente:** o código LC116 "14.01" fixo em todo o
+sistema (nunca configurável por serviço) é usado como `cTribNac`
+implicitamente correto só porque este sistema SÓ atende oficina mecânica —
+se um dia outro tipo de serviço for adicionado,
+`CodigoTributacaoNacionalResolver::MAPA` precisa ganhar a entrada
+correspondente (lança exceção clara em vez de emitir algo errado, então é
+seguro, só não é automático).
 
 ## Sobra da Rodada 39 continuação 2 (2026-09-11) — NFC-e via Spedy não testada até autorizar
 

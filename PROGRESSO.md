@@ -436,82 +436,56 @@ onde a linha é "N/A", é porque aquele motor nunca teve o defeito
 correspondente (arquitetura diferente o suficiente pra não ser afetado),
 não porque ficou pra trás.
 
-### 12. Primeira emissão real via NFePHP/NFS-e nacional — 3 bugs reais de schema em sequência (mesmo padrão da saga Spedy)
-Usuário reportou "a nota via NFePHP deu erro" + "não encontrei a opção de
-homologação com a NFePHP". Investigação em 2 frentes:
+### 12. Primeira emissão real via NFePHP/NFS-e nacional — 🎉 AUTORIZADA DE VERDADE após 7 bugs reais em sequência (mesmo padrão da saga Spedy)
 
-**Homologação — não é bug, é confusão de UI leg gítima.** Confirmado:
-`ambiente_fiscal` é um campo ÚNICO em "Dados da Empresa" compartilhado
-pelos 3 provedores (Spedy/Focus/NFePHP) — não existe nem precisa existir
-uma opção separada por provedor. Confirmado nos dados reais: `ambiente=
-HOMOLOGACAO` pras duas oficinas, e `MotorNfse::contexto()` mapeia
-corretamente pra `TipoAmbiente::Homologacao`, que a lib resolve pro
-endpoint oficial de testes do governo
-(`sefin.producaorestrita.nfse.gov.br` — "Produção Restrita" é o nome
-oficial do ambiente de homologação do Sistema Nacional NFS-e). A nota que
-falhou NÃO foi enviada à produção real. Achado extra: `saas_config.
-provedor_fiscal_padrao` estava setado pra `NFEPHP` (mudado em algum
-momento pelo usuário via SaaS Admin — é onde o provedor é escolhido,
-não em "Dados da Empresa", que só tem o ambiente).
+**Resultado final, confirmado ao vivo no ambiente de homologação oficial do
+governo (2026-09-14):**
+```
+status=AUTORIZADA
+chave=NFS31305072250388509000121000000000000126093928413131
+numero=1
+```
+**Primeira NFS-e via NFePHP autorizada de verdade neste projeto** — mesmo
+marco que a Spedy já tinha alcançado pra NF-e na Rodada 39. Motor NFePHP/
+NFS-e nacional (Sistema Nacional NFS-e / ADN) estava implementado desde a
+Etapa C1/C2 (2026-08-11/12) mas NUNCA tinha sido exercitado contra o
+ambiente real do governo até esta rodada.
 
-**Erro real — primeira tentativa de verdade de NFS-e via NFePHP neste
-projeto inteiro** (confirmado em `TAREFAS.md`: nunca tinha sido emitida
-uma NF-e/NFS-e real via NFePHP até este momento). Mesmo padrão da saga
-Spedy de NF-e (Rodada 39): a SEFAZ/ADN valida o XML em camadas, cada fix
-revelando o próximo problema — 3 bugs reais em sequência, cada um
-**confirmado contra o schema oficial (XSD bundlado no vendor) e/ou a
-tabela oficial do governo antes de corrigir, nunca um chute**:
+**Os 7 bugs, na ordem em que a ADN foi rejeitando** (mesmo método da saga
+Spedy: cada fix revelava o próximo problema — validação em camadas, não
+sintoma de arquitetura ruim):
+1. `cTribNac` no formato LC116 antigo → precisa do código nacional de 6
+   dígitos (`140101`, confirmado na tabela oficial do governo). Commit
+   `967b9c6`.
+2. `cTribMun` (4 dígitos) violava `TCCodTribMun` (exige 3) → omitido
+   (código municipal sem tabela nacional pra confirmar). Commit `2bf1748`.
+3. `totTrib` nunca era enviado (obrigatório dentro de `trib`) →
+   `indTotTrib=0`. Commit `a7e03c2`.
+4. `prest.end` (endereço do prestador) proibido quando o próprio prestador
+   é o emitente da DPS (sempre o caso aqui) → removido. Commit `6a16ef0`.
+5. `pAliq` proibido pra Simples Nacional sem retenção (a ADN calcula
+   sozinha pela tabela do SN) → omitido condicionalmente. Commit `ab516c8`.
+6. `indTotTrib` proibido pra ME/EPP → usa `pTotTribSN` (variante dedicada
+   do mesmo `xs:choice`) em vez disso. Commit `7d7ee5a`.
+7. **Bug real na própria lib vendor** (não no nosso código): `DpsXmlBuilder.
+   php` decide se inclui `pTotTribSN` com `if ($valor)` (truthy) em vez de
+   `!== null` — `0.0` é falsy em PHP, a lib omitia o elemento inteiro,
+   reproduzindo o MESMO erro do bug 3 por uma causa nova. Confirmado lendo
+   o código da lib (não suposição). Sem poder editar o vendor
+   (`composer install` sobrescreveria), workaround do nosso lado:
+   `0.001` em vez de `0` — a própria lib formata com 2 casas decimais
+   antes de gerar o XML, então o valor transmitido pro governo continua
+   sendo "0.00", idêntico à intenção original. Commit `e49c6e0`.
 
-1. **`cTribNac` com o código LC116 antigo ("14.01"), formato errado.**
-   Erro real: `E1235: Falha no esquema XML do DF-e... TSCodTribNac...
-   Pattern constraint failed`. Confirmado no XSD: exige 6 dígitos
-   numéricos (2 item + 2 subitem + 2 "desdobro nacional" — subdivisão NOVA
-   do Sistema Nacional NFS-e sem equivalente no código LC116 clássico que
-   Spedy/Focus usam). Consultei a tabela oficial
-   (gov.br/nfse/pt-br/mei-e-demais-empresas/codigos-de-tributacao-nacional-nbs)
-   e confirmei o código real do item 14.01 (único usado por este sistema,
-   oficina mecânica): **140101**. `CodigoTributacaoNacionalResolver` novo
-   (mesmo padrão do `CrtResolver`: código desconhecido lança exceção,
-   nunca um default silencioso). Commit `967b9c6`.
-2. **`cTribMun` ("1401", 4 dígitos) também violava o schema** (`TCCodTribMun`
-   exige exatamente 3 dígitos). Diferente do cTribNac, é um código
-   MUNICIPAL — cada cidade tem a própria tabela, sem fonte nacional única
-   pra confirmar o valor certo de Ilicínea/MG. Campo é opcional no schema
-   (`minOccurs="0"`) — em vez de chutar um código nunca confirmado, passou
-   a ser omitido quando não bate no formato exigido. Commit `2bf1748`.
-3. **Grupo `totTrib` nunca era enviado** (só `tribMun` dentro de `trib`) —
-   `totTrib` é OBRIGATÓRIO (só `tribFed` é opcional). Erro real: "elemento
-   'trib' com conteúdo incompleto". `indTotTrib=0` é o único valor válido
-   pra essa opção do `xs:choice` — a própria documentação do XSD diz
-   "possui valor fixo igual a zero" (Decreto 8.264/2014, "nenhuma
-   estimativa de tributos informada"), evitando estimar `vTotTrib`/
-   `pTotTrib` sem dado real disponível. Commit `a7e03c2`.
+**Método usado em cada uma das 7 rodadas (idêntico ao da saga Spedy):**
+reproduzir a emissão real via tinker contra o ambiente de homologação
+oficial do governo depois de CADA fix, ler o erro real (nunca confiar em
+suposição), confirmar a causa no XSD bundlado no vendor ou no código-fonte
+da lib antes de codar, deploy, reteste ao vivo, próximo erro.
 
-**Método usado (idêntico ao da saga Spedy):** reproduzir a emissão real
-via tinker contra o ambiente de homologação oficial do governo depois de
-CADA fix, ler o erro real (nunca confiar em suposição), confirmar a causa
-no XSD bundlado no vendor (`vendor/nfse-nacional/nfse-php/references/
-schemas/*.xsd`) ou em fonte oficial do governo antes de codar.
-
-**Verificação:** `php -l` limpo, suíte Unit 305 testes (mesmas 10 falhas
-pré-existentes de sempre) depois de cada um dos 3 commits.
-
-**⚠️ NÃO DEPLOYADO — usuário pediu explicitamente pra aguardar instruções
-antes do deploy** (mensagem recebida no meio da correção do 3º bug).
-Commits `967b9c6` e `2bf1748` JÁ estão deployados (deploy rodou antes do
-pedido de pausa); commit `a7e03c2` (fix do `totTrib`) está só local,
-**nem commitado no GitHub ainda** — aguardando autorização pra
-`git push` + deploy. A nota de teste (`6e84e509`) ainda não chegou a
-autorizar de verdade — o 3º bug (totTrib) só foi corrigido no código
-local, nunca testado ao vivo (deploy pausado antes de poder confirmar).
-
-**Sobra conhecida, não urgente:** o mesmo código LC116 "14.01" fixo em
-todo o sistema (nunca configurável por serviço) também é usado como
-`cTribNac` implicitamente correto só porque este sistema SÓ atende
-oficina mecânica — se um dia outro tipo de serviço for adicionado,
-`CodigoTributacaoNacionalResolver::MAPA` precisa ganhar a entrada
-correspondente (vai lançar exceção clara em vez de emitir algo errado,
-então é seguro, só não é automático).
+**Verificação final:** suíte Unit 308 testes (mesmas 10 falhas
+pré-existentes de sempre) depois de cada um dos 7 commits. Todos
+deployados e confirmados na VPS.
 
 ### 13. Refatoração completa do PDF da nota fiscal (visual — pedido explícito do usuário)
 Usuário: "refatore todo PDF da nota fiscal... cores feias, layout ruim",
@@ -575,8 +549,8 @@ dados de teste em memória (sem precisar de Postgres) — inspecionei o PDF
 resultante visualmente pra cada um (NF-e, NFS-e, DANFE/NFEPHP): grid
 correto, nenhuma sobreposição, dados reais no lugar certo.
 
-**⚠️ NÃO DEPLOYADO — usuário ainda não liberou o deploy** (pausa pedida
-antes desta tarefa, nunca revogada). Commit só local.
+**Deployado** — usuário autorizou o deploy pendente (junto com a
+continuação da investigação do NFePHP, seção 12) logo depois desta tarefa.
 
 ## Rodada 39 continuação 2 **primeira NF-e de peça autorizada
 de verdade pela SEFAZ via Spedy** neste projeto, depois de 5 bugs reais
