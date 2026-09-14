@@ -608,6 +608,88 @@ local sem regressão nova a cada commit, e os 2 achados de maior risco
 (isolamento entre tenants e certificado) confirmados AO VIVO em produção
 antes e depois do deploy — não só por teste automatizado.
 
+### 15. Rodada de 6 pedidos do usuário — 5 bugs reais corrigidos, 1 bloqueio confirmado (não solucionável só por código)
+Usuário pediu, numa única mensagem: remover "(NFePHP)" do PDF, corrigir
+erro ao baixar NFS-e, investigar por que NF-e mostrava Contingência,
+trocar botão "Gerar" por "Baixar" quando a OS já tem notas, reverificar a
+conciliação de entrada de NF, e criar botão de excluir nota (só
+homologação). Todos tratados nesta rodada, cada bug com causa raiz
+confirmada antes de corrigir (nunca um patch às cegas).
+
+**1. "(NFePHP)" removido** do título do DANFE — detalhe de implementação
+que vazava pro documento visto pelo cliente. Trivial, `danfe.blade.php`.
+
+**2. "Erro ao baixar a NFS-e" — causa raiz real, já estava documentada no
+próprio código:** `MotorNfse::baixarDanfse()` dependia da API oficial de
+PDF pronto do ambiente nacional do governo — um docblock **já escrito
+numa sessão anterior** avisava que essa API seria **descontinuada em
+01/07/2026**. Hoje é 14/09/2026 — confirmado ao vivo: `GET /danfse/{chave}`
+→ 404 pra qualquer nota, mesmo autorizada há 3h. Removido o método morto;
+NFS-e via NFePHP agora usa o mesmo template local (`pdf.nota_fiscal_nfse`)
+já usado pra Spedy/Focus — exatamente o que o docblock original já
+recomendava fazer quando isso acontecesse.
+
+**3. NF-e mostrando "Contingência" com mensagem de erro de consulta —
+2 bugs reais empilhados, cada um confirmado ao vivo:**
+- **Bug A:** `NfeService::consultarStatus()` sempre mandava nossa
+  referência interna (`nf-<uuid>`) pro provider, não importa qual fosse —
+  mas NFePHP fala DIRETO com a SEFAZ usando a chave de acesso real (44
+  dígitos). Dava "Consulta chave: chave nf-<uuid> invalida!" toda vez que
+  o status era consultado com a NF-e ainda em PROCESSANDO (ex.: durante o
+  fallback EPEC, que pode demorar segundos). Corrigido: NFEPHP usa
+  `chave_acesso` quando disponível; sem chave ainda, mantém PROCESSANDO
+  sem tentar. Depois do fix, a consulta real revelou a nota genuinamente
+  ainda não confirmada na SEFAZ (cStat=217, "não consta") — esperando
+  retransmissão do EPEC.
+- **Bug B, achado tentando resolver o A:** ao tentar retransmitir de
+  verdade, a SEFAZ rejeitou com "cStat=558: Data de entrada em
+  contingência posterior a data de recebimento". Lendo o XML real salvo:
+  `dhCont` (hora de entrada em contingência) estava **3 horas à FRENTE**
+  do horário real. Causa raiz confirmada no código do VENDOR
+  (`nfephp-org/sped-nfe`, `ContingencyNFe.php:62`): `new
+  \DateTime(gmdate(...))` — gera dígitos em GMT (corretos) mas o
+  construtor de `DateTime` os reinterpreta usando o timezone PADRÃO do
+  processo (`America/Sao_Paulo` neste projeto) como se já fossem hora
+  local — bug real na biblioteca de terceiro, não editável. Workaround:
+  timezone do processo em UTC só durante essa chamada específica,
+  restaurado no finally. **A nota antiga específica que originou a
+  investigação não se autocorrige** (o XML com o dhCont errado já está
+  congelado/salvo, `retransmitir()` reenvia o mesmo XML, nunca remonta) —
+  o fix vale pra toda NOVA entrada em contingência a partir de agora.
+
+**4. Botão "Gerar notas fiscais" → "Baixar notas fiscais" quando já
+existem:** nova relação `OrdemServico::notasFiscais()`, exposta em
+`OrdemServicoResource`; frontend troca o botão condicionalmente e baixa o
+PDF de cada nota vinculada (reaproveitando o mesmo endpoint do histórico
+fiscal).
+
+**5. Conciliação de entrada de NF — reverificada, CONFIRMADO que continua
+bloqueada, e agora com certeza de que não é solucionável só por código:**
+pesquisei a documentação oficial da Spedy (`GET /v1/companies` — lista
+empresas, mas NUNCA devolve a API key completa de uma empresa já
+existente, só na criação original). Como a stuntmotos já existe do lado
+da Spedy (registrada por fora, painel deles), recuperar a credencial
+exige ação manual do usuário (pegar a key no painel da Spedy) ou excluir+
+recriar a empresa lá (arriscado, não fiz sem autorização). Sem mudança de
+código — achado já registrado desde a Rodada 40, agora com a causa
+definitivamente confirmada via doc oficial, não suposição.
+
+**6. Botão de excluir nota fiscal, só homologação:** `NotaFiscalController::
+destroy()` (novo endpoint `DELETE notas-fiscais/{id}`) valida
+`ambiente === 'HOMOLOGACAO'`, 422 caso contrário — nota de PRODUÇÃO é
+documento fiscal real, precisa manter o registro mesmo cancelada.
+`NotaFiscalResource` passou a expor `ambiente` (não expunha antes).
+Frontend: botão só aparece pra notas de homologação, com modal de
+confirmação.
+
+**Verificação de cada item:** TDD com testes novos, suíte Unit sem
+regressão a cada commit (chegou a 314 testes, mesmas 11 falhas
+pré-existentes). Os itens 2, 3 e 6 confirmados AO VIVO em produção
+(reprodução do bug antes do fix + confirmação depois), não só por teste
+automatizado — inclusive o achado do bug de timezone no vendor, provado
+em isolamento por um teste dedicado que reproduz o padrão exato do bug
+antes de aplicar o workaround.
+
 ## Rodada 39 continuação 2 **primeira NF-e de peça autorizada
 de verdade pela SEFAZ via Spedy** neste projeto, depois de 5 bugs reais
 achados e corrigidos em sequência (campos tributáveis, numeração,

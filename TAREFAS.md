@@ -82,6 +82,15 @@ de PIS/COFINS pra esse endpoint não foi confirmada. Precisa de uma
 rodada de teste dedicada (emitir NFC-e de teste, ler o erro real, repetir
 o mesmo método usado pra NF-e: WebFetch na doc + reemissão via tinker).
 
+## ✅ CONCLUÍDA 2026-09-14 — rodada de 6 pedidos (label NFePHP, download NFS-e, contingência, botão OS, conciliação, excluir nota)
+
+Ver `PROGRESSO.md` seção 15 pro relato completo. Resumo: 5 bugs reais
+corrigidos + 1 bloqueio reconfirmado (não solucionável só por código, ver
+acima). Commits `a272b77`, `2152d36`, `9667483`, `89dcbe7` — todos
+deployados e verificados ao vivo em produção (exceto o teste isolado do
+bug de timezone do vendor, provado por teste dedicado em vez de forçar
+uma falha real de SOAP sob demanda).
+
 ## ✅ CONCLUÍDA 2026-09-14 — reconciliação de status Spedy (era a PRÓXIMA TAREFA OBRIGATÓRIA)
 
 Ver `PROGRESSO.md` Rodada 40 pro relato completo (implementação + investigação do
@@ -124,6 +133,16 @@ existente e recuperar/gerar a API key dela, em vez de tentar criar uma
 nova. Se não existir tal endpoint, a alternativa é o usuário pegar a API
 key direto no painel web da Spedy (fora do nosso sistema) e colar no
 cadastro — mais simples, mas manual.
+
+**✅ Confirmado definitivamente 2026-09-14, via doc oficial (`docs.spedy.com.br`,
+`listar-empresas.md`):** não existe esse endpoint. `GET /v1/companies`
+lista todas as empresas mas não filtra por CNPJ nem devolve a key
+completa; `GET /v1/companies/{id}` devolve a key OBFUSCADA (só a criação
+original devolve a key real, uma única vez). **Não é solucionável só por
+código.** As duas únicas saídas continuam sendo: (a) usuário pegar a API
+key direto no painel da Spedy e colar no cadastro, ou (b) excluir+recriar
+a empresa lá (ação arriscada, precisa de autorização explícita do usuário
+antes de fazer — não fiz).
 
 <details>
 <summary>Texto original da tarefa (referência)</summary>
