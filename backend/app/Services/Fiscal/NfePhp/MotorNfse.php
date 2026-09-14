@@ -142,7 +142,14 @@ class MotorNfse
                 'serv'     => [
                     'locPrest' => ['cLocPrestacao' => (string) $cfg->codigo_ibge],
                     'cServ'    => [
-                        'cTribNac'  => $nota->codigoServicoFederal,
+                        // Bug real de produção (2026-09-14): mandar o "14.01"
+                        // (formato LC116 clássico, usado por Spedy/Focus) direto
+                        // como cTribNac dava "E1235: Falha no esquema XML do
+                        // DF-e" — TSCodTribNac exige 6 dígitos numéricos (2
+                        // item + 2 subitem + 2 "desdobro nacional", subdivisão
+                        // nova do Sistema Nacional NFS-e sem equivalente no
+                        // código LC116). Ver CodigoTributacaoNacionalResolver.
+                        'cTribNac'  => \App\Services\Fiscal\CodigoTributacaoNacionalResolver::resolver($nota->codigoServicoFederal),
                         'cTribMun'  => $nota->codigoServicoMunicipal,
                         'xDescServ' => $nota->descricao,
                     ],

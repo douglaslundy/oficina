@@ -88,7 +88,13 @@ class MotorNfseMontarDpsTest extends TestCase
         $this->assertSame('Cliente Teste', $inf->tomador->nome);
 
         // Serviço
-        $this->assertSame('14.01', $inf->servico->codigoServico->codigoTributacaoNacional);
+        // Bug real de produção (2026-09-14): mandar o "14.01" (formato LC116
+        // clássico) direto como cTribNac dava erro de schema na SEFAZ/ADN
+        // ("E1235: Falha no esquema XML do DF-e" — TSCodTribNac exige 6
+        // dígitos numéricos). Precisa do código de 6 dígitos real
+        // (CodigoTributacaoNacionalResolver, confirmado na tabela oficial
+        // gov.br/nfse).
+        $this->assertSame('140101', $inf->servico->codigoServico->codigoTributacaoNacional);
         $this->assertSame('1401', $inf->servico->codigoServico->codigoTributacaoMunicipal);
         $this->assertSame('Troca de óleo', $inf->servico->codigoServico->descricaoServico);
         $this->assertSame((string) $cfg->codigo_ibge, $inf->servico->localPrestacao->codigoLocalPrestacao);
