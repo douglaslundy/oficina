@@ -552,6 +552,62 @@ correto, nenhuma sobreposição, dados reais no lugar certo.
 **Deployado** — usuário autorizou o deploy pendente (junto com a
 continuação da investigação do NFePHP, seção 12) logo depois desta tarefa.
 
+### 14. Auditoria completa do sistema (pedido explícito do usuário) — 5 achados reais corrigidos, 1 pendente de decisão
+Usuário pediu análise minuciosa de todo o sistema + segurança do módulo
+fiscal + erros de conversão/bugs. Executado via 4 forks paralelos
+(auditoria fiscal, conversão/cálculo, backend geral, frontend), cada um só
+leitura, sem duplicar o que já tinha sido corrigido nesta sessão.
+
+**🔴 CRÍTICO, corrigido e testado ao vivo em produção (exploração real
+confirmada antes E depois do fix, com contas descartáveis):** isolamento
+entre tenants falhava aberto — `InitializeTenancyByHeader` resolvia a
+oficina só pelo header `X-Tenant` (do cliente), sem nunca conferir se o
+usuário autenticado pertencia a ela. Qualquer usuário de qualquer oficina
+podia trocar o header e ler/editar/apagar dados de QUALQUER outra oficina.
+Confirmado ao vivo: `GET /api/clientes/{id}` de outra oficina → HTTP 200
+com o dado real, ANTES do fix; HTTP 403, DEPOIS. Novo middleware
+`EnsureTenantMatchesUsuario` (alias `tenant.verify`) em todos os 24 grupos
+de rota protegidos. Commit `57237b8`.
+
+**🟡 MÉDIO, corrigido:** certificado digital A1 (chave privada de
+assinatura fiscal) cifrado com AES-256-CBC "na mão" (sem HMAC/autenticação)
+em vez de `Crypt::encryptString()` — que a senha do certificado, 2 linhas
+abaixo no mesmo método, já usava corretamente. Trocado; certificado real já
+armazenado (stuntmotos) continua funcionando via fallback de leitura
+(confirmado ao vivo pós-deploy). Commit `2457804`.
+
+**🟠 ALTO (bug funcional, não segurança), corrigido:** `EstoqueService::
+darSaidaItem()`/`devolverItem()` truncavam quantidade fracionária pra
+zero (`(int) 0.5 = 0`) — venda de produto vendido em fração de unidade
+(ex.: 0,5L de óleo) nunca baixava estoque, embora cobrasse o cliente
+normalmente. Mitigado com `ceil()` (nunca mais baixa zero); fix completo
+exigiria migrar `produtos.qty_atual`/`movimentacoes_estoque.quantidade`
+pra `decimal` — recomendado, não feito às cegas. Commit `2457804`.
+
+**🟡 MÉDIO, corrigido:** soma de float sem `round()` em
+`OrdemServicoController::store()` e `CriarNotaFiscalService::criar()`
+podia gerar ruído de subcentavo, alimentando `min($totalPago, $total)` e a
+comparação `valor_pago < valor_total` de `ClienteStatusService` com
+valores "sujos" — risco de cliente marcado DEVEDOR com pagamento completo.
+Commit `6449a5d`.
+
+**🔴 ALTO, achado mas NÃO corrigido — pendente de decisão do usuário:**
+token de autenticação salvo em `localStorage` E via `document.cookie`
+(sem `HttpOnly` — impossível de setar assim no cliente) em
+`frontend/hooks/useAuth.ts` — contradiz o próprio `CLAUDE.md` do projeto
+("Cookies httpOnly para tokens, nunca localStorage"). Um XSS futuro
+roubaria a sessão inteira (inclusive a de SaaS Admin, mais privilegiada
+ainda, mesmo padrão em `saas-api.ts`). Corrigir de verdade exige mudar o
+fluxo de login pra Sanctum SPA real (cookie httpOnly emitido pelo
+backend) — mexe em login/logout/interceptors dos DOIS lados (frontend e
+backend) simultaneamente, escopo maior que um fix pontual — não
+implementado sem confirmação do usuário.
+
+**Verificação de cada fix:** TDD com testes novos/atualizados, suíte Unit
+local sem regressão nova a cada commit, e os 2 achados de maior risco
+(isolamento entre tenants e certificado) confirmados AO VIVO em produção
+antes e depois do deploy — não só por teste automatizado.
+
 ## Rodada 39 continuação 2 **primeira NF-e de peça autorizada
 de verdade pela SEFAZ via Spedy** neste projeto, depois de 5 bugs reais
 achados e corrigidos em sequência (campos tributáveis, numeração,
