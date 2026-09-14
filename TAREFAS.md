@@ -4,6 +4,45 @@
 > pequeno) antes de codar, seguindo `superpowers:brainstorming`. Ordem
 > escolhida por risco/dependência crescente, não pela ordem em que foi pedida.
 
+## 🔴 FALHA DE SEGURANÇA GRAVE, registrada 2026-09-14 — corrigir quando autorizado (usuário pediu pra NÃO corrigir ainda)
+
+**Token de autenticação armazenado de forma insegura no navegador.**
+Achado na auditoria completa do sistema (ver `PROGRESSO.md` seção 14).
+Usuário confirmou que é grave e pediu pra registrar, mas **não** autorizou
+a correção ainda — aguardar pedido explícito antes de mexer.
+
+- `frontend/hooks/useAuth.ts`: `login()` guarda o token em
+  `localStorage.setItem('auth_token', ...)` e também via
+  `document.cookie = 'auth_token=...; SameSite=Lax'` (um cookie setado
+  assim NUNCA pode ter `HttpOnly` — só o servidor consegue definir essa
+  flag via header `Set-Cookie`). O mesmo padrão existe pro token de SaaS
+  Admin (`lib/saas-api.ts`, `app/saas-admin/login/page.tsx`) — ainda mais
+  privilegiado (acesso a todas as oficinas da plataforma).
+- Contradiz a regra já escrita no `CLAUDE.md` do próprio projeto:
+  "Cookies httpOnly para tokens (nunca localStorage)".
+- **Risco:** qualquer XSS futuro (uma dependência comprometida, um campo
+  sem escaping em algum ponto ainda não descoberto) rouba a sessão inteira
+  — `localStorage`/`document.cookie` são igualmente legíveis por
+  JavaScript malicioso.
+- **Correção correta (não pontual):** migrar login pro fluxo real de
+  Sanctum SPA — cookie de sessão `HttpOnly`/`Secure`/`SameSite` emitido
+  pelo BACKEND via `Set-Cookie` na resposta de login, nunca um token no
+  corpo da resposta guardado pelo cliente. Exige mudar:
+  1. Backend: endpoint de login parar de devolver o token no JSON, emitir
+     o cookie httpOnly em vez disso (Sanctum já suporta esse modo —
+     `EnsureFrontendRequestsAreStateful` + cookie de sessão em vez de
+     `personal_access_tokens` Bearer).
+  2. Frontend: remover os `localStorage.setItem/getItem` e o
+     `document.cookie` manual de `useAuth.ts` e `saas-api.ts`; `lib/api.ts`
+     já manda `withCredentials: true`, então a mudança é sobretudo parar
+     de gerenciar o token manualmente e depender do cookie automático.
+  3. Ambos os fluxos de auth (oficina normal via `useAuth` e SaaS Admin via
+     `saas-api`) precisam do mesmo tratamento.
+- **Por que não foi feito agora:** é uma mudança de arquitetura de
+  autenticação (mexe em login/logout/interceptors dos dois lados ao mesmo
+  tempo), não um ajuste pontual — usuário pediu pra só registrar por
+  enquanto.
+
 ## ✅ CONCLUÍDA 2026-09-14 — primeira emissão real via NFePHP/NFS-e, autorizada de verdade
 
 Era a pausa registrada aqui (usuário liberou o deploy e pediu pra continuar
