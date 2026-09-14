@@ -513,6 +513,71 @@ oficina mecânica — se um dia outro tipo de serviço for adicionado,
 correspondente (vai lançar exceção clara em vez de emitir algo errado,
 então é seguro, só não é automático).
 
+### 13. Refatoração completa do PDF da nota fiscal (visual — pedido explícito do usuário)
+Usuário: "refatore todo PDF da nota fiscal... cores feias, layout ruim",
+usando `doc_documentos_fiscais/modelo_nota/{NotaProduto,NotaServico}.pdf`
+(DANFE real da Spedy + NFS-e real da Prefeitura de Ilicínea) como
+referência visual.
+
+**Diagnóstico:** os 2 templates A4 (`pdf/nota_fiscal.blade.php`, usado pra
+NF-e E NFS-e via Spedy/Focus; `pdf/danfe.blade.php`, NFEPHP) tinham a
+identidade visual da PLATAFORMA (logo "MecânicaPro", borda âmbar
+`#f5a623`) em vez da do EMITENTE — errado pra um documento fiscal real,
+que deve mostrar quem emitiu, não o fornecedor do software. `nota_fiscal.
+blade.php` também não tinha NENHUMA tabela de itens pra NF-e (só um texto
+livre de "observações"), então uma venda de produto nunca mostrava
+NCM/CFOP/CST/quantidade — dado fiscal relevante ausente, não só estética.
+
+**Refeito do zero, 3 templates novos, estilo DANFE/NFS-e oficial (grid de
+caixas com borda preta fina, rótulo minúsculo em caixa alta cinza, valor
+em negrito — mesma linguagem visual das referências, sem replicar
+pixel-a-pixel o layout exato do MOC nem gerar código de barras real):**
+- `pdf/nota_fiscal_nfe.blade.php` (NOVO) — NF-e via Spedy/Focus: canhoto de
+  recebimento, cabeçalho com emitente/DANFE/chave de acesso, natureza da
+  operação + protocolo, emitente, destinatário, cálculo do imposto (só
+  campos que o sistema realmente calcula — nunca inventei
+  base/valor ICMS que não existem no schema), tabela de itens completa
+  (código, descrição, NCM, CST/CSOSN, CFOP, unidade, qtde, valores),
+  dados adicionais.
+- `pdf/nota_fiscal_nfse.blade.php` (NOVO) — NFS-e via Spedy/Focus:
+  cabeçalho, prestador de serviços, tomador de serviços, discriminação dos
+  serviços, valores (ISS/alíquota/total), código de verificação. Título
+  honesto ("Nota Fiscal de Serviços Eletrônica — NFS-e" com o EMITENTE em
+  destaque) em vez de fingir ser um sistema de prefeitura — a referência
+  mostra "PREFEITURA MUNICIPAL DE ILICÍNEA" porque É o sistema real deles;
+  o nosso é uma cópia gerada pela plataforma, não o documento oficial.
+- `pdf/danfe.blade.php` (REESCRITO) — NF-e via NFePHP, mesmo estilo visual
+  do `nota_fiscal_nfe`, adaptado ao formato de itens que `DanfeRenderer`
+  extrai do XML (sem SKU/CST disponíveis nessa fonte — colunas reduzidas
+  de forma honesta, não inventadas).
+- `pdf/nota_fiscal.blade.php` (REMOVIDO) — órfão depois da divisão em 2
+  templates dedicados; confirmado sem nenhuma referência restante em
+  `app/`/`tests/` antes de apagar.
+- `DanfeRenderer::dadosParaTemplate()` ganhou `empresa` (antes só mandava
+  `nota`/`itens` — o template não tinha como mostrar quem emitiu). Guard
+  `try/catch` em `Configuracao::first()` pro mesmo cenário sem conexão de
+  banco já documentado em `MotorNfe::consultar()` (`DanfeRendererTest` usa
+  `PHPUnit\Framework\TestCase` puro).
+- `NotaFiscalController::montarPdfArquivo()`: roteamento explícito por
+  `$nota->modelo` (`NF-e` → `nota_fiscal_nfe`, resto → `nota_fiscal_nfse`,
+  `NFC-e` inalterado — cupom térmico, formato correto, não fazia parte da
+  reclamação).
+
+**`pdf/nota_fiscal_nfce.blade.php` (cupom 80mm) NÃO foi tocado** — já é
+preto e branco, sem a identidade âmbar da plataforma, formato correto de
+cupom térmico (a única referência fornecida foi pra NF-e/NFS-e A4, não
+pra NFC-e).
+
+**Verificação:** `php -l` limpo nos arquivos PHP alterados. Suíte Unit:
+305 testes, mesmas 10 falhas pré-existentes de sempre. **PDF real gerado
+via DomPDF (não só o HTML compilado) pra cada um dos 3 templates**, com
+dados de teste em memória (sem precisar de Postgres) — inspecionei o PDF
+resultante visualmente pra cada um (NF-e, NFS-e, DANFE/NFEPHP): grid
+correto, nenhuma sobreposição, dados reais no lugar certo.
+
+**⚠️ NÃO DEPLOYADO — usuário ainda não liberou o deploy** (pausa pedida
+antes desta tarefa, nunca revogada). Commit só local.
+
 ## Rodada 39 continuação 2 **primeira NF-e de peça autorizada
 de verdade pela SEFAZ via Spedy** neste projeto, depois de 5 bugs reais
 achados e corrigidos em sequência (campos tributáveis, numeração,

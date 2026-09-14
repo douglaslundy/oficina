@@ -217,9 +217,16 @@ class NotaFiscalController extends Controller
     }
 
     /**
-     * Escolhe o template certo (cupom 80mm pra NFC-e, A4 pra NF-e/NFS-e) e monta o
-     * PDF — compartilhado entre pdf() e downloadZip() (achado da revisão final de
-     * branch: downloadZip() usava sempre o template A4, mesmo pra NFC-e).
+     * Escolhe o template certo — cupom 80mm pra NFC-e, DANFE-style A4 pra NF-e
+     * (produto), layout de NFS-e municipal pra NFS-e (serviço) — e monta o
+     * PDF. Compartilhado entre pdf() e downloadZip() (achado da revisão final
+     * de branch: downloadZip() usava sempre o template A4, mesmo pra NFC-e).
+     *
+     * Refatoração 2026-09-14: os dois templates A4 (NF-e/NFS-e) eram um único
+     * `pdf.nota_fiscal` genérico, sem tabela de itens pra NF-e e com a
+     * identidade visual da plataforma (MecânicaPro, âmbar) em vez da do
+     * emitente — layout de referência (`doc_documentos_fiscais/modelo_nota`)
+     * usado pra alinhar com o padrão real de DANFE/NFS-e brasileiro.
      *
      * @return array{pdf: \Barryvdh\DomPDF\PDF, filename: string}
      */
@@ -233,10 +240,17 @@ class NotaFiscalController extends Controller
             return ['pdf' => $pdf, 'filename' => 'NFCe-' . ($nota->numero ?? $nota->id) . '.pdf'];
         }
 
-        $pdf = Pdf::loadView('pdf.nota_fiscal', compact('nota', 'empresa'))
+        if ($nota->modelo === 'NF-e') {
+            $pdf = Pdf::loadView('pdf.nota_fiscal_nfe', compact('nota', 'empresa'))
+                ->setPaper('a4', 'portrait');
+
+            return ['pdf' => $pdf, 'filename' => 'NFe-' . ($nota->numero ?? $nota->id) . '.pdf'];
+        }
+
+        $pdf = Pdf::loadView('pdf.nota_fiscal_nfse', compact('nota', 'empresa'))
             ->setPaper('a4', 'portrait');
 
-        return ['pdf' => $pdf, 'filename' => 'NF-' . ($nota->numero ?? $nota->id) . '.pdf'];
+        return ['pdf' => $pdf, 'filename' => 'NFSe-' . ($nota->numero ?? $nota->id) . '.pdf'];
     }
 
     // ~260pt de cabeçalho/rodapé/totais fixos + ~14pt por item + ~110pt pro QR code

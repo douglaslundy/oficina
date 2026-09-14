@@ -3,6 +3,7 @@ declare(strict_types=1);
 
 namespace App\Services\Fiscal\Pdf;
 
+use App\Models\Configuracao;
 use App\Models\NotaFiscal;
 
 /**
@@ -65,8 +66,26 @@ class DanfeRenderer
         }
 
         return [
-            'nota'  => $nota,
-            'itens' => $itens,
+            'nota'    => $nota,
+            'itens'   => $itens,
+            // Refatoração 2026-09-14: o template precisa dos dados do
+            // emitente (nome/CNPJ/endereço) pra exibir a identidade real de
+            // quem emitiu, em vez da marca da plataforma — mesmo padrão já
+            // usado por pdf.nota_fiscal_nfe/nfse. Sem conexão de banco
+            // disponível (ex.: DanfeRendererTest, PHPUnit\Framework\TestCase
+            // puro), Model::resolveConnection() lança \Error, não \Exception
+            // — mesmo cuidado já aplicado em MotorNfe::consultar().
+            'empresa' => $this->empresaOuVazia(),
         ];
+    }
+
+    /** @return array<string, mixed> */
+    private function empresaOuVazia(): array
+    {
+        try {
+            return Configuracao::first()?->toArray() ?? [];
+        } catch (\Throwable $e) {
+            return [];
+        }
     }
 }

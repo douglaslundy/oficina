@@ -19,6 +19,10 @@ class DanfeRendererTest extends TestCase
 
         $this->assertSame([], $dados['itens']);
         $this->assertSame($nota, $dados['nota']);
+        // Sem conexão de banco disponível neste teste (PHPUnit\Framework\TestCase
+        // puro), Configuracao::first() não pode ser chamado de verdade —
+        // degrada pra array vazio em vez de lançar \Error fatal.
+        $this->assertSame([], $dados['empresa']);
     }
 
     public function test_dados_para_template_com_xml_malformado_cai_no_fallback_sem_lancar(): void
