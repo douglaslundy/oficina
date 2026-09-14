@@ -662,6 +662,22 @@ não só depois.
 **Arquivos:** `backend/app/Services/Fiscal/Providers/NfePhpProvider.php`,
 `backend/tests/Unit/Fiscal/NfePhpProviderTest.php`.
 
+**Verificação pós-deploy (produção real, não só teste isolado):** rodei
+`ConciliarFiscalNotaEntradaJob` de verdade (`dispatchSync`) pras 13 notas
+de entrada da stuntmotos que estavam presas — **11 conciliaram com
+sucesso** (`fiscal_erro_consulta` limpou, `fiscal_conferida_em` preenchido,
+campos fiscais dos produtos atualizados de verdade). As outras 2 (chaves
+de nov/dez antigas) bateram um erro DIFERENTE e genuíno da SEFAZ:
+`cStat=632 "Solicitação fora de prazo, a NF-e não está mais disponível
+para download"` — a Distribuição DFe tem uma janela de retenção real (a
+SEFAZ some com o documento depois de um tempo), não é bug nosso. Achado
+menor, fora do escopo desta correção: a mensagem hoje mostrada pro usuário
+pra esse caso ("Nota não encontrada no provedor ainda.") sugere "espera e
+tenta de novo", quando na verdade é permanente — `interpretarRespostaDistDFe()`
+ignora cStat/xMotivo de propósito (decisão документada no próprio método:
+o XSD não garante uma enumeração fechada de códigos). Não mexi nisso agora
+por estar fora do que foi pedido; registrado aqui pra não se perder.
+
 ### 16. Botão "Ver motivo" (rejeição) + botão "Tentar autorizar" (contingência) + PDF liberado pra contingência
 
 Duas idas e voltas com o usuário sobre a mesma tela (Histórico Fiscal):
