@@ -678,6 +678,34 @@ ignora cStat/xMotivo de propósito (decisão документada no próprio mé
 o XSD não garante uma enumeração fechada de códigos). Não mexi nisso agora
 por estar fora do que foi pedido; registrado aqui pra não se perder.
 
+### 17. Cabeçalho do PDF de NFS-e mostrava a oficina, deveria mostrar a prefeitura
+
+Usuário comparou o PDF gerado com os modelos oficiais de referência que
+enviou (`doc_documentos_fiscais/modelo_nota/NotaServico.pdf` e
+`NotaProduto.pdf`) e notou: no modelo real de NFS-e o topo mostra
+"PREFEITURA MUNICIPAL DE {CIDADE}-{UF}" + "SECRETARIA MUNICIPAL DE
+FAZENDA" (é documento MUNICIPAL, não do prestador) — o nosso mostrava o
+nome da oficina no topo. Confirmado só a NFS-e tinha esse problema: o
+DANFE de NF-e (produto) já mostra corretamente o nome do emitente no
+topo (isso é o padrão real de DANFE, documento estadual, sem prefeitura
+envolvida) — não precisou mexer.
+
+Corrigido `pdf/nota_fiscal_nfse.blade.php`: cabeçalho agora monta
+"PREFEITURA MUNICIPAL DE {cidade}-{uf}" a partir de `Configuracao`
+(campos já existentes). O nome da oficina continua aparecendo,
+corretamente, na seção "Prestador de Serviços" abaixo — só não deve
+repetir no topo.
+
+**Bug real pego na verificação ao vivo, antes de ficar pra trás:**
+`strtoupper()` nativo do PHP não é multibyte-safe — saiu "ILICíNEA-MG"
+(í minúsculo) na primeira tentativa. Troquei por
+`mb_strtoupper(..., 'UTF-8')`. Só peguei porque testei renderizando o
+PDF de verdade em produção (`Configuracao::first()` da stuntmotos,
+cidade real "Ilicínea") em vez de confiar que ia funcionar — a mesma
+disciplina de sempre nesta sessão. Commits `fa8cb86` (fix principal) e
+`0ae9979` (fix do multibyte), ambos deployados e confirmados via PDF
+renderizado de verdade.
+
 ### 16. Botão "Ver motivo" (rejeição) + botão "Tentar autorizar" (contingência) + PDF liberado pra contingência
 
 Duas idas e voltas com o usuário sobre a mesma tela (Histórico Fiscal):
