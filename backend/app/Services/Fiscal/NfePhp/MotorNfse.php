@@ -136,7 +136,16 @@ class MotorNfse
                     // (empresa do Simples reportada como "Não Optante" e vice-versa) — por
                     // isso a tradução explícita em regimeTributarioPrestador().
                     'regTrib' => $this->regimeTributarioPrestador($cfg->regime_tributario ?? ''),
-                    'end'     => $this->enderecoPrestador($cfg),
+                    // Bug real de produção (2026-09-14): a ADN rejeitou com
+                    // "E0128: O endereço nacional do prestador do serviço não
+                    // deve ser informado na DPS quando o próprio prestador for
+                    // o emitente da DPS." — confirmado ao vivo contra o
+                    // ambiente de homologação real do governo. `tpEmit` acima
+                    // é SEMPRE 1 (prestador é sempre o emitente neste sistema,
+                    // nunca um intermediário/tomador), então o grupo `end`
+                    // nunca pode ser enviado aqui — o endereço já está no
+                    // cadastro nacional do CNPJ. Removido `enderecoPrestador()`
+                    // (ficou órfão).
                 ], static fn ($v) => $v !== null),
                 'toma'     => [$chaveDocTomador => $docTomador, 'xNome' => $nota->tomador['nome'] ?? ''],
                 'serv'     => [
@@ -216,43 +225,6 @@ class MotorNfse
         return [
             'opSimpNac'  => 1, // Não Optante
             'regEspTrib' => 0, // Nenhum
-        ];
-    }
-
-    /**
-     * Monta o grupo prest.end (Nfse\Dto\Nfse\EnderecoData) quando os 3 campos
-     * decompostos exigidos pelo schema estiverem preenchidos — xLgr/nro/
-     * xBairro não têm minOccurs="0" em TCEndereco (references/schemas/
-     * tiposComplexos_v1.01.xsd), ou seja, são obrigatórios SE o grupo end for
-     * enviado. Configuracao.endereco (texto livre único) não é uma fonte
-     * segura pra derivar isso — por isso só populamos quando logradouro,
-     * numero e bairro (campos novos e opcionais) já foram preenchidos; caso
-     * contrário retorna null e prest.end simplesmente não é enviado (o grupo
-     * inteiro é opcional em PrestadorData::$endereco).
-     *
-     * As chaves usadas são os NOMES DE PROPRIEDADE de EnderecoData
-     * (codigoMunicipio, cep, logradouro, numero, bairro), não as tags XML —
-     * é assim que Nfse\Dto\Dto::normalizeInput() expande o MapFrom com dot
-     * notation ('endNac.cMun', 'endNac.CEP') para o array aninhado que o
-     * schema espera. Confirmado lendo o construtor de Dto no vendor, não
-     * assumido.
-     */
-    private function enderecoPrestador(Configuracao $cfg): ?array
-    {
-        $logradouro = trim((string) ($cfg->logradouro ?? ''));
-        $numero = trim((string) ($cfg->numero ?? ''));
-        $bairro = trim((string) ($cfg->bairro ?? ''));
-
-        if ($logradouro === '' || $numero === '' || $bairro === '') {
-            return null;
-        }
-
-        return [
-            'codigoMunicipio' => (string) $cfg->codigo_ibge,
-            'cep'             => preg_replace('/\D/', '', $cfg->cep ?? '') ?: null,
-            'logradouro'      => $logradouro,
-            'numero'          => $numero,
-            'bairro'          => $bairro,
         ];
     }
 

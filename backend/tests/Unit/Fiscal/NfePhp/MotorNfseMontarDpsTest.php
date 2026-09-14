@@ -249,43 +249,23 @@ class MotorNfseMontarDpsTest extends TestCase
         $this->assertSame('2', $dps->infDps->serie);
     }
 
-    public function test_sem_endereco_decomposto_prest_end_fica_ausente(): void
+    public function test_prest_end_nunca_e_enviado_mesmo_com_endereco_completo(): void
     {
-        // Configuracao padrão do fixture não seta logradouro/numero/bairro —
-        // regressão do comportamento "nunca enviar grupo end incompleto"
-        // (xLgr/nro/xBairro são obrigatórios se end for enviado).
-        $cfg = $this->configuracaoSimplesNacional();
-
-        $dps = (new MotorNfse())->montarDps($this->notaServico(), $cfg, 'HOMOLOGACAO', 1);
-
-        $this->assertNull($dps->infDps->prestador->endereco);
-    }
-
-    public function test_endereco_decomposto_completo_preenche_prest_end(): void
-    {
+        // Bug real de produção (2026-09-14, 4ª camada de validação da mesma
+        // investigação de erro de schema): a ADN rejeitou com
+        // "E0128: O endereço nacional do prestador do serviço não deve ser
+        // informado na DPS quando o próprio prestador for o emitente da
+        // DPS." — confirmado ao vivo contra o ambiente de homologação real
+        // do governo. Este sistema SEMPRE emite com tpEmit=1 (prestador é
+        // sempre o emitente, nunca um intermediário/tomador) — logo o grupo
+        // `end` dentro de `prest` nunca pode ser enviado, mesmo quando a
+        // Configuracao tem endereço completo (o dado já está no cadastro
+        // nacional do CNPJ, reenviar é que causa a rejeição).
         $cfg = $this->configuracaoSimplesNacional();
         $cfg->logradouro = 'Rua das Oficinas';
         $cfg->numero = '123';
         $cfg->bairro = 'Centro';
         $cfg->cep = '37130-000';
-
-        $dps = (new MotorNfse())->montarDps($this->notaServico(), $cfg, 'HOMOLOGACAO', 1);
-
-        $end = $dps->infDps->prestador->endereco;
-        $this->assertNotNull($end);
-        $this->assertSame('Rua das Oficinas', $end->logradouro);
-        $this->assertSame('123', $end->numero);
-        $this->assertSame('Centro', $end->bairro);
-        $this->assertSame((string) $cfg->codigo_ibge, $end->codigoMunicipio);
-        $this->assertSame('37130000', $end->cep);
-    }
-
-    public function test_endereco_parcial_nao_envia_prest_end(): void
-    {
-        // Só logradouro preenchido, sem numero/bairro — grupo continua
-        // ausente em vez de ir incompleto (rejeitaria no schema).
-        $cfg = $this->configuracaoSimplesNacional();
-        $cfg->logradouro = 'Rua das Oficinas';
 
         $dps = (new MotorNfse())->montarDps($this->notaServico(), $cfg, 'HOMOLOGACAO', 1);
 
