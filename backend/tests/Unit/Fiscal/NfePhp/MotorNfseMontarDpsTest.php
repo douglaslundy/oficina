@@ -114,19 +114,11 @@ class MotorNfseMontarDpsTest extends TestCase
         // retenção não pode informar pAliq (ver test_simples_nacional_nao_
         // retido_nao_manda_paliq abaixo, com a mensagem completa da ADN).
         $this->assertNull($inf->valores->tributacao->aliquota);
-        // Bug real de produção (2026-09-14, 3ª camada de validação da mesma
-        // investigação): `totTrib` é OBRIGATÓRIO dentro de `trib` (só
-        // `tribFed` é opcional) — SEFAZ/ADN rejeitava com "E1235: elemento
-        // 'trib' com conteúdo incompleto, esperava tribFed/totTrib". A
-        // própria doc do XSD diz que `indTotTrib` "possui valor fixo igual a
-        // zero" — não é um chute, é o único valor válido pra essa opção do
-        // xs:choice (nenhuma estimativa de tributos informada, Decreto
-        // 8.264/2014), evitando ter que estimar vTotTrib/pTotTrib sem dado
-        // real pra isso.
-        $this->assertSame(
-            \Nfse\Enums\IndicadorTotalTributos::Nenhum,
-            $inf->valores->tributacao->indicadorTotalTributos,
-        );
+        // Bug real de produção (2026-09-14, 6ª camada): pra ME/EPP,
+        // `indTotTrib` é PROIBIDO (E0712) — usa `pTotTribSN` em vez disso
+        // (ver test_me_epp_usa_ptotribsn_em_vez_de_indtotrib abaixo).
+        $this->assertNull($inf->valores->tributacao->indicadorTotalTributos);
+        $this->assertNotNull($inf->valores->tributacao->percentualTotalTributosSN);
     }
 
     public function test_ctribmun_valido_de_3_digitos_e_enviado(): void
@@ -257,6 +249,36 @@ class MotorNfseMontarDpsTest extends TestCase
         $dps = (new MotorNfse())->montarDps($this->notaServico(), $cfg, 'HOMOLOGACAO', 1);
 
         $this->assertSame(5.0, $dps->infDps->valores->tributacao->aliquota);
+    }
+
+    public function test_me_epp_usa_ptotribsn_em_vez_de_indtotrib(): void
+    {
+        // Bug real de produção (2026-09-14, 6ª camada de validação da mesma
+        // investigação): a ADN rejeitou com "E0712: Para ME/EPP o indicador
+        // de informação de valor total de tributos não pode ser informado."
+        // — confirmado ao vivo contra o ambiente de homologação real do
+        // governo. `indTotTrib` (usado até aqui) é proibido pra ME/EPP —
+        // existe uma opção dedicada no mesmo xs:choice, `pTotTribSN`
+        // ("percentual aproximado do total dos tributos da alíquota do
+        // Simples Nacional"), que é a variante correta pra esse regime.
+        $dps = (new MotorNfse())->montarDps($this->notaServico(), $this->configuracaoSimplesNacional(), 'HOMOLOGACAO', 1);
+
+        $this->assertNull($dps->infDps->valores->tributacao->indicadorTotalTributos);
+        $this->assertNotNull($dps->infDps->valores->tributacao->percentualTotalTributosSN);
+    }
+
+    public function test_regime_normal_continua_usando_indtotrib(): void
+    {
+        $cfg = $this->configuracaoSimplesNacional();
+        $cfg->regime_tributario = 'Lucro Presumido';
+
+        $dps = (new MotorNfse())->montarDps($this->notaServico(), $cfg, 'HOMOLOGACAO', 1);
+
+        $this->assertSame(
+            \Nfse\Enums\IndicadorTotalTributos::Nenhum,
+            $dps->infDps->valores->tributacao->indicadorTotalTributos,
+        );
+        $this->assertNull($dps->infDps->valores->tributacao->percentualTotalTributosSN);
     }
 
     public function test_ambiente_producao_usa_tpamb_1(): void

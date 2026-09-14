@@ -196,13 +196,20 @@ class MotorNfse
                         // Bug real de produção (2026-09-14): `totTrib` é
                         // OBRIGATÓRIO dentro de `trib` (só `tribFed` é
                         // opcional) — SEFAZ/ADN rejeitava com "elemento 'trib'
-                        // com conteúdo incompleto". `indTotTrib=0` é o único
-                        // valor válido pra essa opção do xs:choice (a própria
-                        // doc do XSD diz "possui valor fixo igual a zero") —
-                        // "nenhuma estimativa de tributos informada" (Decreto
-                        // 8.264/2014), sem precisar estimar vTotTrib/pTotTrib
-                        // sem dado real pra isso.
-                        'totTrib' => ['indTotTrib' => 0],
+                        // com conteúdo incompleto". `indTotTrib=0` seria o
+                        // mais simples (a doc do XSD diz "possui valor fixo
+                        // igual a zero"), MAS a ADN rejeita com "E0712: Para
+                        // ME/EPP o indicador de informação de valor total de
+                        // tributos não pode ser informado" — confirmado ao
+                        // vivo. Pra ME/EPP (Simples Nacional) usa `pTotTribSN`
+                        // em vez disso, a variante do mesmo xs:choice dedicada
+                        // a esse regime. 0% aqui não afeta o valor real da
+                        // nota (é só a estimativa informativa da Lei
+                        // 12.741/2012) — mesmo espírito de "não estimar sem
+                        // dado real" do indTotTrib=0 que já usávamos.
+                        'totTrib' => in_array($regTrib['opSimpNac'] ?? null, [2, 3], true)
+                            ? ['pTotTribSN' => 0]
+                            : ['indTotTrib' => 0],
                     ],
                 ],
             ],
