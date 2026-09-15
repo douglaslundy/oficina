@@ -6,8 +6,9 @@ campo confirmados contra a doc oficial (payload anterior era inferido e tinha
 7-8 nomes de campo inexistentes no schema real). Confirmado ao vivo em
 homologação: payload novo passa da validação de schema (antes rejeitava
 IMEDIATO), agora só bloqueado por falta de CSC/TokenId (credencial externa,
-SEFAZ-MG — não é bug de código). Ver seção "Rodada 45". Rodada 44 (fix
-`codigo_ibge`) commitada/deployada/verificada com sucesso.
+SEFAZ-MG — não é bug de código). Ver seção "Rodada 45". Commit `298d5df`,
+deployado (domínio público respondeu 200 pós-deploy). Rodada 44 (fix
+`codigo_ibge`) também commitada/deployada/verificada com sucesso.
 
 ## Rodada 45 (2026-09-15) — fix: montarPayloadNfce() (Spedy) usava nomes de campo inexistentes no schema real
 
