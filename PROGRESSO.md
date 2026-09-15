@@ -1,12 +1,73 @@
 # Progresso do Projeto
 
 ## Última atualização
-2026-09-14 — Rodada 43: migração de autenticação de token Bearer/localStorage
-pra sessão httpOnly (Sanctum SPA), autorizada e concluída nesta rodada — ver
-seção "Rodada 43" e TAREFAS.md. Inclui um bug de infra REAL achado ao vivo
-(nginx sobrescrevendo X-Forwarded-Proto, quebrando a sessão em qualquer
-domínio fora do hardcoded). Verificado ao vivo nos 3 domínios reais com
-contas descartáveis. Nenhuma tarefa pendente desta rodada.
+2026-09-15 — Rodada 44: corrigido gap `codigo_ibge` do destinatário (achado
+da Rodada 40) + documentação stale corrigida (item NFC-e/NFePHP já estava
+resolvido). Ver seção "Rodada 44" e TAREFAS.md. Não commitado/deployado
+ainda nesta sessão — ver seção pra status exato.
+
+## Rodada 44 (2026-09-15) — fix: codigo_ibge do destinatário sempre era o da oficina + correção de doc stale
+
+Usuário pediu pra atacar os itens "que dá pra fazer" da lista de sobras
+(excluindo o bloqueio da Spedy, que depende de ação manual do usuário no
+painel deles).
+
+### Doc stale corrigida
+`TAREFAS.md` ainda listava como "não corrigido" o roteamento silencioso de
+NFC-e pro motor de NFS-e no `NfePhpProvider` — na real já tinha sido
+corrigido em 2026-09-14 (commit `4fbdd92`, motor `MotorNfce` completo,
+testado em `NfePhpProviderTest`). Só a entrada em `TAREFAS.md` não tinha
+sido atualizada. Corrigido o texto pra refletir o estado real.
+
+### Fix: `codigo_ibge` do destinatário
+Achado da Rodada 40: `NfeService::montarNotaData()` recebe
+`codigoIbgeTomador` como parâmetro, mas `emitir()` sempre passava
+`$config->codigo_ibge` (o código IBGE da PRÓPRIA OFICINA) — `clientes`
+nunca teve essa coluna. Qualquer cliente de outro município saía com
+`cMun`/`codigo_municipio` errado no documento fiscal (divergente de
+`UF`/`cidade`, que já usavam o dado real do cliente). Não tinha dado
+problema ainda só porque o único cliente de teste real (ABRAÃO VINICIUS)
+mora na mesma cidade da stuntmotos.
+
+**Fix:**
+- Migration `2026_09_15_000001_add_codigo_ibge_to_clientes_table.php`:
+  `clientes.codigo_ibge` (string 10, nullable).
+- `Cliente::$fillable` + `ClienteResource` + validação em
+  `ClienteController::store()`/`update()` (`nullable|string|max:10`).
+- `NfeService::montarNotaData()`: `'codigo_ibge' => $cliente?->codigo_ibge
+  ?: $codigoIbgeTomador` — prefere o do cliente, cai pro parâmetro (oficina)
+  só quando o cliente ainda não tem esse dado (retrocompatível com clientes
+  já cadastrados). Escolhido colocar a lógica DENTRO de `montarNotaData()`
+  (não em `emitir()`) pra manter testável sem DB, mesmo padrão já usado no
+  arquivo pro `$ambiente`/`$numeroDps` explícitos.
+- Frontend (`ClienteForm.tsx`): captura o campo `ibge` que o ViaCEP já
+  devolve (só não era lido) e manda como `codigo_ibge` num input oculto —
+  sem novo campo visível, é dado de bastidor fiscal, não uma informação que
+  o usuário digita.
+- Providers (`SpedyProvider`, `FocusNfeProvider`, `MotorNfe`/`MotorNfse` do
+  NFePHP) **não precisaram de mudança** — todos já liam
+  `$tomador['codigo_ibge']`/`$nota->tomador['codigo_ibge']` esperando um
+  valor específico do destinatário; só ninguém nunca populava isso
+  corretamente antes.
+
+### Testes
+2 testes novos em `NfeServiceMontagemTest` (cliente com `codigo_ibge`
+vence o parâmetro; cliente sem `codigo_ibge` cai pro parâmetro — retrocompat).
+`OPENSSL_CONF=/mingw64/etc/ssl/openssl.cnf ./vendor/bin/phpunit
+--testsuite=Unit`: 361 testes, 824 assertions, 7 erros — todos em
+`ConciliarFiscalNotaEntradaJobTest`/`EmitirNotaFiscalJobTest`
+(`RefreshDatabase`, sem Postgres local, mesma limitação de sempre, zero
+relação com esta mudança). `npx tsc --noEmit` limpo no frontend.
+
+**Pendente desta rodada:** migration ainda não rodada contra Postgres real
+(sem DB local); commit e deploy ainda não feitos — aguardando ok do
+usuário antes de deployar em produção (mudança de schema).
+
+**Arquivos alterados:** `backend/database/migrations/2026_09_15_000001_add_codigo_ibge_to_clientes_table.php`
+(novo), `backend/app/Models/Cliente.php`, `backend/app/Http/Resources/ClienteResource.php`,
+`backend/app/Http/Controllers/ClienteController.php`, `backend/app/Services/NfeService.php`,
+`backend/tests/Unit/Fiscal/NfeServiceMontagemTest.php`, `frontend/components/forms/ClienteForm.tsx`,
+`TAREFAS.md`.
 
 ## Rodada 43 (2026-09-14) — migração de auth pra sessão httpOnly + bug de infra achado ao vivo
 

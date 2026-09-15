@@ -21,6 +21,7 @@ class ClienteResource extends JsonResource
             'bairro'         => $this->bairro,
             'cidade'         => $this->cidade,
             'uf'             => $this->uf,
+            'codigo_ibge'    => $this->codigo_ibge,
             'veiculo_modelo' => $this->veiculo_modelo,
             'veiculo_ano'    => $this->veiculo_ano,
             'veiculo_placa'  => $this->veiculo_placa,

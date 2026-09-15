@@ -23,7 +23,7 @@ class Cliente extends Model
 
     protected $fillable = [
         'nome', 'cpf_cnpj', 'telefone', 'email',
-        'cep', 'endereco', 'bairro', 'cidade', 'uf',
+        'cep', 'endereco', 'bairro', 'cidade', 'uf', 'codigo_ibge',
         'veiculo_modelo', 'veiculo_ano', 'veiculo_placa', 'status', 'oficina_id',
     ];
 

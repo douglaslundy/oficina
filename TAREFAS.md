@@ -232,37 +232,28 @@ Usuário pediu análise dos módulos Focus e NFePHP (config + dados enviados),
 mas quer adiar qualquer correção pro próximo momento (limite semanal
 perto do fim). Achados, por ordem de risco:
 
-1. **BUG real — `NfePhpProvider::emitir()` roteia NFC-e pro motor de NFS-e
-   silenciosamente.** `NfePhpProvider::emitir()` só distingue `NFE` (→
-   `MotorNfe`) de "qualquer outra coisa" (→ `MotorNfse`) —
-   `MotorNfse::emitir()` nunca checa `$nota->modelo`. NFePHP **não tem
-   suporte a NFC-e implementado** (confirmado: zero menções a `NFCE`/`CSC`/
-   `idToken` em `MotorNfe.php`), mas nada bloqueia isso — nem
-   `IniciarEmissaoNotaService::iniciar()`, nem o motor. Se uma oficina
-   configurada pra `provedor_fiscal = NFEPHP` tentar emitir uma NFC-e
-   (venda de peça a consumidor, fluxo comum de oficina), o sistema geraria
-   uma NFS-e (nota de serviço) em vez de recusar com erro claro — documento
-   fiscal errado, não uma falha visível. **Hoje dormente**: nenhuma oficina
-   está configurada pra NFEPHP (`provedor_fiscal_padrao = SPEDY`,
-   `oficinas.provedor_fiscal` vazio nas duas oficinas existentes), mas
-   precisa de guarda explícita (rejeitar com mensagem clara) antes de
-   qualquer oficina real ligar o NFEPHP.
+1. **✅ CORRIGIDO 2026-09-14 (commit `4fbdd92`) — `NfePhpProvider::emitir()`
+   roteava NFC-e pro motor de NFS-e silenciosamente.** Motor `MotorNfce`
+   completo (modelo 65) implementado; `NfePhpProvider::emitir()`/
+   `consultar()`/`cancelar()` agora despacham `NFCE` pro motor certo, nunca
+   caem no `default` (`MotorNfse`). Testado em `NfePhpProviderTest`
+   (`emitir`/`consultar`/`cancelar` com `modelo: 'NFCE'`). Este item ficou
+   registrado como pendente por engano — a correção já existia no código,
+   só não tinha sido refletida aqui (mesma classe de falha de documentação
+   já vista antes neste arquivo).
 
-2. **Gap de dados cross-provider — `codigo_ibge` do destinatário é sempre o
-   da PRÓPRIA oficina, nunca o do cliente.** `NfeService::montarNotaData()`
-   recebe `codigoIbgeTomador` como parâmetro, mas todo caller
-   (`NfeService::emitir()`) passa `$config->codigo_ibge` (a oficina) — a
-   tabela `clientes` **não tem coluna `codigo_ibge`** (só `cidade`/`uf`
-   texto). Afeta os 3 provedores igualmente (Spedy `enderecoDestinatario()`,
-   Focus `montarPayloadNfse()`/`montarPayloadNfe()`, NFePHP `tagenderDest`/
-   `MotorNfse`), porque nasce numa camada compartilhada. Não deu problema
-   ainda porque o único teste real (ABRAÃO VINICIUS, Ilicínea/MG) mora na
-   mesma cidade da STUNT MOTOS — mas qualquer cliente de outro município
-   sai com `cMun`/`codigo_municipio` errado no documento fiscal (divergente
-   de `UF`/`xMun`, que usam o dado real do cliente). Correção: `clientes`
-   precisa de uma coluna `codigo_ibge` própria, preenchida pelo ViaCEP no
-   cadastro (o ViaCEP já devolve o campo `ibge` na resposta — só não é
-   capturado hoje).
+2. **✅ CORRIGIDO 2026-09-15 (Rodada 44) — `codigo_ibge` do destinatário era
+   sempre o da PRÓPRIA oficina, nunca o do cliente.** `clientes.codigo_ibge`
+   (migration nova) preenchido pelo ViaCEP no cadastro (campo `ibge` da
+   resposta, capturado num input oculto no `ClienteForm`);
+   `NfeService::montarNotaData()` agora usa `$cliente?->codigo_ibge ?:
+   $codigoIbgeTomador` (prefere o do cliente, cai pro da oficina só quando
+   o cliente ainda não tem o dado — retrocompat com cadastros antigos). Os
+   3 providers (Spedy, Focus, NFePHP) já liam `$tomador['codigo_ibge']`
+   esperando o valor do destinatário — não precisaram de mudança, só
+   ninguém populava certo. 2 testes novos em `NfeServiceMontagemTest`. Ver
+   `PROGRESSO.md` Rodada 44. **Migration ainda não rodada em produção** —
+   pendente de deploy.
 
 3. **Focus não tem NENHUMA credencial cadastrada** (`saas_config`:
    `focus_master_token_producao`/`_homologacao` ambos vazios). Não é bug —

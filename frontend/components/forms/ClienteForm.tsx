@@ -24,6 +24,11 @@ const schema = z.object({
   bairro:   z.string().optional(),
   cidade:   z.string().optional(),
   uf:       z.string().max(2, 'UF deve ter 2 letras').optional(),
+  // Preenchido só pelo autofill do ViaCEP (campo `ibge` da resposta) — sem
+  // input visível, mesmo padrão de campo "de bastidor" fiscal. Usado na
+  // emissão de NF-e pra não sair com o município da OFICINA no documento do
+  // cliente (ver NfeService::montarNotaData()).
+  codigo_ibge: z.string().optional(),
 })
 
 type FormData = z.infer<typeof schema>
@@ -93,7 +98,7 @@ export function ClienteForm({ initialData, onSuccess }: ClienteFormProps) {
     }
     fetch(`https://viacep.com.br/ws/${digits}/json/`)
       .then(r => r.json())
-      .then((d: { erro?: boolean; logradouro?: string; bairro?: string; localidade?: string; uf?: string }) => {
+      .then((d: { erro?: boolean; logradouro?: string; bairro?: string; localidade?: string; uf?: string; ibge?: string }) => {
         if (d.erro) return
         // CEPs rurais/genéricos retornam logradouro/bairro vazios — nunca
         // apagar um valor já preenchido (digitado ou carregado do banco).
@@ -101,6 +106,7 @@ export function ClienteForm({ initialData, onSuccess }: ClienteFormProps) {
         if (d.bairro) setValue('bairro', d.bairro.toUpperCase())
         if (d.localidade) setValue('cidade', d.localidade)
         if (d.uf) setValue('uf', d.uf)
+        if (d.ibge) setValue('codigo_ibge', d.ibge)
       })
       .catch(() => {})
   }, [cep, setValue])
@@ -178,6 +184,7 @@ export function ClienteForm({ initialData, onSuccess }: ClienteFormProps) {
 
   return (
     <form onSubmit={handleSubmit(onSubmit)}>
+      <input type="hidden" {...register('codigo_ibge')} />
       <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16 }}>
         <div style={{ gridColumn: '1 / -1' }}>
           <label style={labelStyle}>Nome / Razão Social *</label>

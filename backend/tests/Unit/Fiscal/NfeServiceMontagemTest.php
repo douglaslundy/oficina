@@ -258,6 +258,50 @@ class NfeServiceMontagemTest extends TestCase
         $this->assertSame('UN', $data->itens[0]['unidade']);
     }
 
+    /**
+     * Gap de dados cross-provider (achado 2026-09-14, TAREFAS.md): antes
+     * deste fix, o `codigo_ibge` do tomador SEMPRE vinha do parâmetro (a
+     * própria oficina), nunca do cliente — mesmo quando `clientes.codigo_ibge`
+     * já estava preenchido pelo ViaCEP.
+     */
+    public function test_monta_nota_data_usa_codigo_ibge_do_cliente_quando_presente(): void
+    {
+        $cliente = new Cliente([
+            'nome' => 'Fulano', 'cpf_cnpj' => '12345678000199',
+            'cidade' => 'Ilicínea', 'uf' => 'MG', 'codigo_ibge' => '3132404',
+        ]);
+        $nota = new NotaFiscal([
+            'valor_total' => 150.0, 'natureza_operacao' => 'Prestação de Serviços',
+            'referencia_externa' => 'nf-ibge-cliente',
+        ]);
+        $nota->setRelation('cliente', $cliente);
+
+        // Parâmetro simula o codigo_ibge da OFICINA (São Paulo), diferente do
+        // cliente (Ilicínea/MG) — o do cliente precisa vencer.
+        $data = (new NfeService())->montarNotaData($nota, codigoIbgeTomador: '3550308');
+
+        $this->assertSame('3132404', $data->tomador['codigo_ibge']);
+    }
+
+    /**
+     * Contraprova: cliente cadastrado antes deste fix (ou sem CEP informado)
+     * não tem `codigo_ibge` — precisa continuar caindo pro valor da oficina,
+     * mesmo comportamento de antes do fix, em vez de mandar vazio.
+     */
+    public function test_monta_nota_data_usa_codigo_ibge_da_oficina_quando_cliente_nao_tem(): void
+    {
+        $cliente = new Cliente(['nome' => 'Fulano', 'cpf_cnpj' => '12345678000199']);
+        $nota = new NotaFiscal([
+            'valor_total' => 150.0, 'natureza_operacao' => 'Prestação de Serviços',
+            'referencia_externa' => 'nf-ibge-fallback',
+        ]);
+        $nota->setRelation('cliente', $cliente);
+
+        $data = (new NfeService())->montarNotaData($nota, codigoIbgeTomador: '3550308');
+
+        $this->assertSame('3550308', $data->tomador['codigo_ibge']);
+    }
+
     public function test_monta_nota_data_nfce_usa_modelo_interno_nfce_e_inclui_itens(): void
     {
         $cliente = new Cliente(['nome' => 'Fulano', 'cpf_cnpj' => '87748248800']);

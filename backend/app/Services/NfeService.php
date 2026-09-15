@@ -118,7 +118,16 @@ class NfeService
                 'bairro'      => $cliente?->bairro,
                 'cidade'      => $cliente?->cidade,
                 'uf'          => $cliente?->uf,
-                'codigo_ibge' => $codigoIbgeTomador,
+                // Gap de dados cross-provider (achado 2026-09-14, ver
+                // TAREFAS.md): antes disto, $codigoIbgeTomador SEMPRE vinha
+                // de $config->codigo_ibge (a própria oficina) — qualquer
+                // cliente de outro município saía com cMun/codigo_municipio
+                // errado no documento fiscal, divergente de UF/cidade (que já
+                // usavam o dado real do cliente). `clientes.codigo_ibge` é
+                // preenchido pelo ViaCEP no cadastro; usa o do cliente quando
+                // existe, cai pro parâmetro (oficina) só pra clientes antigos
+                // sem esse dado ainda.
+                'codigo_ibge' => $cliente?->codigo_ibge ?: $codigoIbgeTomador,
             ],
             descricao: $nota->observacoes ?? 'Serviços automotivos',
             valorServicos: (float) $nota->valor_total,
