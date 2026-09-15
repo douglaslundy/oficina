@@ -1,17 +1,74 @@
 # Progresso do Projeto
 
 ## Última atualização
-2026-09-15 — Rodada 50: usuário pediu auditoria manual completa (linha por
-linha, sem agentes) dos 3 motores fiscais NFePHP, depois de repetidos bugs
-reativos. Achado real: falta o grupo `infRespTec` (Responsável Técnico,
-NT 2018.005) em `MotorNfe`/`MotorNfce` — exigido pela SEFAZ quando o
-sistema de emissão é de terceiro. **Decisão do usuário (não é bug a
-corrigir)**: o sistema é considerado da própria empresa/oficina, então
-`infRespTec` fica deliberadamente omitido — que já é o comportamento atual
-(nenhum código chama esse método). Nenhuma mudança de código necessária.
-Ver seção "Rodada 50" pro resto da auditoria (schema-validation já cobre
-o resto da estrutura). Rodada 49 (fix `tPag`/`xPag`, cStat=441) permanece
-abaixo.
+2026-09-15 — Rodada 51: usuário pediu verificação específica de "todos os
+dados obrigatórios" nas notas de serviço (NFS-e) e produto (NF-e/NFC-e).
+Achado real e CONFIRMADO ATIVO em produção: o pacote vendor da NFS-e
+nacional traz arquivos `.txt` com as regras de negócio OFICIAIS da Receita
+(campo a campo, com código de erro) — `dps-prestador.txt` regra #121/E0116
+exige a Inscrição Municipal do prestador quando a oficina tem registro
+complementar no CNC do município. `MotorNfse::montarDps()` nunca mandava
+`IM`. Confirmado que a stuntmotos (oficina ativa) TEM
+`inscricao_municipal='801944'` cadastrada — ou seja, toda NFS-e emitida até
+agora provavelmente saiu sem esse dado obrigatório. Corrigido: `IM` agora
+enviado quando `Configuracao.inscricao_municipal` está preenchida. Ver
+seção "Rodada 51". Rodada 50 (auditoria + decisão sobre `infRespTec`)
+permanece abaixo.
+
+## Rodada 51 (2026-09-15) — fix real: IM do prestador ausente na NFS-e (achado ATIVO em produção)
+
+Continuação da Rodada 50. Usuário pediu verificação específica: "verifique
+se todos os dados obrigatórios estarão sendo enviados pelos motores nas
+notas de serviço e produto".
+
+### Mina de ouro achada: regras de negócio oficiais bundled no vendor
+`vendor/nfse-nacional/nfse-php/src/Dto/schemas/*.txt` (dps-root,
+dps-prestador, dps-tomador, dps-servico, dps-valores, dps-intermediario) —
+a planilha OFICIAL da Receita Federal com toda regra de negócio da NFS-e
+nacional, campo a campo, com código de erro (Exx) e mensagem exata. Muito
+mais confiável que memória própria ou busca externa. Lidos os 5 arquivos
+relevantes por completo (a maior parte das regras é sobre cenários que
+este sistema nunca usa — exportação de serviço, obra civil, eventos,
+substituição de NFS-e, deduções/benefícios municipais — nenhum aplicável a
+uma oficina mecânica doméstica sem descontos, então nenhuma ação
+necessária nesses trechos).
+
+### Achado real: falta `IM` (Inscrição Municipal) do prestador
+Regra #121 (dps-prestador.txt, código E0116): "Se o emitente for o
+prestador (tpEmit=1) e houver registro complementar do contribuinte no CNC
+do município emissor, então a IM DEVE ser informada". Regra irmã #123
+(E0120): o oposto quando NÃO há esse registro. `MotorNfse::montarDps()`
+nunca mandava `IM` em nenhum caso — só `CNPJ`/`regTrib` no grupo `prest`.
+
+**Verificado que isso é ativo em produção, não teórico**: consultado ao
+vivo via tinker, `Configuracao.inscricao_municipal` da stuntmotos =
+`'801944'` (preenchida) — ou seja, toda NFS-e emitida até agora
+provavelmente saiu sem a IM que deveria ter sido informada.
+
+### Fix
+`prest.IM` agora é enviado quando `Configuracao.inscricao_municipal` está
+preenchida (melhor proxy disponível pra "tem registro complementar no
+CNC" — não dá pra confirmar isso com certeza sem consultar o CNC
+diretamente, mas se a oficina já cadastrou uma IM no sistema, é forte
+sinal de que tem). Mesmo padrão condicional já usado pra `cTribMun`.
+
+### Testes
+2 testes novos em `MotorNfseMontarDpsTest` (IM enviada quando configurada;
+IM ausente quando não configurada — contraprova da regra irmã). Suíte
+relevante: 18 testes, 45 assertions, 0 falhas. Unit completa: 384 testes,
+869 assertions, 7 erros (mesmos de sempre, `RefreshDatabase` sem Postgres
+local), zero regressão nova.
+
+### Resto da verificação: NF-e/NFC-e (produto)
+Não existe um arquivo de regras de negócio bundled equivalente pro
+`sped-nfe` (só pra NFS-e nacional) — a verificação desse lado já tinha sido
+feita na Rodada 50 via leitura completa do código + o teste de
+`schemaValidate()` contra o XSD oficial. Nenhum campo adicional identificado
+além do já corrigido nas Rodadas 47/49 (CEST, GTIN, xPag) e do `infRespTec`
+(decisão deliberada de não implementar, Rodada 50).
+
+**Arquivos alterados:** `backend/app/Services/Fiscal/NfePhp/MotorNfse.php`,
+`backend/tests/Unit/Fiscal/NfePhp/MotorNfseMontarDpsTest.php`.
 
 ## Rodada 50 (2026-09-15) — auditoria manual completa dos 3 motores NFePHP + decisão sobre infRespTec
 

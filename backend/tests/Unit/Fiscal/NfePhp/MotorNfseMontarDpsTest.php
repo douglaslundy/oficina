@@ -361,4 +361,36 @@ class MotorNfseMontarDpsTest extends TestCase
 
         $this->assertNull($dps->infDps->prestador->endereco);
     }
+
+    /**
+     * Achado 2026-09-15 (auditoria manual, regra de negócio OFICIAL bundled
+     * no vendor: src/Dto/schemas/dps-prestador.txt, regra #121/E0116) —
+     * quando há registro complementar do contribuinte no CNC do município
+     * emissor, a IM do prestador DEVE ser informada. `Configuracao.
+     * inscricao_municipal` preenchida é o melhor proxy disponível pra essa
+     * condição (mesmo padrão condicional já usado pra cTribMun).
+     */
+    public function test_prest_im_e_enviada_quando_configuracao_tem_inscricao_municipal(): void
+    {
+        $cfg = $this->configuracaoSimplesNacional();
+        $cfg->inscricao_municipal = '987654';
+
+        $dps = (new MotorNfse())->montarDps($this->notaServico(), $cfg, 'HOMOLOGACAO', 1);
+
+        $this->assertSame('987654', $dps->infDps->prestador->inscricaoMunicipal);
+    }
+
+    /**
+     * Contraprova: regra irmã #123/E0120 — quando NÃO há registro
+     * complementar (aqui: `inscricao_municipal` vazia), a IM NÃO deve ser
+     * informada.
+     */
+    public function test_prest_im_nao_e_enviada_quando_configuracao_nao_tem_inscricao_municipal(): void
+    {
+        $cfg = $this->configuracaoSimplesNacional();
+
+        $dps = (new MotorNfse())->montarDps($this->notaServico(), $cfg, 'HOMOLOGACAO', 1);
+
+        $this->assertNull($dps->infDps->prestador->inscricaoMunicipal);
+    }
 }

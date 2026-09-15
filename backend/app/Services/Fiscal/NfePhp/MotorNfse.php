@@ -131,6 +131,21 @@ class MotorNfse
                 'cLocEmi'  => (string) $cfg->codigo_ibge,
                 'prest'    => array_filter([
                     'CNPJ' => preg_replace('/\D/', '', $cfg->cnpj ?? ''),
+                    // Achado 2026-09-15, via regra de negócio OFICIAL bundled no
+                    // pacote vendor (src/Dto/schemas/dps-prestador.txt, regra
+                    // #121/E0116): "Se o emitente for o prestador (tpEmit=1) e
+                    // houver registro complementar do contribuinte no CNC do
+                    // município emissor, então a IM DEVE ser informada" — e a
+                    // regra irmã #123/E0120 diz o oposto quando NÃO há esse
+                    // registro ("IM NÃO deve ser informado"). Não dá pra saber
+                    // com certeza se a oficina tem esse registro complementar,
+                    // mas `Configuracao.inscricao_municipal` preenchida é o
+                    // melhor proxy disponível — mesmo padrão condicional já
+                    // usado abaixo pra `cTribMun`. Exceção MEI (regra também
+                    // menciona) não se aplica aqui: só afeta a regra #121, e
+                    // conservadoramente só mandamos IM quando o dado existe de
+                    // qualquer forma.
+                    'IM' => $cfg->inscricao_municipal ?: null,
                     // regTrib: presente no exemplo oficial (examples/contribuinte/emitir.php).
                     // ATENÇÃO: CrtResolver::resolver() devolve a escala do CRT do leiaute
                     // NF-e/ICMS (1=Simples Nacional, 3=Regime Normal) — escala DIFERENTE da
