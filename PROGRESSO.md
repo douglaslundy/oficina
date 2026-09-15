@@ -1,13 +1,35 @@
 # Progresso do Projeto
 
 ## Última atualização
-2026-09-14 — Rodada 41: causa raiz do `cStat=883` (GTIN/cEAN ausente) achada
-e corrigida em MotorNfe/MotorNfce + camada de mensagem de rejeição amigável
-(`RejeicaoSefazTradutor`) exposta no modal "Ver motivo" do histórico.
-Deployado e verificado ao vivo em produção. Ver seção "Rodada 41" abaixo.
-Próximas tarefas do usuário (NÃO iniciadas): (b) consulta de notas emitidas
-pro CNPJ próprio via NSU + alerta automático; (c) pesquisa de base pública
-de dados fiscais de produto por código.
+2026-09-14 — Rodada 42: 2 bugs reais de UI achados AO VIVO em produção no
+mesmo dia da Rodada 41, ambos corrigidos e deployados:
+1. "Ver notas" (Produtos → Notas Recebidas) ficava vazio depois que o
+   comando agendado `nfe:verificar-notas-recebidas` avançava o checkpoint de
+   NSU — `notas_terceiro_notificadas` virou a fonte de verdade da tela via
+   `VerificarNotasTerceiroService` (usado pelo comando E pelo controller).
+2. Botão "Ver motivo" não aparecia pra notas com status `ERRO` (só cobria
+   `REJEITADA`) — `EmissaoResultado::erro()` (falha técnica, ex.: SEFAZ
+   indisponível + EPEC também falhou) grava status `ERRO`, distinto de
+   `REJEITADA`. Corrigido, texto do modal ajustado pra não dizer "rejeitada
+   pela SEFAZ" quando é falha técnica de comunicação.
+
+Autorizado nesta sessão, AINDA NÃO INICIADO: migração de auth pra cookie
+httpOnly (Sanctum SPA), removendo token de localStorage/document.cookie —
+ver seção "Falha de segurança grave" em TAREFAS.md. Investigação de
+arquitetura já feita (guards 'web'/'saas', stateful domains com wildcard de
+subdomínio de tenant via placeholder `__SANCTUM_CURRENT_REQUEST_HOST__`,
+SESSION_DOMAIN precisa ficar vazio pra host-only cookie) — implementação
+pendente, é mudança grande e sensível, feita com cuidado numa sessão
+dedicada.
+
+## Rodada 42 (2026-09-14) — 2 bugs de UI achados ao vivo (Notas Recebidas vazio + Ver motivo faltando pra ERRO)
+
+Ver commits `cd2b577` (Notas Recebidas) e `03894a7` (Ver motivo ERRO).
+Ambos verificados ao vivo em produção depois do deploy: `listarNotas()`
+confirmado retornando as 3 notas da stuntmotos que tinham sumido; nota real
+com status ERRO (`mensagem_erro`: "SEFAZ indisponível e contingência EPEC
+também falhou: ... Could not resolve host: hom1.n...") confirmada como o
+caso real que motivou o reporte do usuário.
 
 ## Rodada 41 (2026-09-14) — causa raiz do cStat=883 (GTIN ausente) + mensagens de rejeição amigáveis
 

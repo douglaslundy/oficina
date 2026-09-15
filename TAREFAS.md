@@ -387,6 +387,7 @@ telas `(auth)`. Ver `PROGRESSO.md` Rodada 38. **Backlog geral 100% fechado.**
 ## Backlog vazio — tudo o que estava listado foi feito.
 
 Sobras conhecidas (documentadas, não bloqueiam ninguém, ninguém pediu):
-- Paginação COMPLETA do NFePHP DistDFe (checkpoint de NSU + sync agendado) — só se alguma oficina usar o NFePHP com volume alto.
+- ✅ Paginação/checkpoint de NSU do NFePHP DistDFe + sync agendado — CONCLUÍDO 2026-09-14 (comando `nfe:verificar-notas-recebidas`, ver PROGRESSO.md Rodada 41). O teto de 3 páginas por execução (~150 docs) continua existindo por design (evita cStat 656), mas agora com checkpoint persistido não é mais um problema prático — cada execução hourly só busca o que é novo desde a última.
 - Validação real do toggle AUTOMATICO_PROVEDOR com catálogo variado — depende do certificado A1.
-- Bloco IBS/CBS na NF-e (obrigatório só em 2027), CSC pra QR Code da NFC-e (precisa credencial SEFAZ-MG).
+- Bloco IBS/CBS na NF-e (obrigatório só em 2027), CSC pra QR Code da NFC-e (precisa credencial SEFAZ-MG — motor já implementado, só falta a oficina cadastrar o CSC real quando ativar NFC-e via NFePHP em produção).
+- GTIN/NCM por base pública (Cosmos Bluesoft) — pesquisado 2026-09-14, não implementado por decisão do usuário (limite de 25 consultas/dia grátis não escala multi-tenant).
