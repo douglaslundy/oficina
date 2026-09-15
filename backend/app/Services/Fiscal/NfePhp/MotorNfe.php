@@ -188,9 +188,17 @@ class MotorNfe
         foreach ($nota->itens as $i => $item) {
             $nItem = $i + 1;
 
+            // Bug real de produção (2026-09-14, "cStat=883: GTIN (cEAN) sem
+            // informação"): desde 12/09/2022 a SEFAZ exige cEAN/cEANTrib
+            // preenchidos em todo item — GTIN de verdade quando o produto
+            // tem código de barras cadastrado, ou o literal "SEM GTIN"
+            // (nunca vazio/omitido) quando não tem. Nunca era mandado aqui.
+            $gtin = trim((string) ($item['codigo_barras'] ?? '')) ?: 'SEM GTIN';
+
             $make->tagprod((object) [
                 'item'    => $nItem,
                 'cProd'   => $item['sku'] ?? $item['produto_id'],
+                'cEAN'    => $gtin,
                 'xProd'   => $item['descricao'],
                 'NCM'     => $item['ncm'],
                 'CFOP'    => $item['cfop'],
@@ -198,6 +206,7 @@ class MotorNfe
                 'qCom'    => $item['quantidade'],
                 'vUnCom'  => $item['valor_unitario'],
                 'vProd'   => round((float) $item['quantidade'] * (float) $item['valor_unitario'], 2),
+                'cEANTrib' => $gtin,
                 'uTrib'   => $item['unidade'] ?? 'UN',
                 'qTrib'   => $item['quantidade'],
                 'vUnTrib' => $item['valor_unitario'],

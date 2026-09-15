@@ -121,6 +121,34 @@ class NfeServiceMontagemTest extends TestCase
         $this->assertNull($data->numeroReservado);
     }
 
+    /**
+     * Bug real de produção (2026-09-14, "cStat=883: GTIN (cEAN) sem
+     * informação"): codigo_barras nunca era lido do produto vinculado, então
+     * MotorNfe/MotorNfce nunca tinham o que mandar como cEAN — mesmo padrão
+     * de `cest`, que já era lido assim.
+     */
+    public function test_monta_nota_data_inclui_codigo_de_barras_do_produto_vinculado(): void
+    {
+        $cliente = new Cliente(['nome' => 'Fulano', 'cpf_cnpj' => '87748248800']);
+        $nota = new NotaFiscal([
+            'modelo' => 'NF-e', 'valor_total' => 90.0,
+            'natureza_operacao' => 'Venda de Mercadoria', 'referencia_externa' => 'nf-gtin',
+        ]);
+        $nota->setRelation('cliente', $cliente);
+        $item = new \App\Models\NotaFiscalItem([
+            'produto_id' => 'prod-uuid', 'sku' => 'FLT-001', 'descricao' => 'Filtro',
+            'unidade' => 'Par', 'ncm' => '84212300', 'cfop' => '5102',
+            'origem' => 0, 'tributacao_icms' => 'NORMAL', 'cst_csosn' => '102',
+            'quantidade' => 2, 'valor_unitario' => 45,
+        ]);
+        $item->setRelation('produto', new \App\Models\Produto(['codigo_barras' => '7891234567890']));
+        $nota->setRelation('itens', collect([$item]));
+
+        $data = (new NfeService())->montarNotaData($nota);
+
+        $this->assertSame('7891234567890', $data->itens[0]['codigo_barras']);
+    }
+
     public function test_monta_nota_data_inclui_sku_e_unidade_do_item(): void
     {
         $cliente = new Cliente(['nome' => 'Fulano', 'cpf_cnpj' => '87748248800']);

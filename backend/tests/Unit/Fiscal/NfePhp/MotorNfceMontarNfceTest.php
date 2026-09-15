@@ -100,6 +100,37 @@ class MotorNfceMontarNfceTest extends TestCase
         $this->assertStringContainsString('<CPF>12345678900</CPF>', $xml);
     }
 
+    /**
+     * Mesmo bug real de MotorNfeMontarNfeTest ("cStat=883: GTIN (cEAN) sem
+     * informação") — vale igual pra NFC-e.
+     */
+    public function test_monta_xml_usa_sem_gtin_quando_produto_nao_tem_codigo_de_barras(): void
+    {
+        $motor = new MotorNfce();
+        $xml = $motor->montarNfce($this->notaVenda(), $this->configuracaoSimplesNacional(), 'HOMOLOGACAO', 1, 1);
+
+        $this->assertStringContainsString('<cEAN>SEM GTIN</cEAN>', $xml);
+        $this->assertStringContainsString('<cEANTrib>SEM GTIN</cEANTrib>', $xml);
+    }
+
+    public function test_monta_xml_usa_o_codigo_de_barras_do_produto_quando_existe(): void
+    {
+        $nota = $this->notaVenda();
+        $notaComGtin = new NotaFiscalData(
+            tipo: $nota->tipo, tomador: $nota->tomador, descricao: $nota->descricao,
+            valorServicos: $nota->valorServicos, aliquotaIss: $nota->aliquotaIss, issRetido: $nota->issRetido,
+            codigoServicoFederal: $nota->codigoServicoFederal, codigoServicoMunicipal: $nota->codigoServicoMunicipal,
+            naturezaOperacao: $nota->naturezaOperacao, referenciaExterna: $nota->referenciaExterna,
+            modelo: $nota->modelo,
+            itens: [array_merge($nota->itens[0], ['codigo_barras' => '7891234567890'])],
+        );
+
+        $xml = (new MotorNfce())->montarNfce($notaComGtin, $this->configuracaoSimplesNacional(), 'HOMOLOGACAO', 1, 1);
+
+        $this->assertStringContainsString('<cEAN>7891234567890</cEAN>', $xml);
+        $this->assertStringContainsString('<cEANTrib>7891234567890</cEANTrib>', $xml);
+    }
+
     public function test_destinatario_omitido_quando_venda_anonima_sem_documento(): void
     {
         $motor = new MotorNfce();

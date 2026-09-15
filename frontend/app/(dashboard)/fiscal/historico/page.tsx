@@ -14,6 +14,7 @@ interface NotaFiscal {
   modelo: string
   status: string
   mensagem_erro?: string | null
+  mensagem_erro_amigavel?: string | null
   ambiente?: string | null
 }
 
@@ -28,7 +29,7 @@ export default function HistoricoNFPage() {
   const [excluirModal, setExcluirModal] = useState<{ id: string; numero: number | null } | null>(null)
   const [excluindo, setExcluindo]       = useState(false)
   const [modeloFiltro, setModeloFiltro] = useState('')
-  const [motivoModal, setMotivoModal]   = useState<{ numero: number | null; mensagem: string } | null>(null)
+  const [motivoModal, setMotivoModal]   = useState<{ numero: number | null; mensagem: string; amigavel: string | null } | null>(null)
   const [retransmitindo, setRetransmitindo] = useState<string | null>(null)
 
   const fetchNotas = useCallback((opts?: { silent?: boolean }) => {
@@ -332,7 +333,11 @@ export default function HistoricoNFPage() {
                     <div style={{ display: 'flex', gap: 8 }}>
                       {nota.status === 'REJEITADA' && (
                         <button
-                          onClick={() => setMotivoModal({ numero: nota.numero, mensagem: nota.mensagem_erro || 'Nenhuma mensagem de erro registrada para esta nota.' })}
+                          onClick={() => setMotivoModal({
+                            numero: nota.numero,
+                            mensagem: nota.mensagem_erro || 'Nenhuma mensagem de erro registrada para esta nota.',
+                            amigavel: nota.mensagem_erro_amigavel ?? null,
+                          })}
                           style={{ background: 'none', border: '1px solid var(--danger)', color: 'var(--danger)', borderRadius: 6, padding: '4px 10px', cursor: 'pointer', fontSize: 13, whiteSpace: 'nowrap' }}
                         >
                           ⚠ Ver motivo
@@ -495,8 +500,20 @@ export default function HistoricoNFPage() {
             <h3 className="font-display" style={{ fontSize: 20, fontWeight: 800, color: 'var(--danger)', marginBottom: 8 }}>
               Nota Fiscal Rejeitada {motivoModal.numero ? `— #${motivoModal.numero}` : ''}
             </h3>
+            {motivoModal.amigavel && (
+              <div style={{
+                background: 'rgba(245,166,35,.08)', border: '1px solid var(--accent)', borderRadius: 8,
+                padding: '12px 14px', color: 'var(--text)', fontSize: 14, lineHeight: 1.5,
+                marginBottom: 12,
+              }}>
+                <strong style={{ color: 'var(--accent)', display: 'block', marginBottom: 4, fontSize: 12, textTransform: 'uppercase', letterSpacing: 0.5 }}>
+                  O que aconteceu
+                </strong>
+                {motivoModal.amigavel}
+              </div>
+            )}
             <p style={{ color: 'var(--muted)', fontSize: 13, marginBottom: 6 }}>
-              Justificativa retornada pela SEFAZ (ou pelo provedor fiscal):
+              {motivoModal.amigavel ? 'Mensagem técnica original (SEFAZ / provedor fiscal):' : 'Justificativa retornada pela SEFAZ (ou pelo provedor fiscal):'}
             </p>
             <div style={{
               background: 'rgba(229,57,53,.06)', border: '1px solid var(--danger)', borderRadius: 8,

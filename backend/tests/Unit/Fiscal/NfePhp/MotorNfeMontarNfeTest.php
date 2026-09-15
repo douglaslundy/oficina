@@ -102,6 +102,40 @@ class MotorNfeMontarNfeTest extends TestCase
     }
 
     /**
+     * Bug real de produção (2026-09-14, "cStat=883: GTIN (cEAN) sem
+     * informação"): cEAN/cEANTrib nunca eram mandados — SEFAZ rejeita TODA
+     * nota sem esse campo desde 12/09/2022. Sem código de barras
+     * cadastrado, o literal "SEM GTIN" tem que ser mandado (nunca vazio).
+     */
+    public function test_monta_xml_usa_sem_gtin_quando_produto_nao_tem_codigo_de_barras(): void
+    {
+        $motor = new MotorNfe();
+        $xml = $motor->montarNfe($this->notaVenda(), $this->configuracaoSimplesNacional(), 'HOMOLOGACAO', 1, 1);
+
+        $this->assertStringContainsString('<cEAN>SEM GTIN</cEAN>', $xml);
+        $this->assertStringContainsString('<cEANTrib>SEM GTIN</cEANTrib>', $xml);
+    }
+
+    public function test_monta_xml_usa_o_codigo_de_barras_do_produto_quando_existe(): void
+    {
+        $nota = $this->notaVenda();
+        $notaComGtin = new NotaFiscalData(
+            tipo: $nota->tipo, tomador: $nota->tomador, descricao: $nota->descricao,
+            valorServicos: $nota->valorServicos, aliquotaIss: $nota->aliquotaIss, issRetido: $nota->issRetido,
+            codigoServicoFederal: $nota->codigoServicoFederal, codigoServicoMunicipal: $nota->codigoServicoMunicipal,
+            naturezaOperacao: $nota->naturezaOperacao, referenciaExterna: $nota->referenciaExterna,
+            modelo: $nota->modelo,
+            itens: [array_merge($nota->itens[0], ['codigo_barras' => '7891234567890'])],
+        );
+
+        $motor = new MotorNfe();
+        $xml = $motor->montarNfe($notaComGtin, $this->configuracaoSimplesNacional(), 'HOMOLOGACAO', 1, 1);
+
+        $this->assertStringContainsString('<cEAN>7891234567890</cEAN>', $xml);
+        $this->assertStringContainsString('<cEANTrib>7891234567890</cEANTrib>', $xml);
+    }
+
+    /**
      * Task 4 — achado da revisão da Task 3: Make::addTagDet() só inclui
      * <PIS>/<COFINS> quando aPIS[item]/aCOFINS[item] são populados por
      * tagPIS()/tagCOFINS() explícitos (confirmado em Make.php ~743-755); o

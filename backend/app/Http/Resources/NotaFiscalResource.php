@@ -51,6 +51,12 @@ class NotaFiscalResource extends JsonResource
             'ambiente'          => $this->ambiente,
             'chave_acesso'      => $this->chave_acesso,
             'mensagem_erro'     => $this->mensagem_erro,
+            // Pedido explícito do usuário (2026-09-14): "como tornar a
+            // mensagem de rejeição da SEFAZ amigável?" — explicação em
+            // português claro quando o cStat é reconhecido; null quando não
+            // (frontend cai pra mostrar só a mensagem técnica original,
+            // nunca escondida).
+            'mensagem_erro_amigavel' => \App\Services\Fiscal\RejeicaoSefazTradutor::traduzir($this->mensagem_erro),
             'pdf_url'           => $this->pdf_url,
             'observacoes'       => $this->observacoes,
             'emitido_em'        => $this->emitido_em?->format('d/m/Y H:i'),

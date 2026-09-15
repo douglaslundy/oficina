@@ -148,6 +148,16 @@ class NfeService
                 // própria; lê direto do produto vinculado (lazy-load OK,
                 // poucos itens por nota).
                 'cest'            => $item->produto?->cest,
+                // Bug real de produção (2026-09-14, "cStat=883: GTIN (cEAN)
+                // sem informação"): desde 12/09/2022 a SEFAZ exige <cEAN>
+                // preenchido em TODO item — com o GTIN de verdade quando o
+                // produto tem código de barras, ou o literal "SEM GTIN"
+                // quando não tem (nunca vazio). Este campo nunca era lido
+                // aqui nem mandado por MotorNfe/MotorNfce::tagprod() — toda
+                // emissão de produto SEM código de barras cadastrado batia
+                // essa rejeição. Mesmo padrão de `cest` acima: lê direto do
+                // produto vinculado.
+                'codigo_barras'   => $item->produto?->codigo_barras,
                 'tributacao_icms' => $item->tributacao_icms,
                 'cst_csosn'       => $item->cst_csosn,
                 'quantidade'      => $item->quantidade,
