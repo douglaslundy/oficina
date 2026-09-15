@@ -1,14 +1,82 @@
 # Progresso do Projeto
 
 ## Última atualização
-2026-09-15 — Rodada 49: bug real reportado pelo usuário ao vivo, LOGO
-DEPOIS da Rodada 48 — SEFAZ rejeitou com "cStat=441: Descricao do pagamento
-obrigatoria para meio de pagamento 99-outros". Causa raiz:
-`MotorNfe::montarNfe()` mandava `tPag` HARDCODED '99' pra TODA NF-e (nunca
-mapeava `formaPagamento` de verdade, ao contrário de `MotorNfce`, que já
-tinha esse mapeamento) — e nem `MotorNfe` nem `MotorNfce` mandavam `xPag`
-(obrigatório pela SEFAZ quando tPag=99). Corrigido nos dois motores. Ver
-seção "Rodada 49".
+2026-09-15 — Rodada 50: usuário pediu auditoria manual completa (linha por
+linha, sem agentes) dos 3 motores fiscais NFePHP, depois de repetidos bugs
+reativos. Achado real: falta o grupo `infRespTec` (Responsável Técnico,
+NT 2018.005) em `MotorNfe`/`MotorNfce` — exigido pela SEFAZ quando o
+sistema de emissão é de terceiro. **Decisão do usuário (não é bug a
+corrigir)**: o sistema é considerado da própria empresa/oficina, então
+`infRespTec` fica deliberadamente omitido — que já é o comportamento atual
+(nenhum código chama esse método). Nenhuma mudança de código necessária.
+Ver seção "Rodada 50" pro resto da auditoria (schema-validation já cobre
+o resto da estrutura). Rodada 49 (fix `tPag`/`xPag`, cStat=441) permanece
+abaixo.
+
+## Rodada 50 (2026-09-15) — auditoria manual completa dos 3 motores NFePHP + decisão sobre infRespTec
+
+Usuário, após a Rodada 49: "cada hora que eu reclamo você encontrou (...) o
+motor não enviava (...) verifique as regras fiscais, verifique cada motor e
+verifique os documentos fiscais, e cada um o motor envia os dados
+necessários". Pedido de auditoria completa, sem depender de mais um erro
+real pra achar o próximo bug. Depois de dois agentes falharem por rate
+limit na Rodada 48, fiz esta auditoria eu mesmo, lendo `MotorNfe.php`
+(1416 linhas), `MotorNfce.php` (544) e `MotorNfse.php` (527) inteiros.
+
+### O que já protege a NF-e/NFC-e (achado importante, não sabia que existia)
+Existe um teste (`test_xml_gerado_e_valido_contra_xsd_oficial_exceto_
+assinatura_ausente`) que roda `DOMDocument::schemaValidate()` de verdade
+contra o XSD oficial do governo (`schemes/PL_009_V4/nfe_v4.00.xsd`) no XML
+gerado por `MotorNfe`/`MotorNfce`. Isso significa: qualquer campo
+ESTRUTURALMENTE obrigatório (`minOccurs` sem `="0"` no XSD) que faltasse já
+reprovaria esse teste — e ele passa (só falta a assinatura, que é
+responsabilidade de `emitir()`, não de `montarNfe()`). **Todos os bugs reais
+encontrados até aqui (CEST, GTIN, xPag) são de uma categoria que esse teste
+NUNCA pega**: campos opcionais no XSD mas exigidos por regra de negócio da
+SEFAZ (Notas Técnicas), validados só no lado do servidor da SEFAZ, nunca
+por schema.
+
+### Achado novo: falta `infRespTec` (Responsável Técnico) — NT 2018.005
+Confirmado via WebSearch (rejeição real documentada como "Rejeição 972:
+Obrigatória as informações do responsável técnico", múltiplas fontes:
+Oobj, TecnoSpeed): desde 2019 (rollout por estado, hoje certamente ativo
+em todo lugar), a SEFAZ exige o grupo `infRespTec` (CNPJ + contato + email
++ telefone da empresa responsável pelo sistema de emissão) sempre que esse
+sistema é desenvolvido por TERCEIRO em relação ao emitente. O método existe
+no vendor (`TraitTagInfRespTec::taginfRespTec()`, confirmado lendo o
+código-fonte: campos `CNPJ`/`xContato`/`email`/`fone` obrigatórios,
+`CSRT`/`idCSRT` opcionais) mas nunca é chamado em `MotorNfe`/`MotorNfce`.
+Não se aplica a `MotorNfse` (layout nacional de NFS-e é outro, sem esse
+conceito).
+
+**Decisão do usuário (2026-09-15): NÃO implementar.** O sistema é
+considerado propriedade da própria oficina emissora (não um sistema de
+terceiro), então a condição que tornaria `infRespTec` obrigatório não se
+aplica — o grupo fica deliberadamente omitido. Isso já é exatamente o
+comportamento atual (confirmado: nenhum lugar do código chama
+`taginfRespTec()`), então **nenhuma mudança de código foi necessária**.
+
+**Risco registrado, não uma ação pendente**: se algum dia aparecer uma
+rejeição real com "cStat=972" (SEFAZ exigindo o grupo mesmo assim), esta
+decisão precisa ser revisitada — nesse ponto as opções são (a) CNPJ da
+própria oficina emissora como responsável técnico (tecnicamente aceito,
+mesma ressalva de imprecisão já discutida) ou (b) formalizar um CNPJ
+próprio da plataforma MecânicaPro e usar o mesmo valor pra todas as
+oficinas (campo de nível SaaS, não por oficina).
+
+### Resto da auditoria: nenhum outro gap confirmado
+Revisão completa de `tagide`/`tagemit`/`tagenderEmit`/`tagdest`/
+`tagenderDest`/`tagprod`/`tagICMS(SN)`/`tagPIS`/`tagCOFINS`/`tagICMSTot`/
+`tagtransp`/`tagpag`/`tagdetPag` (MotorNfe/MotorNfce) e do DPS inteiro
+(MotorNfse, que já tem um histórico denso de bugs reais achados e
+corrigidos ao vivo contra a ADN em rodadas anteriores — E0128, E1235,
+E0625, E0712, bug de truthy da lib vendor) — nenhum campo obrigatório
+adicional identificado além do já corrigido nas Rodadas 47/49. Isso não é
+garantia absoluta contra futuras regras de negócio da SEFAZ ainda não
+mapeadas (only descobertas via rejeição real ou uma NT específica), mas é
+uma varredura completa e deliberada, não mais reativa.
+
+**Nenhum arquivo alterado nesta rodada** — só decisão registrada.
 
 ## Rodada 49 (2026-09-15) — fix: tPag hardcoded '99' sem xPag (cStat=441)
 
