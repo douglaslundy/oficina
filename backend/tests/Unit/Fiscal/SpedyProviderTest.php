@@ -620,6 +620,7 @@ class SpedyProviderTest extends TestCase
                 'quantidade' => 2, 'valor_unitario' => 35.50,
             ]],
             formaPagamento: 'Dinheiro',
+            regimeTributario: 'Simples Nacional',
         );
     }
 
@@ -638,23 +639,69 @@ class SpedyProviderTest extends TestCase
 
     public function test_payload_nfce_usa_sku_e_unidade_do_item(): void
     {
+        // Nomes corrigidos 2026-09-15 contra docs.spedy.com.br: `code` (não
+        // `productCode`) e `unit` (não `commercialUnit`) — ver docblock de
+        // montarPayloadNfce().
         $p = new SpedyProvider('https://sandbox-api.spedy.com.br/v1', 'master', 'tok', 'emp-1');
         $payload = $p->montarPayloadNfce($this->notaNfce());
 
-        $this->assertSame('FLT-001', $payload['items'][0]['productCode']);
-        $this->assertSame('PC', $payload['items'][0]['commercialUnit']);
+        $this->assertSame('FLT-001', $payload['items'][0]['code']);
+        $this->assertSame('PC', $payload['items'][0]['unit']);
     }
 
-    public function test_payload_nfce_usa_campos_spedy_inferidos(): void
+    public function test_payload_nfce_usa_campos_confirmados_na_doc(): void
     {
+        // Renomeado de "..._campos_spedy_inferidos": campos confirmados
+        // 2026-09-15 contra docs.spedy.com.br, não mais inferidos por
+        // analogia. `federalTaxNumber` (não `individualTaxNumber` — esse
+        // campo não existe no schema do Receiver, nem pra CPF) e
+        // `payments[].amount` (não `.value`).
         $p = new SpedyProvider('https://sandbox-api.spedy.com.br/v1', 'master', 'tok', 'emp-1');
         $payload = $p->montarPayloadNfce($this->notaNfce());
 
         $this->assertTrue($payload['isFinalCustomer']);
-        $this->assertSame('87748248800', $payload['receiver']['individualTaxNumber']);
+        $this->assertSame('87748248800', $payload['receiver']['federalTaxNumber']);
+        $this->assertArrayNotHasKey('individualTaxNumber', $payload['receiver']);
         $this->assertCount(1, $payload['items']);
-        $this->assertSame('5102', $payload['items'][0]['cfop']);
-        $this->assertSame(71.0, $payload['payments'][0]['value']);
+        $this->assertSame(5102, $payload['items'][0]['cfop']);
+        $this->assertSame(71.0, $payload['payments'][0]['amount']);
+    }
+
+    public function test_payload_nfce_usa_valor_de_enum_valido_pro_metodo_de_pagamento(): void
+    {
+        // `method: 'cash'` (valor antigo) não é um enum válido da Spedy —
+        // os válidos incluem `money`, não `cash`. mapFormaPagamento() já é
+        // compartilhado com a NF-e.
+        $p = new SpedyProvider('https://sandbox-api.spedy.com.br/v1', 'master', 'tok', 'emp-1');
+        $payload = $p->montarPayloadNfce($this->notaNfce());
+
+        $this->assertSame('money', $payload['payments'][0]['method']);
+    }
+
+    public function test_payload_nfce_manda_grupo_pis_cofins_zerado(): void
+    {
+        // NFC-e nunca mandava PIS/COFINS (schema achado 2026-09-15) — mesmo
+        // padrão CST 49 zerado já usado por montarPayloadNfe().
+        $p = new SpedyProvider('https://sandbox-api.spedy.com.br/v1', 'master', 'tok', 'emp-1');
+        $taxes = $p->montarPayloadNfce($this->notaNfce())['items'][0]['taxes'];
+
+        $this->assertSame(['cst' => 49, 'baseTax' => 0, 'rate' => 0, 'amount' => 0], $taxes['pis']);
+        $this->assertSame(['cst' => 49, 'baseTax' => 0, 'rate' => 0, 'amount' => 0], $taxes['cofins']);
+    }
+
+    public function test_payload_nfce_simples_nacional_manda_csosn_aninhado_em_taxes_icms(): void
+    {
+        // ICMS soltos no item (`icmsOrigin`/`icmsTaxSituation`, nomes que não
+        // existem no schema real) trocados por `taxes.icms.origin`/`.csosn`,
+        // mesmo formato confirmado e já usado por montarPayloadNfe().
+        $p = new SpedyProvider('https://sandbox-api.spedy.com.br/v1', 'master', 'tok', 'emp-1');
+        $payload = $p->montarPayloadNfce($this->notaNfce());
+
+        $this->assertSame(0, $payload['items'][0]['taxes']['icms']['origin']);
+        $this->assertSame(102, $payload['items'][0]['taxes']['icms']['csosn']);
+        $this->assertArrayNotHasKey('cst', $payload['items'][0]['taxes']['icms']);
+        $this->assertArrayNotHasKey('icmsOrigin', $payload['items'][0]);
+        $this->assertArrayNotHasKey('icmsTaxSituation', $payload['items'][0]);
     }
 
     public function test_emitir_nfce_enfileirada_retorna_processando(): void

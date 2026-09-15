@@ -299,15 +299,61 @@ class SpedyProvider implements FiscalProvider, ConsultaNotaTerceiroProvider
         ];
     }
 
-    // Payload inferido a partir do padrão camelCase já usado por montarPayloadNfse()/
-    // montarPayloadEmpresa() — a doc pública da Spedy só confirma `isFinalCustomer`
-    // como campo obrigatório. Precisa ser validado contra sandbox real antes de
-    // confiar em produção (mesma ressalva já registrada pra NF-e-Spedy no projeto).
+    /**
+     * Schema confirmado contra docs.spedy.com.br/api-reference/nfc-e/criar-nfc-e.md
+     * (2026-09-15): POST /v1/consumer-invoices. A implementação anterior deste
+     * método era um payload INFERIDO por analogia com outros métodos (nunca
+     * validado contra a doc real — comentário antigo admitia isso) e tinha
+     * vários nomes de campo que simplesmente NÃO EXISTEM no schema real:
+     * - `productCode` → correto é `code`.
+     * - `commercialUnit` → correto é `unit`.
+     * - `unitValue`/`grossValue` → corretos são `unitAmount`/`totalAmount`.
+     * - `icmsOrigin`/`icmsTaxSituation` soltos no item → precisam ficar
+     *   aninhados em `taxes.icms.origin`/`taxes.icms.cst|csosn` (mesmo
+     *   formato já usado — corretamente — por montarPayloadNfe()).
+     * - `receiver.individualTaxNumber` pra CPF → não existe no schema do
+     *   Receiver; só tem `federalTaxNumber`, usado pra CPF e CNPJ igualmente
+     *   (confirmado na doc: nenhum campo separado pra pessoa física).
+     * - `payments[].value` → correto é `payments[].amount`.
+     * - `payments[].method: 'cash'` → não é um valor de enum válido (os
+     *   válidos incluem `money`, não `cash`) — trocado por
+     *   `mapFormaPagamento()`, já compartilhado com a NF-e.
+     * - PIS/COFINS nunca eram mandados — mesmo padrão CST 49 zerado de
+     *   montarPayloadNfe() (Simples Nacional paga via DAS unificado, sem
+     *   cálculo por operação; nenhuma oficina deste sistema é Regime Normal
+     *   ainda). Confirmado na doc que `taxes.pis`/`taxes.cofins` existem com
+     *   os mesmos campos (`cst`/`baseTax`/`rate`/`amount`) usados na NF-e.
+     * - `itemNumber` nos itens → não existe no schema; removido (a NF-e
+     *   também nunca mandou).
+     *
+     * Explica por que nenhuma NFC-e via Spedy chegou a autorizar até agora
+     * (Rodada 39 continuação 2, TAREFAS.md): o payload nunca tinha sido
+     * validado contra a doc real, só copiado (errado) do padrão usado nos
+     * outros métodos.
+     *
+     * **Confirmado ao vivo em homologação (2026-09-15)**: com este payload
+     * corrigido, a Spedy aceita a requisição (`enqueued`/PROCESSANDO, sem
+     * nenhum erro de schema) — evolução real em relação ao payload antigo,
+     * que rejeitava IMEDIATAMENTE com erro de deserialização
+     * (`"cash"` não é um `SefazInvoicePaymentMethod` válido). Consultando o
+     * resultado, a nota vem REJEITADA com motivo genuinamente fiscal, não
+     * mais de schema: **"TokenId e CSC da NFC-e são obrigatórios. Informe
+     * esses dados na configuração da empresa."** — CSC (Código de Segurança
+     * do Contribuinte) é uma credencial que a oficina precisa obter junto à
+     * SEFAZ do seu estado (mesma exigência já documentada pro motor NFePHP,
+     * ver TAREFAS.md "sobras"), configurada do lado da Spedy via
+     * `PUT /v1/companies/{id}/settings` (bloco `consumerInvoice`, campos
+     * `tokenId`/`csc` — confirmado que o endpoint existe, estrutura exata
+     * dos campos não documentada em detalhe, precisa de teste real quando
+     * alguma oficina tiver o CSC em mãos). **Não implementado ainda** —
+     * bloqueio real de credencial externa, não um bug de código.
+     */
     public function montarPayloadNfce(NotaFiscalData $n): array
     {
-        $docTomador     = preg_replace('/\D/', '', $n->tomador['cpf_cnpj']) ?? '';
-        $ehPessoaFisica = strlen($docTomador) <= 11;
-        $valorTotal     = round(array_sum(array_map(
+        $docTomador = preg_replace('/\D/', '', $n->tomador['cpf_cnpj'] ?? '') ?: '';
+        $crt        = \App\Services\Fiscal\CrtResolver::resolver($n->regimeTributario);
+        $campoIcms  = $crt === 1 ? 'csosn' : 'cst'; // CRT=1 (Simples Nacional) usa CSOSN, senão CST
+        $valorTotal = round(array_sum(array_map(
             fn ($item) => (float) $item['quantidade'] * (float) $item['valor_unitario'],
             $n->itens
         )), 2);
@@ -316,17 +362,12 @@ class SpedyProvider implements FiscalProvider, ConsultaNotaTerceiroProvider
             // integrationId: mesmo fix de reconciliação de montarPayloadNfse()
             // — ver comentário lá.
             'integrationId'   => $this->integrationIdDe($n->referenciaExterna),
-            // series/number: mesmo achado de montarPayloadNfe() — não
-            // confirmado empiricamente pra consumer-invoices especificamente,
-            // mas o schema raiz é o mesmo SefazInvoiceItemDto-family da NF-e,
-            // então mandamos por precaução (omitidos quando não carregados).
             'series'          => $n->serieNf,
             'number'          => $n->numeroAlocado !== null ? (int) $n->numeroAlocado : null,
             'isFinalCustomer' => true,
             'operationNature' => $n->naturezaOperacao,
             'receiver' => array_merge(
-                ['name' => $n->tomador['nome']],
-                [$ehPessoaFisica ? 'individualTaxNumber' : 'federalTaxNumber' => $docTomador],
+                ['name' => $n->tomador['nome'], 'federalTaxNumber' => $docTomador],
                 // NFC-e a consumidor final costuma dispensar endereço (venda de
                 // balcão sem cadastro). Só manda o bloco quando o cliente tem
                 // um logradouro cadastrado — senão a Spedy pode recusar um
@@ -336,32 +377,37 @@ class SpedyProvider implements FiscalProvider, ConsultaNotaTerceiroProvider
                     : ['address' => $this->enderecoDestinatario($n->tomador)],
             ),
             'items' => array_map(fn (int $i, array $item) => [
-                'itemNumber'       => $i + 1,
-                'productCode'      => $item['sku'] ?? $item['produto_id'],
-                'description'      => $item['descricao'],
-                'ncm'              => $item['ncm'],
-                // Obrigatório quando icmsTaxSituation indica ST (rejeição
-                // real "806: operação com ICMS-ST sem CEST", homologação
+                'code'        => $item['sku'] ?? $item['produto_id'],
+                'description' => $item['descricao'],
+                'ncm'         => $item['ncm'],
+                // Obrigatório quando o CST/CSOSN indica ST (rejeição real
+                // "806: operação com ICMS-ST sem CEST", homologação
                 // 2026-09-10). Vem de produtos.cest via NfeService.
-                'cest'             => $item['cest'] ?? null,
-                'cfop'             => $item['cfop'],
-                'commercialUnit'   => $item['unidade'] ?? 'UN',
-                'quantity'         => (float) $item['quantidade'],
-                'unitValue'        => (float) $item['valor_unitario'],
-                'grossValue'       => round((float) $item['quantidade'] * (float) $item['valor_unitario'], 2),
+                'cest'        => $item['cest'] ?? null,
+                'cfop'        => (int) $item['cfop'],
+                'unit'        => $item['unidade'] ?? 'UN',
+                'quantity'    => (float) $item['quantidade'],
+                'unitAmount'  => (float) $item['valor_unitario'],
+                'totalAmount' => round((float) $item['quantidade'] * (float) $item['valor_unitario'], 2),
                 // Campos tributáveis (uTrib/qTrib/vUnTrib) — ver comentário em
                 // montarPayloadNfe(). Sem unidade de conversão nesta v1, o
                 // tributável é sempre igual ao comercial.
-                'unitTax'          => $item['unidade'] ?? 'UN',
-                'quantityTax'      => (float) $item['quantidade'],
-                'unitTaxAmount'    => (float) $item['valor_unitario'],
-                'makeupTotal'      => true,
-                'icmsOrigin'       => (int) $item['origem'],
-                'icmsTaxSituation' => $item['cst_csosn'],
+                'unitTax'       => $item['unidade'] ?? 'UN',
+                'quantityTax'   => (float) $item['quantidade'],
+                'unitTaxAmount' => (float) $item['valor_unitario'],
+                'makeupTotal'   => true,
+                'taxes' => [
+                    'icms' => [
+                        'origin'   => (int) $item['origem'],
+                        $campoIcms => (int) $item['cst_csosn'],
+                    ],
+                    'pis'    => ['cst' => 49, 'baseTax' => 0, 'rate' => 0, 'amount' => 0],
+                    'cofins' => ['cst' => 49, 'baseTax' => 0, 'rate' => 0, 'amount' => 0],
+                ],
             ], array_keys($n->itens), $n->itens),
             'payments' => [[
-                'method' => 'cash',
-                'value'  => $valorTotal,
+                'method' => $this->mapFormaPagamento($n->formaPagamento),
+                'amount' => $valorTotal,
             ]],
         ], fn ($v) => $v !== null);
     }

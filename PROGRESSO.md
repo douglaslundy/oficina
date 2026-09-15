@@ -1,10 +1,75 @@
 # Progresso do Projeto
 
 ## Última atualização
-2026-09-15 — Rodada 44: corrigido gap `codigo_ibge` do destinatário (achado
-da Rodada 40) + documentação stale corrigida (item NFC-e/NFePHP já estava
-resolvido). Ver seção "Rodada 44" e TAREFAS.md. Não commitado/deployado
-ainda nesta sessão — ver seção pra status exato.
+2026-09-15 — Rodada 45: `montarPayloadNfce()` (Spedy) reescrito com nomes de
+campo confirmados contra a doc oficial (payload anterior era inferido e tinha
+7-8 nomes de campo inexistentes no schema real). Confirmado ao vivo em
+homologação: payload novo passa da validação de schema (antes rejeitava
+IMEDIATO), agora só bloqueado por falta de CSC/TokenId (credencial externa,
+SEFAZ-MG — não é bug de código). Ver seção "Rodada 45". Rodada 44 (fix
+`codigo_ibge`) commitada/deployada/verificada com sucesso.
+
+## Rodada 45 (2026-09-15) — fix: montarPayloadNfce() (Spedy) usava nomes de campo inexistentes no schema real
+
+Continuação da Rodada 44 (mesmo pedido do usuário: atacar o que dá pra
+fazer sem depender de ação manual da Spedy). Próximo item da lista de
+sobras: "NFC-e via Spedy nunca chegou a autorizar" (Rodada 39 continuação
+2). O comentário do próprio código já confessava o problema: "Payload
+inferido... precisa ser validado contra sandbox real antes de confiar em
+produção" — nunca tinha sido validado de fato.
+
+### Achado (via WebFetch em docs.spedy.com.br, não suposição)
+`montarPayloadNfce()` usava vários nomes de campo que **não existem** no
+schema real de `POST /v1/consumer-invoices`:
+- `productCode` → correto `code`; `commercialUnit` → correto `unit`;
+  `unitValue`/`grossValue` → corretos `unitAmount`/`totalAmount`.
+- `icmsOrigin`/`icmsTaxSituation` soltos no item → precisam ficar em
+  `taxes.icms.origin`/`taxes.icms.cst|csosn` (mesmo formato que
+  `montarPayloadNfe()` já usa corretamente).
+- `receiver.individualTaxNumber` pra CPF → não existe; o schema do
+  Receiver só tem `federalTaxNumber` (serve pra CPF e CNPJ).
+- `payments[].value` → correto `payments[].amount`.
+- `payments[].method: 'cash'` → não é um valor de enum válido (a Spedy
+  rejeitava com erro de deserialização .NET: `Error converting value
+  "cash" to type ... SefazInvoicePaymentMethod`). Trocado por
+  `mapFormaPagamento()`, já compartilhado com a NF-e.
+- PIS/COFINS nunca eram mandados — adicionado o mesmo grupo CST 49 zerado
+  já usado pela NF-e (Simples Nacional paga via DAS).
+- `itemNumber` — campo que não existe no schema, removido.
+
+### Verificação ao vivo (não só teste unitário)
+Copiado o arquivo corrigido pro container de produção via `docker cp`
+(iteração rápida, sem rebuild) e testado contra o sandbox HOMOLOGAÇÃO real
+da Spedy via `artisan tinker`, chamando `SpedyProvider` direto (sem tocar
+`NotaFiscal`/DB — nenhum dado de teste ficou no nosso banco):
+- **Payload antigo**: rejeitado IMEDIATAMENTE (erro de deserialização do
+  campo `method`).
+- **Payload novo**: aceito (`enqueued`/PROCESSANDO, zero erro de schema).
+  Consultando o resultado depois: `REJEITADA` com motivo genuinamente
+  fiscal, não mais de schema — **"TokenId e CSC da NFC-e são obrigatórios.
+  Informe esses dados na configuração da empresa."**
+
+### CSC — bloqueio real, mesma classe do bloqueio da stuntmotos na Spedy
+CSC (Código de Segurança do Contribuinte) é credencial que a oficina
+precisa obter na SEFAZ do próprio estado (mesma exigência já documentada
+pro motor NFePHP em TAREFAS.md "sobras" — não é a primeira vez que aparece,
+só não tinha sido confirmada pro caminho Spedy ainda). Do lado da Spedy,
+existe `PUT /v1/companies/{id}/settings` (bloco `consumerInvoice`, campos
+`tokenId`/`csc`) pra configurar isso — confirmado que o endpoint existe
+(WebFetch na doc), mas a estrutura exata dos campos não está documentada em
+detalhe e **não foi implementada** (nenhuma oficina tem CSC real pra testar
+contra; ir na frente disso seria chutar estrutura de payload fiscal sem
+prova — proibido pela regra do projeto).
+
+### Testes
+`SpedyProviderTest`: 6 testes novos/reescritos (nomes de campo corretos,
+CSOSN aninhado em `taxes.icms`, PIS/COFINS zerado, enum de pagamento
+válido) — 59 testes, 164 assertions, 0 falhas. Suíte Unit completa: 364
+testes, 833 assertions, 7 erros (mesmos de sempre, `RefreshDatabase` sem
+Postgres local, zero relação com esta mudança).
+
+**Arquivos alterados:** `backend/app/Services/Fiscal/Providers/SpedyProvider.php`,
+`backend/tests/Unit/Fiscal/SpedyProviderTest.php`, `TAREFAS.md`.
 
 ## Rodada 44 (2026-09-15) — fix: codigo_ibge do destinatário sempre era o da oficina + correção de doc stale
 

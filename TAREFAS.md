@@ -89,20 +89,31 @@ se um dia outro tipo de serviço for adicionado,
 correspondente (lança exceção clara em vez de emitir algo errado, então é
 seguro, só não é automático).
 
-## Sobra da Rodada 39 continuação 2 (2026-09-11) — NFC-e via Spedy não testada até autorizar
+## ✅ CORRIGIDO 2026-09-15 (Rodada 45) — payload de NFC-e via Spedy usava nomes de campo inexistentes
 
-A NF-e (peça, B2B/consumidor final) já AUTORIZA de verdade via Spedy
-(5 bugs corrigidos, ver `PROGRESSO.md`). A NFC-e (venda de balcão) só
-teve 1 tentativa, ANTES do fix de endereço, e nunca chegou a criar
-registro na Spedy (`consumer-invoices` retornava 0 itens — provavelmente
-o mesmo tipo de campo obrigatório ausente, não diagnosticado). Os 5 fixes
-desta rodada foram aplicados em `montarPayloadNfe()`; `montarPayloadNfce()`
-só recebeu address/CEST/tributáveis/numeração — **falta o grupo PIS/
-COFINS**, que no schema da NFC-e é flat (`icmsOrigin`/`icmsTaxSituation`
-direto no item, não aninhado em `taxes.icms`), então a estrutura exata
-de PIS/COFINS pra esse endpoint não foi confirmada. Precisa de uma
-rodada de teste dedicada (emitir NFC-e de teste, ler o erro real, repetir
-o mesmo método usado pra NF-e: WebFetch na doc + reemissão via tinker).
+`montarPayloadNfce()` era um payload INFERIDO por analogia, nunca validado
+contra a doc real (o próprio comentário do código admitia isso). Achado
+via WebFetch em docs.spedy.com.br: `productCode`/`commercialUnit`/
+`unitValue`/`grossValue`/`icmsOrigin`/`icmsTaxSituation`/
+`receiver.individualTaxNumber`/`payments[].value`/`method:'cash'` — **nenhum
+desses campos existe no schema real**. Reescrito com os nomes corretos
+(`code`/`unit`/`unitAmount`/`totalAmount`/`taxes.icms.origin+cst|csosn`/
+`receiver.federalTaxNumber`/`payments[].amount`/`mapFormaPagamento()`) +
+grupo PIS/COFINS adicionado (mesmo padrão CST 49 zerado da NF-e).
+
+**Confirmado ao vivo em homologação**: payload antigo rejeitava IMEDIATO
+(erro de deserialização do campo `method`); payload novo é aceito
+(`enqueued`) e só é rejeitado depois por um motivo genuinamente fiscal —
+**falta de CSC/TokenId da NFC-e** (credencial que a oficina precisa obter
+na SEFAZ do próprio estado). Ver `PROGRESSO.md` Rodada 45.
+
+**Novo bloqueio real, não solucionável só por código:** CSC — mesma classe
+de exigência já documentada pro motor NFePHP (ver "sobras" abaixo), agora
+confirmada também pro caminho Spedy. A Spedy tem `PUT
+/v1/companies/{id}/settings` (bloco `consumerInvoice`, campos
+`tokenId`/`csc`) pra configurar isso, mas a estrutura exata não está
+documentada em detalhe e não foi implementada — nenhuma oficina tem CSC
+real pra testar contra ainda.
 
 ## ✅ CONCLUÍDA 2026-09-14 — "erro ao conciliar nota" de entrada (NÃO era o bloqueio antigo da Spedy)
 
