@@ -254,10 +254,17 @@ class MotorNfce
         // (sem frete) que MotorNfe já usa pra NF-e.
         $make->tagtransp((object) ['modFrete' => 9]);
 
+        // Bug real de produção (2026-09-15, "cStat=441: Rejeicao: Descricao
+        // do pagamento obrigatoria para meio de pagamento 99-outros"):
+        // `tPagDe()` já mapeava certo, mas a SEFAZ exige `xPag` (descrição)
+        // sempre que o resultado é '99' — nunca mandado aqui. Mesmo fix
+        // aplicado em MotorNfe::montarNfe().
+        $tPag = $this->tPagDe($nota->formaPagamento);
         $make->tagpag((object) []);
         $make->tagdetPag((object) [
             'indPag' => 0,
-            'tPag'   => $this->tPagDe($nota->formaPagamento),
+            'tPag'   => $tPag,
+            'xPag'   => $tPag === '99' ? ($nota->formaPagamento ?: 'Outros') : null,
             'vPag'   => $vProdTotal,
         ]);
 
@@ -273,9 +280,12 @@ class MotorNfce
      * Tabela oficial de formas de pagamento (NT vigente) — mapeamento
      * best-effort a partir do texto livre já usado no resto do sistema
      * (`OrdemServico.forma_pagamento`/`NotaFiscal.forma_pagamento`).
-     * '99' (Outros) nunca falha a emissão por forma de pagamento não
-     * reconhecida — mesma filosofia de MotorNfe (forma de pagamento livre
-     * não afeta cálculo de imposto).
+     *
+     * Correção 2026-09-15: o comentário original aqui dizia que cair em
+     * '99' (Outros) "nunca falha a emissão" — ERRADO, confirmado por
+     * rejeição real (cStat=441: "Descricao do pagamento obrigatoria para
+     * meio de pagamento 99-outros"). `montarNfce()` agora manda `xPag`
+     * sempre que o resultado aqui é '99'.
      */
     private function tPagDe(string $formaPagamento): string
     {

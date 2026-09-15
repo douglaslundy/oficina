@@ -361,10 +361,20 @@ class MotorNfe
 
         $make->tagtransp((object) ['modFrete' => 9]); // Sem frete
 
+        // Bug real de produção (2026-09-15, "cStat=441: Rejeicao: Descricao
+        // do pagamento obrigatoria para meio de pagamento 99-outros"):
+        // `tPag` ficava hardcoded '99' pra TODA NF-e, mesmo quando
+        // `formaPagamento` tinha um valor mapeável (Dinheiro/PIX/Cartão) —
+        // e a SEFAZ exige `xPag` (descrição) sempre que `tPag=99`, nunca
+        // mandado aqui. `MotorNfce::tPagDe()` já fazia esse mapeamento
+        // corretamente; replicado aqui + `xPag` adicionado em ambos os
+        // motores (ver comentário de `tPagDe()` abaixo).
+        $tPag = $this->tPagDe($nota->formaPagamento);
         $make->tagpag((object) []);
         $make->tagdetPag((object) [
             'indPag' => 0,
-            'tPag'   => '99', // Outros — forma de pagamento livre não afeta cálculo de imposto
+            'tPag'   => $tPag,
+            'xPag'   => $tPag === '99' ? ($nota->formaPagamento ?: 'Outros') : null,
             'vPag'   => $vProdTotal,
         ]);
 
@@ -391,6 +401,27 @@ class MotorNfe
     private function cUfMg(): int
     {
         return 31;
+    }
+
+    /**
+     * Tabela oficial de formas de pagamento (NT vigente) — mapeamento
+     * best-effort a partir do texto livre já usado no resto do sistema
+     * (`OrdemServico.forma_pagamento`/`NotaFiscal.forma_pagamento`). Mesma
+     * lógica de `MotorNfce::tPagDe()` — replicada aqui porque `montarNfe()`
+     * mandava `tPag` hardcoded '99' pra toda NF-e (bug real, cStat=441,
+     * 2026-09-15: SEFAZ exige `xPag` sempre que `tPag=99`, nunca mandado).
+     */
+    private function tPagDe(string $formaPagamento): string
+    {
+        $normalizado = strtoupper(trim($formaPagamento));
+        return match (true) {
+            $normalizado === '' => '99',
+            str_contains($normalizado, 'DINHEIRO') => '01',
+            str_contains($normalizado, 'DEBITO') || str_contains($normalizado, 'DÉBITO') => '04',
+            str_contains($normalizado, 'CREDITO') || str_contains($normalizado, 'CRÉDITO') => '03',
+            str_contains($normalizado, 'PIX') => '17',
+            default => '99',
+        };
     }
 
     /**

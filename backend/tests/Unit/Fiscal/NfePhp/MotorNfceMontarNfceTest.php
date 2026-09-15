@@ -178,6 +178,30 @@ class MotorNfceMontarNfceTest extends TestCase
     }
 
     /**
+     * Bug real de produção (2026-09-15, "cStat=441: Rejeicao: Descricao do
+     * pagamento obrigatoria para meio de pagamento 99-outros"): quando
+     * `formaPagamento` não é reconhecida (cai em tPag=99), a SEFAZ exige
+     * `xPag` (descrição) — nunca mandado antes deste fix.
+     */
+    public function test_forma_pagamento_nao_reconhecida_manda_xpag_com_descricao(): void
+    {
+        $motor = new MotorNfce();
+        $cfg   = $this->configuracaoSimplesNacional();
+
+        $nota = new NotaFiscalData(
+            tipo: 'NFSE', tomador: ['nome' => 'Cliente', 'cpf_cnpj' => '12345678900'],
+            descricao: 'x', valorServicos: 0.0, aliquotaIss: 0.0, issRetido: false,
+            codigoServicoFederal: '', codigoServicoMunicipal: '',
+            naturezaOperacao: 'Venda de Mercadoria', referenciaExterna: 'nfce-cheque', modelo: 'NFCE',
+            itens: $this->notaVenda()->itens, formaPagamento: 'Cheque',
+        );
+        $xml = $motor->montarNfce($nota, $cfg, 'HOMOLOGACAO', 1, 1);
+
+        $this->assertStringContainsString('<tPag>99</tPag>', $xml);
+        $this->assertStringContainsString('<xPag>Cheque</xPag>', $xml);
+    }
+
+    /**
      * Mesma disciplina de MotorNfeMontarNfeTest::test_xml_gerado_e_valido_
      * contra_xsd_oficial_exceto_assinatura_ausente() — valida o XML de
      * verdade contra o XSD oficial do vendor, não só string-matching.

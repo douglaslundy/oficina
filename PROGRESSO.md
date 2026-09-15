@@ -1,18 +1,58 @@
 # Progresso do Projeto
 
 ## Última atualização
-2026-09-15 — Rodada 48: usuário pediu auditoria completa em todos os
-motores fiscais ("não aguento mais tentar gerar uma nota e dar bug").
-3 agentes de investigação em paralelo (Spedy, Focus, NFePHP) — 2 completaram
-com sucesso (Spedy: 7 bugs confirmados; Focus: 8 bugs confirmados, 6
-bloqueando emissão), 1 terceiro (fork da mensagem amigável do cStat 806) e
-o agente do motor NFePHP falharam por rate limit de sessão (resets 13h). Um
-achado próprio (fora dos agentes): confirmado via vendor que ST via CSOSN
-500 (Simples Nacional) NÃO precisa de campos extras além do CEST já
-corrigido na Rodada 47 — suspeita descartada com evidência real. Todos os
-fixes confirmados foram aplicados diretamente (sem mais agentes, pra evitar
-rate limit), testados (Unit completo sem regressão) e comitados. Ver seção
-"Rodada 48" pro detalhe completo. Deploy: ver seção pro status exato.
+2026-09-15 — Rodada 49: bug real reportado pelo usuário ao vivo, LOGO
+DEPOIS da Rodada 48 — SEFAZ rejeitou com "cStat=441: Descricao do pagamento
+obrigatoria para meio de pagamento 99-outros". Causa raiz:
+`MotorNfe::montarNfe()` mandava `tPag` HARDCODED '99' pra TODA NF-e (nunca
+mapeava `formaPagamento` de verdade, ao contrário de `MotorNfce`, que já
+tinha esse mapeamento) — e nem `MotorNfe` nem `MotorNfce` mandavam `xPag`
+(obrigatório pela SEFAZ quando tPag=99). Corrigido nos dois motores. Ver
+seção "Rodada 49".
+
+## Rodada 49 (2026-09-15) — fix: tPag hardcoded '99' sem xPag (cStat=441)
+
+Erro reportado pelo usuário na primeira tentativa de emissão DEPOIS do
+deploy da Rodada 48 (auditoria Spedy/Focus) — ou seja, mesmo com aqueles 14
+bugs corrigidos, o motor ATIVO da stuntmotos (NFePHP) tinha um bug próprio
+nunca coberto pela auditoria de hoje (que focou em Spedy/Focus; o agente do
+NFePHP tinha falhado por rate limit na Rodada 48).
+
+### Causa raiz
+`MotorNfe::montarNfe()` (NF-e) mandava:
+```php
+'tPag' => '99', // Outros — forma de pagamento livre não afeta cálculo de imposto
+```
+SEMPRE, ignorando `$nota->formaPagamento` por completo — mesmo quando o
+valor real era "Dinheiro"/"PIX"/"Cartão de Crédito"/etc. `MotorNfce::
+montarNfce()` (NFC-e) já tinha um mapeamento de verdade (`tPagDe()`), mas
+nenhum dos dois motores mandava `xPag` (descrição da forma de pagamento) —
+campo que a SEFAZ EXIGE sempre que `tPag` resolve pra `99` (confirmado pela
+rejeição real; o comentário antigo de `tPagDe()` dizia "99 nunca falha a
+emissão", o que estava errado).
+
+### Fix
+- `MotorNfe`: ganhou o mesmo `tPagDe()` já existente em `MotorNfce`
+  (mapeamento best-effort: Dinheiro→01, Débito→04, Crédito→03, PIX→17,
+  default→99).
+- Ambos os motores: `xPag` agora é mandado (com o texto livre de
+  `formaPagamento`, ou "Outros" se vazio) sempre que `tPag` resolve pra
+  '99'.
+- Corrigido o comentário desatualizado em `MotorNfce::tPagDe()` que afirmava
+  (errado) que cair em 99 nunca falhava a emissão.
+
+### Testes
+2 testes novos em `MotorNfeMontarNfeTest` (forma mapeada não manda xPag;
+forma não reconhecida manda xPag com a descrição) + 1 novo em
+`MotorNfceMontarNfceTest` (mesmo caso). Suíte relevante: 24 testes, 51
+assertions, 0 falhas. Unit completa: 382 testes, 867 assertions, 7 erros
+(mesmos de sempre, `RefreshDatabase` sem Postgres local), zero regressão
+nova.
+
+**Arquivos alterados:** `backend/app/Services/Fiscal/NfePhp/MotorNfe.php`,
+`backend/app/Services/Fiscal/NfePhp/MotorNfce.php`,
+`backend/tests/Unit/Fiscal/NfePhp/MotorNfeMontarNfeTest.php`,
+`backend/tests/Unit/Fiscal/NfePhp/MotorNfceMontarNfceTest.php`.
 
 ## Rodada 48 (2026-09-15) — auditoria completa dos 3 provedores fiscais + 14 bugs reais corrigidos
 

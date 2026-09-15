@@ -102,6 +102,46 @@ class MotorNfeMontarNfeTest extends TestCase
     }
 
     /**
+     * Bug real de produção (2026-09-15, "cStat=441: Rejeicao: Descricao do
+     * pagamento obrigatoria para meio de pagamento 99-outros"): `tPag`
+     * ficava hardcoded '99' pra TODA NF-e, mesmo com forma de pagamento
+     * mapeável — e sem `xPag` (exigido pela SEFAZ quando tPag=99).
+     */
+    public function test_forma_pagamento_mapeia_para_tpag_correto(): void
+    {
+        $motor = new MotorNfe();
+        $nota  = $this->notaVenda();
+        $notaComPagamento = new NotaFiscalData(
+            tipo: $nota->tipo, tomador: $nota->tomador, descricao: $nota->descricao,
+            valorServicos: $nota->valorServicos, aliquotaIss: $nota->aliquotaIss, issRetido: $nota->issRetido,
+            codigoServicoFederal: $nota->codigoServicoFederal, codigoServicoMunicipal: $nota->codigoServicoMunicipal,
+            naturezaOperacao: $nota->naturezaOperacao, referenciaExterna: $nota->referenciaExterna,
+            modelo: $nota->modelo, itens: $nota->itens, formaPagamento: 'PIX',
+        );
+        $xml = $motor->montarNfe($notaComPagamento, $this->configuracaoSimplesNacional(), 'HOMOLOGACAO', 1, 1);
+
+        $this->assertStringContainsString('<tPag>17</tPag>', $xml);
+        $this->assertStringNotContainsString('<xPag>', $xml);
+    }
+
+    public function test_forma_pagamento_nao_reconhecida_manda_xpag_com_descricao(): void
+    {
+        $motor = new MotorNfe();
+        $nota  = $this->notaVenda();
+        $notaComPagamento = new NotaFiscalData(
+            tipo: $nota->tipo, tomador: $nota->tomador, descricao: $nota->descricao,
+            valorServicos: $nota->valorServicos, aliquotaIss: $nota->aliquotaIss, issRetido: $nota->issRetido,
+            codigoServicoFederal: $nota->codigoServicoFederal, codigoServicoMunicipal: $nota->codigoServicoMunicipal,
+            naturezaOperacao: $nota->naturezaOperacao, referenciaExterna: $nota->referenciaExterna,
+            modelo: $nota->modelo, itens: $nota->itens, formaPagamento: 'Cheque',
+        );
+        $xml = $motor->montarNfe($notaComPagamento, $this->configuracaoSimplesNacional(), 'HOMOLOGACAO', 1, 1);
+
+        $this->assertStringContainsString('<tPag>99</tPag>', $xml);
+        $this->assertStringContainsString('<xPag>Cheque</xPag>', $xml);
+    }
+
+    /**
      * Bug real de produção (2026-09-14, "cStat=883: GTIN (cEAN) sem
      * informação"): cEAN/cEANTrib nunca eram mandados — SEFAZ rejeita TODA
      * nota sem esse campo desde 12/09/2022. Sem código de barras
