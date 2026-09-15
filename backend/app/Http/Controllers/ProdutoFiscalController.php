@@ -39,7 +39,16 @@ class ProdutoFiscalController extends Controller
             ->where(function ($q) use ($comDivergencia) {
                 $q->whereNull('ncm')
                   ->orWhere('fiscal_fonte', 'PADRAO')
-                  ->orWhereIn('id', $comDivergencia);
+                  ->orWhereIn('id', $comDivergencia)
+                  // ST sem CEST bloqueia NF-e (CriarNotaFiscalService::criar(),
+                  // achado real 2026-09-15, cStat=806) — precisa aparecer aqui
+                  // mesmo quando NCM/fiscal_fonte já estão OK.
+                  ->orWhere(function ($q2) {
+                      $q2->where('tributacao_icms', 'ST')
+                         ->where(function ($q3) {
+                             $q3->whereNull('cest')->orWhere('cest', '');
+                         });
+                  });
             });
 
         if ($request->filled('categoria')) {

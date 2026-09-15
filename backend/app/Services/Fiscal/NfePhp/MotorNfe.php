@@ -195,12 +195,24 @@ class MotorNfe
             // (nunca vazio/omitido) quando não tem. Nunca era mandado aqui.
             $gtin = trim((string) ($item['codigo_barras'] ?? '')) ?: 'SEM GTIN';
 
+            // Bug real de produção (2026-09-15, "cStat=806: Operação com
+            // ICMS-ST sem informação do CEST"): CEST é uma propriedade
+            // válida de tagprod() no vendor (`TraitTagDet::tagprod()`,
+            // `$possible` inclui `CEST`, tag opcional `<CEST>` dentro de
+            // `<prod>`) mas nunca era lida/mandada aqui — mesmo quando o
+            // produto JÁ tinha o CEST cadastrado (`produtos.cest`, já
+            // propagado corretamente pra Spedy em
+            // NfeService::montarNotaData()/SpedyProvider desde a Rodada 28,
+            // só faltava aqui no motor NFePHP). Confirmado contra um caso
+            // real: produto com `cest='2600100'` rejeitado mesmo assim,
+            // porque o motor simplesmente não enviava o campo.
             $make->tagprod((object) [
                 'item'    => $nItem,
                 'cProd'   => $item['sku'] ?? $item['produto_id'],
                 'cEAN'    => $gtin,
                 'xProd'   => $item['descricao'],
                 'NCM'     => $item['ncm'],
+                'CEST'    => $item['cest'] ?? null,
                 'CFOP'    => $item['cfop'],
                 'uCom'    => $item['unidade'] ?? 'UN',
                 'qCom'    => $item['quantidade'],

@@ -136,6 +136,38 @@ class MotorNfeMontarNfeTest extends TestCase
     }
 
     /**
+     * Bug real de produção (2026-09-15, "cStat=806: Operação com ICMS-ST
+     * sem informação do CEST"): CEST nunca era lido/mandado em tagprod(),
+     * mesmo quando o produto já tinha o dado cadastrado — confirmado contra
+     * um caso real rejeitado com `produtos.cest='2600100'` já preenchido.
+     */
+    public function test_monta_xml_inclui_cest_do_item_quando_presente(): void
+    {
+        $nota = $this->notaVenda();
+        $notaComCest = new NotaFiscalData(
+            tipo: $nota->tipo, tomador: $nota->tomador, descricao: $nota->descricao,
+            valorServicos: $nota->valorServicos, aliquotaIss: $nota->aliquotaIss, issRetido: $nota->issRetido,
+            codigoServicoFederal: $nota->codigoServicoFederal, codigoServicoMunicipal: $nota->codigoServicoMunicipal,
+            naturezaOperacao: $nota->naturezaOperacao, referenciaExterna: $nota->referenciaExterna,
+            modelo: $nota->modelo,
+            itens: [array_merge($nota->itens[0], ['cest' => '2600100'])],
+        );
+
+        $motor = new MotorNfe();
+        $xml = $motor->montarNfe($notaComCest, $this->configuracaoSimplesNacional(), 'HOMOLOGACAO', 1, 1);
+
+        $this->assertStringContainsString('<CEST>2600100</CEST>', $xml);
+    }
+
+    public function test_monta_xml_sem_cest_nao_inclui_a_tag(): void
+    {
+        $motor = new MotorNfe();
+        $xml = $motor->montarNfe($this->notaVenda(), $this->configuracaoSimplesNacional(), 'HOMOLOGACAO', 1, 1);
+
+        $this->assertStringNotContainsString('<CEST>', $xml);
+    }
+
+    /**
      * Task 4 — achado da revisão da Task 3: Make::addTagDet() só inclui
      * <PIS>/<COFINS> quando aPIS[item]/aCOFINS[item] são populados por
      * tagPIS()/tagCOFINS() explícitos (confirmado em Make.php ~743-755); o

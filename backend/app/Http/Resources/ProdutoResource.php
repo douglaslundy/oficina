@@ -29,7 +29,12 @@ class ProdutoResource extends JsonResource
             'tributacao_icms'    => $this->tributacao_icms,
             'fiscal_fonte'       => $this->fiscal_fonte,
             'fiscal_revisado_em' => $this->fiscal_revisado_em?->format('d/m/Y H:i'),
-            'fiscal_pendente'    => $this->ncm === null || $this->fiscal_fonte === 'PADRAO',
+            // ST sem CEST: mesmo tipo de pendência fiscal que bloqueia NF-e
+            // (ver CriarNotaFiscalService::criar()) — precisa aparecer aqui
+            // pra avisar o usuário ANTES de tentar emitir, não só na hora do
+            // erro da SEFAZ (cStat=806, achado real 2026-09-15).
+            'fiscal_pendente'    => $this->ncm === null || $this->fiscal_fonte === 'PADRAO'
+                || ($this->tributacao_icms === 'ST' && empty($this->cest)),
             'criado_em'      => $this->criado_em?->format('d/m/Y'),
         ];
     }

@@ -282,6 +282,37 @@ class ProdutoFiscalTest extends TestCase
         $this->assertCount(1, $response->json('divergencias'));
     }
 
+    /**
+     * Bug real reportado pelo usuário (2026-09-15): SEFAZ rejeitou NF-e com
+     * cStat=806 "ICMS-ST sem CEST" — produto tinha NCM revisado (fiscal_fonte
+     * MANUAL) e por isso NUNCA aparecia nesta lista, mesmo bloqueando a
+     * emissão em CriarNotaFiscalService::criar(). Precisa aparecer aqui
+     * mesmo com NCM/fiscal_fonte já OK.
+     */
+    public function test_pendencias_fiscais_lista_produto_st_sem_cest_mesmo_com_ncm_revisado(): void
+    {
+        [$oficina, $token] = $this->criarOficinaComAdmin();
+
+        $stSemCest = Produto::create([
+            'nome' => 'Pneu com ST', 'sku' => 'PNE-01', 'categoria' => 'Outros', 'oficina_id' => $oficina->id,
+            'ncm' => '40111000', 'fiscal_fonte' => 'MANUAL', 'fiscal_revisado_em' => now(),
+            'tributacao_icms' => 'ST', 'cest' => null,
+        ]);
+        $stComCest = Produto::create([
+            'nome' => 'Filtro com ST', 'sku' => 'FLT-ST-01', 'categoria' => 'Filtros', 'oficina_id' => $oficina->id,
+            'ncm' => '84212300', 'fiscal_fonte' => 'MANUAL', 'fiscal_revisado_em' => now(),
+            'tributacao_icms' => 'ST', 'cest' => '0107600',
+        ]);
+
+        $response = $this->withToken($token)->withHeaders(['X-Tenant' => $oficina->slug])
+            ->getJson('/api/produtos/pendencias-fiscais');
+
+        $response->assertStatus(200);
+        $ids = collect($response->json('data'))->pluck('id')->all();
+        $this->assertContains($stSemCest->id, $ids);
+        $this->assertNotContains($stComCest->id, $ids);
+    }
+
     // ── Marcar como revisado ─────────────────────────────────────────────
 
     public function test_marcar_revisado_recusa_produto_sem_ncm(): void

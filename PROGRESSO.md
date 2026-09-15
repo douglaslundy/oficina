@@ -1,11 +1,89 @@
 # Progresso do Projeto
 
 ## Última atualização
-2026-09-15 — Rodada 46: bug real reportado pelo usuário ao vivo — badge de
-modelo na tela "Emitir Nota Fiscal" mostrava NFC-e mesmo com
-`modelo_venda_padrao=NF-e` configurado. Causa: `NotaFiscalForm.tsx` tinha
-lógica própria (e errada) duplicando a regra do backend, ignorando o switch
-de configuração. Corrigido, ver seção "Rodada 46".
+2026-09-15 — Rodada 47: bug real reportado pelo usuário ao vivo — SEFAZ
+rejeitou NF-e com cStat=806 "ICMS-ST sem CEST", mesmo o produto já tendo
+CEST cadastrado. Causa raiz de verdade: `MotorNfe`/`MotorNfce` (motor
+NFePHP) nunca liam/mandavam o campo CEST em `tagprod()` — bug de
+propagação, não só falta de dado. Corrigido + adicionado bloqueio
+preventivo (`CriarNotaFiscalService`) pro caso em que o CEST realmente não
+existe no cadastro. Executado por um agente independente (fork) enquanto a
+sessão principal cuidava de outro deploy. **Ainda não commitado/enviado**
+nesta escrita — ver seção "Rodada 47" pro estado exato.
+
+## Rodada 47 (2026-09-15) — fix: MotorNfe/MotorNfce nunca mandavam CEST (cStat=806) + bloqueio preventivo
+
+Usuário reportou ao vivo: tentou emitir NF-e, SEFAZ rejeitou com
+`cStat=806: Rejeicao: Operacao com ICMS-ST sem informacao do CEST. [nItem: 1]`.
+Executado por um agente independente (fork), seguindo systematic-debugging.
+
+### Investigação — a causa não era o que parecia
+A hipótese inicial (mesma classe do bug de GTIN da Rodada 41: produto sem
+o dado cadastrado) foi checada primeiro contra produção — **nenhum produto
+tinha `tributacao_icms='ST'` com `cest` vazio** no banco real. Rastreando a
+nota REJEITADA de verdade (`NotaFiscal id=36591017...`, numero=6,
+provedor=`NFEPHP`), o produto do item (`ABRACADEIRA NYLON...`) já tinha
+`cest='2600100'` cadastrado (via importação de XML, `fiscal_fonte='XML'`).
+
+**Causa raiz real**: `NfeService::montarNotaData()` já lê
+`$item->produto?->cest` corretamente (confirmado — o valor chega certinho
+em `NotaFiscalData`), e `SpedyProvider` já manda esse campo (Rodada 28).
+Mas **`MotorNfe::montarNfe()` e `MotorNfce::montarNfce()` (motor NFePHP)
+nunca liam `$item['cest']` em `tagprod()`** — `CEST` é uma propriedade
+válida e opcional do método (`TraitTagDet::tagprod()` do vendor
+`sped-nfe`, `$possible` inclui `CEST`, gera `<CEST>` dentro de `<prod>`
+quando presente), simplesmente nunca foi passada. Ou seja: mesmo com o
+produto 100% cadastrado, a nota saía sem CEST porque o motor não mandava.
+
+### Fix (dois níveis, TDD)
+1. **Propagação** (causa raiz real): `MotorNfe.php`/`MotorNfce.php` —
+   `tagprod()` ganhou `'CEST' => $item['cest'] ?? null`. 3 testes novos em
+   `MotorNfeMontarNfeTest`/`MotorNfceMontarNfceTest` (CEST aparece quando
+   presente, tag ausente quando não).
+2. **Bloqueio preventivo** (pro caso em que o CEST de verdade não existe
+   ainda, mesma família de guarda já usada pra tributação/origem pendente):
+   `CriarNotaFiscalService::criar()` ganhou checagem — produto com
+   `tributacao_icms='ST'` e `cest` vazio bloqueia com
+   `EmissaoBloqueadaException` clara, apontando pra Produtos › Pendências
+   Fiscais, ANTES de tentar emitir. `ProdutoResource::fiscal_pendente` e a
+   query de `ProdutoFiscalController::pendencias()` também passaram a
+   cobrir esse caso (antes só cobriam NCM ausente / fonte PADRAO /
+   divergência — um produto com NCM revisado mas ST sem CEST nunca
+   aparecia na tela de pendências). Frontend (`pendencias-fiscais/page.tsx`)
+   ganhou a situação "ICMS-ST sem CEST" com destaque vermelho. 2 testes
+   Feature novos em `NotaFiscalNfeTest`/`ProdutoFiscalTest`.
+
+### Verificação ao vivo (sem tocar SEFAZ nem o banco)
+Copiado `MotorNfe.php` corrigido pro container de produção via `docker cp`
+(mesma técnica de iteração rápida da Rodada 45) e reconstruído o XML
+EXATO da nota real rejeitada (`montarNfe()` só monta DOM em memória, não
+submete nada) — confirmado `<CEST>2600100</CEST>` presente no XML agora.
+Nenhuma escrita no banco, nenhuma chamada à SEFAZ/Spedy/Focus.
+
+### Testes
+`OPENSSL_CONF=/mingw64/etc/ssl/openssl.cnf ./vendor/bin/phpunit
+--testsuite=Unit`: 367 testes, 836 assertions, 7 erros (mesmos de sempre,
+`RefreshDatabase` sem Postgres local — `ConciliarFiscalNotaEntradaJobTest`/
+`EmitirNotaFiscalJobTest`, zero relação com esta mudança). Os 2 testes
+Feature novos (`NotaFiscalNfeTest`/`ProdutoFiscalTest`) não rodam
+localmente pelo mesmo motivo (precisam de Postgres real) — sintaxe
+validada com `php -l`, mesmo padrão exato dos testes irmãos já existentes
+no arquivo. `npx tsc --noEmit` limpo no frontend.
+
+**Arquivos alterados:** `backend/app/Services/Fiscal/NfePhp/MotorNfe.php`,
+`backend/app/Services/Fiscal/NfePhp/MotorNfce.php`,
+`backend/app/Services/Fiscal/CriarNotaFiscalService.php`,
+`backend/app/Http/Resources/ProdutoResource.php`,
+`backend/app/Http/Controllers/ProdutoFiscalController.php`,
+`backend/tests/Unit/Fiscal/NfePhp/MotorNfeMontarNfeTest.php`,
+`backend/tests/Unit/Fiscal/NfePhp/MotorNfceMontarNfceTest.php`,
+`backend/tests/Feature/NotaFiscalNfeTest.php`,
+`backend/tests/Feature/ProdutoFiscalTest.php`,
+`frontend/app/(dashboard)/produtos/pendencias-fiscais/page.tsx`.
+
+**Pendente:** commit/push feitos por este agente; deploy NÃO executado
+(coordenado pela sessão principal, que tinha outro deploy em andamento ao
+mesmo tempo).
 
 ## Rodada 46 (2026-09-15) — fix: badge de modelo na tela de emitir NF ignorava modelo_venda_padrao
 

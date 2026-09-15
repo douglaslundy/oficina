@@ -131,6 +131,27 @@ class MotorNfceMontarNfceTest extends TestCase
         $this->assertStringContainsString('<cEANTrib>7891234567890</cEANTrib>', $xml);
     }
 
+    /**
+     * Mesmo bug real de MotorNfeMontarNfeTest ("cStat=806: Operação com
+     * ICMS-ST sem informação do CEST") — vale igual pra NFC-e.
+     */
+    public function test_monta_xml_inclui_cest_do_item_quando_presente(): void
+    {
+        $nota = $this->notaVenda();
+        $notaComCest = new NotaFiscalData(
+            tipo: $nota->tipo, tomador: $nota->tomador, descricao: $nota->descricao,
+            valorServicos: $nota->valorServicos, aliquotaIss: $nota->aliquotaIss, issRetido: $nota->issRetido,
+            codigoServicoFederal: $nota->codigoServicoFederal, codigoServicoMunicipal: $nota->codigoServicoMunicipal,
+            naturezaOperacao: $nota->naturezaOperacao, referenciaExterna: $nota->referenciaExterna,
+            modelo: $nota->modelo,
+            itens: [array_merge($nota->itens[0], ['cest' => '2600100'])],
+        );
+
+        $xml = (new MotorNfce())->montarNfce($notaComCest, $this->configuracaoSimplesNacional(), 'HOMOLOGACAO', 1, 1);
+
+        $this->assertStringContainsString('<CEST>2600100</CEST>', $xml);
+    }
+
     public function test_destinatario_omitido_quando_venda_anonima_sem_documento(): void
     {
         $motor = new MotorNfce();

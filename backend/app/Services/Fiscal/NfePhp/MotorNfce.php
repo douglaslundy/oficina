@@ -152,12 +152,16 @@ class MotorNfce
             // literal "SEM GTIN" quando o produto não tem código de barras.
             $gtin = trim((string) ($item['codigo_barras'] ?? '')) ?: 'SEM GTIN';
 
+            // Mesmo bug real de MotorNfe::montarNfe() ("cStat=806: Operação
+            // com ICMS-ST sem informação do CEST") — CEST nunca era lido/
+            // mandado aqui também, mesmo quando o produto já tinha o dado.
             $make->tagprod((object) [
                 'item'    => $nItem,
                 'cProd'   => $item['sku'] ?? $item['produto_id'],
                 'cEAN'    => $gtin,
                 'xProd'   => $item['descricao'],
                 'NCM'     => $item['ncm'],
+                'CEST'    => $item['cest'] ?? null,
                 'CFOP'    => $item['cfop'],
                 'uCom'    => $item['unidade'] ?? 'UN',
                 'qCom'    => $item['quantidade'],

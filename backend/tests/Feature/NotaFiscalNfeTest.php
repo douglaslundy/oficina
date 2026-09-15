@@ -313,4 +313,60 @@ class NotaFiscalNfeTest extends TestCase
         );
         $this->assertDatabaseCount('notas_fiscais', 0);
     }
+
+    /**
+     * Bug real reportado pelo usuário (2026-09-15): a SEFAZ rejeitou uma
+     * NF-e de verdade com "cStat=806: Operação com ICMS-ST sem informação
+     * do CEST" — o produto tinha `tributacao_icms='ST'` mas `cest` vazio, e
+     * nada bloqueava a emissão antes de chegar na SEFAZ (mesma família de
+     * guarda que tributação/origem pendente, acima, mas faltava pro CEST).
+     */
+    public function test_venda_de_mercadoria_bloqueia_produto_st_sem_cest(): void
+    {
+        $this->criarConfiguracao();
+        $token   = $this->loginAdmin();
+        $cliente = $this->criarCliente();
+        $produto = $this->criarProduto(['tributacao_icms' => 'ST', 'cest' => null]);
+
+        $response = $this->withToken($token)->postJson('/api/notas-fiscais', [
+            'cliente_id'        => $cliente->id,
+            'natureza_operacao' => 'Venda de Mercadoria',
+            'itens'             => [[
+                'produto_id'     => $produto->id,
+                'quantidade'     => 2,
+                'valor_unitario' => 45.00,
+            ]],
+        ]);
+
+        $response->assertStatus(422)->assertJsonPath(
+            'message',
+            "Produto \"{$produto->nome}\" está com ICMS-ST mas sem CEST cadastrado. Complete em Produtos › Pendências Fiscais antes de emitir NF-e."
+        );
+        $this->assertDatabaseCount('notas_fiscais', 0);
+    }
+
+    /**
+     * Contraprova: produto ST com CEST preenchido não deve ser bloqueado —
+     * garante que o fix acima não vira um bloqueio amplo demais.
+     */
+    public function test_venda_de_mercadoria_nao_bloqueia_produto_st_com_cest(): void
+    {
+        $this->criarConfiguracao();
+        $token   = $this->loginAdmin();
+        $cliente = $this->criarCliente();
+        $produto = $this->criarProduto(['tributacao_icms' => 'ST', 'cest' => '0107600']);
+
+        $response = $this->withToken($token)->postJson('/api/notas-fiscais', [
+            'cliente_id'        => $cliente->id,
+            'natureza_operacao' => 'Venda de Mercadoria',
+            'itens'             => [[
+                'produto_id'     => $produto->id,
+                'quantidade'     => 2,
+                'valor_unitario' => 45.00,
+            ]],
+        ]);
+
+        $response->assertStatus(201);
+        $this->assertDatabaseCount('notas_fiscais', 1);
+    }
 }

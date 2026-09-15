@@ -93,6 +93,18 @@ class CriarNotaFiscalService
                     throw new EmissaoBloqueadaException("Produto \"{$produto->nome}\" está com a origem da mercadoria pendente de revisão. Complete em Produtos › Pendências Fiscais antes de emitir NF-e.");
                 }
 
+                // Bug real reportado pelo usuário (2026-09-15): SEFAZ rejeitou
+                // com cStat=806 "Operação com ICMS-ST sem informação do CEST"
+                // — a checagem de tributação/origem acima já existia, mas
+                // faltava esta. CEST é obrigatório quando a tributação indica
+                // Substituição Tributária (mesma exigência já tratada, do lado
+                // do payload, em NfeService::montarNotaData()/SpedyProvider/
+                // MotorNfe/MotorNfce — só faltava bloquear ANTES de tentar
+                // emitir, em vez de deixar a SEFAZ rejeitar por dado faltante).
+                if ($produto->tributacao_icms === 'ST' && empty($produto->cest)) {
+                    throw new EmissaoBloqueadaException("Produto \"{$produto->nome}\" está com ICMS-ST mas sem CEST cadastrado. Complete em Produtos › Pendências Fiscais antes de emitir NF-e.");
+                }
+
                 $produtosPorId[$produto->id] = $produto;
             }
         }

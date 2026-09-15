@@ -15,6 +15,8 @@ interface ProdutoPendente {
   ncm: string | null
   fiscal_fonte: string | null
   fiscal_revisado_em: string | null
+  tributacao_icms: string | null
+  cest: string | null
 }
 
 interface Divergencia {
@@ -107,6 +109,9 @@ export default function PendenciasFiscaisPage() {
 
   function situacao(p: ProdutoPendente): { texto: string; cor: string } {
     if (!p.ncm) return { texto: 'Sem NCM', cor: 'var(--danger)' }
+    // ST sem CEST bloqueia a emissão de NF-e (SEFAZ rejeita com cStat=806) —
+    // mesma prioridade visual de "Sem NCM", já que ambos impedem emitir.
+    if (p.tributacao_icms === 'ST' && !p.cest) return { texto: 'ICMS-ST sem CEST', cor: 'var(--danger)' }
     if (p.fiscal_fonte === 'PADRAO') return { texto: 'Padrão da categoria', cor: 'var(--accent)' }
     return { texto: 'Não revisado', cor: 'var(--accent)' }
   }
@@ -240,7 +245,7 @@ export default function PendenciasFiscaisPage() {
                   key={p.id}
                   style={{
                     borderBottom: '1px solid var(--border)',
-                    background: !p.ncm ? 'rgba(229,57,53,.06)' : undefined,
+                    background: (!p.ncm || (p.tributacao_icms === 'ST' && !p.cest)) ? 'rgba(229,57,53,.06)' : undefined,
                   }}
                 >
                   <td style={{ padding: 10 }}>
