@@ -70,6 +70,7 @@ class AlertaConfig extends Model
             'NF_CONTINGENCIA_PRAZO'   => ['nome' => 'NF-e em Contingência — Prazo Próximo', 'template' => '⚠️ *NF-e em Contingência*: a NF #{nf_numero} está em modo de contingência (EPEC) desde {contingencia_desde} e precisa ser retransmitida à SEFAZ em até {dias_restantes} dia(s), ou a contingência da oficina inteira é bloqueada.'],
             'ORCAMENTO_APROVADO'      => ['nome' => 'Orçamento Aprovado',         'template' => '✅ *Orçamento Aprovado*: O cliente *{cliente}* aprovou o orçamento da OS #{os_numero}. Serviços aprovados: {servicos_aprovados}. Valor aprovado: {valor}.'],
             'ORCAMENTO_RECUSADO'      => ['nome' => 'Orçamento Recusado',         'template' => '❌ *Orçamento Recusado*: O cliente *{cliente}* recusou o orçamento da OS #{os_numero}.'],
+            'NOTA_TERCEIRO_RECEBIDA'  => ['nome' => 'Nova Nota Fiscal Recebida', 'template' => '📥 *Nova Nota Fiscal recebida*: {fornecedor} emitiu uma NF-e de *{valor}* pro CNPJ da sua oficina em {data_emissao}. Confira em Produtos → Notas Recebidas.'],
         ];
     }
 }

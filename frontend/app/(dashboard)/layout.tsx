@@ -3,15 +3,19 @@ import { useState, useEffect } from 'react'
 import { Sidebar } from '@/components/layout/Sidebar'
 import { Topbar } from '@/components/layout/Topbar'
 import { AlertBanner } from '@/components/layout/AlertBanner'
+import { NotaTerceiroBanner } from '@/components/layout/NotaTerceiroBanner'
 import { ToastContainer } from '@/components/ui/Toast'
 import { NotificacaoModal } from '@/components/NotificacaoModal'
 import { AssinaturaAlertaModal } from '@/components/AssinaturaAlertaModal'
 import { useEstoqueAlerts } from '@/hooks/useEstoqueAlerts'
 import { useAlertBanner } from '@/hooks/useAlertBanner'
+import { useNotasTerceiroPendentes } from '@/hooks/useNotasTerceiroPendentes'
 
 export default function DashboardLayout({ children }: { children: React.ReactNode }) {
   const { items, produtosCount, clientesDevedoresCount } = useEstoqueAlerts()
   const { dismissed, dismiss } = useAlertBanner()
+  const { dismissed: notasTerceiroDismissed, dismiss: dismissNotasTerceiro } = useAlertBanner()
+  const { pendentes: notasTerceiroPendentes } = useNotasTerceiroPendentes()
   const [sidebarOpen, setSidebarOpen] = useState(false)
   const [isMobile, setIsMobile] = useState(false)
 
@@ -50,6 +54,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
         <Topbar onMenuClick={() => setSidebarOpen(o => !o)} isMobile={isMobile} />
         <main style={{ flex: 1, padding: isMobile ? '16px' : '24px' }}>
           <AlertBanner items={items} dismissed={dismissed} onDismiss={dismiss} />
+          <NotaTerceiroBanner pendentes={notasTerceiroPendentes} dismissed={notasTerceiroDismissed} onDismiss={dismissNotasTerceiro} />
           {children}
         </main>
       </div>

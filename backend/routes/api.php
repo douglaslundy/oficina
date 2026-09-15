@@ -242,6 +242,10 @@ Route::middleware(['tenant', 'auth:sanctum', 'tenant.verify', 'role:ADMIN,ATENDE
 // grupo próprio aqui em vez de junto de `entradas-nf/consultar` mais abaixo.
 Route::middleware(['tenant', 'auth:sanctum', 'tenant.verify', 'role:ADMIN,ATENDENTE'])->group(function () {
     Route::get('entradas-nf/recebidas', [EntradaNfController::class, 'recebidas']);
+    // Mesmo motivo de ordem de registro de 'recebidas' acima (antes de
+    // `{id}`) — contagem leve pro badge/aviso "dentro do sistema", nunca
+    // chama o provedor fiscal (só lê notas_terceiro_notificadas).
+    Route::get('entradas-nf/pendentes-count', [EntradaNfController::class, 'pendentesCount']);
 });
 Route::middleware(['tenant', 'auth:sanctum', 'tenant.verify'])->group(function () {
     Route::get('produtos',            [ProdutoController::class, 'index']);

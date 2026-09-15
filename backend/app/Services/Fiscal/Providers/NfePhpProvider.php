@@ -131,6 +131,12 @@ class NfePhpProvider implements FiscalProvider, ConsultaNotaTerceiroProvider
         // documentada em FocusNfeProvider::listarNotasRecebidas(). Mantido
         // na assinatura por exigência da interface. Ambiente sempre
         // PRODUÇÃO — mesmo motivo de consultarNotaRecebida() acima.
+        //
+        // Checkpoint de NSU (2026-09-14, pedido do usuário: alerta
+        // automático de nota nova sem reconsultar sempre as mesmas) fica
+        // dentro do próprio MotorNfe::listarNotasRecebidas() — ele já toca
+        // Configuracao::first() pra montar o certificado, então persistir o
+        // checkpoint ali não introduz uma dependência de banco nova aqui.
         return app(MotorNfe::class)->listarNotasRecebidas($cnpjOficina, 'PRODUCAO');
     }
 }

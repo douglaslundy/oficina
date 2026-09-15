@@ -403,6 +403,24 @@ class EntradaNfController extends Controller
         return response()->json(['notas' => $resumos]);
     }
 
+    /**
+     * Contagem leve pro badge/aviso "dentro do sistema" (pedido explícito do
+     * usuário, 2026-09-14) — só lê `notas_terceiro_notificadas` (populada
+     * pelo comando agendado `nfe:verificar-notas-recebidas`), nunca chama o
+     * provedor fiscal: precisa ser rápida o bastante pra rodar em toda
+     * navegação, sem gerar tráfego contra SEFAZ/Focus/Spedy a cada clique.
+     */
+    public function pendentesCount(): JsonResponse
+    {
+        $chavesJaLancadas = NotaEntrada::whereNotNull('chave_acesso')->pluck('chave_acesso')->all();
+
+        $pendentes = \App\Models\NotaTerceiroNotificada::query()
+            ->when($chavesJaLancadas !== [], fn ($q) => $q->whereNotIn('chave_acesso', $chavesJaLancadas))
+            ->count();
+
+        return response()->json(['pendentes' => $pendentes]);
+    }
+
     public function index(): AnonymousResourceCollection
     {
         return NotaEntradaResource::collection(

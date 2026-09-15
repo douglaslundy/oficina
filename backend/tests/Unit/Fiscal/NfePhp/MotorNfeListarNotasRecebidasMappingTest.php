@@ -161,12 +161,13 @@ class MotorNfeListarNotasRecebidasMappingTest extends TestCase
 
     // ── Paginação por NSU (paginarDistDFe / nsuDaResposta) ─────────────────
 
-    private function invocarPaginar(callable $buscarPagina): array
+    /** @return array{resumos: list<ConsultaNotaTerceiroResumo>, ultimo_nsu: int} */
+    private function invocarPaginar(callable $buscarPagina, int $nsuInicial = 0): array
     {
         $motor = new MotorNfe();
         $m = new \ReflectionMethod(MotorNfe::class, 'paginarDistDFe');
         $m->setAccessible(true);
-        return $m->invoke($motor, $buscarPagina);
+        return $m->invoke($motor, $buscarPagina, $nsuInicial);
     }
 
     private function paginaComResumo(string $chave, int $ultNSU, int $maxNSU): string
@@ -184,22 +185,23 @@ class MotorNfeListarNotasRecebidasMappingTest extends TestCase
     public function test_paginacao_continua_ate_ultNSU_alcancar_maxNSU(): void
     {
         $chamadas = [];
-        $resumos = $this->invocarPaginar(function (int $ultNSU) use (&$chamadas) {
+        $resultado = $this->invocarPaginar(function (int $ultNSU) use (&$chamadas) {
             $chamadas[] = $ultNSU;
             // 3 documentos no total (maxNSU=3), 1 por página.
             return $this->paginaComResumo('CHAVE-' . ($ultNSU + 1), $ultNSU + 1, 3);
         });
 
         $this->assertSame([0, 1, 2], $chamadas, 'Deve pedir a próxima página a partir do ultNSU anterior até chegar em maxNSU.');
-        $this->assertCount(3, $resumos);
-        $this->assertSame('CHAVE-1', $resumos[0]->chaveAcesso);
-        $this->assertSame('CHAVE-3', $resumos[2]->chaveAcesso);
+        $this->assertCount(3, $resultado['resumos']);
+        $this->assertSame('CHAVE-1', $resultado['resumos'][0]->chaveAcesso);
+        $this->assertSame('CHAVE-3', $resultado['resumos'][2]->chaveAcesso);
+        $this->assertSame(3, $resultado['ultimo_nsu']);
     }
 
     public function test_paginacao_para_no_teto_de_paginas_mesmo_com_mais_documentos(): void
     {
         $chamadas = 0;
-        $resumos = $this->invocarPaginar(function (int $ultNSU) use (&$chamadas) {
+        $resultado = $this->invocarPaginar(function (int $ultNSU) use (&$chamadas) {
             $chamadas++;
             // maxNSU sempre bem acima do ultNSU → nunca "acaba" sozinho;
             // só o teto de páginas (MAX_PAGINAS_DIST_DFE = 3) segura.
@@ -207,7 +209,7 @@ class MotorNfeListarNotasRecebidasMappingTest extends TestCase
         });
 
         $this->assertSame(3, $chamadas, 'Não pode passar de MAX_PAGINAS_DIST_DFE páginas (risco de cStat 656 da SEFAZ).');
-        $this->assertCount(3, $resumos);
+        $this->assertCount(3, $resultado['resumos']);
     }
 
     public function test_paginacao_uma_pagina_so_quando_ja_veio_tudo(): void
@@ -219,6 +221,26 @@ class MotorNfeListarNotasRecebidasMappingTest extends TestCase
         });
 
         $this->assertSame(1, $chamadas);
+    }
+
+    /**
+     * Pedido explícito do usuário (2026-09-14): alerta automático de nota
+     * nova sem reconsultar sempre as mesmas — a paginação precisa saber
+     * retomar de um checkpoint de NSU persistido, não só sempre do 0.
+     */
+    public function test_paginacao_comeca_do_nsu_inicial_informado(): void
+    {
+        $chamadas = [];
+        $resultado = $this->invocarPaginar(function (int $ultNSU) use (&$chamadas) {
+            $chamadas[] = $ultNSU;
+            return $this->paginaComResumo('CHAVE-' . ($ultNSU + 1), $ultNSU + 1, 12);
+        }, nsuInicial: 10);
+
+        $this->assertSame([10, 11], $chamadas, 'Deve pedir a 1ª página já a partir do NSU inicial informado, não do 0.');
+        $this->assertCount(2, $resultado['resumos']);
+        $this->assertSame('CHAVE-11', $resultado['resumos'][0]->chaveAcesso);
+        $this->assertSame('CHAVE-12', $resultado['resumos'][1]->chaveAcesso);
+        $this->assertSame(12, $resultado['ultimo_nsu']);
     }
 
     public function test_nsu_da_resposta_le_ultNSU_e_maxNSU(): void

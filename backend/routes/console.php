@@ -17,6 +17,9 @@ Schedule::command('alertas:verificar')->dailyAt('07:00')->timezone('America/Sao_
 Schedule::command('cobrancas:gerar')->dailyAt('06:00')->timezone('America/Sao_Paulo');
 Schedule::command('nfe:reconciliar-contingencia')->hourly()->timezone('America/Sao_Paulo');
 
+// Alerta de nota nova emitida pro CNPJ da oficina (compra de fornecedor).
+Schedule::command('nfe:verificar-notas-recebidas')->hourly()->timezone('America/Sao_Paulo');
+
 // Notas presas em PROCESSANDO (Spedy/Focus assíncronos) quando ninguém está
 // com a tela de emissão aberta pra o polling do frontend reconciliar.
 Schedule::command('nfe:reconciliar-processando')

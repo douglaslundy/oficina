@@ -1158,6 +1158,17 @@ class MotorNfe
      */
     private const MAX_PAGINAS_DIST_DFE = 3;
 
+    /**
+     * Checkpoint de NSU (2026-09-14, pedido do usuário: alerta automático de
+     * nota nova sem reconsultar sempre as mesmas): lido e persistido em
+     * `Configuracao::dist_dfe_ultimo_nsu` — único mecanismo que a
+     * Distribuição DFe realmente suporta pra "buscar só o que é novo" (não
+     * filtra por data). Nunca regride: só avança quando esta consulta foi
+     * além do checkpoint anterior. `$cfg` já era buscado aqui mesmo antes
+     * (pro certificado), então isso não introduz uma consulta nova.
+     *
+     * @return list<ConsultaNotaTerceiroResumo>
+     */
     public function listarNotasRecebidas(string $cnpjOficina, string $ambiente): array
     {
         try {
@@ -1170,7 +1181,14 @@ class MotorNfe
             $certificate = Certificate::readPfx($dados['pfx'], $dados['senha']);
             $tools       = new Tools($this->configJson($cfg, $ambiente), $certificate);
 
-            return $this->paginarDistDFe(fn (int $ultNSU): string => $tools->sefazDistDFe($ultNSU, 0, null));
+            $nsuInicial = (int) ($cfg->dist_dfe_ultimo_nsu ?? 0);
+            $resultado  = $this->paginarDistDFe(fn (int $ultNSU): string => $tools->sefazDistDFe($ultNSU, 0, null), $nsuInicial);
+
+            if ($resultado['ultimo_nsu'] > $nsuInicial) {
+                $cfg->update(['dist_dfe_ultimo_nsu' => $resultado['ultimo_nsu']]);
+            }
+
+            return $resultado['resumos'];
         } catch (\Throwable $e) {
             Log::warning('NFePHP/DistDFe: falha ao listar notas recebidas.', ['erro' => $e->getMessage()]);
             throw new \RuntimeException(
@@ -1187,13 +1205,19 @@ class MotorNfe
      * relação a rede/certificado: recebe um `callable(int $ultNSU): string`
      * que devolve o XML da resposta — testável direto por reflexão.
      *
+     * `$nsuInicial` (2026-09-14, pedido do usuário: alerta automático de nota
+     * nova sem reconsultar sempre as mesmas): permite retomar de onde a
+     * última execução parou, em vez de sempre recomeçar do 0 — quem persiste
+     * o `ultimo_nsu` devolvido é o chamador (NfePhpProvider), não este
+     * método. Continua puro/sem I/O.
+     *
      * @param callable(int): string $buscarPagina
-     * @return list<ConsultaNotaTerceiroResumo>
+     * @return array{resumos: list<ConsultaNotaTerceiroResumo>, ultimo_nsu: int}
      */
-    private function paginarDistDFe(callable $buscarPagina): array
+    private function paginarDistDFe(callable $buscarPagina, int $nsuInicial = 0): array
     {
         $resumos = [];
-        $ultNSU  = 0;
+        $ultNSU  = $nsuInicial;
         $maxNSU  = 0;
         $pagina  = 0;
 
@@ -1210,7 +1234,7 @@ class MotorNfe
             ]);
         }
 
-        return $resumos;
+        return ['resumos' => $resumos, 'ultimo_nsu' => $ultNSU];
     }
 
     /**

@@ -1,13 +1,74 @@
 # Progresso do Projeto
 
 ## Última atualização
-2026-09-14 — Rodada 40: corrigida a reconciliação de status Spedy (era a
-PRÓXIMA TAREFA OBRIGATÓRIA) + investigação do pedido do usuário sobre notas
-"aprovadas mas constam rejeitadas" e "aprovada pra um cliente, não pra
-outro" — as duas perguntas eram o MESMO bug, sem evidência de diferença
-real ligada ao cliente. Ver seção "Rodada 40" abaixo. Reconciliação manual
-dos 10 registros reais afetados na stuntmotos **pendente de confirmação do
-usuário** (mutação de dado fiscal de produção).
+2026-09-14 — Rodada 41: causa raiz do `cStat=883` (GTIN/cEAN ausente) achada
+e corrigida em MotorNfe/MotorNfce + camada de mensagem de rejeição amigável
+(`RejeicaoSefazTradutor`) exposta no modal "Ver motivo" do histórico.
+Deployado e verificado ao vivo em produção. Ver seção "Rodada 41" abaixo.
+Próximas tarefas do usuário (NÃO iniciadas): (b) consulta de notas emitidas
+pro CNPJ próprio via NSU + alerta automático; (c) pesquisa de base pública
+de dados fiscais de produto por código.
+
+## Rodada 41 (2026-09-14) — causa raiz do cStat=883 (GTIN ausente) + mensagens de rejeição amigáveis
+
+Pedido do usuário: tornar amigável a mensagem de rejeição
+"cStat=883: Rejeicao: GTIN (cEAN) sem informacao [nItem: 1]".
+
+**Achado ao investigar (não era só questão de mensagem):**
+`MotorNfe::montarNfe()`/`MotorNfce::montarNfce()` NUNCA enviavam os campos
+`cEAN`/`cEANTrib` (GTIN) no `tagprod()` — por isso a rejeição real acontecia
+em produção pra qualquer produto sem "código de barras" cadastrado. SEFAZ
+exige esse campo desde 12/09/2022, aceitando o literal `"SEM GTIN"` quando
+o produto não tem código de barras real (confirmado lendo
+`NFePHP\NFe\Common\Gtin::isValid()` no vendor, que trata esse literal como
+válido).
+
+**Fix (causa raiz, TDD):**
+- `NfeService::montarNotaData()` agora inclui `codigo_barras` do produto no
+  array de item (mesmo padrão do `cest` já existente).
+- `MotorNfe`/`MotorNfce`: `$gtin = trim((string) ($item['codigo_barras'] ?? '')) ?: 'SEM GTIN';`
+  usado em `cEAN` e `cEANTrib`.
+- `RejeicaoSefazTradutor` (novo): traduz o `cStat` de mensagens de erro
+  conhecidas (883, 204, 215, 225, 999, 217, 558, 632) pra explicação em
+  português claro — mapa pequeno e extensível, cresce só com códigos
+  confirmados contra fonte real, nunca "chutado". Exposto como
+  `mensagem_erro_amigavel` em `NotaFiscalResource` (mensagem técnica
+  original nunca escondida, só complementada).
+- Frontend (`fiscal/historico/page.tsx`): modal "Ver motivo" agora mostra a
+  explicação amigável em destaque (quando reconhecida) acima da mensagem
+  técnica original.
+
+**Arquivos:** `backend/app/Services/NfeService.php`,
+`backend/app/Services/Fiscal/NfePhp/MotorNfe.php`,
+`backend/app/Services/Fiscal/NfePhp/MotorNfce.php`,
+`backend/app/Services/Fiscal/RejeicaoSefazTradutor.php` (novo),
+`backend/app/Http/Resources/NotaFiscalResource.php`,
+`frontend/app/(dashboard)/fiscal/historico/page.tsx`.
+
+**Testes:** 6 novos (2 em `MotorNfeMontarNfeTest`, 2 em
+`MotorNfceMontarNfceTest`, 1 em `NfeServiceMontagemTest`, 8 em
+`RejeicaoSefazTradutorTest` novo). Suíte Unit completa: 346 passaram, 11
+falhas — as mesmas pré-existentes de sempre (OpenSSL/Windows), zero
+regressão nova. `npx tsc --noEmit` limpo no frontend.
+
+**Deploy e verificação ao vivo:** commit `9c0ce19`, push + deploy via
+`deploy-vps.sh` (domínio público respondeu 200). Verificado rodando
+`RejeicaoSefazTradutor::traduzir()` dentro do container de produção via
+script tinker descartável — traduziu o cStat 883 corretamente e retornou
+`null` pra um código não mapeado (110), confirmando que a mensagem técnica
+nunca é escondida quando não há tradução.
+
+**Pendente (próximas tarefas do usuário, ainda não iniciadas):**
+1. Consulta de notas emitidas pro CNPJ da empresa via NSU — usuário sugeriu
+   filtro por DATA da última nota importada, mas a Distribuição DFe da
+   SEFAZ (`sefazDistDFe`) não suporta filtro por data — funciona só por NSU
+   incremental (`ultNSU`/`maxNSU`). Plano: persistir `dist_dfe_ultimo_nsu`
+   em `Configuracao`, usar/atualizar esse valor em vez de sempre começar do
+   0, e criar alerta automático (scheduled command, mesmo padrão de
+   `nfe:reconciliar-contingencia`) quando notas novas forem encontradas.
+2. Pesquisar se existe base pública confiável (gratuita) pra consultar
+   dados fiscais de produto (NCM etc.) por código — nenhuma pesquisa feita
+   ainda, não presumir que existe antes de checar.
 
 ## Rodada 40 (2026-09-14) — reconciliação Spedy + investigação "aprovada pra um cliente, não pra outro"
 
