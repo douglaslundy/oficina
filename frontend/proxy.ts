@@ -7,11 +7,19 @@ export function proxy(request: NextRequest) {
   const { pathname } = request.nextUrl
   const host = request.headers.get('host') ?? ''
 
+  // Falha de segurança grave corrigida em 2026-09-14: a autenticação real
+  // agora é uma sessão httpOnly (Sanctum SPA) — este proxy nunca teve, e
+  // continua sem ter, acesso ao cookie de sessão de verdade (é httpOnly de
+  // propósito). `oficina_logado`/`saas_logado` são cookies de PRESENÇA, sem
+  // nenhum valor de credencial (não autenticam nada sozinhos) — servem só
+  // pra decidir redirecionar sem bater no backend a cada navegação. A
+  // autorização de verdade continua 100% no servidor, em toda requisição.
+
   // --- saas.dlsistemas.com.br → redireciona tudo para /saas-admin ---
   if (host.startsWith('saas.')) {
     if (!pathname.startsWith('/saas-admin')) {
-      const saasToken = request.cookies.get('saas_token')?.value
-      const dest = saasToken ? '/saas-admin' : '/saas-admin/login'
+      const saasLogado = request.cookies.get('saas_logado')?.value
+      const dest = saasLogado ? '/saas-admin' : '/saas-admin/login'
       return NextResponse.redirect(new URL(dest, request.url))
     }
   }
@@ -22,8 +30,8 @@ export function proxy(request: NextRequest) {
     if (SAAS_PUBLIC.some(p => pathname.startsWith(p))) {
       return NextResponse.next()
     }
-    const saasToken = request.cookies.get('saas_token')?.value
-    if (!saasToken) {
+    const saasLogado = request.cookies.get('saas_logado')?.value
+    if (!saasLogado) {
       return NextResponse.redirect(new URL('/saas-admin/login', request.url))
     }
     return NextResponse.next()
@@ -32,14 +40,13 @@ export function proxy(request: NextRequest) {
   // --- Regular tenant routes ---
   const isPublic = PUBLIC_PATHS.some(p => pathname.startsWith(p))
 
-  // Check for token in cookies
-  const token = request.cookies.get('auth_token')?.value
+  const logado = request.cookies.get('oficina_logado')?.value
 
-  if (!token && !isPublic) {
+  if (!logado && !isPublic) {
     return NextResponse.redirect(new URL('/login', request.url))
   }
 
-  if (token && pathname === '/login') {
+  if (logado && pathname === '/login') {
     return NextResponse.redirect(new URL('/', request.url))
   }
 

@@ -7,6 +7,8 @@ use App\Http\Controllers\Controller;
 use App\Models\Usuario;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Auth;
+use Illuminate\Support\Facades\Cookie;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Facades\RateLimiter;
 
@@ -18,6 +20,17 @@ class LoginController extends Controller
             'email' => ['required', 'email'],
             'senha' => ['required', 'string'],
         ]);
+
+        // Login precisa vir de uma origem "stateful" reconhecida (Referer/
+        // Origin em SANCTUM_STATEFUL_DOMAINS) — sem isso,
+        // EnsureFrontendRequestsAreStateful nunca inicia a sessão e
+        // `Auth::guard('web')->login()`/`$request->session()` mais abaixo
+        // dariam erro 500 em vez de uma mensagem clara. Único cliente real
+        // desta rota é o próprio frontend SPA, que sempre manda Origin numa
+        // requisição POST — isto é rede de segurança, não o caminho normal.
+        if (! $request->hasSession()) {
+            return response()->json(['message' => 'Requisição não reconhecida como vinda do aplicativo.'], 400);
+        }
 
         $key = 'login:' . $request->ip();
         if (RateLimiter::tooManyAttempts($key, 5)) {
@@ -48,14 +61,30 @@ class LoginController extends Controller
         RateLimiter::clear($key);
         $usuario->update(['ultimo_acesso' => now()]);
 
-        $token = $usuario->createToken('auth-token')->plainTextToken;
+        // Falha de segurança grave corrigida em 2026-09-14: era um token
+        // Bearer devolvido no corpo da resposta e guardado pelo frontend em
+        // localStorage/document.cookie (legível por qualquer XSS). Agora é
+        // sessão httpOnly via Sanctum SPA auth (EnsureFrontendRequestsAreStateful
+        // no grupo de middleware `api`, ver bootstrap/app.php) — nenhum
+        // segredo chega a existir no JavaScript do cliente.
+        Auth::guard('web')->login($usuario);
+        $request->session()->regenerate();
 
         $oficina_slug = $usuario->oficina_id
             ? \App\Models\Oficina::where('id', $usuario->oficina_id)->value('slug')
             : null;
 
+        // Cookie NÃO-httpOnly, só de presença — não carrega nenhum segredo
+        // (não autentica nada sozinho, só existe pra o middleware de rota do
+        // Next.js/`proxy.ts` saber se deve redirecionar pra /login sem
+        // precisar bater no backend a cada navegação).
+        Cookie::queue(Cookie::make(
+            'oficina_logado', '1', config('session.lifetime'), '/',
+            config('session.domain'), (bool) config('session.secure'), false, false,
+            config('session.same_site'),
+        ));
+
         return response()->json([
-            'token'        => $token,
             'oficina_slug' => $oficina_slug,
             'user'         => [
                 'id'    => $usuario->id,
@@ -68,7 +97,11 @@ class LoginController extends Controller
 
     public function logout(Request $request): JsonResponse
     {
-        $request->user()->currentAccessToken()->delete();
+        Auth::guard('web')->logout();
+        $request->session()->invalidate();
+        $request->session()->regenerateToken();
+        Cookie::queue(Cookie::forget('oficina_logado'));
+
         return response()->json(['message' => 'Logout realizado com sucesso.']);
     }
 

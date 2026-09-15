@@ -27,9 +27,7 @@ export function useAuth() {
     try {
       const { data } = await api.post('/auth/login', { email, senha })
       if (data.oficina_slug) localStorage.setItem('oficina_slug', data.oficina_slug)
-      localStorage.setItem('auth_token', data.token)
       localStorage.setItem('auth_user', JSON.stringify(data.user))
-      document.cookie = `auth_token=${data.token}; path=/; SameSite=Lax`
       if (lembrar) localStorage.setItem('remember_email', email)
       router.push('/')
     } catch (err: unknown) {
@@ -43,10 +41,8 @@ export function useAuth() {
 
   async function logout() {
     try { await api.post('/auth/logout') } catch { /* ignore */ }
-    localStorage.removeItem('auth_token')
     localStorage.removeItem('auth_user')
     localStorage.removeItem('oficina_slug')
-    document.cookie = 'auth_token=; path=/; expires=Thu, 01 Jan 1970 00:00:00 GMT'
     router.push('/login')
   }
 

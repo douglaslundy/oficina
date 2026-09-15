@@ -59,8 +59,25 @@ services:
       CACHE_STORE: redis
       SESSION_DRIVER: redis
       QUEUE_CONNECTION: redis
-      SANCTUM_STATEFUL_DOMAINS: "oficina.dlsistemas.com.br,localhost:8080"
-      SESSION_DOMAIN: "oficina.dlsistemas.com.br"
+      # Falha de segurança grave corrigida em 2026-09-14: autenticação
+      # migrou de token Bearer (localStorage) pra sessão httpOnly (Sanctum
+      # SPA auth). `__SANCTUM_CURRENT_REQUEST_HOST__` é um placeholder do
+      # próprio pacote (Sanctum::$currentRequestHostPlaceholder) que casa
+      # com o host de CADA requisição dinamicamente — necessário porque
+      # cada oficina tem seu próprio subdomínio (wildcard
+      # `*.dlsistemas.com.br` no Traefik, ver docker-compose.vps.yml) e
+      # `lib/api.ts` já chama a API sempre pela ORIGEM ATUAL da página
+      # (`window.location.origin`), nunca por um domínio fixo — sem isso,
+      # só oficina.dlsistemas.com.br teria sessão stateful, quebrando login
+      # pra qualquer oficina acessando pelo próprio subdomínio.
+      SANCTUM_STATEFUL_DOMAINS: "oficina.dlsistemas.com.br,localhost:8080,__SANCTUM_CURRENT_REQUEST_HOST__"
+      # SESSION_DOMAIN vazio de propósito (era "oficina.dlsistemas.com.br")
+      # — cookie host-only, escopado exatamente ao domínio de cada
+      # requisição. Um Domain fixo faria o cookie de uma oficina em
+      # stuntmotos.dlsistemas.com.br nunca ser enviado de volta (Domain não
+      # cobre subdomínios IRMÃOS, só o próprio host e os SEUS subdomínios).
+      SESSION_DOMAIN: ""
+      SESSION_SECURE_COOKIE: "true"
       CORS_ALLOWED_ORIGINS: "https://oficina.dlsistemas.com.br,https://saas.dlsistemas.com.br,http://localhost:3000"
       LOG_CHANNEL: stderr
       APP_KEY: ${APP_KEY}

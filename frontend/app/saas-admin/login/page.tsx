@@ -43,12 +43,11 @@ export default function SaasAdminLoginPage() {
     setGlobalError('')
     setLoading(true)
     try {
-      const { data } = await saasApi.post<{ token: string; user: { id: string; nome: string; email: string } }>(
+      const { data } = await saasApi.post<{ user: { id: string; nome: string; email: string } }>(
         '/saas/auth/login',
         { email, senha }
       )
-      localStorage.setItem('saas_token', data.token)
-      document.cookie = `saas_token=${data.token}; path=/; max-age=${7 * 24 * 3600}`
+      localStorage.setItem('saas_user', JSON.stringify(data.user))
       router.push('/saas-admin')
     } catch {
       setGlobalError('Credenciais inválidas.')

@@ -42,8 +42,21 @@ return [
             'driver' => 'session',
             'provider' => 'users',
         ],
+        // Falha de segurança grave corrigida em 2026-09-14: era driver
+        // 'sanctum' (token Bearer, guardado insegur em localStorage pelo
+        // frontend). Trocado pra 'session' — guard de sessão PRÓPRIO e
+        // ISOLADO do guard 'web' (usuários de oficina): usar o mecanismo de
+        // sessão-stateful do Sanctum (Laravel\Sanctum\Guard) exigiria listar
+        // ambos os guards em config('sanctum.guard'), e esse array é
+        // compartilhado por QUALQUER guard sanctum da aplicação — um
+        // Usuario logado em 'web' seria aceito como SuperAdmin autenticado
+        // em rotas 'auth:saas', e vice-versa (Guard::__invoke() não filtra
+        // por provider na checagem de sessão, só na de token). Guard
+        // 'session' comum evita esse cross-contamination por completo: cada
+        // guard lê sua própria chave de sessão (`login_web_*` vs
+        // `login_saas_*`), nunca a do outro.
         'saas' => [
-            'driver' => 'sanctum',
+            'driver' => 'session',
             'provider' => 'super_admins',
         ],
     ],

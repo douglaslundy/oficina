@@ -9,6 +9,8 @@ use App\Models\SuperAdmin;
 use App\Models\SuperAdminPasswordReset;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Auth;
+use Illuminate\Support\Facades\Cookie;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Facades\RateLimiter;
 use Illuminate\Support\Str;
@@ -22,16 +24,37 @@ class AuthController extends Controller
             'senha' => 'required|string',
         ]);
 
+        // Mesma rede de segurança do LoginController::login() — sem
+        // Referer/Origin reconhecido, EnsureFrontendRequestsAreStateful
+        // nunca inicia a sessão.
+        if (! $request->hasSession()) {
+            return response()->json(['message' => 'Requisição não reconhecida como vinda do aplicativo.'], 400);
+        }
+
         $admin = SuperAdmin::where('email', $request->email)->first();
 
         if (!$admin || !Hash::check($request->senha, $admin->senha_hash)) {
             return response()->json(['message' => 'Credenciais inválidas.'], 401);
         }
 
-        $token = $admin->createToken('saas-token')->plainTextToken;
+        // Falha de segurança grave corrigida em 2026-09-14: era um token
+        // Bearer devolvido no corpo da resposta e guardado pelo frontend em
+        // localStorage/document.cookie — ainda mais sensível aqui do que no
+        // login de oficina, por dar acesso a TODAS as oficinas da
+        // plataforma. Agora é sessão httpOnly via guard 'session' PRÓPRIO
+        // ('saas', ver config/auth.php — isolado do guard 'web' de
+        // propósito, pra uma sessão de oficina nunca satisfazer
+        // `auth:saas`).
+        Auth::guard('saas')->login($admin);
+        $request->session()->regenerate();
+
+        Cookie::queue(Cookie::make(
+            'saas_logado', '1', config('session.lifetime'), '/',
+            config('session.domain'), (bool) config('session.secure'), false, false,
+            config('session.same_site'),
+        ));
 
         return response()->json([
-            'token' => $token,
             'user' => [
                 'id'    => $admin->id,
                 'nome'  => $admin->nome,
@@ -42,7 +65,11 @@ class AuthController extends Controller
 
     public function logout(Request $request): JsonResponse
     {
-        $request->user('saas')?->currentAccessToken()?->delete();
+        Auth::guard('saas')->logout();
+        $request->session()->invalidate();
+        $request->session()->regenerateToken();
+        Cookie::queue(Cookie::forget('saas_logado'));
+
         return response()->json(['message' => 'Logout realizado.']);
     }
 

@@ -2,7 +2,7 @@
 import { useState, useEffect, useCallback, useRef } from 'react'
 import { StatusPill } from '@/components/ui/StatusPill'
 import { formatarMoeda, formatarDataHora } from '@/lib/formatters'
-import api from '@/lib/api'
+import api, { xsrfHeader } from '@/lib/api'
 import { toast } from '@/hooks/useToast'
 
 interface NotaFiscal {
@@ -85,13 +85,13 @@ export default function HistoricoNFPage() {
     if (selected.size === 0) return
     setBaixandoZip(true)
     try {
-      const token = localStorage.getItem('auth_token')
       const res = await fetch(`${window.location.origin}/api/notas-fiscais/download-zip`, {
         method: 'POST',
+        credentials: 'include',
         headers: {
           'Content-Type': 'application/json',
-          'Authorization': `Bearer ${token}`,
           'X-Tenant': localStorage.getItem('oficina_slug') ?? '',
+          ...(await xsrfHeader()),
         },
         body: JSON.stringify({ ids: Array.from(selected) }),
       })
@@ -113,10 +113,9 @@ export default function HistoricoNFPage() {
 
   async function baixarPdf(nota: NotaFiscal) {
     try {
-      const token = localStorage.getItem('auth_token')
       const res = await fetch(`${window.location.origin}/api/notas-fiscais/${nota.id}/pdf`, {
+        credentials: 'include',
         headers: {
-          'Authorization': `Bearer ${token}`,
           'X-Tenant': localStorage.getItem('oficina_slug') ?? '',
         },
       })
@@ -137,10 +136,9 @@ export default function HistoricoNFPage() {
   // (até aqui só existia baixar o PDF).
   async function baixarXml(nota: NotaFiscal) {
     try {
-      const token = localStorage.getItem('auth_token')
       const res = await fetch(`${window.location.origin}/api/notas-fiscais/${nota.id}/xml`, {
+        credentials: 'include',
         headers: {
-          'Authorization': `Bearer ${token}`,
           'X-Tenant': localStorage.getItem('oficina_slug') ?? '',
         },
       })

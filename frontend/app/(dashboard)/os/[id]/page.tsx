@@ -100,11 +100,10 @@ export default function OSDetailPage() {
 
   async function downloadFile(endpoint: string, filename: string) {
     try {
-      const token = localStorage.getItem('auth_token')
       const slug  = localStorage.getItem('oficina_slug')
       const response = await fetch(
         `${window.location.origin}/api/os/${id}/${endpoint}`,
-        { headers: { Authorization: `Bearer ${token}`, 'X-Tenant': slug ?? '' } }
+        { credentials: 'include', headers: { 'X-Tenant': slug ?? '' } }
       )
       if (!response.ok) throw new Error('Erro ao gerar PDF')
       const blob = await response.blob()
@@ -167,12 +166,11 @@ export default function OSDetailPage() {
     if (!notas.length) return
     setBaixandoNotas(true)
     try {
-      const token = localStorage.getItem('auth_token')
       const slug  = localStorage.getItem('oficina_slug')
       for (const nota of notas) {
         const response = await fetch(
           `${window.location.origin}/api/notas-fiscais/${nota.id}/pdf`,
-          { headers: { Authorization: `Bearer ${token}`, 'X-Tenant': slug ?? '' } }
+          { credentials: 'include', headers: { 'X-Tenant': slug ?? '' } }
         )
         if (!response.ok) {
           toast(`Erro ao baixar a nota ${nota.modelo} nº ${nota.numero ?? '-'}.`, 'danger')

@@ -1,5 +1,6 @@
 'use client'
 import { usePathname, useRouter } from 'next/navigation'
+import saasApi from '@/lib/saas-api'
 
 const NAV_ITEMS = [
   { label: 'Dashboard', href: '/saas-admin' },
@@ -18,9 +19,15 @@ export default function SaasAdminLayout({ children }: { children: React.ReactNod
   const pathname = usePathname()
   const router = useRouter()
 
-  function handleLogout() {
-    localStorage.removeItem('saas_token')
-    document.cookie = 'saas_token=; path=/; max-age=0'
+  // Achado ao corrigir a falha de segurança do token (2026-09-14): este
+  // logout nunca chamava o backend — só limpava estado local. Com a
+  // credencial agora vivendo em uma sessão httpOnly no servidor, isso
+  // deixaria a sessão real ATIVA mesmo depois de "sair" (qualquer um com
+  // acesso ao navegador continuaria autenticado via cookie). Corrigido pra
+  // invalidar a sessão de verdade no backend também.
+  async function handleLogout() {
+    try { await saasApi.post('/saas/auth/logout') } catch { /* ignore */ }
+    localStorage.removeItem('saas_user')
     router.push('/saas-admin/login')
   }
 

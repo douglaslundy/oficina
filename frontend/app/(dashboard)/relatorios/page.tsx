@@ -50,7 +50,6 @@ export default function RelatoriosPage() {
 
   async function exportar(tipo: 'os' | 'clientes' | 'estoque') {
     try {
-      const token = localStorage.getItem('auth_token')
       const slug  = localStorage.getItem('oficina_slug')
       let qs = '?export=true'
       if (tipo === 'os') {
@@ -60,7 +59,7 @@ export default function RelatoriosPage() {
       }
       const res = await fetch(
         `${window.location.origin}/api/relatorios/${tipo}${qs}`,
-        { headers: { Authorization: `Bearer ${token}`, 'X-Tenant': slug ?? '' } }
+        { credentials: 'include', headers: { 'X-Tenant': slug ?? '' } }
       )
       if (!res.ok) throw new Error()
       const blob = await res.blob()

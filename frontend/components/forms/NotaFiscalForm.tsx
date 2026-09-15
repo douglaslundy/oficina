@@ -122,10 +122,9 @@ export function NotaFiscalForm() {
 
   async function abrirPdf(notaId: string, numero?: number | string) {
     try {
-      const token = localStorage.getItem('auth_token')
       const res = await fetch(`${window.location.origin}/api/notas-fiscais/${notaId}/pdf`, {
+        credentials: 'include',
         headers: {
-          Authorization: `Bearer ${token}`,
           'X-Tenant': localStorage.getItem('oficina_slug') ?? '',
         },
       })

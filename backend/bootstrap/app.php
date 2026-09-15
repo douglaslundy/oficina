@@ -28,8 +28,20 @@ return Application::configure(basePath: dirname(__DIR__))
             '127.0.0.1',
         ]);
 
+        // Falha de segurança grave corrigida em 2026-09-14: login guardava o
+        // token em localStorage/document.cookie (legível por qualquer XSS),
+        // contrariando a própria regra do CLAUDE.md ("Cookies httpOnly para
+        // tokens (nunca localStorage)"). EnsureFrontendRequestsAreStateful
+        // troca a autenticação por token Bearer por sessão via cookie
+        // httpOnly (Sanctum SPA auth) pra requisições vindas do frontend
+        // (Referer/Origin batendo com SANCTUM_STATEFUL_DOMAINS) — precisa
+        // rodar logo depois do CORS, antes de qualquer coisa que dependa de
+        // sessão/CSRF.
         $middleware->api(
-            prepend: [\Illuminate\Http\Middleware\HandleCors::class],
+            prepend: [
+                \Illuminate\Http\Middleware\HandleCors::class,
+                \Laravel\Sanctum\Http\Middleware\EnsureFrontendRequestsAreStateful::class,
+            ],
             append: [\App\Http\Middleware\SecurityHeaders::class],
         );
 
