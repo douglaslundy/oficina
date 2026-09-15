@@ -24,6 +24,14 @@ class RejeicaoSefazTradutorTest extends TestCase
         $this->assertStringContainsString('já foi autorizada', $resultado);
     }
 
+    public function test_traduz_cstat_806_icms_st_sem_cest(): void
+    {
+        $resultado = RejeicaoSefazTradutor::traduzir('cStat=806: Rejeicao: Operacao com ICMS-ST sem informacao do CEST. [nItem: 1]');
+
+        $this->assertNotNull($resultado);
+        $this->assertStringContainsString('CEST', $resultado);
+    }
+
     /** @dataProvider codigosMapeadosProvider */
     public function test_traduz_todos_os_codigos_mapeados(string $codigo): void
     {
@@ -35,7 +43,7 @@ class RejeicaoSefazTradutorTest extends TestCase
     public static function codigosMapeadosProvider(): array
     {
         return [
-            ['883'], ['204'], ['215'], ['225'], ['999'], ['217'], ['558'], ['632'],
+            ['883'], ['204'], ['215'], ['225'], ['999'], ['217'], ['558'], ['632'], ['806'],
         ];
     }
 

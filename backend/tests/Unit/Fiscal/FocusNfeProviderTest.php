@@ -28,6 +28,10 @@ class FocusNfeProviderTest extends TestCase
             codigoServicoMunicipal: '1401',
             naturezaOperacao: 'Prestação de Serviços',
             referenciaExterna: 'os-123',
+            regimeTributario: 'Simples Nacional',
+            cnpjEmitente: '11222333000181',
+            inscricaoMunicipalEmitente: '98765',
+            codigoIbgeEmitente: '3130507',
         );
     }
 
@@ -56,6 +60,7 @@ class FocusNfeProviderTest extends TestCase
                 'tributacao_icms' => 'NORMAL', 'cst_csosn' => '00',
                 'quantidade' => 2, 'valor_unitario' => 35.50,
             ]],
+            cnpjEmitente: '11222333000181',
         );
     }
 
@@ -84,6 +89,32 @@ class FocusNfeProviderTest extends TestCase
         $this->assertSame(2.0, $payload['items'][0]['quantidade_comercial']);
         $this->assertSame(35.50, $payload['items'][0]['valor_unitario_comercial']);
         $this->assertSame(71.0, $payload['items'][0]['valor_bruto']);
+    }
+
+    /**
+     * Bug real achado 2026-09-15 (auditoria contra
+     * doc.focusnfe.com.br/reference/criar_empresa.md): faltavam
+     * `habilita_nfe`/`habilita_nfce` — só `habilita_nfse` era mandado, então
+     * a conta na Focus nunca tinha permissão de emitir esses dois modelos
+     * mesmo com o payload de emissão correto. `codigo_municipio` (que não
+     * existe no schema de request desse endpoint) foi removido.
+     */
+    public function test_payload_empresa_habilita_todos_os_modelos_e_nao_manda_campo_inexistente(): void
+    {
+        $p = new FocusNfeProvider('https://homologacao.focusnfe.com.br', 'master', 'HOMOLOGACAO');
+        $e = new \App\Services\Fiscal\Data\EmissorData(
+            cnpj: '12.345.678/0001-99', razaoSocial: 'Oficina X Ltda', nomeFantasia: 'Oficina X',
+            inscricaoEstadual: '123', inscricaoMunicipal: '456', regimeTributario: 'Simples Nacional',
+            email: 'of@x.com', telefone: '11999999999', cep: '01310-100', logradouro: 'Av Paulista',
+            numero: '1000', complemento: null, bairro: 'Centro', cidade: 'São Paulo', uf: 'SP',
+            codigoIbge: '3550308', cnae: '4520-0/01',
+        );
+        $payload = $p->montarPayloadEmpresa($e);
+
+        $this->assertTrue($payload['habilita_nfse']);
+        $this->assertTrue($payload['habilita_nfe']);
+        $this->assertTrue($payload['habilita_nfce']);
+        $this->assertArrayNotHasKey('codigo_municipio', $payload);
     }
 
     public function test_emitir_nfe_processando(): void
@@ -240,6 +271,28 @@ class FocusNfeProviderTest extends TestCase
         $this->assertSame(5.0, $payload['servico']['aliquota']);
         $this->assertSame('12345678000199', $payload['tomador']['cnpj']);
         $this->assertSame('Prestação de Serviços', $payload['natureza_operacao']);
+    }
+
+    /**
+     * Bugs reais achados 2026-09-15 (auditoria contra
+     * doc.focusnfe.com.br/reference/emitir_nfse.md) — caminho mais
+     * impactante do arquivo, já que NFSE é o `default` de `emitir()`:
+     * faltava o objeto `prestador` inteiro (obrigatório, raiz), faltava
+     * `servico.codigo_municipio` (código IBGE do MUNICÍPIO DE PRESTAÇÃO —
+     * do emitente, não do destinatário) e faltava `optante_simples_nacional`.
+     */
+    public function test_payload_nfse_manda_prestador_codigo_municipio_e_optante_simples(): void
+    {
+        $p = new FocusNfeProvider('https://homologacao.focusnfe.com.br', 'master', 'HOMOLOGACAO', 'tok');
+        $payload = $p->montarPayloadNfse($this->nota());
+
+        $this->assertSame('11222333000181', $payload['prestador']['cnpj']);
+        $this->assertSame('98765', $payload['prestador']['inscricao_municipal']);
+        // Município de PRESTAÇÃO = do emitente (regra geral de ISS, LC
+        // 116/2003) — não confundir com codigo_municipio do endereço do
+        // TOMADOR (dentro de tomador.endereco), que é outro campo.
+        $this->assertSame('3130507', $payload['servico']['codigo_municipio']);
+        $this->assertTrue($payload['optante_simples_nacional']);
     }
 
     public function test_emitir_envia_ref_e_processa(): void
@@ -404,6 +457,7 @@ class FocusNfeProviderTest extends TestCase
                 'quantidade' => 2, 'valor_unitario' => 35.50,
             ]],
             formaPagamento: 'PIX',
+            cnpjEmitente: '11222333000181',
         );
     }
 
@@ -420,6 +474,43 @@ class FocusNfeProviderTest extends TestCase
         $this->assertSame('5102', $payload['items'][0]['cfop']);
         $this->assertSame('17', $payload['formas_pagamento'][0]['forma_pagamento']);
         $this->assertSame(71.0, $payload['formas_pagamento'][0]['valor_pagamento']);
+    }
+
+    /**
+     * Bugs reais achados 2026-09-15 (auditoria contra
+     * doc.focusnfe.com.br/reference/emitir_nfce.md): `cnpj_emitente`
+     * (obrigatório, raiz) e `valor_unitario_tributavel` (obrigatório, par de
+     * `quantidade_tributavel`) nunca eram mandados — bloqueava TODA emissão
+     * de NFC-e via Focus.
+     */
+    public function test_payload_nfce_manda_cnpj_emitente_e_valor_unitario_tributavel(): void
+    {
+        $p = new FocusNfeProvider('https://homologacao.focusnfe.com.br', 'master', 'HOMOLOGACAO', 'tok');
+        $payload = $p->montarPayloadNfce($this->notaNfce());
+
+        $this->assertSame('11222333000181', $payload['cnpj_emitente']);
+        $this->assertSame(35.50, $payload['items'][0]['valor_unitario_tributavel']);
+    }
+
+    /**
+     * Bug real achado 2026-09-15: `numero_protocolo` já era extraído
+     * corretamente em resultadoNfeDe() (mesmo campo, mesma API) — em
+     * resultadoNfceDe() ficava hardcoded null, perdendo o protocolo de toda
+     * NFC-e autorizada via Focus.
+     */
+    public function test_consultar_nfce_autorizada_le_numero_protocolo(): void
+    {
+        Http::fake([
+            '*/v2/nfce/os-nfce-1' => Http::response([
+                'status' => 'autorizado', 'numero' => '55', 'chave_nfe' => 'CHAVE-NFCE',
+                'numero_protocolo' => '135260000099999',
+            ], 200),
+        ]);
+
+        $p = new FocusNfeProvider('https://homologacao.focusnfe.com.br', 'master', 'HOMOLOGACAO', 'tok');
+        $r = $p->consultar('os-nfce-1', 'NFCE');
+
+        $this->assertSame('135260000099999', $r->protocolo);
     }
 
     public function test_emitir_nfce_autorizada_sincrona(): void
@@ -487,6 +578,28 @@ class FocusNfeProviderTest extends TestCase
         Http::fake([
             '*/nfes_recebidas/CHAVE1.json*' => Http::response([
                 'chave_nfe' => 'CHAVE1', 'manifestacao_destinatario' => null,
+            ], 200),
+            '*/nfes_recebidas/CHAVE1/manifesto' => Http::response(['status' => 'evento_registrado'], 200),
+        ]);
+
+        $p = new FocusNfeProvider('https://homologacao.focusnfe.com.br', 'master', 'HOMOLOGACAO', 'tok');
+        $r = $p->consultarNotaRecebida('CHAVE1');
+
+        $this->assertSame('AGUARDANDO_MANIFESTACAO', $r->status);
+        Http::assertSent(fn ($req) => str_contains($req->url(), '/manifesto') && $req['tipo'] === 'ciencia');
+    }
+
+    /**
+     * Bug real achado 2026-09-15 (auditoria contra doc.focusnfe.com.br): a
+     * API real da Focus devolve a STRING LITERAL "nulo" (não `null`/`""`)
+     * quando ainda não há manifestação — `empty('nulo')` é `false` em PHP,
+     * então o branch de ciência automática nunca executava com dados reais.
+     */
+    public function test_consultar_nota_recebida_manifestacao_nulo_string_manifesta_e_retorna_aguardando(): void
+    {
+        Http::fake([
+            '*/nfes_recebidas/CHAVE1.json*' => Http::response([
+                'chave_nfe' => 'CHAVE1', 'manifestacao_destinatario' => 'nulo',
             ], 200),
             '*/nfes_recebidas/CHAVE1/manifesto' => Http::response(['status' => 'evento_registrado'], 200),
         ]);

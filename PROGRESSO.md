@@ -1,15 +1,170 @@
 # Progresso do Projeto
 
 ## Última atualização
-2026-09-15 — Rodada 47: bug real reportado pelo usuário ao vivo — SEFAZ
-rejeitou NF-e com cStat=806 "ICMS-ST sem CEST", mesmo o produto já tendo
-CEST cadastrado. Causa raiz de verdade: `MotorNfe`/`MotorNfce` (motor
-NFePHP) nunca liam/mandavam o campo CEST em `tagprod()` — bug de
-propagação, não só falta de dado. Corrigido + adicionado bloqueio
-preventivo (`CriarNotaFiscalService`) pro caso em que o CEST realmente não
-existe no cadastro. Executado por um agente independente (fork) enquanto a
-sessão principal cuidava de outro deploy. **Ainda não commitado/enviado**
-nesta escrita — ver seção "Rodada 47" pro estado exato.
+2026-09-15 — Rodada 48: usuário pediu auditoria completa em todos os
+motores fiscais ("não aguento mais tentar gerar uma nota e dar bug").
+3 agentes de investigação em paralelo (Spedy, Focus, NFePHP) — 2 completaram
+com sucesso (Spedy: 7 bugs confirmados; Focus: 8 bugs confirmados, 6
+bloqueando emissão), 1 terceiro (fork da mensagem amigável do cStat 806) e
+o agente do motor NFePHP falharam por rate limit de sessão (resets 13h). Um
+achado próprio (fora dos agentes): confirmado via vendor que ST via CSOSN
+500 (Simples Nacional) NÃO precisa de campos extras além do CEST já
+corrigido na Rodada 47 — suspeita descartada com evidência real. Todos os
+fixes confirmados foram aplicados diretamente (sem mais agentes, pra evitar
+rate limit), testados (Unit completo sem regressão) e comitados. Ver seção
+"Rodada 48" pro detalhe completo. Deploy: ver seção pro status exato.
+
+## Rodada 48 (2026-09-15) — auditoria completa dos 3 provedores fiscais + 14 bugs reais corrigidos
+
+Pedido do usuário, com urgência real ("não aguento mais tentar gerar uma
+nota e dar um bug"): analisar TODOS os motores fiscais em busca de mais
+bugs, não só reagir ao próximo erro isolado.
+
+### Metodologia
+Mesma da Rodada 45/47: comparar CADA campo/payload contra a fonte real
+(doc oficial do provedor via WebFetch, ou código-fonte real do vendor
+instalado) — nunca confiar em "parece certo" por analogia com outro método
+do mesmo arquivo. 3 agentes de investigação (SOMENTE LEITURA, sem editar
+nada) disparados em paralelo, um por provedor:
+
+- **SpedyProvider** — ✅ completou. 7 bugs confirmados.
+- **FocusNfeProvider** — ✅ completou. 8 bugs confirmados (6 bloqueiam
+  emissão).
+- **Motores NFePHP (MotorNfe/MotorNfce/MotorNfse) vs. código do vendor** —
+  ❌ falhou por rate limit de sessão ("session limit, resets 13h") antes de
+  produzir qualquer achado. Não re-disparado nesta rodada (ver "pendente"
+  abaixo).
+- Um 4º fork (tradução amigável do cStat 806, pedido à parte do usuário) —
+  ❌ também falhou por rate limit, mas só DEPOIS de já ter feito o trabalho
+  (arquivo editado, 16/16 testes passando) — só não chegou a commitar. A
+  sessão principal revisou o diff (correto) e completou o commit.
+
+**Achado próprio, fora dos agentes** (verificação pontual antes de decidir
+não re-disparar o agente do NFePHP): suspeita de que ICMS-ST via CSOSN 500
+(Simples Nacional) precisasse de campos extras (`vBCSTRet`/`pST`/
+`vICMSSubstituto`/`vICMSSTRet`) além do CEST já corrigido na Rodada 47.
+Verificado direto em
+`vendor/nfephp-org/sped-nfe/src/Traits/TraitTagDetICMS.php` (case '500' de
+`tagICMSSN()`): todos esses campos são passados com o parâmetro
+`obrigatorio=false` do `addChild()` (só `orig`/`CSOSN` são `true`) — CSOSN
+500 significa "ICMS-ST já retido em etapa anterior", então esses valores
+são genuinamente opcionais nesse caso. **Suspeita descartada com evidência
+real, não presumida.** O fix da Rodada 47 (só CEST) já estava completo.
+
+### Correção de doc stale (mesma classe de problema já vista antes)
+`TAREFAS.md` ainda listava `SpedyProvider::cancelar()` como usando
+`DELETE /{recurso}/{referencia}` por path (bug não corrigido). Lendo o
+código atual: **já está corrigido** (busca o `id` real via
+`GET ?integrationId=` antes de deletar, com teste
+`test_cancelar_busca_o_id_real_antes_de_deletar` cobrindo isso) — a entrada
+em TAREFAS.md não tinha sido atualizada quando esse fix foi feito
+(provavelmente junto do fix de `consultar()`, mesma rodada). Corrigido o
+texto.
+
+### Bugs reais corrigidos — SpedyProvider (7)
+1. **`mapRegime()`** — `lucroPresumido`/`lucroReal` não existem no enum real
+   `TaxRegime` (só `simplesNacional`/`simplesNacionalExcessoSublimite`/
+   `regimeNormal`/`simplesNacionalMEI`) — bloqueava `POST /v1/companies`
+   pra TODA oficina fora do Simples Nacional. Ambos mapeados pra
+   `regimeNormal`.
+2. **`montarPayloadNfse()`** — faltava `effectiveDate` (obrigatório no
+   schema) — bloqueava TODA emissão de NFS-e via Spedy. Esse fluxo nunca
+   tinha comentário de spike/teste real, ao contrário de NF-e/NFC-e.
+3. **`montarPayloadNfse()`** — `status: 'enqueued'` não é um campo de
+   request válido (controlado só pela Spedy); removido (o default de
+   `issue`, campo que a doc recomenda, já produz o comportamento desejado).
+4. **`montarPayloadNfse()`** — `operationNature` não existe no schema de
+   NFS-e (só em NF-e/NFC-e); removido (dado morto, provavelmente ignorado
+   silenciosamente, mas indicava payload nunca conferido).
+5. **`resultadoDe()`/`resultadoNfceDe()`** — `protocolo` sempre `null`
+   (limitação documentada em 2026-08-03 por falta de confirmação); agora lê
+   `authorization.protocol`, confirmado na doc.
+6. **`montarPayloadEmpresa()`** — `isMain: true` não existe em
+   `CompanyEconomicActivityDto` (campo real é `type: 'main'|'secondary'`) —
+   nenhuma atividade econômica ficava marcada como principal.
+7. `pdfUrl` também citado pelo agente (mesmo padrão do bug de XML já
+   corrigido) — **investigado e descartado**: `NotaFiscalController::pdf()`
+   sempre gera o PDF localmente via DomPDF, nunca lê `pdf_url` do banco,
+   pra NENHUM provedor. Campo morto — não vale criar um `pdfAutorizadoDe()`
+   dedicado (custo de rede extra) pra popular um dado que nada consome.
+
+### Bugs reais corrigidos — FocusNfeProvider (6 de 8 — os 2 restantes eram cosméticos/baixa confiança, não aplicados)
+1. **`montarPayloadNfce()`** — faltava `cnpj_emitente` (obrigatório, raiz)
+   — bloqueava TODA emissão de NFC-e via Focus.
+2. **`montarPayloadNfce()`** — faltava `valor_unitario_tributavel` por item
+   (obrigatório, par de `quantidade_tributavel`) — item ficava incompleto
+   mesmo corrigindo #1.
+3. **`montarPayloadNfse()`** — faltava o objeto `prestador` inteiro
+   (`cnpj`+`inscricao_municipal`, obrigatório) — **provavelmente a causa
+   raiz mais impactante do arquivo**, já que NFS-e é o modelo `default` de
+   `emitir()`: toda emissão de NFS-e via Focus deve ter sido recusada por
+   causa disso.
+4. **`montarPayloadNfse()`** — `servico.codigo_municipio` (código IBGE do
+   MUNICÍPIO DE PRESTAÇÃO, obrigatório) nunca era mandado — o código só
+   mandava `codigo_tributario_municipio` (campo diferente, tabela
+   tributária do município, opcional). Regra geral de ISS (LC 116/2003,
+   sem exceção aplicável a serviço automotivo) é o município do
+   ESTABELECIMENTO PRESTADOR, não do destinatário — mesmo padrão que
+   `MotorNfse` (NFePHP) já usa.
+5. **`montarPayloadNfse()`** — faltava `optante_simples_nacional` (boolean,
+   confiança média-alta — 1 exemplo real da doc omite o campo, pode variar
+   por prefeitura; mandado de qualquer forma por estar no schema geral e
+   não ter custo mandar onde é opcional).
+6. **`montarPayloadEmpresa()`** — faltavam `habilita_nfe`/`habilita_nfce`
+   (só `habilita_nfse` era mandado) — bloqueio de PERMISSÃO DE CONTA na
+   Focus, não de payload malformado; mesmo corrigindo tudo acima, a conta
+   nunca teria autorização de emitir NF-e/NFC-e. `codigo_municipio`
+   (inexistente nesse endpoint de request) removido de brinde.
+7. **`resultadoNfceDe()`** — `numero_protocolo` já era extraído
+   corretamente em `resultadoNfeDe()` (mesmo campo); em `resultadoNfceDe()`
+   ficava hardcoded `null`.
+8. **`consultarNotaRecebida()`** — `empty($json['manifestacao_destinatario'])`
+   nunca detectava "sem manifestação" com dados reais, porque a API real
+   devolve a STRING LITERAL `"nulo"` (não `null`/`""`) — `empty('nulo')` é
+   `false` em PHP. A ciência automática da operação nunca era registrada.
+   O teste existente também simulava o formato errado (`null`) — mantido
+   (ainda uma entrada defensiva válida) e adicionado um teste novo com
+   `'nulo'` cobrindo o caso real.
+
+**Não aplicados** (achados de baixíssima confiança/puramente cosméticos,
+já descartados no próprio relatório do agente): fallback morto
+`caminho_danfse` (nunca atingido, `url` real já cobre o caso), e
+`regime_tributario` como string vs. integer (o agente já marcou como baixa
+confiança, provável tolerância de coerção JSON).
+
+### Mudança estrutural necessária: `NotaFiscalData` ganhou dados do EMITENTE
+Achado ao tentar corrigir #1/#3 da Focus: `NotaFiscalData` só carregava
+dados do DESTINATÁRIO (`tomador`) — nenhum provider precisava do CNPJ/IM/
+código IBGE da própria oficina antes (Spedy/NFePHP usam a credencial/
+certificado, já escopados à empresa). Adicionados `cnpjEmitente`,
+`inscricaoMunicipalEmitente`, `codigoIbgeEmitente` (todos nullable,
+populados por `NfeService::montarNotaData()` a partir de `Configuracao`).
+
+### Testes
+`SpedyProviderTest`: 64 testes (era 59, +5). `FocusNfeProviderTest`: 35
+testes (era 30, +5). `RejeicaoSefazTradutorTest`: 16 testes (+1, cStat
+806). Suíte Unit completa: **379 testes, 861 assertions, 7 erros** — mesmos
+de sempre (`RefreshDatabase`, sem Postgres local), zero regressão nova.
+`npx tsc --noEmit` limpo.
+
+### Pendente (não bloqueia, registrado pra retomar)
+- Auditoria dos motores NFePHP (`MotorNfe`/`MotorNfce`/`MotorNfse`) contra
+  o código real do vendor — não completada (rate limit). Como NFEPHP é o
+  provedor ATIVO da stuntmotos hoje, vale retomar quando a sessão não
+  estiver sob rate limit. O achado pontual sobre ICMS-ST/CSOSN 500 (acima)
+  cobre só uma suspeita específica, não uma auditoria completa do arquivo.
+- Focus: `optante_simples_nacional` pode não ser exigido por toda
+  prefeitura (1 exemplo real da doc omite) — se alguma emissão real via
+  Focus rejeitar por causa desse campo, é o primeiro lugar a olhar.
+
+**Arquivos alterados:** `backend/app/Services/Fiscal/Data/NotaFiscalData.php`,
+`backend/app/Services/Fiscal/Providers/SpedyProvider.php`,
+`backend/app/Services/Fiscal/Providers/FocusNfeProvider.php`,
+`backend/app/Services/Fiscal/RejeicaoSefazTradutor.php`,
+`backend/app/Services/NfeService.php`,
+`backend/tests/Unit/Fiscal/SpedyProviderTest.php`,
+`backend/tests/Unit/Fiscal/FocusNfeProviderTest.php`,
+`backend/tests/Unit/Fiscal/RejeicaoSefazTradutorTest.php`, `TAREFAS.md`.
 
 ## Rodada 47 (2026-09-15) — fix: MotorNfe/MotorNfce nunca mandavam CEST (cStat=806) + bloqueio preventivo
 

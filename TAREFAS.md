@@ -306,16 +306,13 @@ Resultado da varredura nos 3:
   — arquitetura diferente da Spedy, que nunca teve essa concordância. TDD
   (`FocusNfeProviderTest`: 29→30 testes), suíte Unit completa sem regressão
   (298 testes, mesmas 10 falhas pré-existentes).
-- **`SpedyProvider::cancelar()` ainda usa `DELETE /{recurso}/{referencia}`
-   por path** (não por filtro `integrationId`) — mesma classe de problema do
-   `consultar()` antigo: `referencia_externa` salvo é sempre a nossa
-   referência interna, nunca o `id` real da Spedy, então cancelar uma nota
-   já AUTORIZADA provavelmente também dá 404. **Não corrigido nesta rodada**
-   porque exigiria confirmar empiricamente (sandbox real) se a Spedy aceita
-   filtrar por `integrationId` também no DELETE ou se exige o `id` real via
-   um GET prévio — nenhuma nota chegou a ser cancelada de verdade ainda
-   neste projeto, então não há evidência de produção como havia pra
-   `consultar()`. Precisa de uma rodada dedicada com teste ao vivo.
+- **✅ CORRIGIDO** (achado desatualizado aqui — corrigido em rodada não
+  registrada nesta lista, achado só ao ler o código atual na Rodada 48,
+  2026-09-15): `SpedyProvider::cancelar()` já busca o `id` real da Spedy via
+  `GET ?integrationId=` ANTES de fazer o `DELETE` (mesmo padrão do
+  `consultar()`), com teste dedicado
+  (`test_cancelar_busca_o_id_real_antes_de_deletar`). Esta entrada só não
+  tinha sido atualizada quando o fix foi feito.
 
 ## Fila (nesta ordem)
 

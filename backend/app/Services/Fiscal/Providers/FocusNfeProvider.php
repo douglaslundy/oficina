@@ -135,6 +135,18 @@ class FocusNfeProvider implements FiscalProvider, ConsultaNotaTerceiroProvider
         return $this->resultadoNfceDe($resp->json(), $nota->referenciaExterna);
     }
 
+    /**
+     * Bugs reais achados 2026-09-15 (auditoria campo-a-campo contra
+     * doc.focusnfe.com.br/reference/emitir_nfce.md):
+     * - `cnpj_emitente` está no `required` da raiz e nunca era mandado —
+     *   bloqueava TODA emissão de NFC-e via Focus. Vem de
+     *   `Configuracao.cnpj` (`NotaFiscalData::$cnpjEmitente`, ver
+     *   NfeService::montarNotaData()).
+     * - `valor_unitario_tributavel` está no `required` do item (par de
+     *   `quantidade_tributavel`, que já era mandado) e nunca era mandado —
+     *   mesmo corrigindo o item acima, a nota ainda seria rejeitada por
+     *   item incompleto.
+     */
     public function montarPayloadNfce(NotaFiscalData $n): array
     {
         $docTomador = preg_replace('/\D/', '', $n->tomador['cpf_cnpj']) ?? '';
@@ -145,6 +157,7 @@ class FocusNfeProvider implements FiscalProvider, ConsultaNotaTerceiroProvider
         )), 2);
 
         return [
+            'cnpj_emitente'      => preg_replace('/\D/', '', $n->cnpjEmitente ?? ''),
             'natureza_operacao'  => $n->naturezaOperacao,
             'data_emissao'       => date('c'),
             'presenca_comprador' => 1, // presencial — único cenário coberto na v1
@@ -164,6 +177,7 @@ class FocusNfeProvider implements FiscalProvider, ConsultaNotaTerceiroProvider
                 'unidade_tributavel'        => $item['unidade'] ?? 'UN',
                 'quantidade_tributavel'     => (float) $item['quantidade'],
                 'valor_unitario_comercial'  => (float) $item['valor_unitario'],
+                'valor_unitario_tributavel' => (float) $item['valor_unitario'],
                 'valor_bruto'               => round((float) $item['quantidade'] * (float) $item['valor_unitario'], 2),
                 'icms_origem'               => (int) $item['origem'],
                 'icms_situacao_tributaria'  => $item['cst_csosn'],
@@ -211,9 +225,15 @@ class FocusNfeProvider implements FiscalProvider, ConsultaNotaTerceiroProvider
         $xmlUrl      = $json['caminho_xml_nota_fiscal'] ?? null;
         $xmlConteudo = $xmlUrl ? $this->baixarXmlNfe($xmlUrl) : null;
 
+        // Bug real achado 2026-09-15: `numero_protocolo` já é extraído
+        // corretamente em resultadoNfeDe() (mesmo campo, mesma API) — aqui
+        // ficava hardcoded null, perdendo o protocolo de toda NFC-e
+        // autorizada via Focus.
+        $protocoloBruto = $json['numero_protocolo'] ?? $json['protocolo'] ?? null;
+
         return EmissaoResultado::autorizada(
             chave: $json['chave_nfe'] ?? null,
-            protocolo: null,
+            protocolo: $protocoloBruto !== null ? (string) $protocoloBruto : null,
             numero: isset($json['numero']) ? (string) $json['numero'] : null,
             xml: $xmlConteudo,
             pdfUrl: $json['caminho_danfe'] ?? null,
@@ -299,11 +319,42 @@ class FocusNfeProvider implements FiscalProvider, ConsultaNotaTerceiroProvider
             'cep'                 => preg_replace('/\D/', '', $e->cep),
             'municipio'           => $e->cidade,
             'uf'                  => $e->uf,
-            'codigo_municipio'    => $e->codigoIbge,
+            // Bugs reais achados 2026-09-15 (auditoria contra
+            // doc.focusnfe.com.br/reference/criar_empresa.md):
+            // - `codigo_municipio` não existe no schema de REQUEST de
+            //   criação de empresa (só na resposta) — a Focus recebe
+            //   `municipio`+`uf` (nome), removido por ser dado morto.
+            // - Faltavam `habilita_nfe`/`habilita_nfce` — só `habilita_nfse`
+            //   era mandado, então mesmo corrigindo os payloads de emissão
+            //   de NF-e/NFC-e, a conta na Focus nunca tinha permissão pra
+            //   emitir esses modelos (bloqueio de permissão de conta, não
+            //   de payload malformado).
             'habilita_nfse'       => true,
+            'habilita_nfe'        => true,
+            'habilita_nfce'       => true,
         ];
     }
 
+    /**
+     * Bugs reais achados 2026-09-15 (auditoria campo-a-campo contra
+     * doc.focusnfe.com.br/reference/emitir_nfse.md, POST /v2/nfse) — este
+     * era o caminho mais impactante (`NFSE` é o `default` de `emitir()`):
+     * - Faltava o objeto `prestador` inteiro (`cnpj`+`inscricao_municipal`,
+     *   ambos no `required` da raiz e presentes em todo exemplo real da
+     *   doc) — SEM ele, TODA emissão de NFS-e via Focus deve estar sendo
+     *   recusada.
+     * - `servico.codigo_municipio` (código IBGE do MUNICÍPIO DE PRESTAÇÃO,
+     *   `required`) nunca era mandado — o código só mandava
+     *   `codigo_tributario_municipio` (campo diferente, opcional, tabela
+     *   tributária do município). Regra geral de ISS (LC 116/2003, sem
+     *   nenhuma exceção aplicável a serviço automotivo) é o município do
+     *   ESTABELECIMENTO PRESTADOR — mesmo padrão já usado por
+     *   `MotorNfse::cLocPrestacao` (NFePHP), não o do destinatário.
+     * - `optante_simples_nacional` (boolean, `required` no schema; doc tem
+     *   1 exemplo real que omite o campo, então a exigência pode variar por
+     *   prefeitura — mandado de qualquer forma por ser confirmado no schema
+     *   geral e não ter custo mandar mesmo onde é opcional).
+     */
     public function montarPayloadNfse(NotaFiscalData $n): array
     {
         $docTomador = preg_replace('/\D/', '', $n->tomador['cpf_cnpj']) ?? '';
@@ -312,6 +363,11 @@ class FocusNfeProvider implements FiscalProvider, ConsultaNotaTerceiroProvider
         return [
             'data_emissao'      => date('Y-m-d'),
             'natureza_operacao' => $n->naturezaOperacao,
+            'optante_simples_nacional' => str_contains(strtolower($n->regimeTributario), 'simples'),
+            'prestador' => [
+                'cnpj'                => preg_replace('/\D/', '', $n->cnpjEmitente ?? ''),
+                'inscricao_municipal' => $n->inscricaoMunicipalEmitente ?? '',
+            ],
             'tomador'           => [
                 $chaveDoc      => $docTomador,
                 'razao_social' => $n->tomador['nome'],
@@ -329,6 +385,7 @@ class FocusNfeProvider implements FiscalProvider, ConsultaNotaTerceiroProvider
                 'discriminacao'               => $n->descricao,
                 'item_lista_servico'          => $n->codigoServicoFederal,
                 'codigo_tributario_municipio' => $n->codigoServicoMunicipal,
+                'codigo_municipio'            => $n->codigoIbgeEmitente ?? '',
                 'aliquota'                    => $n->aliquotaIss,
                 'iss_retido'                  => $n->issRetido,
                 'valor_servicos'              => $n->valorServicos,
@@ -529,7 +586,15 @@ class FocusNfeProvider implements FiscalProvider, ConsultaNotaTerceiroProvider
 
         $json = $resp->json();
 
-        if (empty($json['manifestacao_destinatario'])) {
+        // Bug real achado 2026-09-15 (auditoria contra
+        // doc.focusnfe.com.br/reference/consultar_nfe_recebida_individual_json):
+        // o campo `manifestacao_destinatario` está SEMPRE presente na
+        // resposta e, quando ainda não há manifestação, vale a STRING
+        // LITERAL "nulo" — nunca `null`/`""`. `empty('nulo')` é `false` em
+        // PHP, então este branch nunca executava com dados reais: a ciência
+        // da operação nunca era auto-registrada.
+        $manifestacao = $json['manifestacao_destinatario'] ?? null;
+        if ($manifestacao === null || $manifestacao === '' || $manifestacao === 'nulo') {
             $manifestoResp = Http::withBasicAuth($this->emissorToken ?? $this->masterToken, '')
                 ->post("{$this->baseUrl}/v2/nfes_recebidas/{$chaveAcesso}/manifesto", ['tipo' => 'ciencia']);
 

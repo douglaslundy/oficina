@@ -65,5 +65,18 @@ final class NotaFiscalData
         // provedor que precise mandar explicitamente.
         public readonly ?string $numeroAlocado = null,
         public readonly ?string $serieNf = null,
+        // Dados do EMITENTE (a própria oficina) — achado real 2026-09-15
+        // (auditoria FocusNfeProvider): `montarPayloadNfce()`/`montarPayloadNfse()`
+        // da Focus exigem `cnpj_emitente`/`prestador.cnpj`+`prestador.inscricao_municipal`/
+        // `servico.codigo_municipio` (município do PRESTADOR, não do
+        // destinatário — regra geral de ISS é o município do estabelecimento
+        // prestador), mas este objeto só carregava dados do destinatário
+        // (`tomador`). Só populados por NfeService::montarNotaData() a partir
+        // de Configuracao — nenhum provider até então precisava disso
+        // explicitamente (Spedy/NFePHP usam a credencial/certificado, que já
+        // é escopada à empresa).
+        public readonly ?string $cnpjEmitente = null,
+        public readonly ?string $inscricaoMunicipalEmitente = null,
+        public readonly ?string $codigoIbgeEmitente = null,
     ) {}
 }

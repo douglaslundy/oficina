@@ -181,6 +181,9 @@ class NfeService
             // pra qualquer provedor — ver comentário em NotaFiscalData.
             numeroAlocado: $temItens && $nota->numero !== null ? (string) $nota->numero : null,
             serieNf: $config?->serie_nf,
+            cnpjEmitente: $config?->cnpj,
+            inscricaoMunicipalEmitente: $config?->inscricao_municipal,
+            codigoIbgeEmitente: $config?->codigo_ibge,
         );
     }
 

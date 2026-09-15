@@ -50,7 +50,35 @@ class SpedyProviderTest extends TestCase
         $this->assertSame(200.00, $payload['total']['invoiceAmount']);
         $this->assertSame(0.05, $payload['total']['issRate']);
         $this->assertSame('12345678000199', $payload['receiver']['federalTaxNumber']);
-        $this->assertSame('Prestação de Serviços', $payload['operationNature']);
+    }
+
+    /**
+     * Bug real achado 2026-09-15 (auditoria contra docs.spedy.com.br/
+     * api-reference/nfs-e/criar-nfs-e.md): `effectiveDate` está no `required`
+     * do schema de POST /v1/service-invoices e nunca era mandado — bloqueava
+     * TODA emissão de NFS-e via Spedy por campo obrigatório ausente.
+     */
+    public function test_payload_nfse_manda_effective_date(): void
+    {
+        $p = new SpedyProvider('https://sandbox-api.spedy.com.br/v1', 'master', 'tok', 'emp-1');
+        $payload = $p->montarPayloadNfse($this->nota());
+
+        $this->assertArrayHasKey('effectiveDate', $payload);
+        $this->assertNotEmpty($payload['effectiveDate']);
+    }
+
+    /**
+     * `status` não existe como campo de request (é controlado só pela
+     * Spedy) e `operationNature` não existe no schema de NFS-e (só em NF-e/
+     * NFC-e) — ambos removidos, ver docblock de montarPayloadNfse().
+     */
+    public function test_payload_nfse_nao_manda_campos_inexistentes_no_schema(): void
+    {
+        $p = new SpedyProvider('https://sandbox-api.spedy.com.br/v1', 'master', 'tok', 'emp-1');
+        $payload = $p->montarPayloadNfse($this->nota());
+
+        $this->assertArrayNotHasKey('status', $payload);
+        $this->assertArrayNotHasKey('operationNature', $payload);
     }
 
     public function test_payload_nfse_manda_integration_id_para_reconciliacao(): void
@@ -146,6 +174,50 @@ class SpedyProviderTest extends TestCase
         $this->assertSame('REGISTRADO', $r->status);
         $this->assertSame('comp-1', $r->emissorExternoId);
         $this->assertSame('spedy-key-1', $r->token);
+    }
+
+    private function emissor(string $regimeTributario): \App\Services\Fiscal\Data\EmissorData
+    {
+        return new \App\Services\Fiscal\Data\EmissorData(
+            cnpj: '12.345.678/0001-99', razaoSocial: 'Oficina X Ltda', nomeFantasia: 'Oficina X',
+            inscricaoEstadual: '123', inscricaoMunicipal: '456', regimeTributario: $regimeTributario,
+            email: 'of@x.com', telefone: '11999999999', cep: '01310-100', logradouro: 'Av Paulista',
+            numero: '1000', complemento: null, bairro: 'Centro', cidade: 'São Paulo', uf: 'SP',
+            codigoIbge: '3550308', cnae: '4520-0/01',
+        );
+    }
+
+    /**
+     * Bug real achado 2026-09-15: `lucroPresumido`/`lucroReal` não existem no
+     * enum `TaxRegime` real da Spedy (só `simplesNacional`,
+     * `simplesNacionalExcessoSublimite`, `regimeNormal`,
+     * `simplesNacionalMEI`) — `POST /v1/companies` rejeitava com erro de
+     * enum inválido pra toda oficina fora do Simples Nacional, bloqueando o
+     * cadastro fiscal inteiro. Lucro Presumido e Lucro Real caem em
+     * `regimeNormal`.
+     */
+    public function test_payload_empresa_lucro_presumido_e_real_mapeiam_pra_regime_normal(): void
+    {
+        $p = new SpedyProvider('https://sandbox-api.spedy.com.br/v1', 'master');
+
+        $this->assertSame('regimeNormal', $p->montarPayloadEmpresa($this->emissor('Lucro Presumido'))['taxRegime']);
+        $this->assertSame('regimeNormal', $p->montarPayloadEmpresa($this->emissor('Lucro Real'))['taxRegime']);
+        $this->assertSame('simplesNacional', $p->montarPayloadEmpresa($this->emissor('Simples Nacional'))['taxRegime']);
+    }
+
+    /**
+     * Bug real achado 2026-09-15: `isMain` não existe em
+     * `CompanyEconomicActivityDto` — o campo real é `type`
+     * (`main`/`secondary`). Era ignorado pela Spedy; nenhuma atividade
+     * econômica ficava marcada como principal.
+     */
+    public function test_payload_empresa_usa_type_main_nao_ismain(): void
+    {
+        $p = new SpedyProvider('https://sandbox-api.spedy.com.br/v1', 'master');
+        $payload = $p->montarPayloadEmpresa($this->emissor('Simples Nacional'));
+
+        $this->assertSame('main', $payload['economicActivities'][0]['type']);
+        $this->assertArrayNotHasKey('isMain', $payload['economicActivities'][0]);
     }
 
     /**
@@ -790,6 +862,29 @@ class SpedyProviderTest extends TestCase
 
         $this->assertSame('AUTORIZADA', $r->status);
         $this->assertSame('<nfeProc>autorizada</nfeProc>', $r->xml);
+    }
+
+    /**
+     * Bug real achado 2026-09-15: `protocolo` era sempre `null` (limitação
+     * documentada em 2026-08-03 por falta de confirmação) — confirmado agora
+     * contra docs.spedy.com.br que a resposta traz `authorization.protocol`.
+     */
+    public function test_consultar_autorizada_le_protocolo_de_authorization(): void
+    {
+        Http::fake([
+            '*/product-invoices*' => Http::response([
+                'items' => [[
+                    'id' => 'inv-99', 'status' => 'authorized', 'accessKey' => 'CHAVE-99', 'number' => '5',
+                    'authorization' => ['protocol' => '135250000012345'],
+                ]],
+                'totalCount' => 1,
+            ], 200),
+        ]);
+
+        $p = new SpedyProvider('https://sandbox-api.spedy.com.br/v1', 'master', 'tok', 'emp-1');
+        $r = $p->consultar('ref-99', 'NFE');
+
+        $this->assertSame('135250000012345', $r->protocolo);
     }
 
     public function test_consultar_autorizada_sem_id_nao_tenta_baixar_xml(): void

@@ -52,6 +52,13 @@ class RejeicaoSefazTradutor
         '217' => 'A SEFAZ ainda não tem registro desta nota. Se ela foi emitida em contingência recentemente, isso é esperado até a retransmissão ser concluída.',
         '558' => 'Falha técnica na hora de registrar a contingência desta nota (problema já corrigido no sistema para novas emissões). Esta nota específica pode precisar de correção manual — avise o suporte.',
         '632' => 'Esta nota é antiga demais para ser consultada de novo — a SEFAZ só mantém o documento completo disponível por cerca de 90 dias. Isso não significa que a nota é inválida, só que não é mais possível baixar o XML original por essa via.',
+        // Bug real de produção (2026-09-15): MotorNfe/MotorNfce nunca liam o
+        // CEST do produto ao montar o XML, mesmo quando já cadastrado —
+        // causa raiz corrigida nesta sessão (ver PROGRESSO.md, Rodada 47).
+        // Esta explicação cobre o caso residual de notas rejeitadas antes do
+        // fix, produtos ainda sem CEST cadastrado, ou rejeição via outro
+        // provedor.
+        '806' => 'Um produto desta nota tem tributação de ICMS por Substituição Tributária (ICMS-ST), que exige o CEST (Código Especificador da Substituição Tributária) — e o produto não tem esse código cadastrado. Complete o CEST em Produtos › Pendências Fiscais antes de emitir de novo.',
     ];
 
     /**

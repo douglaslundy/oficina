@@ -236,16 +236,37 @@ class SpedyProvider implements FiscalProvider, ConsultaNotaTerceiroProvider
                 ],
             ],
             'taxRegime'          => $this->mapRegime($e->regimeTributario),
+            // Bug real achado 2026-09-15: `isMain` não existe em
+            // `CompanyEconomicActivityDto` — o campo real é `type` (enum
+            // `main`/`secondary`). `isMain: true` era ignorado pela Spedy;
+            // nenhuma atividade econômica ficava marcada como principal.
             'economicActivities' => [
-                ['code' => preg_replace('/\D/', '', $e->cnae), 'isMain' => true],
+                ['code' => preg_replace('/\D/', '', $e->cnae), 'type' => 'main'],
             ],
         ];
     }
 
+    /**
+     * Bugs reais achados 2026-09-15 (auditoria campo-a-campo contra
+     * docs.spedy.com.br/api-reference/nfs-e/criar-nfs-e.md, POST
+     * /v1/service-invoices):
+     * - `effectiveDate` (data de competência) está no `required` do schema
+     *   e NUNCA era mandado — bloqueava toda emissão de NFS-e via Spedy por
+     *   campo obrigatório ausente. Esse fluxo nunca tinha comentário de
+     *   spike/teste real (ao contrário de NF-e/NFC-e), indício de que nunca
+     *   foi validado contra sandbox de verdade.
+     * - `status` não existe como campo de request — é "controlado
+     *   exclusivamente pela Spedy" segundo a doc; quem decide emitir de
+     *   verdade (vs. rascunho) é o booleano `issue` (default `true`, que já
+     *   é o comportamento desejado aqui). Removido.
+     * - `operationNature` não existe no schema de NFS-e (existe em NF-e/
+     *   NFC-e, prescolhido daí por engano) — os campos reais de natureza
+     *   são `taxationType`/`federalServiceCode`/`cityServiceCode`, já
+     *   enviados. Removido.
+     */
     public function montarPayloadNfse(NotaFiscalData $n): array
     {
         return [
-            'status'              => 'enqueued',
             // Bug de reconciliação (2026-09-10, ver TAREFAS.md): sem mandar a
             // nossa referência aqui, consultar() nunca consegue achar a nota
             // de volta na Spedy (ela não conhece a nossa referência interna
@@ -253,12 +274,12 @@ class SpedyProvider implements FiscalProvider, ConsultaNotaTerceiroProvider
             // nosso banco mesmo já autorizada lá. `integrationId` é o campo
             // que consultar() usa como filtro (?integrationId=) pra achá-la.
             'integrationId'       => $this->integrationIdDe($n->referenciaExterna),
+            'effectiveDate'       => now()->toDateString(),
             'sendEmailToCustomer' => false,
             'description'         => $n->descricao,
             'federalServiceCode'  => $n->codigoServicoFederal,
             'cityServiceCode'     => $n->codigoServicoMunicipal,
             'taxationType'        => 'taxationInMunicipality',
-            'operationNature'     => $n->naturezaOperacao,
             'receiver'            => [
                 'name'             => $n->tomador['nome'],
                 'federalTaxNumber' => preg_replace('/\D/', '', $n->tomador['cpf_cnpj']),
@@ -687,9 +708,14 @@ class SpedyProvider implements FiscalProvider, ConsultaNotaTerceiroProvider
 
         return EmissaoResultado::autorizada(
             chave: $json['accessKey'] ?? null,
-            protocolo: null,
+            protocolo: $json['authorization']['protocol'] ?? null,
             numero: isset($json['number']) ? (string) $json['number'] : null,
             xml: $this->xmlAutorizadoDe($recurso, $json['id'] ?? null),
+            // pdfUrl: campo morto — NotaFiscalController::pdf() sempre gera o
+            // PDF localmente via DomPDF (NotaFiscalDocumentoService), nunca lê
+            // esta coluna. Mantido como leitura simples (sem custo de rede
+            // extra) só por completude — não vale criar um pdfAutorizadoDe()
+            // dedicado (como o de XML) pra popular um dado que nada consome.
             pdfUrl: $json['pdfUrl'] ?? null,
             ref: $ref,
             qrCodeUrl: $json['qrCodeUrl'] ?? ($json['qrcodeUrl'] ?? null),
@@ -716,14 +742,25 @@ class SpedyProvider implements FiscalProvider, ConsultaNotaTerceiroProvider
         return 'PROCESSANDO';
     }
 
+    /**
+     * Bug real achado 2026-09-15 (auditoria campo-a-campo contra
+     * docs.spedy.com.br/api-reference/empresas/criar-empresa.md): o enum
+     * `TaxRegime` da Spedy só aceita `simplesNacional`,
+     * `simplesNacionalExcessoSublimite`, `regimeNormal` e
+     * `simplesNacionalMEI` — `lucroPresumido`/`lucroReal` NÃO EXISTEM como
+     * valores. `POST /v1/companies` rejeitava com erro de enum inválido pra
+     * toda oficina fora do Simples Nacional, bloqueando o cadastro fiscal
+     * inteiro antes de qualquer emissão. Lucro Presumido e Lucro Real caem
+     * juntos em `regimeNormal` ("Regime Normal (Lucro Presumido ou Lucro
+     * Real)", conforme a própria doc).
+     */
     private function mapRegime(string $regime): string
     {
         $r = strtolower($regime);
         return match (true) {
-            str_contains($r, 'simples')   => 'simplesNacional',
-            str_contains($r, 'presumido') => 'lucroPresumido',
-            str_contains($r, 'real')      => 'lucroReal',
-            default                       => 'simplesNacional',
+            str_contains($r, 'simples') => 'simplesNacional',
+            str_contains($r, 'presumido'), str_contains($r, 'real') => 'regimeNormal',
+            default => 'simplesNacional',
         };
     }
 
@@ -744,14 +781,15 @@ class SpedyProvider implements FiscalProvider, ConsultaNotaTerceiroProvider
 
         return EmissaoResultado::autorizada(
             chave: $json['accessKey'] ?? null,
-            // 2026-08-03: não reusa "number" como protocolo (defeito #4) — a doc
-            // de NFS-e da Spedy não confirma um campo de protocolo distinto de
-            // "number". Sem confirmação, documentamos como limitação do
-            // provedor em vez de inventar um valor (ver spec da Etapa B).
-            protocolo: null,
+            // 2026-09-15: confirmado contra docs.spedy.com.br que a resposta
+            // (NF-e/NFC-e/NFS-e) traz `authorization.protocol` — substituindo
+            // o `null` fixo de 2026-08-03 (na época sem confirmação; "number"
+            // nunca foi o protocolo, isso continua certo, só a fonte real do
+            // protocolo era outra chave, não ausência de protocolo nenhum).
+            protocolo: $json['authorization']['protocol'] ?? null,
             numero: isset($json['number']) ? (string) $json['number'] : null,
             xml: $this->xmlAutorizadoDe($recurso, $json['id'] ?? null),
-            pdfUrl: $json['pdfUrl'] ?? null,
+            pdfUrl: $json['pdfUrl'] ?? null, // campo morto — ver resultadoNfceDe()
             ref: $ref,
         );
     }
