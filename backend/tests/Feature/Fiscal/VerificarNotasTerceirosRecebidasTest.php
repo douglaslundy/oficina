@@ -107,6 +107,28 @@ class VerificarNotasTerceirosRecebidasTest extends TestCase
         $this->assertDatabaseCount('notas_terceiro_notificadas', 1);
     }
 
+    /**
+     * Achado AO VIVO em produção (2026-09-14, primeira execução real): a
+     * Distribuição DFe pode devolver a MESMA chave duas vezes no mesmo lote
+     * (ex.: resNFe resumido numa página de NSU e procNFe completo em outra)
+     * — sem dedup dentro do próprio loop, a 2ª tentativa de INSERT violava
+     * unique(oficina_id, chave_acesso) e derrubava o comando pra aquela
+     * oficina inteira.
+     */
+    public function test_mesma_chave_duplicada_no_mesmo_lote_nao_quebra_o_comando(): void
+    {
+        $this->oficinaComCnpj();
+        $chave = str_repeat('4', 44);
+        $provider = $this->fakeProvider([$this->resumo($chave), $this->resumo($chave)]);
+
+        $this->mock(FiscalProviderManager::class, fn ($m) => $m->shouldReceive('forTenant')->andReturn($provider));
+        $this->mock(AlertaDispatchService::class, fn ($m) => $m->shouldReceive('dispatch')->once());
+
+        $this->artisan('nfe:verificar-notas-recebidas')->assertSuccessful();
+
+        $this->assertDatabaseCount('notas_terceiro_notificadas', 1);
+    }
+
     public function test_falha_do_provedor_nao_derruba_o_comando(): void
     {
         $this->oficinaComCnpj();

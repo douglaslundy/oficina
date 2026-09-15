@@ -104,6 +104,14 @@ class VerificarNotasTerceirosRecebidas extends Command
                 continue;
             }
 
+            // Marca como vista IMEDIATAMENTE (não só no fim do loop): a
+            // mesma chave pode aparecer 2x dentro do MESMO lote de
+            // resumos — achado ao vivo em produção (2026-09-14) — quando a
+            // Distribuição DFe manda um resNFe (resumo) e depois, em outra
+            // página de NSU, o procNFe (completo) da mesma nota. Sem isso
+            // a 2ª ocorrência violava a unique(oficina_id, chave_acesso).
+            $vistas[$resumo->chaveAcesso] = true;
+
             NotaTerceiroNotificada::create([
                 'chave_acesso'    => $resumo->chaveAcesso,
                 'fornecedor_nome' => $resumo->fornecedorNome,
