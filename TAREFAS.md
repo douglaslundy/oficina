@@ -4,7 +4,7 @@
 > pequeno) antes de codar, seguindo `superpowers:brainstorming`. Ordem
 > escolhida por risco/dependência crescente, não pela ordem em que foi pedida.
 
-## 🔴 FALHA DE SEGURANÇA GRAVE, registrada 2026-09-14 — corrigir quando autorizado (usuário pediu pra NÃO corrigir ainda)
+## ✅ CONCLUÍDA 2026-09-14 — FALHA DE SEGURANÇA GRAVE (autorizada e corrigida nesta rodada)
 
 **Token de autenticação armazenado de forma insegura no navegador.**
 Achado na auditoria completa do sistema (ver `PROGRESSO.md` seção 14).
@@ -38,10 +38,32 @@ a correção ainda — aguardar pedido explícito antes de mexer.
      de gerenciar o token manualmente e depender do cookie automático.
   3. Ambos os fluxos de auth (oficina normal via `useAuth` e SaaS Admin via
      `saas-api`) precisam do mesmo tratamento.
-- **Por que não foi feito agora:** é uma mudança de arquitetura de
-  autenticação (mexe em login/logout/interceptors dos dois lados ao mesmo
-  tempo), não um ajuste pontual — usuário pediu pra só registrar por
-  enquanto.
+**✅ Corrigido 2026-09-14** (usuário autorizou explicitamente: "Sim, corrigir
+agora"). Migrado pro fluxo real de Sanctum SPA (commit `298dd50`):
+sessão httpOnly (`Auth::guard('web'|'saas')->login()`), sem token nenhum no
+corpo da resposta. Achados durante a implementação:
+- `config('auth.guards.saas')` precisou virar `driver: session` PRÓPRIO em
+  vez de reusar o guard `sanctum` (que compartilha `config('sanctum.guard')`
+  entre TODOS os guards da app sem filtrar por provider na checagem de
+  sessão — um Usuario logado em 'web' teria autenticado em `auth:saas`).
+- 8 chamadas `fetch()` cruas (download de PDF/XML/ZIP/relatórios) liam o
+  token manualmente pra montar `Authorization: Bearer` — todas corrigidas
+  pra `credentials: 'include'`.
+- `handleLogout()` do SaaS Admin nunca chamava o backend.
+- **Bug de infra real achado ao vivo, corrigido em commit separado
+  (`5182bf6`):** nginx só escuta HTTP puro (TLS termina no Traefik) —
+  `proxy_set_header X-Forwarded-Proto $scheme;` sobrescrevia o valor CORRETO
+  que o Traefik mandava, fazendo o Laravel achar que toda requisição HTTPS
+  era HTTP e anexar `:443` no host resolvido — quebrando a sessão stateful
+  em QUALQUER domínio exceto o hardcoded em `SANCTUM_STATEFUL_DOMAINS`
+  (`oficina.dlsistemas.com.br`). Sem esse fix, login funcionaria só no
+  domínio principal, nunca em `saas.dlsistemas.com.br` nem nos subdomínios
+  de tenant (`stuntmotos.dlsistemas.com.br` etc.) — encontrado via rota de
+  diagnóstico temporária, removida depois de confirmar a causa raiz.
+- Verificado ao vivo em produção com contas descartáveis (criadas e
+  apagadas): login → cookie httpOnly → `/auth/me` autenticado → logout →
+  sessão de verdade invalidada — nos 3 domínios reais (oficina, saas,
+  stuntmotos como subdomínio de tenant).
 
 ## ✅ CONCLUÍDA 2026-09-14 — primeira emissão real via NFePHP/NFS-e, autorizada de verdade
 

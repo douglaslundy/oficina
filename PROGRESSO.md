@@ -1,26 +1,36 @@
 # Progresso do Projeto
 
 ## Última atualização
-2026-09-14 — Rodada 42: 2 bugs reais de UI achados AO VIVO em produção no
-mesmo dia da Rodada 41, ambos corrigidos e deployados:
-1. "Ver notas" (Produtos → Notas Recebidas) ficava vazio depois que o
-   comando agendado `nfe:verificar-notas-recebidas` avançava o checkpoint de
-   NSU — `notas_terceiro_notificadas` virou a fonte de verdade da tela via
-   `VerificarNotasTerceiroService` (usado pelo comando E pelo controller).
-2. Botão "Ver motivo" não aparecia pra notas com status `ERRO` (só cobria
-   `REJEITADA`) — `EmissaoResultado::erro()` (falha técnica, ex.: SEFAZ
-   indisponível + EPEC também falhou) grava status `ERRO`, distinto de
-   `REJEITADA`. Corrigido, texto do modal ajustado pra não dizer "rejeitada
-   pela SEFAZ" quando é falha técnica de comunicação.
+2026-09-14 — Rodada 43: migração de autenticação de token Bearer/localStorage
+pra sessão httpOnly (Sanctum SPA), autorizada e concluída nesta rodada — ver
+seção "Rodada 43" e TAREFAS.md. Inclui um bug de infra REAL achado ao vivo
+(nginx sobrescrevendo X-Forwarded-Proto, quebrando a sessão em qualquer
+domínio fora do hardcoded). Verificado ao vivo nos 3 domínios reais com
+contas descartáveis. Nenhuma tarefa pendente desta rodada.
 
-Autorizado nesta sessão, AINDA NÃO INICIADO: migração de auth pra cookie
-httpOnly (Sanctum SPA), removendo token de localStorage/document.cookie —
-ver seção "Falha de segurança grave" em TAREFAS.md. Investigação de
-arquitetura já feita (guards 'web'/'saas', stateful domains com wildcard de
-subdomínio de tenant via placeholder `__SANCTUM_CURRENT_REQUEST_HOST__`,
-SESSION_DOMAIN precisa ficar vazio pra host-only cookie) — implementação
-pendente, é mudança grande e sensível, feita com cuidado numa sessão
-dedicada.
+## Rodada 43 (2026-09-14) — migração de auth pra sessão httpOnly + bug de infra achado ao vivo
+
+Ver TAREFAS.md ("FALHA DE SEGURANÇA GRAVE") pro relato completo da
+migração e do bug de nginx. Resumo rápido:
+- Commit `298dd50`: backend (LoginController/SaaS\AuthController migrados
+  pra `Auth::guard()->login()`/`logout()`, `EnsureFrontendRequestsAreStateful`
+  no grupo `api`, guard `saas` isolado como `driver: session` próprio) +
+  frontend (proxy.ts/lib/api.ts/lib/saas-api.ts/useAuth.ts + 8 fetch() cruas
+  de download de arquivo corrigidas) + docker-compose.prod.yml
+  (SANCTUM_STATEFUL_DOMAINS com placeholder dinâmico, SESSION_DOMAIN vazio
+  pra cookie host-only, SESSION_SECURE_COOKIE).
+- Commit `5182bf6`: nginx sobrescrevia X-Forwarded-Proto com seu próprio
+  `$scheme` (sempre "http", já que TLS termina no Traefik antes) — quebrava
+  a sessão stateful em todo domínio que dependesse do placeholder
+  `__SANCTUM_CURRENT_REQUEST_HOST__`. Achado via rota de diagnóstico
+  temporária (`/api/debug-host`, removida depois de confirmar a causa raiz),
+  não por suposição.
+- Verificação ao vivo completa: csrf-cookie → login (sem token na resposta,
+  cookie httpOnly setado) → `/auth/me` autenticado via cookie → logout →
+  sessão de verdade invalidada — testado em `oficina.dlsistemas.com.br`,
+  `saas.dlsistemas.com.br` e `stuntmotos.dlsistemas.com.br` (subdomínio de
+  tenant real), com um Usuario e um SuperAdmin descartáveis (criados e
+  apagados ao final).
 
 ## Rodada 42 (2026-09-14) — 2 bugs de UI achados ao vivo (Notas Recebidas vazio + Ver motivo faltando pra ERRO)
 
