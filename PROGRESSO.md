@@ -1,14 +1,52 @@
 # Progresso do Projeto
 
 ## Última atualização
-2026-09-15 — Rodada 45: `montarPayloadNfce()` (Spedy) reescrito com nomes de
-campo confirmados contra a doc oficial (payload anterior era inferido e tinha
-7-8 nomes de campo inexistentes no schema real). Confirmado ao vivo em
-homologação: payload novo passa da validação de schema (antes rejeitava
-IMEDIATO), agora só bloqueado por falta de CSC/TokenId (credencial externa,
-SEFAZ-MG — não é bug de código). Ver seção "Rodada 45". Commit `298d5df`,
-deployado (domínio público respondeu 200 pós-deploy). Rodada 44 (fix
-`codigo_ibge`) também commitada/deployada/verificada com sucesso.
+2026-09-15 — Rodada 46: bug real reportado pelo usuário ao vivo — badge de
+modelo na tela "Emitir Nota Fiscal" mostrava NFC-e mesmo com
+`modelo_venda_padrao=NF-e` configurado. Causa: `NotaFiscalForm.tsx` tinha
+lógica própria (e errada) duplicando a regra do backend, ignorando o switch
+de configuração. Corrigido, ver seção "Rodada 46".
+
+## Rodada 46 (2026-09-15) — fix: badge de modelo na tela de emitir NF ignorava modelo_venda_padrao
+
+Usuário reportou ao vivo: foi emitir uma nota e a tela mostrou o badge
+"NFC-e", mesmo com `Configuracao.modelo_venda_padrao = 'NF-e'` configurado
+(o switch introduzido na Rodada 41/commit `4fbdd92`).
+
+### Causa raiz
+`frontend/components/forms/NotaFiscalForm.tsx` tinha sua PRÓPRIA cópia da
+regra de decisão NF-e/NFC-e, em vez de refletir a de
+`CriarNotaFiscalService::criar()` (backend, correta):
+```
+// ERRADO (frontend, antes):
+const modeloExibido = !ehVenda ? 'NFS-e' : (ehPessoaFisica && !forcarNfe ? 'NFC-e' : 'NF-e')
+```
+Isso assumia que TODO cliente pessoa física resultava em NFC-e "automático",
+ignorando dois fatores que o backend já considerava: (1)
+`configuracao.modelo_venda_padrao` (o switch de verdade, default `NF-e`) e
+(2) `mesmoEstado` (NFC-e nunca é interestadual). A nota realmente emitida
+saía correta — quem decide de fato é o backend — mas o badge mentia pro
+usuário antes de emitir, e o botão "emitir como NF-e mesmo assim" aparecia
+mesmo quando não havia nada de NFC-e pra "forçar a voltar".
+
+### Fix
+`modeloExibido` agora replica a mesma condição do backend
+(`ehPessoaFisica && mesmoEstado && modelo_venda_padrao === 'NFC-e'`), e o
+botão de forçar NF-e só aparece quando NFC-e seria de fato a escolha
+automática. `Empresa` (interface local) ganhou o campo
+`modelo_venda_padrao` — o backend (`ConfiguracaoController::sanitizar()`)
+já devolvia esse campo em `GET /configuracoes`, só não estava sendo lido.
+
+**Sem mudança de backend** — `CriarNotaFiscalService` já estava certo.
+
+### Verificação
+`npx tsc --noEmit` limpo. Sem suíte de testes de componente React neste
+projeto (frontend é verificado por tsc + uso real) — recomendo conferir ao
+vivo depois do deploy: cliente pessoa física, mesmo estado da oficina,
+`modelo_venda_padrao=NF-e` → badge deve mostrar "NF-e" sem botão de
+alternância.
+
+**Arquivos alterados:** `frontend/components/forms/NotaFiscalForm.tsx`.
 
 ## Rodada 45 (2026-09-15) — fix: montarPayloadNfce() (Spedy) usava nomes de campo inexistentes no schema real
 

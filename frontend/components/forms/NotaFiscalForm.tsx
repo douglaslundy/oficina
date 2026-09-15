@@ -38,6 +38,7 @@ interface Empresa {
   uf?: string
   ambiente_fiscal?: string
   aliquota_iss?: number
+  modelo_venda_padrao?: string
 }
 
 interface PlanInfo {
@@ -107,7 +108,17 @@ export function NotaFiscalForm() {
   const clienteSelecionado = clientes.find(c => c.id === clienteId)
   const ehVenda = natureza === 'Venda de Mercadoria'
   const ehPessoaFisica = !!clienteSelecionado && clienteSelecionado.cpf_cnpj.replace(/\D/g, '').length === 11
-  const modeloExibido = !ehVenda ? 'NFS-e' : (ehPessoaFisica && !forcarNfe ? 'NFC-e' : 'NF-e')
+  // Bug real reportado pelo usuário (2026-09-15): este badge tinha uma cópia
+  // própria (e errada) da regra de CriarNotaFiscalService::criar() — assumia
+  // que pessoa física SEMPRE resultava em NFC-e "automático", ignorando
+  // `configuracao.modelo_venda_padrao` (o switch real que decide isso) e o
+  // `mesmoEstado` (NFC-e nunca é interestadual). A nota emitida saía correta
+  // (o backend decide certo), mas o badge mostrava "NFC-e" mesmo com o
+  // padrão configurado como NF-e — confundindo o usuário antes de emitir.
+  const mesmoEstado = !!clienteSelecionado?.uf && !!empresa?.uf
+    && clienteSelecionado.uf.toUpperCase() === empresa.uf.toUpperCase()
+  const nfceSeriaAutomatica = ehPessoaFisica && mesmoEstado && empresa?.modelo_venda_padrao === 'NFC-e'
+  const modeloExibido = !ehVenda ? 'NFS-e' : (nfceSeriaAutomatica && !forcarNfe ? 'NFC-e' : 'NF-e')
   const subtotal = itens.reduce((acc, i) => acc + i.quantidade * i.valor_unitario, 0)
   // Venda de Mercadoria não tem desconto/ISS no backend (emitir() só envia `itens`
   // nesse caso — NotaFiscalController::store() calcula desconto: 0, valor_iss: 0,
@@ -272,7 +283,7 @@ export function NotaFiscalForm() {
             }}>
               {modeloExibido}
             </span>
-            {ehPessoaFisica && (
+            {nfceSeriaAutomatica && (
               <button
                 type="button"
                 onClick={() => setForcarNfe(f => !f)}
