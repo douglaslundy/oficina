@@ -59,9 +59,11 @@ vence o parâmetro; cliente sem `codigo_ibge` cai pro parâmetro — retrocompat
 (`RefreshDatabase`, sem Postgres local, mesma limitação de sempre, zero
 relação com esta mudança). `npx tsc --noEmit` limpo no frontend.
 
-**Pendente desta rodada:** migration ainda não rodada contra Postgres real
-(sem DB local); commit e deploy ainda não feitos — aguardando ok do
-usuário antes de deployar em produção (mudança de schema).
+**Deploy:** commit `0c2dcdd`, push + `deploy-vps.sh` (build+up+healthcheck
+ok, domínio público `saas.dlsistemas.com.br` respondeu 200). Migration
+confirmada rodada em produção via `migrate:status` (`Ran`) e
+`Schema::hasColumn('clientes','codigo_ibge')` (`true`) por tinker
+descartável.
 
 **Arquivos alterados:** `backend/database/migrations/2026_09_15_000001_add_codigo_ibge_to_clientes_table.php`
 (novo), `backend/app/Models/Cliente.php`, `backend/app/Http/Resources/ClienteResource.php`,
