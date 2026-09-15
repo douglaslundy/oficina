@@ -74,7 +74,16 @@ class VerificarNotasTerceirosRecebidasTest extends TestCase
         $this->assertDatabaseHas('notas_terceiro_notificadas', ['chave_acesso' => str_repeat('1', 44)]);
     }
 
-    public function test_nota_ja_lancada_nao_gera_alerta_nem_notificacao(): void
+    /**
+     * Corrigido 2026-09-14 (mesmo dia): a nota já lançada CONTINUA sendo
+     * espelhada em `notas_terceiro_notificadas` — a tela "Notas Recebidas"
+     * (`EntradaNfController::recebidas()`) precisa dela ali pra mostrar o
+     * flag `ja_lancada` (comportamento já existente antes desta feature,
+     * ver `EntradaNfConsultaTest::test_recebidas_lista_com_ja_lancada_
+     * calculado`). Só o ALERTA (que significa "nota nova, ainda não
+     * importada") é que não dispara pra ela.
+     */
+    public function test_nota_ja_lancada_e_espelhada_mas_nao_gera_alerta(): void
     {
         $of = $this->oficinaComCnpj();
         $chave = str_repeat('2', 44);
@@ -89,7 +98,7 @@ class VerificarNotasTerceirosRecebidasTest extends TestCase
 
         $this->artisan('nfe:verificar-notas-recebidas')->assertSuccessful();
 
-        $this->assertDatabaseMissing('notas_terceiro_notificadas', ['chave_acesso' => $chave]);
+        $this->assertDatabaseHas('notas_terceiro_notificadas', ['chave_acesso' => $chave]);
     }
 
     public function test_nota_ja_notificada_anteriormente_nao_alerta_de_novo(): void

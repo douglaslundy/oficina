@@ -10,9 +10,9 @@ use App\Models\NotaEntradaItem;
 use App\Models\Produto;
 use App\Services\EstoqueService;
 use App\Services\Fiscal\Contracts\ConsultaNotaTerceiroProvider;
-use App\Services\Fiscal\Data\ConsultaNotaTerceiroResumo;
 use App\Services\Fiscal\FiscalProviderManager;
 use App\Services\Fiscal\ProdutoFiscalService;
+use App\Services\Fiscal\VerificarNotasTerceiroService;
 use App\Services\NotaEntradaXmlParser;
 use App\Services\PlanLimitService;
 use App\Tenancy\TenancyContext;
@@ -371,36 +371,42 @@ class EntradaNfController extends Controller
         };
     }
 
-    public function recebidas(FiscalProviderManager $providerManager): JsonResponse
+    /**
+     * Bug real achado ao vivo em produção (2026-09-14, mesmo dia do
+     * lançamento da feature de alerta): esta rota fazia sua PRÓPRIA consulta
+     * ao vivo e devolvia o resultado direto — mas pro NFePHP,
+     * `listarNotasRecebidas()` agora avança o checkpoint de NSU
+     * compartilhado (`Configuracao::dist_dfe_ultimo_nsu`). Como o comando
+     * agendado `nfe:verificar-notas-recebidas` já tinha rodado, a consulta
+     * ao vivo daqui não achava mais nada NOVO — escondendo 3 notas já
+     * detectadas (e alertadas) mas ainda não importadas. Corrigido: a
+     * consulta ao vivo continua acontecendo (via o mesmo
+     * `VerificarNotasTerceiroService` do comando agendado, então também
+     * avança o checkpoint — não tem problema, é o MESMO checkpoint
+     * compartilhado de propósito agora), mas a RESPOSTA vem de
+     * `notas_terceiro_notificadas` (fonte de verdade), nunca só do
+     * resultado isolado desta chamada.
+     */
+    public function recebidas(FiscalProviderManager $providerManager, VerificarNotasTerceiroService $verificarService): JsonResponse
     {
         $provider = $providerManager->forTenant();
         if (!$provider instanceof ConsultaNotaTerceiroProvider) {
             return response()->json(['message' => 'O motor fiscal desta oficina ainda não suporta consultar notas recebidas.'], 422);
         }
 
-        $cnpjOficina      = (string) (Configuracao::first()?->cnpj ?? '');
-        $chavesJaLancadas = NotaEntrada::whereNotNull('chave_acesso')->pluck('chave_acesso')->all();
-
-        try {
-            $notas = $provider->listarNotasRecebidas($cnpjOficina);
-        } catch (\RuntimeException $e) {
-            // Falha do provedor (token expirado, add-on não contratado, queda)
-            // não pode virar lista vazia: a tela mostraria "nenhuma nota
-            // pendente" pra um erro real, escondendo o problema do usuário.
-            return response()->json(['message' => $e->getMessage()], 422);
+        $cfg = Configuracao::first();
+        if ($cfg !== null) {
+            try {
+                $verificarService->verificarOficinaAtual($provider, $cfg);
+            } catch (\RuntimeException $e) {
+                // Falha do provedor (token expirado, add-on não contratado, queda)
+                // não pode virar lista vazia: a tela mostraria "nenhuma nota
+                // pendente" pra um erro real, escondendo o problema do usuário.
+                return response()->json(['message' => $e->getMessage()], 422);
+            }
         }
 
-        $resumos = array_map(fn (ConsultaNotaTerceiroResumo $r) => [
-            'chave_acesso'    => $r->chaveAcesso,
-            'fornecedor_nome' => $r->fornecedorNome,
-            'fornecedor_cnpj' => $r->fornecedorCnpj,
-            'data_emissao'    => $r->dataEmissao,
-            'valor_total'     => $r->valorTotal,
-            'completa'        => $r->completa,
-            'ja_lancada'      => in_array($r->chaveAcesso, $chavesJaLancadas, true),
-        ], $notas);
-
-        return response()->json(['notas' => $resumos]);
+        return response()->json(['notas' => $verificarService->listarNotas()]);
     }
 
     /**

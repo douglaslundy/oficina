@@ -224,6 +224,43 @@ XML, 200),
         $this->assertFalse(collect($notas)->firstWhere('chave_acesso', 'CHAVE2')['ja_lancada']);
     }
 
+    /**
+     * Bug real achado ao vivo em produção (2026-09-14): antes desta correção,
+     * a rota devolvia SÓ o resultado da consulta ao vivo da própria chamada
+     * — uma nota detectada numa chamada anterior "sumia" da tela se uma
+     * chamada seguinte não achasse mais nada novo (típico do NFePHP, cujo
+     * checkpoint de NSU avança a cada consulta). Este teste prova que a
+     * nota continua aparecendo mesmo quando a 2ª consulta ao vivo não
+     * retorna mais nada.
+     */
+    public function test_recebidas_continua_mostrando_nota_ja_detectada_mesmo_sem_nada_novo_na_consulta_seguinte(): void
+    {
+        [$token, $oficina] = $this->loginAdmin('SPEDY');
+
+        Http::fake([
+            '*/inbound-product-invoices' => Http::response([
+                'items' => [
+                    ['accessKey' => 'CHAVE-DETECTADA', 'isComplete' => true, 'amount' => 50, 'issuedOn' => '2026-09-10T10:00:00', 'issuer' => ['name' => 'Fornecedor X', 'federalTaxNumber' => '333']],
+                ],
+            ], 200),
+        ]);
+
+        $primeira = $this->withToken($token)->withHeaders(['X-Tenant' => $oficina->slug])
+            ->getJson('/api/entradas-nf/recebidas')
+            ->assertStatus(200);
+        $this->assertNotNull(collect($primeira->json('notas'))->firstWhere('chave_acesso', 'CHAVE-DETECTADA'));
+
+        // 2ª consulta ao vivo não acha mais nada novo (comportamento normal
+        // depois que o checkpoint avançou) — a resposta precisa continuar
+        // mostrando a nota já detectada.
+        Http::fake(['*/inbound-product-invoices' => Http::response(['items' => []], 200)]);
+
+        $segunda = $this->withToken($token)->withHeaders(['X-Tenant' => $oficina->slug])
+            ->getJson('/api/entradas-nf/recebidas')
+            ->assertStatus(200);
+        $this->assertNotNull(collect($segunda->json('notas'))->firstWhere('chave_acesso', 'CHAVE-DETECTADA'));
+    }
+
     public function test_recebidas_com_motor_nfephp_retorna_422(): void
     {
         [$token, $oficina] = $this->loginAdmin('NFEPHP');

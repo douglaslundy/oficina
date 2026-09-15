@@ -18,12 +18,13 @@ class NotaTerceiroNotificada extends Model
     public $timestamps = false;
 
     protected $fillable = [
-        'oficina_id', 'chave_acesso', 'fornecedor_nome', 'valor_total', 'data_emissao',
+        'oficina_id', 'chave_acesso', 'fornecedor_nome', 'fornecedor_cnpj', 'valor_total', 'data_emissao', 'completa',
     ];
 
     protected $casts = [
         'valor_total'  => 'float',
         'data_emissao' => 'date',
+        'completa'     => 'boolean',
         'criado_em'    => 'datetime',
     ];
 
