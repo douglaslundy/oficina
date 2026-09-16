@@ -3,7 +3,7 @@
 ## Última atualização
 2026-09-16 — Plano de limpeza e polish pós-auditoria (6 tarefas). Task 2 COMPLETA:
 removida dependência `spatie/laravel-permission` (estavam instalada mas zero uso real,
-RBAC custom via `CheckRole.php` mantido). Confirmado zero referências via grep antes/depois,
+RBAC custom via `CheckRole.php` mantido). Confirmado zero referências via grep pré-remoção,
 suíte Unit sem regressão (383 testes, 865 assertions, 7 erros pré-existentes, nenhum novo).
 Task 1 já finalizada ontem.
 
