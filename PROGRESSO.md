@@ -1,25 +1,26 @@
 # Progresso do Projeto
 
 ## Última atualização
-2026-09-16 — Rodada 53: auditoria completa do sistema (4 agentes paralelos,
-somente leitura) pra validar contra o código real tudo que eu tinha
-resumido antes como "o que falta desenvolver" — achou 1 caracterização
-errada minha (NFC-e via NFePHP: o pipeline de CSC/Token/QR Code JÁ estava
-implementado, não faltava código, só a credencial real da SEFAZ-MG), 1
-doc desatualizada (`TAREFAS.md` dizia migration `codigo_ibge` pendente de
-deploy — já tinha sido deployada, corrigido), e 1 achado de segurança novo
-e real: proteção de rota por ROLE não existia no frontend (só proteção de
-SESSÃO, via `proxy.ts` — que o primeiro agente não achou porque procurou
-por `middleware.ts`, convenção descontinuada no Next.js 16, que renomeou
-pra `proxy.ts`; ver AGENTS.md do frontend, que já avisa sobre isso).
-**Corrigido nesta rodada**: cookie `oficina_role` (mesmo padrão de
-segurança do `oficina_logado` já existente — presença/UX, não credencial)
-setado no login e limpo no logout; `proxy.ts` ganhou `ROLE_RULES` que
-bloqueia navegação pra 8 telas cuja LEITURA já é role-restrita no backend
-(usuários, configurações, empresa, fiscal, relatórios, minhas-faturas,
-auditoria, alertas), com toast de feedback. Ver seção "Rodada 53" pro
-relato completo (achados que NÃO foram corrigidos ainda ficam registrados
-lá como backlog). Rodada 52 (revert do IM na NFS-e) permanece abaixo.
+2026-09-16 — Plano de limpeza e polish pós-auditoria (6 tarefas). Task 1 COMPLETA:
+removido Job morto `EnviarAlertaEstoque` (nunca despachado em lugar nenhum, pipeline
+real é `AlertaDispatchService`). Confirmado zero referências via grep, suíte Unit
+sem regressão (383 testes, 868 assertions, 7 erros pré-existentes, nenhum novo).
+Rodada 53 (auditoria) permanece abaixo.
+
+## Task 1 (2026-09-16) — Remover Job morto `EnviarAlertaEstoque`
+
+**O que foi feito:** deletado arquivo `backend/app/Jobs/EnviarAlertaEstoque.php` confirmado
+via grep que zero referências existem em lugar nenhum do backend.
+
+**Por quê:** código morto encontrado na auditoria da Rodada 53. Job nunca é despachado
+em lugar nenhum — o pipeline real de alertas de estoque crítico é `AlertaDispatchService`.
+Mantém-se na documentação (`CLAUDE.md`) por razões históricas (documento de spec original),
+não em código vivo.
+
+**Testes:** suíte Unit após mudança = 383 testes, 868 assertions, 7 erros (mesmos
+pré-existentes, causados por `RefreshDatabase` sem Postgres local). Nenhuma regressão.
+
+**Arquivos:** deletado `backend/app/Jobs/EnviarAlertaEstoque.php`. PROGRESSO.md atualizado.
 
 ## Rodada 53 (2026-09-16) — auditoria completa + fix de proteção de rota por role
 
