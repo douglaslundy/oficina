@@ -1,19 +1,66 @@
 # Progresso do Projeto
 
 ## Última atualização
-2026-09-15 — Rodada 51: usuário pediu verificação específica de "todos os
-dados obrigatórios" nas notas de serviço (NFS-e) e produto (NF-e/NFC-e).
-Achado real e CONFIRMADO ATIVO em produção: o pacote vendor da NFS-e
-nacional traz arquivos `.txt` com as regras de negócio OFICIAIS da Receita
-(campo a campo, com código de erro) — `dps-prestador.txt` regra #121/E0116
-exige a Inscrição Municipal do prestador quando a oficina tem registro
-complementar no CNC do município. `MotorNfse::montarDps()` nunca mandava
-`IM`. Confirmado que a stuntmotos (oficina ativa) TEM
-`inscricao_municipal='801944'` cadastrada — ou seja, toda NFS-e emitida até
-agora provavelmente saiu sem esse dado obrigatório. Corrigido: `IM` agora
-enviado quando `Configuracao.inscricao_municipal` está preenchida. Ver
-seção "Rodada 51". Rodada 50 (auditoria + decisão sobre `infRespTec`)
-permanece abaixo.
+2026-09-16 — Rodada 52: o fix da Rodada 51 (mandar `IM` do prestador na
+NFS-e quando `Configuracao.inscricao_municipal` preenchida) causou uma
+rejeição REAL em produção — `E0120: IM do prestador não deve ser
+informado, pois não existem informações complementares registradas no CNC
+NFS-e do município emissor`. A suposição da Rodada 51 ("IM preenchida no
+nosso cadastro ⇒ tem registro no CNC NFS-e") estava ERRADA — são cadastros
+diferentes, sem relação garantida. **Revertido**: `IM` nunca mais é
+enviada (não existe forma confiável de consultar o CNC NFS-e pra saber se
+o registro existe). Usuário deu diretriz permanente: nenhuma decisão
+técnica/fiscal pode vir de suposição própria — só de fonte oficial,
+rejeição real, ou confirmação explícita do usuário (registrado em memória
+persistente). Ver seção "Rodada 52". Rodada 51 (achado original) e Rodada
+50 (auditoria + decisão sobre `infRespTec`) permanecem abaixo.
+
+## Rodada 52 (2026-09-16) — revert: IM do prestador nunca deve ser enviada (rejeição real E0120)
+
+Usuário tentou emitir a NFS-e depois do deploy da Rodada 51 e recebeu
+rejeição real da ADN (ambiente `sefin.producaorestrita.nfse.gov.br`,
+homologação):
+```
+E0120: IM do prestador não deve ser informado, pois não existem
+informações complementares registradas no CNC NFS-e do município
+emissor informado na DPS.
+```
+
+### Causa raiz do erro (meu, não do sistema)
+A Rodada 51 tratou `Configuracao.inscricao_municipal` preenchida como
+"proxy" pra decidir se a oficina tem registro complementar no **CNC NFS-e**
+(Cadastro Nacional Complementar do Sistema Nacional NFS-e — um cadastro
+específico do sistema nacional, usado por contribuintes com múltiplos
+estabelecimentos/registros no mesmo município). Isso é uma suposição, não
+uma confirmação: Inscrição Municipal comum (cadastro da prefeitura,
+existe há décadas) e CNC NFS-e (cadastro novo, específico do Sistema
+Nacional NFS-e) são registros DIFERENTES — não há garantia de que um
+implica o outro. Confirmado ao vivo: a stuntmotos TEM inscrição municipal
+(`801944`) mas NÃO tem registro no CNC do seu município.
+
+### Diretriz do usuário (permanente, registrada em memória)
+"Você não deve supor de forma nenhuma, jamais, todas as decisões devem ser
+tomadas de forma técnica e consultada na literatura técnica e jurídica."
+Registrado como `feedback-nunca-supor-decisao-tecnica-consultada` na
+memória persistente — vale pra toda decisão técnica/fiscal futura, não só
+NFS-e.
+
+### Fix
+`prest.IM` nunca é mais enviado (voltou ao comportamento anterior à Rodada
+51). Não existe hoje uma forma técnica de consultar o CNC NFS-e pra saber
+se o registro existe pra uma oficina específica — sem essa fonte de
+verdade, o único valor correto é omitir o dado.
+
+### Testes
+Teste da Rodada 51 que afirmava "IM enviada quando configurada" foi
+substituído por `test_prest_im_nunca_e_enviada_mesmo_com_inscricao_municipal_configurada`
+(usa o valor real `801944` que causou a rejeição, como contraprova
+permanente). Suíte `MotorNfseMontarDpsTest`: 17 testes, 44 assertions, 0
+falhas. Unit completa: 383 testes, 868 assertions, 7 erros (mesmos de
+sempre, `RefreshDatabase` sem Postgres local), zero regressão nova.
+
+**Arquivos alterados:** `backend/app/Services/Fiscal/NfePhp/MotorNfse.php`,
+`backend/tests/Unit/Fiscal/NfePhp/MotorNfseMontarDpsTest.php`.
 
 ## Rodada 51 (2026-09-15) — fix real: IM do prestador ausente na NFS-e (achado ATIVO em produção)
 

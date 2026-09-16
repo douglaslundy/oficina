@@ -363,31 +363,20 @@ class MotorNfseMontarDpsTest extends TestCase
     }
 
     /**
-     * Achado 2026-09-15 (auditoria manual, regra de negócio OFICIAL bundled
-     * no vendor: src/Dto/schemas/dps-prestador.txt, regra #121/E0116) —
-     * quando há registro complementar do contribuinte no CNC do município
-     * emissor, a IM do prestador DEVE ser informada. `Configuracao.
-     * inscricao_municipal` preenchida é o melhor proxy disponível pra essa
-     * condição (mesmo padrão condicional já usado pra cTribMun).
+     * REVERTIDO 2026-09-16 (rejeição real "E0120: IM do prestador não deve
+     * ser informado, pois não existem informações complementares
+     * registradas no CNC NFS-e do município emissor"). A Rodada 51
+     * (2026-09-15) tinha introduzido o envio condicional de `IM` baseado em
+     * `Configuracao.inscricao_municipal` estar preenchida, supondo que isso
+     * indicava registro no CNC NFS-e — suposição errada (são cadastros
+     * diferentes: inscrição municipal comum vs. CNC do Sistema Nacional
+     * NFS-e). Sem forma confiável de saber se o CNC existe, `IM` nunca deve
+     * ser mandado — mesmo quando `inscricao_municipal` está preenchida.
      */
-    public function test_prest_im_e_enviada_quando_configuracao_tem_inscricao_municipal(): void
+    public function test_prest_im_nunca_e_enviada_mesmo_com_inscricao_municipal_configurada(): void
     {
         $cfg = $this->configuracaoSimplesNacional();
-        $cfg->inscricao_municipal = '987654';
-
-        $dps = (new MotorNfse())->montarDps($this->notaServico(), $cfg, 'HOMOLOGACAO', 1);
-
-        $this->assertSame('987654', $dps->infDps->prestador->inscricaoMunicipal);
-    }
-
-    /**
-     * Contraprova: regra irmã #123/E0120 — quando NÃO há registro
-     * complementar (aqui: `inscricao_municipal` vazia), a IM NÃO deve ser
-     * informada.
-     */
-    public function test_prest_im_nao_e_enviada_quando_configuracao_nao_tem_inscricao_municipal(): void
-    {
-        $cfg = $this->configuracaoSimplesNacional();
+        $cfg->inscricao_municipal = '801944'; // valor real que causou a rejeição E0120 em produção
 
         $dps = (new MotorNfse())->montarDps($this->notaServico(), $cfg, 'HOMOLOGACAO', 1);
 

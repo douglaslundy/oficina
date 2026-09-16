@@ -131,21 +131,25 @@ class MotorNfse
                 'cLocEmi'  => (string) $cfg->codigo_ibge,
                 'prest'    => array_filter([
                     'CNPJ' => preg_replace('/\D/', '', $cfg->cnpj ?? ''),
-                    // Achado 2026-09-15, via regra de negócio OFICIAL bundled no
-                    // pacote vendor (src/Dto/schemas/dps-prestador.txt, regra
-                    // #121/E0116): "Se o emitente for o prestador (tpEmit=1) e
-                    // houver registro complementar do contribuinte no CNC do
-                    // município emissor, então a IM DEVE ser informada" — e a
-                    // regra irmã #123/E0120 diz o oposto quando NÃO há esse
-                    // registro ("IM NÃO deve ser informado"). Não dá pra saber
-                    // com certeza se a oficina tem esse registro complementar,
-                    // mas `Configuracao.inscricao_municipal` preenchida é o
-                    // melhor proxy disponível — mesmo padrão condicional já
-                    // usado abaixo pra `cTribMun`. Exceção MEI (regra também
-                    // menciona) não se aplica aqui: só afeta a regra #121, e
-                    // conservadoramente só mandamos IM quando o dado existe de
-                    // qualquer forma.
-                    'IM' => $cfg->inscricao_municipal ?: null,
+                    // REVERTIDO 2026-09-16 (rejeição real em produção, cStat
+                    // E0120): a Rodada 51 (2026-09-15) passou a mandar `IM`
+                    // sempre que `Configuracao.inscricao_municipal` estivesse
+                    // preenchida, como proxy pra "tem registro complementar no
+                    // CNC do município" (regra #121/E0116 do vendor). Essa
+                    // suposição estava ERRADA: `inscricao_municipal` é o
+                    // cadastro municipal comum (prefeitura), não o CNC NFS-e
+                    // (Cadastro Nacional Complementar do Sistema Nacional
+                    // NFS-e) — são registros DIFERENTES, e não temos como
+                    // consultar o CNC pra saber se ele existe. Confirmado ao
+                    // vivo: a stuntmotos tem `inscricao_municipal` cadastrada
+                    // mas NÃO tem registro no CNC do seu município — rejeição
+                    // real "E0120: IM do prestador não deve ser informado,
+                    // pois não existem informações complementares registradas
+                    // no CNC NFS-e do município emissor". Sem uma forma
+                    // confiável de saber se o CNC existe (exigiria consultar a
+                    // API do CNC, não implementado), o único valor seguro é
+                    // nunca mandar `IM` — nunca "chutar" um dado que o sistema
+                    // não tem como confirmar.
                     // regTrib: presente no exemplo oficial (examples/contribuinte/emitir.php).
                     // ATENÇÃO: CrtResolver::resolver() devolve a escala do CRT do leiaute
                     // NF-e/ICMS (1=Simples Nacional, 3=Regime Normal) — escala DIFERENTE da
