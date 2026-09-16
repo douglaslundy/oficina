@@ -82,6 +82,7 @@ export function NotaFiscalForm() {
   const [produtos, setProdutos] = useState<ProdutoOpt[]>([])
   const [forcarNfe, setForcarNfe] = useState(false)
   const [aguardandoConfirmacao, setAguardandoConfirmacao] = useState(false)
+  const [loadingPreview, setLoadingPreview] = useState(false)
   const pollRef = useRef<ReturnType<typeof setInterval> | null>(null)
 
   useEffect(() => () => { if (pollRef.current) clearInterval(pollRef.current) }, [])
@@ -194,30 +195,40 @@ export function NotaFiscalForm() {
     }, 3000)
   }
 
+  function validarFormulario(): boolean {
+    if (!clienteId) { toast('Selecione um cliente.', 'danger'); return false }
+    if (ehVenda && itens.some(i => !i.produto_id)) { toast('Selecione um produto para todos os itens (ou remova as linhas vazias).', 'danger'); return false }
+    if (!ehVenda && itens.every(i => !i.descricao)) { toast('Adicione pelo menos um item.', 'danger'); return false }
+    return true
+  }
+
+  function montarPayload(): Record<string, unknown> {
+    const payload: Record<string, unknown> = {
+      cliente_id: clienteId,
+      natureza_operacao: natureza,
+      forma_pagamento: formaPgto || undefined,
+      observacoes: obs || undefined,
+    }
+    if (ehVenda) {
+      payload.itens = itens
+        .filter((i): i is ItemNF & { produto_id: string } => !!i.produto_id)
+        .map(i => ({
+          produto_id: i.produto_id, quantidade: i.quantidade, valor_unitario: i.valor_unitario,
+        }))
+      payload.forcar_nfe = forcarNfe
+    } else {
+      payload.subtotal = subtotal
+      payload.desconto = desconto
+      payload.aliquota_iss = aliquota
+    }
+    return payload
+  }
+
   async function emitir() {
-    if (!clienteId) { toast('Selecione um cliente.', 'danger'); return }
-    if (ehVenda && itens.some(i => !i.produto_id)) { toast('Selecione um produto para todos os itens (ou remova as linhas vazias).', 'danger'); return }
-    if (!ehVenda && itens.every(i => !i.descricao)) { toast('Adicione pelo menos um item.', 'danger'); return }
+    if (!validarFormulario()) return
     setLoading(true)
     try {
-      const payload: Record<string, unknown> = {
-        cliente_id: clienteId,
-        natureza_operacao: natureza,
-        forma_pagamento: formaPgto || undefined,
-        observacoes: obs || undefined,
-      }
-      if (ehVenda) {
-        payload.itens = itens
-          .filter((i): i is ItemNF & { produto_id: string } => !!i.produto_id)
-          .map(i => ({
-            produto_id: i.produto_id, quantidade: i.quantidade, valor_unitario: i.valor_unitario,
-          }))
-        payload.forcar_nfe = forcarNfe
-      } else {
-        payload.subtotal = subtotal
-        payload.desconto = desconto
-        payload.aliquota_iss = aliquota
-      }
+      const payload = montarPayload()
       const nf = await api.post('/notas-fiscais', payload)
       const notaId = nf.data.data.id
       const resultado = await api.post(`/notas-fiscais/${notaId}/emitir`)
@@ -236,6 +247,29 @@ export function NotaFiscalForm() {
       toast(e.response?.data?.message ?? 'Erro ao emitir NF.', 'danger')
     } finally {
       setLoading(false)
+    }
+  }
+
+  async function visualizarPdf() {
+    if (!validarFormulario()) return
+    setLoadingPreview(true)
+    try {
+      const payload = montarPayload()
+      const nf = await api.post('/notas-fiscais', payload)
+      const notaId = nf.data.data.id
+      const res = await fetch(`${window.location.origin}/api/notas-fiscais/${notaId}/pdf`, {
+        credentials: 'include',
+        headers: { 'X-Tenant': localStorage.getItem('oficina_slug') ?? '' },
+      })
+      if (!res.ok) throw new Error()
+      const blob = await res.blob()
+      const url = URL.createObjectURL(blob)
+      window.open(url, '_blank')
+    } catch (err: unknown) {
+      const e = err as { response?: { data?: { message?: string } } }
+      toast(e.response?.data?.message ?? 'Erro ao gerar pré-visualização.', 'danger')
+    } finally {
+      setLoadingPreview(false)
     }
   }
 
@@ -514,19 +548,39 @@ export function NotaFiscalForm() {
         )}
 
         <button
+          onClick={visualizarPdf}
+          disabled={loading || loadingPreview || aguardandoConfirmacao}
+          className="font-display"
+          style={{
+            width: '100%',
+            padding: 12,
+            borderRadius: 10,
+            background: 'transparent',
+            color: 'var(--text)',
+            border: '1px solid var(--border)',
+            fontWeight: 700,
+            fontSize: 15,
+            cursor: (loading || loadingPreview || aguardandoConfirmacao) ? 'not-allowed' : 'pointer',
+            marginBottom: 10,
+          }}
+        >
+          {loadingPreview ? '⟳ Gerando...' : '👁 Pré-visualizar PDF'}
+        </button>
+
+        <button
           onClick={emitir}
-          disabled={loading || aguardandoConfirmacao}
+          disabled={loading || loadingPreview || aguardandoConfirmacao}
           className="font-display"
           style={{
             width: '100%',
             padding: 14,
             borderRadius: 10,
-            background: (loading || aguardandoConfirmacao) ? 'var(--muted)' : 'var(--success)',
+            background: (loading || loadingPreview || aguardandoConfirmacao) ? 'var(--muted)' : 'var(--success)',
             color: '#fff',
             border: 'none',
             fontWeight: 800,
             fontSize: 18,
-            cursor: (loading || aguardandoConfirmacao) ? 'not-allowed' : 'pointer',
+            cursor: (loading || loadingPreview || aguardandoConfirmacao) ? 'not-allowed' : 'pointer',
           }}
         >
           {loading ? '⟳ Processando...' : aguardandoConfirmacao ? '⟳ Aguardando confirmação...' : 'EMITIR NOTA FISCAL'}

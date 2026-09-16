@@ -1,14 +1,41 @@
 # Progresso do Projeto
 
 ## Última atualização
-2026-09-16 — Plano de limpeza e polish pós-auditoria (6 tarefas). Task 3 COMPLETA:
-`ROLE_RULES` extraído de `frontend/proxy.ts` pra `frontend/lib/roleRules.ts` compartilhado
-(`RoleRule`, `ROLE_RULES`, `regraRoleDe`, `papelPermitido`). `proxy.ts` agora importa
-`papelPermitido` do módulo novo em vez de ter a lógica inline. Task 2 COMPLETA:
-removida dependência `spatie/laravel-permission` (estavam instalada mas zero uso real,
-RBAC custom via `CheckRole.php` mantido). Confirmado zero referências via grep pré-remoção,
-suíte Unit sem regressão (383 testes, 865 assertions, 7 erros pré-existentes, nenhum novo).
-Task 1 já finalizada ontem.
+2026-09-16 — Plano de limpeza e polish pós-auditoria (6 tarefas). Task 6 COMPLETA
+(última do plano): botão "Pré-visualizar PDF" adicionado em `NotaFiscalForm.tsx`.
+Tasks 1-5 já finalizadas anteriormente (ver commits `19b5ee4`, `ab1187d`, `34a50f7`,
+`c0aacc3`, `7d798cb`). Plano de limpeza e polish pós-auditoria está COMPLETO.
+
+## Task 6 (2026-09-16) — Botão "Pré-visualizar PDF" antes de emitir Nota Fiscal
+
+**O que foi feito:** em `frontend/components/forms/NotaFiscalForm.tsx`, extraídas
+duas funções de dentro de `emitir()`: `validarFormulario(): boolean` (as 3
+validações que hoje faziam `return` cedo) e `montarPayload(): Record<string, unknown>`
+(montagem do `payload` de criação da nota). `emitir()` reescrita pra usar as duas,
+comportamento idêntico ao original. Adicionado estado `loadingPreview` e função nova
+`visualizarPdf()`: chama `validarFormulario()`, `montarPayload()`, `POST /notas-fiscais`
+(cria a nota como `RASCUNHO` — mesmo primeiro passo de `emitir()`) e então busca
+`GET /api/notas-fiscais/{id}/pdf` via `fetch` + `credentials: 'include'`, abrindo o
+blob com `window.open(url, '_blank')`. **Nunca chama** `POST /notas-fiscais/{id}/emitir`
+— a nota fica como rascunho, nada é enviado à SEFAZ. Adicionado botão secundário
+"👁 Pré-visualizar PDF" na JSX, imediatamente antes do botão "EMITIR NOTA FISCAL";
+os `disabled` de ambos os botões agora consideram `loading || loadingPreview ||
+aguardandoConfirmacao` pra evitar os dois disparando ao mesmo tempo.
+
+**Decisão deliberada:** `visualizarPdf()` propositalmente NÃO chama
+`URL.revokeObjectURL(url)` — a aba nova precisa que o blob continue acessível depois
+que `window.open` retorna, e não há hook confiável de "aba terminou de carregar" pra
+revogar depois. Pequeno vazamento de memória por clique, aceitável (mesmo padrão de
+apps que abrem blob PDF em nova aba).
+
+**Testes:** `npx tsc --noEmit` (de `frontend/`) sem erros. Verificação manual no
+navegador NÃO foi possível neste ambiente — só há dev server do frontend rodando
+(porta 3000); nenhum backend Laravel está de pé localmente (`NEXT_PUBLIC_API_URL`
+aponta pra `localhost:8001`, porta fechada) — confirma a nota de memória de que este
+ambiente não tem DB/Docker local. Fluxo de preview/emissão real fica pendente de
+confirmação manual (ex: em ambiente com backend rodando, ou pós-deploy).
+
+**Arquivos:** `frontend/components/forms/NotaFiscalForm.tsx`. PROGRESSO.md atualizado.
 
 ## Task 3 (2026-09-16) — Extrair módulo compartilhado de regras de role
 
