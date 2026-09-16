@@ -1,7 +1,159 @@
 # Progresso do Projeto
 
 ## Última atualização
-2026-09-16 — Rodada 52: o fix da Rodada 51 (mandar `IM` do prestador na
+2026-09-16 — Rodada 53: auditoria completa do sistema (4 agentes paralelos,
+somente leitura) pra validar contra o código real tudo que eu tinha
+resumido antes como "o que falta desenvolver" — achou 1 caracterização
+errada minha (NFC-e via NFePHP: o pipeline de CSC/Token/QR Code JÁ estava
+implementado, não faltava código, só a credencial real da SEFAZ-MG), 1
+doc desatualizada (`TAREFAS.md` dizia migration `codigo_ibge` pendente de
+deploy — já tinha sido deployada, corrigido), e 1 achado de segurança novo
+e real: proteção de rota por ROLE não existia no frontend (só proteção de
+SESSÃO, via `proxy.ts` — que o primeiro agente não achou porque procurou
+por `middleware.ts`, convenção descontinuada no Next.js 16, que renomeou
+pra `proxy.ts`; ver AGENTS.md do frontend, que já avisa sobre isso).
+**Corrigido nesta rodada**: cookie `oficina_role` (mesmo padrão de
+segurança do `oficina_logado` já existente — presença/UX, não credencial)
+setado no login e limpo no logout; `proxy.ts` ganhou `ROLE_RULES` que
+bloqueia navegação pra 8 telas cuja LEITURA já é role-restrita no backend
+(usuários, configurações, empresa, fiscal, relatórios, minhas-faturas,
+auditoria, alertas), com toast de feedback. Ver seção "Rodada 53" pro
+relato completo (achados que NÃO foram corrigidos ainda ficam registrados
+lá como backlog). Rodada 52 (revert do IM na NFS-e) permanece abaixo.
+
+## Rodada 53 (2026-09-16) — auditoria completa + fix de proteção de rota por role
+
+Usuário pediu validação completa do meu resumo anterior de "o que falta
+desenvolver" contra o código real (não confiar em documentação). Dispatchei
+4 agentes paralelos, somente leitura, cada um auditando um domínio
+independente: (1) telas frontend vs. spec do `CLAUDE.md`, (2) motores
+fiscais Spedy/Focus/NFePHP, (3) regras de negócio core (estoque, cliente,
+RBAC, auth, backup), (4) consistência docs vs. git log.
+
+### Correção a uma afirmação minha anterior
+**NFC-e via NFePHP não estava incompleta.** Eu tinha dito antes que o
+motor "não tinha tratamento de CSC/Token pro QR Code". Falso — o agente 2
+confirmou que `MotorNfce.php` já tem o pipeline inteiro: `cscDe()` lê
+`Configuracao::csc_id_producao/homologacao` +
+`csc_token_producao/homologacao_encrypted`, decripta via
+`Crypt::decryptString`, injeta em `configJson()` pro vendor gerar o QR
+Code automaticamente (migration própria,
+`2026_09_14_000001_add_nfce_csc_and_modelo_venda_padrao_to_configuracoes`).
+O bloqueio real não é código — é a oficina obter o CSC de verdade na
+SEFAZ-MG.
+
+### Doc desatualizada corrigida
+`TAREFAS.md` (linha ~266) dizia "migration `codigo_ibge` ainda não rodada
+em produção — pendente de deploy". O próprio `PROGRESSO.md` (Rodada 44,
+que é a fonte que `TAREFAS.md` cita) já registra o deploy confirmado
+(commit `0c2dcdd`, `migrate:status`=`Ran`,
+`Schema::hasColumn('clientes','codigo_ibge')`=`true`). Texto corrigido.
+
+### Achado de segurança real: proteção de rota por role não existia
+O `CLAUDE.md` pede "middleware de rota no Next.js para proteção por role".
+O agente 1 (telas frontend) reportou que não existe `middleware.ts` em
+lugar nenhum — **verdade, mas incompleta**: o Next.js 16 (versão real
+instalada, `node_modules/next` = 16.2.6, bem diferente do "14+" que o
+`CLAUDE.md` presume) **renomeou o arquivo de `middleware.ts` pra
+`proxy.ts`** desde a v16.0.0 (confirmado lendo
+`node_modules/next/dist/docs/01-app/03-api-reference/03-file-conventions/proxy.md`
+— o próprio `frontend/AGENTS.md` já avisa "This is NOT the Next.js you
+know... Read the relevant guide before writing any code", e foi exatamente
+isso que evitou eu escrever um `middleware.ts` morto). **`proxy.ts` já
+existe** (`frontend/proxy.ts`) e já protege por SESSÃO (redireciona pra
+`/login` se o cookie de presença `oficina_logado` não existir) — o gap
+real, mais estreito do que "zero proteção", era: **nenhuma checagem de
+ROLE**, só de login. Um MECANICO conseguia abrir `/usuarios` ou
+`/fiscal/emitir` no browser (a tela renderizava; só uma chamada de API
+específica dentro dela retornaria 403).
+
+### Fix aplicado
+1. **Backend** (`LoginController.php`): cookie novo `oficina_role`, MESMO
+   padrão de segurança do `oficina_logado` já existente (comentário no
+   código explica: não-httpOnly, só texto puro do role, não é credencial,
+   não autentica nada sozinho — só permite o `proxy.ts` decidir sem bater
+   no backend a cada navegação). Setado no `login()`, removido no
+   `logout()` junto com `oficina_logado`.
+2. **Frontend** (`proxy.ts`): array `ROLE_RULES` — só pras telas cuja
+   LEITURA no backend já é role-restrita (não só a escrita): `/usuarios`
+   (ADMIN), `/configuracoes` (ADMIN, exceto `/configuracoes/categorias-
+   fiscais` que é ADMIN+ATENDENTE — checado ANTES da regra genérica de
+   `/configuracoes` porque prefixo mais específico precisa vir primeiro,
+   senão a regra errada casava primeiro), `/empresa` (ADMIN), `/auditoria`
+   (ADMIN), `/fiscal` (ADMIN+FINANCEIRO), `/relatorios`
+   (ADMIN+FINANCEIRO), `/minhas-faturas` (ADMIN+FINANCEIRO), `/alertas`
+   (ADMIN+ATENDENTE). Mapeamento tirado direto dos middlewares `role:` reais
+   em `routes/api.php`, não inventado. **Deliberadamente NÃO** apliquei
+   essa proteção a telas cuja leitura é aberta a todos os roles (clientes,
+   produtos, OS, agendamentos, PDV, contas-a-receber, veículos, serviços)
+   — lá a proteção real já é 100% no backend via middleware `role:` só nas
+   rotas de ESCRITA; bloquear a tela inteira seria mais restritivo que o
+   próprio backend permite.
+3. Redirect de bloqueio vai pra `/?acesso=negado`; `(dashboard)/layout.tsx`
+   ganhou um componente `AcessoNegadoToast` (usa `useSearchParams()`,
+   por isso envolto em `<Suspense>` — mesmo padrão já usado em
+   `agendamentos/page.tsx` pra esse hook) que mostra toast vermelho e limpa
+   a URL.
+4. **Defesa em profundidade, não a única camada**: a autorização de
+   verdade continua 100% no backend (middleware `role:` em toda rota da
+   API) — mesmo se alguém forjasse o cookie `oficina_role` no browser, o
+   backend recusaria qualquer chamada real. Isso é UX/camada extra, documentado
+   explicitamente nos comentários do código pra não ser confundido depois
+   como "a" proteção.
+
+### Testes
+`tests/Feature/Auth/LoginTest.php`: 2 assertions novas no teste de login
+(cookie `oficina_role` não-httpOnly, valor = role do usuário) + 1 teste
+novo (`test_logout_remove_cookies_de_presenca_e_role`, usando o padrão
+`actingAs()` + `TenancyContext::set()` já estabelecido em
+`AssinaturaControllerTest`, não uma sessão real via cookie — mais simples
+e confiável). **Não executado localmente** (Feature test, precisa de
+Postgres — mesma limitação de sempre, ver
+[[feedback-local-testing]]). `npx tsc --noEmit` limpo. `php -l` limpo nos
+2 arquivos PHP tocados. Unit suite completa: 383 testes, 868 assertions, 7
+erros (mesmos de sempre), zero regressão nova.
+
+**Arquivos alterados:** `backend/app/Http/Controllers/Auth/LoginController.php`,
+`backend/tests/Feature/Auth/LoginTest.php`, `frontend/proxy.ts`,
+`frontend/app/(dashboard)/layout.tsx`, `TAREFAS.md`.
+
+### Outros achados da auditoria — NÃO corrigidos ainda (backlog, registrados aqui pra não perder)
+- `spatie/laravel-permission` está no `composer.json` mas tem ZERO uso real
+  — RBAC funciona via middleware custom (`CheckRole.php`, compara a coluna
+  `role`), não pelas tabelas do pacote. Não é bug, mas é dependência morta
+  que pode confundir manutenção futura. Decidir: remover a dependência, ou
+  migrar de fato pro spatie (mais trabalho, sem ganho funcional claro já
+  que o custom funciona).
+- Job `app/Jobs/EnviarAlertaEstoque.php` é código morto — nunca é
+  despachado. O alerta de estoque real passa por `AlertaDispatchService`.
+  O `CLAUDE.md` cita o Job pelo nome antigo — confundiria quem procurasse
+  por ele.
+- `BackupService`: a cifra AES-256 só roda se a env `BACKUP_PASSPHRASE`
+  estiver setada — se não estiver em produção, backup sai sem cifra
+  silenciosamente (sem erro/aviso). **Precisa confirmar se essa env está
+  configurada na VPS.**
+- Schema: `os_itens.quantidade` é `decimal(8,2)` mas
+  `produtos.qty_atual`/`movimentacoes_estoque.quantidade` são `INTEGER` —
+  `EstoqueService::darSaidaItem()` mitiga com `ceil()`, não é fix de raiz.
+- `ClienteStatusService::recalcular()` tem uma camada extra
+  (`DIVIDA_VENCIDA`, prioridade máxima) não descrita no `CLAUDE.md`, e
+  `DEVEDOR` só considera OS com `status=CONCLUIDA` (o pseudocódigo do
+  `CLAUDE.md` não filtra por status). Parece melhoria deliberada (evita
+  marcar cliente com OS em andamento como devedor prematuramente), mas
+  nunca foi confirmado com o usuário que é o comportamento desejado.
+- Frontend: falta a animação de sucesso "✓ Acesso liberado!" (600ms, fundo
+  verde) antes do redirect no login (`hooks/useAuth.ts` vai direto pro
+  `router.push('/')`).
+- Frontend: falta o botão "Pré-visualizar PDF" antes de emitir NF
+  (`components/forms/NotaFiscalForm.tsx`) — só baixa o PDF depois de
+  emitida.
+- Sidebar (`components/layout/Sidebar.tsx`) mostra o mesmo menu pra todos
+  os roles, sem esconder itens que o usuário não pode acessar (agora
+  bloqueados por `proxy.ts`, mas ainda visíveis e clicáveis até o
+  redirect). UX inferior, não é falha de segurança (o bloqueio real já
+  existe).
+
+## Rodada 52 (2026-09-16) — revert: IM do prestador nunca deve ser enviada (rejeição real E0120) (mandar `IM` do prestador na
 NFS-e quando `Configuracao.inscricao_municipal` preenchida) causou uma
 rejeição REAL em produção — `E0120: IM do prestador não deve ser
 informado, pois não existem informações complementares registradas no CNC

@@ -57,6 +57,33 @@ class LoginTest extends TestCase
         $cookies = collect($response->headers->getCookies())->keyBy(fn ($c) => $c->getName());
         $this->assertTrue($cookies->get(config('session.cookie'))->isHttpOnly(), 'Cookie de sessão precisa ser httpOnly.');
         $this->assertFalse($cookies->get('oficina_logado')->isHttpOnly(), 'Cookie de presença não deve ser httpOnly (só o proxy.ts do frontend lê).');
+        $this->assertFalse($cookies->get('oficina_role')->isHttpOnly(), 'Cookie de role não deve ser httpOnly (só o proxy.ts do frontend lê).');
+        $this->assertSame('ADMIN', $cookies->get('oficina_role')->getValue());
+    }
+
+    public function test_logout_remove_cookies_de_presenca_e_role(): void
+    {
+        $plano = \App\Models\Plano::create(['nome' => 'Padrão', 'preco_mensal' => 100]);
+        $oficina = \App\Models\Oficina::create([
+            'nome' => 'Teste', 'cnpj' => (string) mt_rand(10000000000000, 99999999999999),
+            'slug' => 'teste-' . uniqid(), 'plano_id' => $plano->id, 'status' => 'ATIVA',
+            'ciclo_cobranca' => 'MENSAL', 'proximo_vencimento' => now()->addMonth()->toDateString(),
+        ]);
+        \App\Tenancy\TenancyContext::set($oficina->id, $oficina->slug);
+        $usuario = $this->criarUsuario(['email' => 'logout@mecanicapro.com', 'oficina_id' => $oficina->id]);
+        \App\Tenancy\TenancyContext::clear();
+
+        $response = $this->withHeaders(['X-Tenant' => $oficina->slug])
+            ->actingAs($usuario)
+            ->postJson('/api/auth/logout');
+
+        $response->assertStatus(200);
+
+        $cookies = collect($response->headers->getCookies())->keyBy(fn ($c) => $c->getName());
+        $this->assertTrue($cookies->has('oficina_logado'), 'Logout precisa expirar o cookie de presença.');
+        $this->assertLessThanOrEqual(0, $cookies->get('oficina_logado')->getExpiresTime());
+        $this->assertTrue($cookies->has('oficina_role'), 'Logout precisa expirar o cookie de role.');
+        $this->assertLessThanOrEqual(0, $cookies->get('oficina_role')->getExpiresTime());
     }
 
     public function test_login_sem_origem_reconhecida_nao_ativa_sessao_stateful(): void

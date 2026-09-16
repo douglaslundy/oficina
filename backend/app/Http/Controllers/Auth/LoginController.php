@@ -84,6 +84,18 @@ class LoginController extends Controller
             config('session.same_site'),
         ));
 
+        // Mesmo padrão/segurança do cookie acima — só o ROLE em texto puro,
+        // não é credencial (não autentica nada sozinho). Existe só pra
+        // `proxy.ts` decidir bloquear navegação pra tela restrita por papel
+        // sem bater no backend a cada troca de rota. A autorização de
+        // verdade continua 100% no servidor (middleware `role:` em cada
+        // rota da API), este cookie é só uma otimização de UX.
+        Cookie::queue(Cookie::make(
+            'oficina_role', $usuario->role, config('session.lifetime'), '/',
+            config('session.domain'), (bool) config('session.secure'), false, false,
+            config('session.same_site'),
+        ));
+
         return response()->json([
             'oficina_slug' => $oficina_slug,
             'user'         => [
@@ -101,6 +113,7 @@ class LoginController extends Controller
         $request->session()->invalidate();
         $request->session()->regenerateToken();
         Cookie::queue(Cookie::forget('oficina_logado'));
+        Cookie::queue(Cookie::forget('oficina_role'));
 
         return response()->json(['message' => 'Logout realizado com sucesso.']);
     }

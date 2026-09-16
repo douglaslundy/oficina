@@ -1,5 +1,6 @@
 'use client'
-import { useState, useEffect } from 'react'
+import { useState, useEffect, Suspense } from 'react'
+import { useRouter, useSearchParams } from 'next/navigation'
 import { Sidebar } from '@/components/layout/Sidebar'
 import { Topbar } from '@/components/layout/Topbar'
 import { AlertBanner } from '@/components/layout/AlertBanner'
@@ -10,6 +11,22 @@ import { AssinaturaAlertaModal } from '@/components/AssinaturaAlertaModal'
 import { useEstoqueAlerts } from '@/hooks/useEstoqueAlerts'
 import { useAlertBanner } from '@/hooks/useAlertBanner'
 import { useNotasTerceiroPendentes } from '@/hooks/useNotasTerceiroPendentes'
+import { toast } from '@/hooks/useToast'
+
+function AcessoNegadoToast() {
+  // Feedback do redirect de bloqueio por role em proxy.ts (?acesso=negado)
+  const router = useRouter()
+  const searchParams = useSearchParams()
+
+  useEffect(() => {
+    if (searchParams.get('acesso') === 'negado') {
+      toast('Você não tem permissão para acessar essa página.', 'danger')
+      router.replace('/')
+    }
+  }, [searchParams, router])
+
+  return null
+}
 
 export default function DashboardLayout({ children }: { children: React.ReactNode }) {
   const { items, produtosCount, clientesDevedoresCount } = useEstoqueAlerts()
@@ -61,6 +78,9 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
       <ToastContainer />
       <NotificacaoModal />
       <AssinaturaAlertaModal />
+      <Suspense fallback={null}>
+        <AcessoNegadoToast />
+      </Suspense>
     </div>
   )
 }

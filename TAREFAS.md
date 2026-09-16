@@ -263,8 +263,12 @@ perto do fim). Achados, por ordem de risco:
    3 providers (Spedy, Focus, NFePHP) já liam `$tomador['codigo_ibge']`
    esperando o valor do destinatário — não precisaram de mudança, só
    ninguém populava certo. 2 testes novos em `NfeServiceMontagemTest`. Ver
-   `PROGRESSO.md` Rodada 44. **Migration ainda não rodada em produção** —
-   pendente de deploy.
+   `PROGRESSO.md` Rodada 44. **✅ Migration deployada e confirmada em
+   produção** (commit `0c2dcdd`, `migrate:status` = `Ran`,
+   `Schema::hasColumn('clientes','codigo_ibge')` = `true` — ver
+   `PROGRESSO.md` Rodada 44). Esta entrada ficou desatualizada por engano
+   (mesma classe de falha de documentação já registrada 2x neste arquivo),
+   corrigida na auditoria de 2026-09-16.
 
 3. **Focus não tem NENHUMA credencial cadastrada** (`saas_config`:
    `focus_master_token_producao`/`_homologacao` ambos vazios). Não é bug —
