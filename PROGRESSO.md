@@ -1,11 +1,32 @@
 # Progresso do Projeto
 
 ## Última atualização
-2026-09-16 — Plano de limpeza e polish pós-auditoria (6 tarefas). Task 1 COMPLETA:
-removido Job morto `EnviarAlertaEstoque` (nunca despachado em lugar nenhum, pipeline
-real é `AlertaDispatchService`). Confirmado zero referências via grep, suíte Unit
-sem regressão (383 testes, 868 assertions, 7 erros pré-existentes, nenhum novo).
-Rodada 53 (auditoria) permanece abaixo.
+2026-09-16 — Plano de limpeza e polish pós-auditoria (6 tarefas). Task 2 COMPLETA:
+removida dependência `spatie/laravel-permission` (estavam instalada mas zero uso real,
+RBAC custom via `CheckRole.php` mantido). Confirmado zero referências via grep antes/depois,
+suíte Unit sem regressão (383 testes, 865 assertions, 7 erros pré-existentes, nenhum novo).
+Task 1 já finalizada ontem.
+
+## Task 2 (2026-09-16) — Remover dependência morta `spatie/laravel-permission`
+
+**O que foi feito:** removida dependência Composer `spatie/laravel-permission` (7.4.1)
+via `composer remove spatie/laravel-permission --ignore-platform-reqs` (flags necessários
+porque ambiente local tem versão PHP incompatível com alguns deps).
+
+**Por quê:** auditoria detectou que o pacote está no `composer.json` mas zero uso real
+em código. Sistema usa RBAC custom (`CheckRole.php`) que compara a coluna `usuarios.role`
+direto contra permissões estáticas. Usuário confirmou que quer remover a dependência
+morta, não migrar RBAC pro pacote.
+
+**Verificação pré-remoção:** grep -rln "Spatie\\\\Permission\|HasRoles\|assignRole\|->hasRole(\|->hasPermissionTo("
+app database routes → zero resultados. Confirmado morta.
+
+**Testes pós-remoção:** `composer dump-autoload --ignore-platform-reqs` rodou sem erro.
+Suíte Unit = 383 testes, 865 assertions, 7 erros (mesmos pré-existentes, causados por
+`RefreshDatabase` sem Postgres local). Nenhuma regressão.
+
+**Arquivos:** `backend/composer.json` + `backend/composer.lock` (ambos atualizados
+automaticamente por composer). PROGRESSO.md atualizado.
 
 ## Task 1 (2026-09-16) — Remover Job morto `EnviarAlertaEstoque`
 
