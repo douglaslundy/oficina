@@ -141,12 +141,15 @@ export default function OSDetailPage() {
       const geradas: string[] = []
       if (r.data.nfe_id) geradas.push('NF-e (peças)')
       if (r.data.nfse_id) geradas.push('NFS-e (serviços)')
-      toast(
-        geradas.length
-          ? `Enfileirado: ${geradas.join(' + ')}. Acompanhe em Notas Fiscais.`
-          : 'Nenhuma nota gerada.',
-        geradas.length ? 'success' : 'danger',
-      )
+      if (geradas.length) {
+        toast(`Enfileirado: ${geradas.join(' + ')}. Acompanhe em Notas Fiscais.`, 'success')
+      } else if ((r.data.avisos ?? []).length === 0) {
+        // Nada gerado e nenhum aviso: não é erro, é "já estava tudo pronto"
+        // (ex: clicou "Gerar nota faltante" mas outra aba já tinha gerado).
+        toast('As notas fiscais desta OS já estão completas.', 'info')
+      } else {
+        toast('Nenhuma nota gerada.', 'danger')
+      }
       ;(r.data.avisos ?? []).forEach(a => toast(a, 'info'))
       router.push('/fiscal/historico')
     } catch (e: unknown) {
@@ -255,6 +258,19 @@ export default function OSDetailPage() {
     ...os,
     prazo_entrega: toInputDate(os.prazo_entrega),
   }
+
+  // Achado 2026-09-16: com pelo menos 1 nota vinculada a OS, o botão trocava
+  // pra "Baixar" pra sempre — mesmo se só uma das 2 categorias (peça/
+  // serviço) tivesse saído, ou se a única nota gerada tivesse sido
+  // REJEITADA/ERRO. Não tinha como gerar só a que faltou. Mesma lista de
+  // status "satisfeito" usada no backend (EmissaoOrquestradorService).
+  const STATUS_SATISFEITOS = ['AUTORIZADA', 'CONTINGENCIA', 'PROCESSANDO']
+  const notasFiscais = os.notas_fiscais ?? []
+  const temPecas = (os.itens ?? []).some(i => i.tipo === 'PECA' && i.produto_id)
+  const temServicos = (os.itens ?? []).some(i => i.tipo === 'SERVICO')
+  const nfeSatisfeita = notasFiscais.some(n => ['NF-e', 'NFC-e'].includes(n.modelo) && STATUS_SATISFEITOS.includes(n.status))
+  const nfseSatisfeita = notasFiscais.some(n => n.modelo === 'NFS-e' && STATUS_SATISFEITOS.includes(n.status))
+  const faltaNotaFiscal = (temPecas && !nfeSatisfeita) || (temServicos && !nfseSatisfeita)
 
   return (
     <div style={{ maxWidth: 900, margin: '0 auto' }}>
@@ -365,17 +381,23 @@ export default function OSDetailPage() {
           </button>
         )}
         {os.status === 'CONCLUIDA' && (
-          (os.notas_fiscais ?? []).length > 0 ? (
-            <button onClick={baixarNotasFiscais} disabled={baixandoNotas}
-              title="Baixa o PDF de cada nota fiscal já gerada para esta OS"
-              style={{ padding: '6px 14px', background: 'var(--info)', border: 'none', color: '#fff', borderRadius: 8, cursor: baixandoNotas ? 'not-allowed' : 'pointer', fontSize: 13, fontWeight: 700 }}>
-              {baixandoNotas ? '⟳ Baixando...' : '📥 Baixar notas fiscais'}
-            </button>
-          ) : (
+          notasFiscais.length === 0 ? (
             <button onClick={emitirNotas} disabled={emitindoNotas}
               title="Gera a NF-e das peças e a NFS-e dos serviços desta OS"
               style={{ padding: '6px 14px', background: 'var(--info)', border: 'none', color: '#fff', borderRadius: 8, cursor: emitindoNotas ? 'not-allowed' : 'pointer', fontSize: 13, fontWeight: 700 }}>
               {emitindoNotas ? '⟳ Gerando...' : '🧾 Gerar notas fiscais'}
+            </button>
+          ) : faltaNotaFiscal ? (
+            <button onClick={emitirNotas} disabled={emitindoNotas}
+              title="Uma das notas (NF-e ou NFS-e) ainda falta ou não saiu — gera só a que falta, sem duplicar a que já existe"
+              style={{ padding: '6px 14px', background: 'var(--accent)', border: 'none', color: '#000', borderRadius: 8, cursor: emitindoNotas ? 'not-allowed' : 'pointer', fontSize: 13, fontWeight: 700 }}>
+              {emitindoNotas ? '⟳ Gerando...' : '🧾 Gerar nota faltante'}
+            </button>
+          ) : (
+            <button onClick={baixarNotasFiscais} disabled={baixandoNotas}
+              title="Baixa o PDF de cada nota fiscal já gerada para esta OS"
+              style={{ padding: '6px 14px', background: 'var(--info)', border: 'none', color: '#fff', borderRadius: 8, cursor: baixandoNotas ? 'not-allowed' : 'pointer', fontSize: 13, fontWeight: 700 }}>
+              {baixandoNotas ? '⟳ Baixando...' : '📥 Baixar notas fiscais'}
             </button>
           )
         )}

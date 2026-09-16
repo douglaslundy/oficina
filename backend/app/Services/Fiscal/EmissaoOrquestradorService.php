@@ -16,9 +16,17 @@ use App\Models\OrdemServico;
  *   NFS-e ainda sai. O retorno diz o que saiu e o que não.
  * - Peça sem produto vinculado não entra na NF-e (não tem NCM) — vira aviso.
  * - OS só com peças → só NF-e. Só com serviços → só NFS-e.
+ * - IDEMPOTENTE por categoria (achado 2026-09-16, usuário pediu "gerar nota
+ *   faltante"): se a OS já tem uma nota AUTORIZADA/CONTINGENCIA/PROCESSANDO
+ *   do modelo certo, essa categoria é pulada (não duplica). Uma nota
+ *   REJEITADA/ERRO/RASCUNHO/CANCELADA NÃO conta como satisfeita — chamar de
+ *   novo tenta gerar uma nova pra essa categoria.
  */
 class EmissaoOrquestradorService
 {
+    /** Status que contam como "essa categoria já foi resolvida" — não gera de novo. */
+    private const STATUS_SATISFEITOS = ['AUTORIZADA', 'CONTINGENCIA', 'PROCESSANDO'];
+
     public function __construct(
         private readonly CriarNotaFiscalService $criarNota,
         private readonly IniciarEmissaoNotaService $iniciarEmissao,
@@ -26,11 +34,11 @@ class EmissaoOrquestradorService
 
     /**
      * @return array{nfe_id: ?string, nfse_id: ?string, avisos: list<string>}
-     * @throws EmissaoBloqueadaException  se NENHUMA nota pôde ser gerada
+     * @throws EmissaoBloqueadaException  se NENHUMA nota pôde ser gerada E havia algo pendente de gerar
      */
     public function orquestrar(OrdemServico $os): array
     {
-        $os->loadMissing('itens');
+        $os->loadMissing(['itens', 'notasFiscais']);
 
         $pecas           = $os->itens->filter(fn ($i) => $i->tipo === 'PECA' && $i->produto_id !== null)->values();
         $servicos        = $os->itens->filter(fn ($i) => $i->tipo === 'SERVICO')->values();
@@ -40,10 +48,17 @@ class EmissaoOrquestradorService
             ->map(fn ($p) => "Item \"{$p->descricao}\" é uma peça sem produto vinculado — ficou de fora da NF-e (sem NCM).")
             ->all();
 
+        $nfeJaSatisfeita = $os->notasFiscais->contains(
+            fn ($n) => in_array($n->modelo, ['NF-e', 'NFC-e'], true) && in_array($n->status, self::STATUS_SATISFEITOS, true),
+        );
+        $nfseJaSatisfeita = $os->notasFiscais->contains(
+            fn ($n) => $n->modelo === 'NFS-e' && in_array($n->status, self::STATUS_SATISFEITOS, true),
+        );
+
         $nfeId  = null;
         $nfseId = null;
 
-        if ($pecas->isNotEmpty()) {
+        if ($pecas->isNotEmpty() && !$nfeJaSatisfeita) {
             try {
                 $notaNfe = $this->criarNota->criar([
                     'cliente_id'        => $os->cliente_id,
@@ -63,7 +78,7 @@ class EmissaoOrquestradorService
             }
         }
 
-        if ($servicos->isNotEmpty()) {
+        if ($servicos->isNotEmpty() && !$nfseJaSatisfeita) {
             try {
                 $notaNfse = $this->criarNota->criar([
                     'cliente_id'        => $os->cliente_id,
@@ -80,7 +95,12 @@ class EmissaoOrquestradorService
             }
         }
 
-        if ($nfeId === null && $nfseId === null) {
+        // "Nada a fazer" (tudo que a OS tem já está satisfeito, ou a OS não
+        // tem peça/serviço nenhum) é diferente de "bloqueado" — só lança
+        // exceção se havia algo pendente de gerar e nada saiu.
+        $tudoJaSatisfeito = ($pecas->isEmpty() || $nfeJaSatisfeita) && ($servicos->isEmpty() || $nfseJaSatisfeita);
+
+        if ($nfeId === null && $nfseId === null && !$tudoJaSatisfeito) {
             throw new EmissaoBloqueadaException(
                 $avisos !== []
                     ? implode(' ', $avisos)

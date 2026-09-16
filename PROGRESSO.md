@@ -1,10 +1,72 @@
 # Progresso do Projeto
 
 ## Última atualização
-2026-09-16 — Plano de limpeza e polish pós-auditoria (6 tarefas). Task 6 COMPLETA
-(última do plano): botão "Pré-visualizar PDF" adicionado em `NotaFiscalForm.tsx`.
-Tasks 1-5 já finalizadas anteriormente (ver commits `19b5ee4`, `ab1187d`, `34a50f7`,
-`c0aacc3`, `7d798cb`). Plano de limpeza e polish pós-auditoria está COMPLETO.
+2026-09-16 — Usuário perguntou como corrigir/gerar só o documento fiscal que
+faltou numa OS mista (peças+serviços) quando um dos dois falha. Investigação
+achou um gap real: assim que QUALQUER nota ficava vinculada à OS (mesmo
+REJEITADA/ERRO), a tela trocava pra sempre "Gerar notas fiscais" por "Baixar
+notas fiscais" — sem jeito de gerar só a que faltou sem duplicar a outra.
+Corrigido: (1) `EmissaoOrquestradorService` agora é idempotente por
+categoria — pula NF-e/NFS-e já AUTORIZADA/CONTINGENCIA/PROCESSANDO, só
+tenta gerar a que falta; "nada a fazer" virou 202 (sucesso trivial), não
+mais 422; (2) tela da OS ganhou um 3º estado de botão "🧾 Gerar nota
+faltante" (âmbar) quando só uma das duas categorias está satisfeita; (3)
+Histórico de NF ganhou botão "🔄 Tentar novamente" em notas REJEITADA/ERRO
+(o backend já aceitava reemissão nesses status — só faltava o botão). Ver
+seção "Gerar nota faltante" abaixo.
+
+Antes disso: Plano de limpeza e polish pós-auditoria (6 tarefas + revisão
+final com 2 achados corrigidos) — COMPLETO. Ver seção "Task 6" e a seção da
+revisão final logo abaixo pro detalhe.
+
+## Gerar nota faltante / reemitir nota rejeitada (2026-09-16)
+
+**Achado do usuário:** ao gerar as notas de uma OS mista e uma das duas
+falhar (bloqueio na criação, ex: produto sem NCM; ou rejeição da SEFAZ
+depois), não tinha como corrigir a causa e gerar só a que faltou — a única
+saída era recriar manualmente em "Emitir Nota Fiscal", reentrando tudo à
+mão, porque a tela da OS já tinha trocado pro botão de download assim que
+qualquer nota existia (mesmo uma rejeitada).
+
+### Fix 1 — `EmissaoOrquestradorService` idempotente por categoria
+`backend/app/Services/Fiscal/EmissaoOrquestradorService.php`: antes de
+tentar criar a NF-e/NFC-e ou a NFS-e, checa se a OS já tem uma nota do
+modelo certo com status `AUTORIZADA`/`CONTINGENCIA`/`PROCESSANDO` — se sim,
+pula essa categoria (não duplica). REJEITADA/ERRO/RASCUNHO/CANCELADA NÃO
+contam como satisfeitas — chamar de novo tenta gerar uma nova pra essa
+categoria. "Nada a fazer" (tudo já satisfeito, ou OS sem peça/serviço)
+agora retorna 202 em vez de lançar `EmissaoBloqueadaException` (422) — não
+é mais tratado como bloqueio.
+
+### Fix 2 — Botão "Gerar nota faltante" na tela da OS
+`frontend/app/(dashboard)/os/[id]/page.tsx`: o botão agora tem 3 estados
+em vez de 2 — sem nenhuma nota → "🧾 Gerar notas fiscais"; com nota(s) mas
+faltando NF-e OU NFS-e (checado client-side com a mesma lista de status
+satisfeitos do backend) → "🧾 Gerar nota faltante" (âmbar, chama a mesma
+`emitirNotas()`, que agora é segura contra duplicata); tudo satisfeito →
+"📥 Baixar notas fiscais" (comportamento antigo, inalterado).
+
+### Fix 3 — Botão "Tentar novamente" no Histórico de NF
+`frontend/app/(dashboard)/fiscal/historico/page.tsx`: notas REJEITADA/ERRO
+ganharam um botão "🔄 Tentar novamente" ao lado de "⚠ Ver motivo" — chama
+`POST /notas-fiscais/{id}/emitir` (o backend já não bloqueava reemissão
+nesses status, só faltava o botão). Reaproveita o polling de PROCESSANDO
+que a tela já tinha.
+
+### Testes
+3 testes novos em `EmissaoOrquestradorTest.php` (Feature, precisa de
+Postgres — não roda localmente, ver [[feedback-local-testing]]):
+`test_pula_nfe_ja_autorizada_e_gera_so_a_nfse_que_faltava`,
+`test_retorna_202_sem_gerar_nada_quando_tudo_ja_esta_satisfeito`,
+`test_nfe_rejeitada_nao_conta_como_satisfeita_e_gera_nova_tentativa`.
+`php -l` limpo nos arquivos PHP tocados. Unit suite completa: 383 testes,
+868 assertions, 7 erros (mesmos de sempre), zero regressão. `npx tsc
+--noEmit` limpo no frontend.
+
+**Arquivos alterados:** `backend/app/Services/Fiscal/EmissaoOrquestradorService.php`,
+`backend/tests/Feature/Fiscal/EmissaoOrquestradorTest.php`,
+`frontend/app/(dashboard)/os/[id]/page.tsx`,
+`frontend/app/(dashboard)/fiscal/historico/page.tsx`.
 
 ## Task 6 (2026-09-16) — Botão "Pré-visualizar PDF" antes de emitir Nota Fiscal
 

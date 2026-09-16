@@ -129,4 +129,92 @@ class EmissaoOrquestradorTest extends TestCase
             ->postJson("/api/os/{$os->id}/emitir-notas")
             ->assertStatus(422);
     }
+
+    /**
+     * Achado 2026-09-16: a tela da OS trocava permanentemente "Gerar notas
+     * fiscais" por "Baixar notas fiscais" assim que QUALQUER nota existia
+     * pra ela — mesmo que só uma das duas categorias (peça/serviço) tivesse
+     * saído. Não existia jeito de gerar só a que faltou sem duplicar a que
+     * já tinha ido pra SEFAZ. Estes 3 testes cobrem o fix: o orquestrador
+     * agora pula categoria já satisfeita, e trata "nada a fazer" como
+     * sucesso (202), não como bloqueio (422).
+     */
+    public function test_pula_nfe_ja_autorizada_e_gera_so_a_nfse_que_faltava(): void
+    {
+        [$oficina, $token, $os] = $this->cenario();
+
+        NotaFiscal::create([
+            'oficina_id' => $oficina->id, 'cliente_id' => $os->cliente_id, 'os_id' => $os->id,
+            'modelo' => 'NF-e', 'status' => 'AUTORIZADA',
+            'natureza_operacao' => 'Venda de Mercadoria', 'valor_total' => 30,
+        ]);
+
+        Http::fake(['*focusnfe*' => Http::response(['status' => 'processando'], 202)]);
+
+        $res = $this->withToken($token)->withHeaders(['X-Tenant' => $oficina->slug])
+            ->postJson("/api/os/{$os->id}/emitir-notas")
+            ->assertStatus(202);
+
+        $this->assertNull($res->json('nfe_id'), 'NF-e já autorizada não deve ser gerada de novo.');
+        $this->assertNotNull($res->json('nfse_id'), 'NFS-e ainda faltava e deve ser gerada agora.');
+        $this->assertSame(
+            1, NotaFiscal::where('os_id', $os->id)->where('modelo', 'NF-e')->count(),
+            'Não pode duplicar a NF-e já autorizada.',
+        );
+    }
+
+    public function test_retorna_202_sem_gerar_nada_quando_tudo_ja_esta_satisfeito(): void
+    {
+        [$oficina, $token, $os] = $this->cenario();
+
+        NotaFiscal::create([
+            'oficina_id' => $oficina->id, 'cliente_id' => $os->cliente_id, 'os_id' => $os->id,
+            'modelo' => 'NF-e', 'status' => 'AUTORIZADA',
+            'natureza_operacao' => 'Venda de Mercadoria', 'valor_total' => 30,
+        ]);
+        NotaFiscal::create([
+            'oficina_id' => $oficina->id, 'cliente_id' => $os->cliente_id, 'os_id' => $os->id,
+            'modelo' => 'NFS-e', 'status' => 'AUTORIZADA',
+            'natureza_operacao' => 'Prestação de Serviços', 'valor_total' => 150,
+        ]);
+
+        $res = $this->withToken($token)->withHeaders(['X-Tenant' => $oficina->slug])
+            ->postJson("/api/os/{$os->id}/emitir-notas");
+
+        // 202, não 422 — "nada a fazer porque já está tudo pronto" não é
+        // um bloqueio, é sucesso trivial.
+        $res->assertStatus(202);
+        $this->assertNull($res->json('nfe_id'));
+        $this->assertNull($res->json('nfse_id'));
+        $this->assertSame(
+            2, NotaFiscal::where('os_id', $os->id)->count(),
+            'Não pode duplicar nenhuma das duas notas já satisfeitas.',
+        );
+    }
+
+    public function test_nfe_rejeitada_nao_conta_como_satisfeita_e_gera_nova_tentativa(): void
+    {
+        [$oficina, $token, $os] = $this->cenario();
+
+        NotaFiscal::create([
+            'oficina_id' => $oficina->id, 'cliente_id' => $os->cliente_id, 'os_id' => $os->id,
+            'modelo' => 'NF-e', 'status' => 'REJEITADA', 'mensagem_erro' => 'rejeitada em teste',
+            'natureza_operacao' => 'Venda de Mercadoria', 'valor_total' => 30,
+        ]);
+
+        Http::fake(['*focusnfe*' => Http::response(['status' => 'processando'], 202)]);
+
+        $res = $this->withToken($token)->withHeaders(['X-Tenant' => $oficina->slug])
+            ->postJson("/api/os/{$os->id}/emitir-notas")
+            ->assertStatus(202);
+
+        $this->assertNotNull(
+            $res->json('nfe_id'),
+            'NF-e rejeitada NÃO conta como satisfeita — precisa tentar gerar uma nova.',
+        );
+        $this->assertSame(
+            2, NotaFiscal::where('os_id', $os->id)->where('modelo', 'NF-e')->count(),
+            'A rejeitada antiga fica no histórico, somada à nova tentativa.',
+        );
+    }
 }

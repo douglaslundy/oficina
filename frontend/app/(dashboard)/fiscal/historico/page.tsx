@@ -31,6 +31,7 @@ export default function HistoricoNFPage() {
   const [modeloFiltro, setModeloFiltro] = useState('')
   const [motivoModal, setMotivoModal]   = useState<{ numero: number | null; mensagem: string; amigavel: string | null; status: string } | null>(null)
   const [retransmitindo, setRetransmitindo] = useState<string | null>(null)
+  const [reemitindo, setReemitindo] = useState<string | null>(null)
 
   const fetchNotas = useCallback((opts?: { silent?: boolean }) => {
     if (!opts?.silent) setLoading(true)
@@ -195,6 +196,33 @@ export default function HistoricoNFPage() {
     }
   }
 
+  // Achado 2026-09-16: uma nota REJEITADA/ERRO só tinha "Ver motivo" — depois
+  // de corrigir a causa (ex: cadastrar o NCM que faltava), não tinha como
+  // tentar de novo pela tela, só recriando manualmente do zero em "Emitir
+  // Nota Fiscal". O backend já aceitava reemissão nesses status
+  // (NotaFiscalController::emitir só bloqueia AUTORIZADA/PROCESSANDO) — só
+  // faltava o botão.
+  async function reemitir(nota: NotaFiscal) {
+    setReemitindo(nota.id)
+    try {
+      const r = await api.post(`/notas-fiscais/${nota.id}/emitir`)
+      const novoStatus = r.data.data.status
+      if (novoStatus === 'AUTORIZADA') {
+        toast(`NF #${r.data.data.numero} autorizada!`, 'success')
+      } else if (novoStatus === 'PROCESSANDO') {
+        toast('Reenviada — aguardando confirmação da SEFAZ...', 'info')
+      } else {
+        toast('Rejeitada de novo — veja o motivo atualizado.', 'danger')
+      }
+      fetchNotas()
+    } catch (e: unknown) {
+      const msg = (e as { response?: { data?: { message?: string } } })?.response?.data?.message
+      toast(msg ?? 'Erro ao tentar reemitir a nota.', 'danger')
+    } finally {
+      setReemitindo(null)
+    }
+  }
+
   // Pedido explícito do usuário (2026-09-14): botão pra tentar autorizar uma
   // NF-e presa em CONTINGÊNCIA na hora, sem esperar a varredura agendada
   // (`nfe:reconciliar-contingencia`, roda de hora em hora).
@@ -340,6 +368,21 @@ export default function HistoricoNFPage() {
                           style={{ background: 'none', border: '1px solid var(--danger)', color: 'var(--danger)', borderRadius: 6, padding: '4px 10px', cursor: 'pointer', fontSize: 13, whiteSpace: 'nowrap' }}
                         >
                           ⚠ Ver motivo
+                        </button>
+                      )}
+                      {(nota.status === 'REJEITADA' || nota.status === 'ERRO') && (
+                        <button
+                          onClick={() => reemitir(nota)}
+                          disabled={reemitindo === nota.id}
+                          title="Corrigiu a causa do erro? Tenta emitir esta nota de novo, sem precisar recriar do zero"
+                          style={{
+                            background: 'none', border: '1px solid var(--accent)',
+                            color: reemitindo === nota.id ? 'var(--muted)' : 'var(--accent)',
+                            borderRadius: 6, padding: '4px 10px',
+                            cursor: reemitindo === nota.id ? 'not-allowed' : 'pointer', fontSize: 13, whiteSpace: 'nowrap',
+                          }}
+                        >
+                          {reemitindo === nota.id ? '⟳ Tentando...' : '🔄 Tentar novamente'}
                         </button>
                       )}
                       {(nota.status === 'AUTORIZADA' || nota.status === 'CONTINGENCIA') && nota.numero && (
