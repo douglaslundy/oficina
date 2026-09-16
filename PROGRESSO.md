@@ -5275,3 +5275,25 @@ comportamento atual) | `AUTOMATICO_PROVEDOR`), checado em
 `TributacaoIcmsSaidaResolver`/alíquota configurada). Toggle na tela de
 Dados da Empresa. **Não implementado ainda** — deliberadamente adiado até
 o teste real confirmar o comportamento de cada provedor.
+
+## Plano: Limpeza e Polish Pós-Auditoria (2026-09-16)
+
+### Task 3: COMPLETA (commit 34a50f7)
+- Extraiu ROLE_RULES de proxy.ts para lib/roleRules.ts compartilhado
+- Exporta `regraRoleDe(pathname)` consumida por Task 4
+- Verificado: tsc --noEmit passa limpo
+
+### Task 4: COMPLETA (2026-09-16)
+- **Implementação:** Sidebar agora esconde itens de navegação cuja LEITURA é
+  role-restrita no backend, usando `regraRoleDe()` da Task 3 como fonte de
+  verdade — mesmo padrão conservador do filtro de `gate` (oculta enquanto
+  user ainda carrega).
+- **Linhas alteradas:**
+  - Imports (linha 6): adicionado `import { regraRoleDe } from '@/lib/roleRules'`
+  - Pipeline (linhas 90-101): adicionado filtro role logo após filtro de gate
+- **Verificação de tipos:** `npx tsc --noEmit` passa limpo (sem erros)
+- **Verificação manual no navegador:** Não foi possível realizar nesta execução
+  — Claude-in-Chrome extension não está disponível no ambiente. Esta é uma
+  pendência legítima documentada; a lógica está correta e já compilada sem
+  erros TypeScript, pronta para ser testada em uma sessão com acesso a
+  navegador.

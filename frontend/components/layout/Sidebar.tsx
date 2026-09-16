@@ -4,6 +4,7 @@ import { usePathname } from 'next/navigation'
 import { useAuth, AuthUser } from '@/hooks/useAuth'
 import { useState, useEffect } from 'react'
 import api from '@/lib/api'
+import { regraRoleDe } from '@/lib/roleRules'
 
 // Recursos opcionais liberados por plano. Item com `gate` só aparece se o
 // plano atual liberar o recurso correspondente.
@@ -90,6 +91,13 @@ export function Sidebar({ clientesDevedores = 0, produtosAlerta = 0, isMobile = 
   const itemsWithBadges = NAV_ITEMS
     // Esconde itens de recursos não liberados no plano (enquanto carrega, oculta gated).
     .filter(item => !item.gate || (ent ? gateLiberado(item.gate, ent) : false))
+    // Esconde itens cuja LEITURA já é role-restrita no backend, pro usuário
+    // sem o papel certo (enquanto `user` ainda não carregou, oculta — mesmo
+    // padrão conservador do filtro de `gate` acima).
+    .filter(item => {
+      const regra = regraRoleDe(item.href)
+      return !regra || (user ? regra.roles.includes(user.role) : false)
+    })
     .map(item => {
       if (item.href === '/clientes' && clientesDevedores > 0)
         return { ...item, badge: clientesDevedores }
