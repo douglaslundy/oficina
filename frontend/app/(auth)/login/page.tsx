@@ -4,7 +4,7 @@ import Link from 'next/link'
 import { useAuth } from '@/hooks/useAuth'
 
 function LoginForm() {
-  const { login, loading, error } = useAuth()
+  const { login, loading, success, error } = useAuth()
   const [email, setEmail] = useState('')
   const [senha, setSenha] = useState('')
   const [showSenha, setShowSenha] = useState(false)
@@ -90,11 +90,11 @@ function LoginForm() {
           className="font-display"
           style={{
             width: '100%', padding: 12, borderRadius: 8,
-            background: loading ? 'var(--muted)' : 'var(--accent)',
+            background: success ? 'var(--success)' : loading ? 'var(--muted)' : 'var(--accent)',
             color: '#000', fontWeight: 800, fontSize: 17, border: 'none',
             cursor: loading ? 'not-allowed' : 'pointer', marginTop: 8,
           }}>
-          {loading ? '⟳ Verificando...' : 'Entrar'}
+          {success ? '✓ Acesso liberado!' : loading ? '⟳ Verificando...' : 'Entrar'}
         </button>
       </form>
 

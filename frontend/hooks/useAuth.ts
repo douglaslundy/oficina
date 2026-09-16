@@ -14,6 +14,7 @@ export function useAuth() {
   const router = useRouter()
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const [success, setSuccess] = useState(false)
 
   function getUser(): AuthUser | null {
     if (typeof window === 'undefined') return null
@@ -29,12 +30,13 @@ export function useAuth() {
       if (data.oficina_slug) localStorage.setItem('oficina_slug', data.oficina_slug)
       localStorage.setItem('auth_user', JSON.stringify(data.user))
       if (lembrar) localStorage.setItem('remember_email', email)
+      setSuccess(true)
+      await new Promise(resolve => setTimeout(resolve, 600))
       router.push('/')
     } catch (err: unknown) {
       const e = err as { response?: { data?: { message?: string } } }
       setError(e.response?.data?.message ?? 'Erro ao fazer login.')
       localStorage.removeItem('oficina_slug')
-    } finally {
       setLoading(false)
     }
   }
@@ -46,5 +48,5 @@ export function useAuth() {
     router.push('/login')
   }
 
-  return { login, logout, getUser, loading, error }
+  return { login, logout, getUser, loading, success, error }
 }
