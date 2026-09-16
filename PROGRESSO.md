@@ -1,11 +1,39 @@
 # Progresso do Projeto
 
 ## Última atualização
-2026-09-16 — Plano de limpeza e polish pós-auditoria (6 tarefas). Task 2 COMPLETA:
+2026-09-16 — Plano de limpeza e polish pós-auditoria (6 tarefas). Task 3 COMPLETA:
+`ROLE_RULES` extraído de `frontend/proxy.ts` pra `frontend/lib/roleRules.ts` compartilhado
+(`RoleRule`, `ROLE_RULES`, `regraRoleDe`, `papelPermitido`). `proxy.ts` agora importa
+`papelPermitido` do módulo novo em vez de ter a lógica inline. Task 2 COMPLETA:
 removida dependência `spatie/laravel-permission` (estavam instalada mas zero uso real,
 RBAC custom via `CheckRole.php` mantido). Confirmado zero referências via grep pré-remoção,
 suíte Unit sem regressão (383 testes, 865 assertions, 7 erros pré-existentes, nenhum novo).
 Task 1 já finalizada ontem.
+
+## Task 3 (2026-09-16) — Extrair módulo compartilhado de regras de role
+
+**O que foi feito:** criado `frontend/lib/roleRules.ts`, exportando `interface RoleRule`,
+`ROLE_RULES`, `regraRoleDe(pathname)` e `papelPermitido(pathname, role)` — extraídos
+literalmente do array `ROLE_RULES` e da lógica de bloqueio que já existiam inline em
+`frontend/proxy.ts` (adicionados na Rodada 53). `proxy.ts` agora importa
+`{ papelPermitido }` de `./lib/roleRules` e usa essa função no lugar da busca manual
+no array local; comportamento de runtime idêntico (mesmo redirect pra
+`/?acesso=negado`).
+
+**Por quê:** Task 4 (filtro de sidebar por role, despachada em seguida) precisa
+exatamente da mesma lógica de mapeamento prefixo→roles pra filtrar o menu. Duplicar o
+array em dois arquivos arriscava os dois divergirem com o tempo; extrair pra um módulo
+único elimina esse risco (DRY).
+
+**Testes:** `npx tsc --noEmit` (de `frontend/`) sem erros. `npm run build` (Next.js
+16.2.6, Turbopack) completou com sucesso — compilação, checagem de tipos e geração de
+52 páginas estáticas, sem erros. `proxy.ts` roda em runtime de servidor Node (não Edge)
+nesta versão do Next.js, então o build de produção é o teste que importa pra confirmar
+que o import relativo `./lib/roleRules` resolve corretamente nesse contexto.
+
+**Arquivos:** criado `frontend/lib/roleRules.ts`; modificado `frontend/proxy.ts`
+(removido array `ROLE_RULES` local + import novo + uso de `papelPermitido`);
+PROGRESSO.md atualizado.
 
 ## Task 2 (2026-09-16) — Remover dependência morta `spatie/laravel-permission`
 

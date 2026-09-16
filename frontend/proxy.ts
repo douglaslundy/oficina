@@ -1,26 +1,8 @@
 import { NextResponse } from 'next/server'
 import type { NextRequest } from 'next/server'
+import { papelPermitido } from './lib/roleRules'
 
 const PUBLIC_PATHS = ['/login', '/forgot-password', '/reset-password', '/orcamento']
-
-// Telas cujas rotas de LEITURA no backend já são restritas por role (não é
-// só a mutação) — ver routes/api.php. Nunca duplicar telas cuja leitura é
-// aberta a todos os roles (ex: clientes, produtos, OS): lá a proteção real
-// já é 100% no backend, via middleware `role:` nas rotas de escrita, e
-// bloquear a tela inteira aqui seria mais restritivo que o próprio backend.
-// Ordem importa: prefixos mais específicos primeiro (ex: categorias-fiscais
-// antes de configuracoes, que tem uma role diferente).
-const ROLE_RULES: { prefix: string; roles: string[] }[] = [
-  { prefix: '/configuracoes/categorias-fiscais', roles: ['ADMIN', 'ATENDENTE'] },
-  { prefix: '/configuracoes', roles: ['ADMIN'] },
-  { prefix: '/empresa', roles: ['ADMIN'] },
-  { prefix: '/usuarios', roles: ['ADMIN'] },
-  { prefix: '/auditoria', roles: ['ADMIN'] },
-  { prefix: '/fiscal', roles: ['ADMIN', 'FINANCEIRO'] },
-  { prefix: '/relatorios', roles: ['ADMIN', 'FINANCEIRO'] },
-  { prefix: '/minhas-faturas', roles: ['ADMIN', 'FINANCEIRO'] },
-  { prefix: '/alertas', roles: ['ADMIN', 'ATENDENTE'] },
-]
 
 export function proxy(request: NextRequest) {
   const { pathname } = request.nextUrl
@@ -70,14 +52,13 @@ export function proxy(request: NextRequest) {
   }
 
   // Bloqueio por role — só pras telas cuja LEITURA já é role-restrita no
-  // backend (ver ROLE_RULES acima). Defesa de UX/camada extra: a
-  // autorização de verdade continua 100% no servidor (middleware `role:`
-  // em toda rota da API); mesmo que este cookie fosse forjado, o backend
-  // recusaria qualquer chamada real.
+  // backend (ver ROLE_RULES em lib/roleRules.ts). Defesa de UX/camada
+  // extra: a autorização de verdade continua 100% no servidor (middleware
+  // `role:` em toda rota da API); mesmo que este cookie fosse forjado, o
+  // backend recusaria qualquer chamada real.
   if (logado) {
     const role = request.cookies.get('oficina_role')?.value
-    const regra = ROLE_RULES.find(r => pathname.startsWith(r.prefix))
-    if (regra && role && !regra.roles.includes(role)) {
+    if (role && !papelPermitido(pathname, role)) {
       return NextResponse.redirect(new URL('/?acesso=negado', request.url))
     }
   }
