@@ -385,10 +385,10 @@ export default function HistoricoNFPage() {
                           Cancelar
                         </button>
                       )}
-                      {nota.ambiente === 'HOMOLOGACAO' && (
+                      {(nota.ambiente === 'HOMOLOGACAO' || nota.status === 'RASCUNHO') && (
                         <button
                           onClick={() => setExcluirModal({ id: nota.id, numero: nota.numero })}
-                          title="Excluir — só disponível para notas emitidas em ambiente de homologação"
+                          title="Excluir — disponível para notas em homologação ou rascunhos nunca emitidos"
                           style={{ background: 'none', border: '1px solid var(--muted)', color: 'var(--muted)', borderRadius: 6, padding: '4px 10px', cursor: 'pointer', fontSize: 13, whiteSpace: 'nowrap' }}
                         >
                           🗑️ Excluir

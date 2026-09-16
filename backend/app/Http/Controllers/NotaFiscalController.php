@@ -240,21 +240,27 @@ class NotaFiscalController extends Controller
     }
 
     /**
-     * Exclui uma nota fiscal — permitido SOMENTE pra notas emitidas em
-     * ambiente de HOMOLOGAÇÃO (pedido explícito do usuário, 2026-09-14).
-     * Uma nota de PRODUÇÃO é um documento fiscal real (mesmo cancelada,
-     * seu registro precisa ser preservado — cancelamento já existe pra
-     * isso); exclusão física só faz sentido pra lixo de teste/homologação
-     * que nunca teve valor legal. `notas_fiscais_itens` cai em cascata
-     * (FK `onDelete('cascade')`, migration 2026_08_02_000001).
+     * Exclui uma nota fiscal — permitido pra notas emitidas em ambiente de
+     * HOMOLOGAÇÃO (pedido explícito do usuário, 2026-09-14) OU pra
+     * rascunhos nunca emitidos (status RASCUNHO — nunca passaram por
+     * IniciarEmissaoNotaService, nunca tocaram SEFAZ, `ambiente` fica
+     * `null` pra sempre; achado na revisão final da Task 6 "Pré-visualizar
+     * PDF", 2026-09-16 — sem essa exceção, todo clique em "Pré-visualizar"
+     * deixava uma nota RASCUNHO órfã e indeletável em /fiscal/historico).
+     * Uma nota de PRODUÇÃO já emitida é um documento fiscal real (mesmo
+     * cancelada, seu registro precisa ser preservado — cancelamento já
+     * existe pra isso); exclusão física só faz sentido pra lixo de
+     * teste/homologação ou rascunho que nunca teve valor legal.
+     * `notas_fiscais_itens` cai em cascata (FK `onDelete('cascade')`,
+     * migration 2026_08_02_000001).
      */
     public function destroy(string $id): JsonResponse
     {
         $nota = NotaFiscal::findOrFail($id);
 
-        if ($nota->ambiente !== 'HOMOLOGACAO') {
+        if ($nota->ambiente !== 'HOMOLOGACAO' && $nota->status !== 'RASCUNHO') {
             return response()->json([
-                'message' => 'Só é possível excluir notas fiscais emitidas em ambiente de homologação.',
+                'message' => 'Só é possível excluir notas fiscais emitidas em ambiente de homologação, ou rascunhos nunca emitidos.',
             ], 422);
         }
 

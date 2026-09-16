@@ -9,6 +9,9 @@ return new class extends Migration
     /**
      * Run the migrations.
      */
+    // ⚠️ Depende de config/permission.php mesmo com spatie/laravel-permission
+    // já removido do composer.json (Task 2, 2026-09-16) — ver o comentário
+    // no topo daquele arquivo antes de apagar qualquer um dos dois.
     public function up(): void
     {
         $teams = config('permission.teams');

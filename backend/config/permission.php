@@ -1,5 +1,19 @@
 <?php
 
+// ⚠️ ATENÇÃO — a dependência spatie/laravel-permission foi REMOVIDA do
+// composer.json (Task 2, 2026-09-16) — zero uso real no código (RBAC roda
+// via App\Http\Middleware\CheckRole, comparando usuarios.role direto, não
+// via este pacote). Este arquivo foi deliberadamente MANTIDO: a migration
+// database/migrations/2026_05_30_092611_create_permission_tables.php lê
+// config('permission.table_names'/'teams'/'column_names') e lança exceção
+// se ausente — apagar só este arquivo quebraria `migrate:fresh` /
+// RefreshDatabase (usado em CI e Feature tests) sem apagar a migration
+// junto. Achado na revisão final da Task 2 (ver PROGRESSO.md, seção da
+// revisão final do plano de limpeza de 2026-09-16). Se um dia remover de
+// vez: apagar os DOIS juntos (este arquivo + a migration acima, cujas
+// tabelas roles/permissions/model_has_*/role_has_permissions estão
+// confirmadas sem nenhum uso no código), nunca um sem o outro.
+
 use Spatie\Permission\DefaultTeamResolver;
 use Spatie\Permission\Models\Permission;
 use Spatie\Permission\Models\Role;
