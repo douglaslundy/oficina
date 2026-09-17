@@ -1,6 +1,131 @@
 # Progresso do Projeto
 
 ## Última atualização
+2026-09-17 — **BUG SÉRIO reportado pelo usuário, corrigido**: mudou a
+alíquota de ISS de 5% pra 2,01% em Configurações › Empresa, gerou uma NF
+nova a partir de uma OS, e ela saiu com 5% mesmo assim — a alteração não
+refletiu. Root cause (systematic-debugging, Fases 1-3 completas antes de
+qualquer fix): `EmissaoOrquestradorService::orquestrar()` (o caminho real
+usado — botão "Gerar notas fiscais" da tela da OS) NUNCA mandava
+`aliquota_iss` no payload pra `CriarNotaFiscalService::criar()`, que caía
+num fallback HARDCODED `?? 5.00` em vez de ler `Configuracao.aliquota_iss`
+da oficina. O fluxo manual (`/fiscal/emitir`) não tinha esse bug — só o
+caminho mais usado (via OS) tinha. Corrigido na raiz:
+`CriarNotaFiscalService::criar()` agora sempre lê `Configuracao::first()`
+(antes só lia quando `natureza_operacao === 'Venda de Mercadoria'`) e o
+fallback de alíquota virou `$dados['aliquota_iss'] ?? $configuracao?->aliquota_iss ?? 5.00`
+— protege TODOS os chamadores atuais e futuros, não só o orquestrador. 1
+teste novo em `EmissaoOrquestradorTest.php` reproduzindo o bug exato
+reportado (não roda localmente, precisa de Postgres). Ver seção "Bug:
+alíquota de ISS configurada não refletia na NF" abaixo.
+
+**Segunda pergunta do usuário, em investigação — NÃO corrigida ainda,
+aguardando confirmação explícita antes de mexer (mudança de fórmula
+financeira, afeta toda NF já emitida):** o total da NFS-e hoje é
+`subtotal + valor_iss` (ex: OS de R$100 → NF de R$105). Pesquisa em fontes
+externas (LC 116/2003 Art. 7º + Contabilizei) indica isso está ERRADO — a
+base de cálculo do ISS é o próprio preço do serviço (ISS "por dentro"), o
+cliente nunca paga mais que o valor combinado. Ver seção "ISS por dentro"
+abaixo pro relato completo e as fontes.
+
+## Bug: alíquota de ISS configurada não refletia na NF (2026-09-17)
+
+**Relato do usuário:** "Eu alterei o valor da alíquota que estava de 5%
+para 2,01. Gerei a nota fiscal nova e saiu no valor da alíquota de 5%. A
+alteração que eu fiz no campo empresa não refletiu."
+
+**Investigação (systematic-debugging):**
+1. Confirmei que `ConfiguracaoController::update()` salva `aliquota_iss`
+   corretamente (`$config->update($validated)`, sem filtro nem bug de
+   persistência) — a alteração feita pelo usuário FOI salva no banco.
+2. Confirmei que o fluxo manual de emissão (`/fiscal/emitir`,
+   `NotaFiscalForm.tsx`) lê `GET /configuracoes` fresco e manda
+   `aliquota_iss` correto no payload — esse caminho nunca teve o bug.
+3. Achei o caminho real quebrado: `EmissaoOrquestradorService::orquestrar()`
+   (usado pelo botão "Gerar notas fiscais"/"Gerar nota faltante" da tela da
+   OS — o fluxo que a maioria das oficinas usa de verdade, não o manual)
+   monta o payload da NFS-e SEM a chave `aliquota_iss`:
+   ```php
+   $notaNfse = $this->criarNota->criar([
+       'cliente_id' => ..., 'os_id' => ..., 'natureza_operacao' => 'Prestação de Serviços',
+       'forma_pagamento' => ..., 'subtotal' => ..., 'observacoes' => ...,
+       // aliquota_iss NUNCA estava aqui
+   ]);
+   ```
+4. `CriarNotaFiscalService::criar()` linha 124 (antes do fix):
+   `$aliquota = (float) ($dados['aliquota_iss'] ?? 5.00);` — fallback
+   HARDCODED, nunca lia `Configuracao.aliquota_iss`. Confirmado via `git
+   log` que esse bug existe desde o commit original do
+   `EmissaoOrquestradorService` (2026-09-05, `6145620`) — não é regressão
+   de nenhuma mudança recente.
+
+**Fix:** `CriarNotaFiscalService::criar()` agora sempre carrega
+`$configuracao = Configuracao::first()` (antes só carregava dentro do
+`if ($ehVenda)`) e o fallback virou
+`$dados['aliquota_iss'] ?? $configuracao?->aliquota_iss ?? 5.00` — corrige
+na fonte única (protege o orquestrador E qualquer chamador futuro), em vez
+de remendar só o payload do orquestrador.
+
+**⚠️ Ação recomendada ao usuário:** qualquer NFS-e emitida ANTES deste fix
+através do botão da OS pode ter saído com 5% de ISS mesmo que a alíquota
+real configurada fosse outra. Vale conferir o histórico de NF por notas
+com `aliquota_iss = 5.00` que deveriam ter outro valor, e avaliar
+cancelamento/reemissão das mais recentes se ainda dentro do prazo da
+SEFAZ.
+
+**Testes:** 1 teste novo em `EmissaoOrquestradorTest.php`
+(`test_nfse_da_os_usa_a_aliquota_iss_configurada_na_empresa_nao_5_por_cento_hardcoded`),
+reproduz o cenário exato relatado. Feature test, precisa de Postgres — não
+roda localmente (ver [[feedback-local-testing]]). `php -l` limpo. Unit
+suite completa sem regressão (383/868/7, mesmos de sempre).
+
+**Arquivos alterados:** `backend/app/Services/Fiscal/CriarNotaFiscalService.php`,
+`backend/tests/Feature/Fiscal/EmissaoOrquestradorTest.php`.
+
+## ISS "por dentro": o total da NFS-e não deveria somar o ISS (2026-09-17)
+
+**Pergunta do usuário:** numa OS de R$100 com ISS de 5%, a NF saiu em
+R$105. Está correto? Ou deveria continuar R$100, com o ISS só informado
+(não somado)?
+
+**Investigação:** `CriarNotaFiscalService::criar()` calcula
+`$valorTotal = round(($subtotal - $desconto) + $valorIss, 2)` — soma o ISS
+ao total pra NFS-e. Esse `valor_total` alimenta `NfeService.php:133`
+(`valorServicos: (float) $nota->valor_total`), que por sua vez é o `vServ`
+(valor do serviço) mandado de verdade no DPS/payload pra SEFAZ/Spedy/Focus
+— ou seja, não é só a tela que mostra errado, o **documento fiscal real
+enviado ao governo também declara um "valor do serviço" inflado**.
+
+**Fontes pesquisadas (usuário pediu explicitamente pra verificar antes de
+mexer, não supor):**
+- **LC 116/2003, Art. 7º**: "A base de cálculo do imposto é o preço do
+  serviço." — o ISS é calculado SOBRE o preço já cobrado, não somado a ele
+  ("por dentro", diferente de um imposto "por fora" tipo sales tax dos
+  EUA).
+- **Contabilizei** (`contabilizei.com.br/contabilidade-online/iss-retido/`):
+  exemplo numérico confirma — serviço de R$1.000, ISS 5% = R$50: **com**
+  retenção, cliente paga R$950 ao prestador + repassa R$50 à prefeitura
+  (total R$1.000, nunca mais); **sem** retenção (caso do Simples Nacional,
+  ISS embutido na guia DAS), cliente paga os R$1.000 cheios e o prestador
+  recolhe o ISS por conta própria. **Em nenhum dos dois casos o cliente
+  paga mais que o valor combinado.**
+
+**Conclusão: o entendimento do usuário está correto, o sistema está
+errado.** A NF de uma OS de R$100 deveria continuar totalizando R$100 (o
+ISS aparece como informação/composição do preço, não como acréscimo).
+
+**NÃO corrigido ainda** — mudança de fórmula financeira que afeta toda NF
+já emitida (histórico + documentos já enviados à SEFAZ), aguardando
+confirmação explícita do usuário antes de alterar o cálculo. Fix
+provável: em `CriarNotaFiscalService::criar()`, trocar
+`$valorTotal = round(($subtotal - $desconto) + $valorIss, 2)` por
+`$valorTotal = round($subtotal - $desconto, 2)` (ISS continua calculado e
+persistido em `valor_iss`/exibido no PDF, só não soma ao total). Mesma
+correção seria necessária em qualquer nota NFS-e HISTÓRICA errada, e no
+texto/PDF que hoje pode estar comunicando "total" incluindo ISS.
+
+---
+
 2026-09-16 — Usuário perguntou como corrigir/gerar só o documento fiscal que
 faltou numa OS mista (peças+serviços) quando um dos dois falha. Investigação
 achou um gap real: assim que QUALQUER nota ficava vinculada à OS (mesmo

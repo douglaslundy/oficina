@@ -217,4 +217,34 @@ class EmissaoOrquestradorTest extends TestCase
             'A rejeitada antiga fica no histórico, somada à nova tentativa.',
         );
     }
+
+    /**
+     * Bug real reportado pelo usuário (2026-09-17): mudou a alíquota de ISS
+     * de 5% pra 2,01% em Configurações › Empresa, gerou uma NF nova a
+     * partir de uma OS, e ela saiu com 5% mesmo assim. Causa raiz:
+     * `EmissaoOrquestradorService::orquestrar()` nunca mandava
+     * `aliquota_iss` no payload pra `CriarNotaFiscalService::criar()`, que
+     * caía no fallback hardcoded `?? 5.00` em vez de ler
+     * `Configuracao.aliquota_iss`. O fluxo manual (`/fiscal/emitir`) não
+     * tinha esse bug — o frontend já lia e mandava o valor configurado; só
+     * o caminho "Gerar notas fiscais" da tela da OS (o mais usado) tinha o
+     * defeito.
+     */
+    public function test_nfse_da_os_usa_a_aliquota_iss_configurada_na_empresa_nao_5_por_cento_hardcoded(): void
+    {
+        [$oficina, $token, $os] = $this->cenario();
+        Configuracao::where('oficina_id', $oficina->id)->update(['aliquota_iss' => 2.01]);
+
+        Http::fake(['*focusnfe*' => Http::response(['status' => 'processando'], 202)]);
+
+        $res = $this->withToken($token)->withHeaders(['X-Tenant' => $oficina->slug])
+            ->postJson("/api/os/{$os->id}/emitir-notas")
+            ->assertStatus(202);
+
+        $nfse = NotaFiscal::find($res->json('nfse_id'));
+        $this->assertNotNull($nfse);
+        $this->assertSame(2.01, (float) $nfse->aliquota_iss);
+        // Serviço de R$150 (valor fixo do cenário) a 2,01% = R$3,015 → R$3,02 arredondado.
+        $this->assertEqualsWithDelta(3.02, (float) $nfse->valor_iss, 0.01);
+    }
 }

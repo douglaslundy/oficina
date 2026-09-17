@@ -45,12 +45,17 @@ class CriarNotaFiscalService
         $ehVenda = $dados['natureza_operacao'] === 'Venda de Mercadoria';
         $modelo  = 'NFS-e';
 
-        $configuracao  = null;
+        // Lido sempre (não só quando $ehVenda) — bug real reportado pelo
+        // usuário (2026-09-17): o fallback de aliquota_iss abaixo usava um
+        // valor hardcoded em vez de ler a Configuracao da oficina, então
+        // qualquer chamador que não mandasse aliquota_iss explicitamente
+        // (o EmissaoOrquestradorService nunca mandava) ignorava
+        // silenciosamente a alíquota configurada em Empresa.
+        $configuracao  = Configuracao::first();
         $cliente       = null;
         $produtosPorId = [];
 
         if ($ehVenda) {
-            $configuracao = Configuracao::first();
             if (! $configuracao || empty($configuracao->uf) || empty($configuracao->regime_tributario)) {
                 throw new EmissaoBloqueadaException('Complete a UF e o regime tributário da empresa em Configurações antes de emitir NF-e.');
             }
@@ -121,7 +126,10 @@ class CriarNotaFiscalService
             : round((float) ($dados['subtotal'] ?? 0), 2);
 
         $desconto   = round((float) ($dados['desconto'] ?? 0), 2);
-        $aliquota   = (float) ($dados['aliquota_iss'] ?? 5.00);
+        // Ordem: valor explícito no payload > alíquota configurada em
+        // Empresa > 5% (teto legal) só se nem isso existir (oficina sem
+        // Configuracao cadastrada — não deveria acontecer em produção).
+        $aliquota   = (float) ($dados['aliquota_iss'] ?? $configuracao?->aliquota_iss ?? 5.00);
         $valorIss   = $ehVenda ? 0.0 : round((($subtotal - $desconto) * $aliquota) / 100, 2);
         $valorTotal = round(($subtotal - $desconto) + $valorIss, 2);
 
