@@ -126,7 +126,12 @@ export function NotaFiscalForm() {
   // valor_total: subtotal). Zerar aqui evita mostrar um total que diverge do que
   // realmente é emitido.
   const valorIss = ehVenda ? 0 : ((subtotal - desconto) * aliquota) / 100
-  const total = ehVenda ? subtotal : subtotal - desconto + valorIss
+  // ISS é "por dentro" (LC 116/2003, art. 7º — a base de cálculo é o
+  // próprio preço do serviço, não soma em cima). Bug real reportado pelo
+  // usuário (2026-09-17): uma OS de R$100 virava nota de R$105. O ISS
+  // continua exibido no resumo abaixo (linha "ISS (X%)"), só não soma mais
+  // ao TOTAL.
+  const total = ehVenda ? subtotal : subtotal - desconto
 
   function updateItem(idx: number, field: keyof ItemNF, value: string | number) {
     setItens(prev => prev.map((item, j) => j === idx ? { ...item, [field]: value } : item))

@@ -54,6 +54,35 @@ class NotaFiscalTest extends TestCase
     }
 
     /**
+     * Bug real reportado pelo usuário (2026-09-17): uma OS/serviço de R$100
+     * gerava nota de R$105 (somando o ISS de 5% ao total). Errado — LC
+     * 116/2003 art. 7º: "a base de cálculo do imposto é o preço do
+     * serviço" (ISS "por dentro", o cliente nunca paga mais que o valor
+     * combinado; confirmado também via fonte contábil externa, ver
+     * PROGRESSO.md). O total da nota tem que continuar igual ao
+     * subtotal-desconto; o ISS aparece só como informação/composição do
+     * preço, não como acréscimo.
+     */
+    public function test_valor_total_da_nfse_nao_soma_o_iss_iss_e_por_dentro(): void
+    {
+        $token   = $this->loginAdmin();
+        $cliente = $this->criarCliente();
+
+        $response = $this->withToken($token)->postJson('/api/notas-fiscais', [
+            'cliente_id'        => $cliente->id,
+            'natureza_operacao' => 'Prestação de Serviços',
+            'subtotal'          => 100.00,
+            'desconto'          => 0,
+            'aliquota_iss'      => 5.00,
+        ])->assertStatus(201);
+
+        $nota = NotaFiscal::find($response->json('data.id'));
+        $this->assertSame(100.0, (float) $nota->subtotal);
+        $this->assertSame(5.0, (float) $nota->valor_iss, 'ISS continua calculado e exibido.');
+        $this->assertSame(100.0, (float) $nota->valor_total, 'Total NÃO soma o ISS — ISS é "por dentro" (LC 116/2003, art. 7º).');
+    }
+
+    /**
      * Pedido explícito do usuário (2026-09-14): botão de excluir nota
      * fiscal, permitido SOMENTE pra notas de homologação — nunca produção
      * (documento fiscal real, mesmo cancelada precisa manter o registro).

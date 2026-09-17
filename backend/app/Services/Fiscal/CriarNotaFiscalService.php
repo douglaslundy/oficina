@@ -131,7 +131,16 @@ class CriarNotaFiscalService
         // Configuracao cadastrada — não deveria acontecer em produção).
         $aliquota   = (float) ($dados['aliquota_iss'] ?? $configuracao?->aliquota_iss ?? 5.00);
         $valorIss   = $ehVenda ? 0.0 : round((($subtotal - $desconto) * $aliquota) / 100, 2);
-        $valorTotal = round(($subtotal - $desconto) + $valorIss, 2);
+        // ISS é "por dentro" (LC 116/2003, art. 7º: "a base de cálculo do
+        // imposto é o preço do serviço") — não é somado ao preço cobrado do
+        // cliente, é uma fração dele. Bug real reportado pelo usuário
+        // (2026-09-17): antes disto, valor_total = subtotal + valor_iss,
+        // então uma OS de R$100 virava nota de R$105 — errado tanto na
+        // exibição quanto no documento fiscal de verdade mandado à SEFAZ
+        // (NfeService::montarNotaData() usa valor_total como `valorServicos`
+        // → vServ no DPS/payload). valor_iss continua calculado e
+        // persistido — é informação de composição do preço, não acréscimo.
+        $valorTotal = round($subtotal - $desconto, 2);
 
         $serie = '001';
         if ($ehVenda) {

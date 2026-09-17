@@ -101,6 +101,11 @@ class EmissaoOrquestradorTest extends TestCase
         $this->assertSame(30.0, (float) $nfe->valor_total);
         $this->assertSame('NFS-e', $nfse->modelo);
         $this->assertSame(150.0, (float) $nfse->subtotal);
+        // Bug real reportado pelo usuário (2026-09-17): este era exatamente
+        // o caminho onde a nota saía com o ISS somado ao total (R$150 de
+        // serviço virava R$157,50 com a alíquota padrão de 5%). ISS é "por
+        // dentro" — o total tem que ficar igual ao subtotal.
+        $this->assertSame(150.0, (float) $nfse->valor_total, 'Total da NFS-e não pode somar o ISS.');
         $this->assertSame($os->id, $nfe->os_id);
     }
 
@@ -246,5 +251,7 @@ class EmissaoOrquestradorTest extends TestCase
         $this->assertSame(2.01, (float) $nfse->aliquota_iss);
         // Serviço de R$150 (valor fixo do cenário) a 2,01% = R$3,015 → R$3,02 arredondado.
         $this->assertEqualsWithDelta(3.02, (float) $nfse->valor_iss, 0.01);
+        // ISS é "por dentro" — o total continua R$150, não R$153,02.
+        $this->assertSame(150.0, (float) $nfse->valor_total);
     }
 }

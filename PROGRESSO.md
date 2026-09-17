@@ -19,14 +19,18 @@ teste novo em `EmissaoOrquestradorTest.php` reproduzindo o bug exato
 reportado (não roda localmente, precisa de Postgres). Ver seção "Bug:
 alíquota de ISS configurada não refletia na NF" abaixo.
 
-**Segunda pergunta do usuário, em investigação — NÃO corrigida ainda,
-aguardando confirmação explícita antes de mexer (mudança de fórmula
-financeira, afeta toda NF já emitida):** o total da NFS-e hoje é
-`subtotal + valor_iss` (ex: OS de R$100 → NF de R$105). Pesquisa em fontes
-externas (LC 116/2003 Art. 7º + Contabilizei) indica isso está ERRADO — a
-base de cálculo do ISS é o próprio preço do serviço (ISS "por dentro"), o
-cliente nunca paga mais que o valor combinado. Ver seção "ISS por dentro"
-abaixo pro relato completo e as fontes.
+**Segunda pergunta do usuário — CORRIGIDA também (usuário confirmou:
+nenhuma nota real foi enviada à SEFAZ ainda, tudo era teste em
+homologação, autorizou corrigir "em todos os motores e documentos fiscais
+que se aplicar"):** o total da NFS-e somava o ISS (`subtotal + valor_iss`,
+ex: OS de R$100 → NF de R$105). Confirmado ERRADO via LC 116/2003 Art. 7º
++ Contabilizei — ISS é "por dentro", cliente nunca paga mais que o valor
+combinado. Corrigido na mesma função (`CriarNotaFiscalService::criar()`)
+e no preview do frontend (`NotaFiscalForm.tsx`). Varredura confirmou que
+essa é a ÚNICA origem do valor em todo o sistema — os 3 motores fiscais
+(Spedy/Focus/NFePHP) e os PDFs só leem `valor_total` já calculado, nenhum
+recalcula por conta própria, então um fix único corrige os 3 motores e
+todos os documentos automaticamente. Ver seção "ISS por dentro" abaixo.
 
 ## Bug: alíquota de ISS configurada não refletia na NF (2026-09-17)
 
@@ -114,15 +118,74 @@ mexer, não supor):**
 errado.** A NF de uma OS de R$100 deveria continuar totalizando R$100 (o
 ISS aparece como informação/composição do preço, não como acréscimo).
 
-**NÃO corrigido ainda** — mudança de fórmula financeira que afeta toda NF
-já emitida (histórico + documentos já enviados à SEFAZ), aguardando
-confirmação explícita do usuário antes de alterar o cálculo. Fix
-provável: em `CriarNotaFiscalService::criar()`, trocar
-`$valorTotal = round(($subtotal - $desconto) + $valorIss, 2)` por
-`$valorTotal = round($subtotal - $desconto, 2)` (ISS continua calculado e
-persistido em `valor_iss`/exibido no PDF, só não soma ao total). Mesma
-correção seria necessária em qualquer nota NFS-e HISTÓRICA errada, e no
-texto/PDF que hoje pode estar comunicando "total" incluindo ISS.
+**✅ CORRIGIDO** — usuário confirmou que nenhuma nota real foi enviada à
+SEFAZ ainda (tudo teste em homologação) e autorizou corrigir "em todos os
+motores e documentos fiscais que se aplicar".
+
+### Varredura de todos os motores/documentos (pedido explícito do usuário)
+Antes de corrigir, mapeei TODO lugar que lê `valor_iss`/`aliquota_iss` no
+backend e no frontend, pra confirmar que a correção na fonte cobre
+realmente tudo:
+- **`NfeService.php:133`** (`valorServicos: (float) $nota->valor_total`) —
+  só LÊ `valor_total`, não recalcula. Alimenta os 3 motores.
+- **`MotorNfse.php`** (NFePHP) — `vServPrest.vServ = $nota->valorServicos`
+  (== `valor_total`); `trib.tribMun.pAliq` é só a alíquota (%), a própria
+  ADN calcula o ISS a partir disso pro Simples Nacional sem retenção — não
+  existe um segundo campo de "total com imposto" no DPS.
+- **`SpedyProvider.php`** — `invoiceAmount`/`price`/`amount` todos
+  `= $n->valorServicos`; `issAmount` é campo separado, só informativo.
+- **`FocusNfeProvider.php`** — `aliquota = $n->aliquotaIss`, não recalcula
+  total.
+- **PDF (`nota_fiscal_nfse.blade.php`)** — só lê `$nota->valor_total`/
+  `valor_iss` direto, não recalcula. **Achado bônus**: o layout do PDF já
+  tinha os campos certos do padrão oficial de NFS-e ("Valor líquido" e
+  "Total da nota" == mesmo valor, "Valor do ISS" como linha separada) —
+  só o CÁLCULO que alimentava esses campos estava errado, o template
+  nunca precisou de ajuste.
+- **Frontend (`NotaFiscalForm.tsx`)** — único outro lugar que calculava um
+  total próprio (preview antes de emitir, não afeta o que é salvo).
+
+**Conclusão da varredura: existe UMA ÚNICA origem do valor** —
+`CriarNotaFiscalService::criar()`. Corrigir ali resolve os 3 motores e
+todos os documentos fiscais automaticamente (eles só leem o valor já
+calculado, nunca duplicam a conta).
+
+### Fix aplicado
+- `backend/app/Services/Fiscal/CriarNotaFiscalService.php`:
+  `$valorTotal = round(($subtotal - $desconto) + $valorIss, 2)` →
+  `$valorTotal = round($subtotal - $desconto, 2)`. `valor_iss` continua
+  calculado e persistido normalmente (linha de composição do preço, não
+  some do sistema, só não soma mais ao total).
+- `frontend/components/forms/NotaFiscalForm.tsx`: preview do total (antes
+  de emitir) ajustado do mesmo jeito — `const total = ehVenda ? subtotal :
+  subtotal - desconto` (removido o `+ valorIss`; o `ehVenda ? subtotal :`
+  preservado de propósito — evita usar um `desconto` desatualizado se o
+  usuário trocar de "Venda de Mercadoria" pra "Prestação de Serviços" e
+  voltar sem resetar o formulário).
+
+### Testes
+3 testes cobrindo o fix (Feature, precisam de Postgres, não rodam
+localmente):
+- `NotaFiscalTest.php::test_valor_total_da_nfse_nao_soma_o_iss_iss_e_por_dentro`
+  (fluxo manual `/fiscal/emitir`).
+- `EmissaoOrquestradorTest.php::test_os_mista_gera_nfe_das_pecas_e_nfse_dos_servicos`
+  ganhou assert extra (fluxo real da OS, alíquota padrão 5%).
+- `EmissaoOrquestradorTest.php::test_nfse_da_os_usa_a_aliquota_iss_configurada_na_empresa_nao_5_por_cento_hardcoded`
+  ganhou assert extra (cobre os dois bugs juntos: alíquota configurada +
+  ISS não somado, no mesmo cenário — 2,01% de R$150 = R$3,02 de ISS, total
+  continua R$150).
+
+`php -l` limpo nos arquivos PHP tocados. `npx tsc --noEmit` limpo no
+frontend. Unit suite completa sem regressão (383/868/7, mesmos de
+sempre).
+
+**Arquivos alterados (além dos já listados no bug da alíquota):**
+`backend/tests/Feature/NotaFiscalTest.php`,
+`frontend/components/forms/NotaFiscalForm.tsx`.
+
+**Nenhuma nota histórica precisa de correção retroativa** — usuário
+confirmou que tudo até agora foi só teste em homologação, nada foi
+enviado à SEFAZ de produção.
 
 ---
 
