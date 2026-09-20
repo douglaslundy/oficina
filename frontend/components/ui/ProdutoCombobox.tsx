@@ -19,6 +19,9 @@ interface ProdutoComboboxProps {
 }
 
 const ATRASO_MS = 250
+// A lista só aparece (e o servidor só é consultado) a partir de 3 caracteres
+// digitados — ao focar o campo nada abre. Não afeta o Enter com código exato.
+const MIN_CARACTERES = 3
 
 // Campo de busca de produto: filtra no servidor enquanto digita (parcial, sem
 // diferenciar acento/caixa) no lugar do <select> com todos os produtos.
@@ -35,10 +38,13 @@ export function ProdutoCombobox({ selectedLabel, onSelect, placeholder, disabled
   const itensRef = useRef<Array<HTMLLIElement | null>>([])
   const consultandoCodigo = useRef(false)
   const consulta = texto.trim()
+  const buscaAtiva = aberto && consulta.length >= MIN_CARACTERES
   const carregando = resolvido !== consulta
+  // A lista só vale se a busca está ativa e já respondeu ao texto atual.
+  const listaPronta = buscaAtiva && !carregando && !erro
 
   useEffect(() => {
-    if (!aberto) return
+    if (!buscaAtiva) return
     let cancelado = false // resposta velha (já digitou outra coisa) é descartada
     const controller = new AbortController()
     const timer = setTimeout(async () => {
@@ -55,9 +61,9 @@ export function ProdutoCombobox({ selectedLabel, onSelect, placeholder, disabled
         setErro(true)
         setResolvido(consulta)
       }
-    }, consulta === '' ? 0 : ATRASO_MS)
+    }, ATRASO_MS)
     return () => { cancelado = true; clearTimeout(timer); controller.abort() }
-  }, [consulta, aberto])
+  }, [consulta, buscaAtiva])
 
   useEffect(() => {
     itensRef.current[ativo]?.scrollIntoView({ block: 'nearest' })
@@ -78,7 +84,7 @@ export function ProdutoCombobox({ selectedLabel, onSelect, placeholder, disabled
     if (digitado === '' || consultandoCodigo.current) return
 
     // Lido ANTES do await: a lista só vale se já respondeu ao texto atual.
-    const destaque = !carregando && !erro ? resultados[ativo] : undefined
+    const destaque = listaPronta ? resultados[ativo] : undefined
     consultandoCodigo.current = true
     try {
       const r = await resolverCodigoProduto(digitado)
@@ -89,7 +95,12 @@ export function ProdutoCombobox({ selectedLabel, onSelect, placeholder, disabled
       } else if (destaque) {
         escolher(destaque, 'lista')
       } else {
-        toast(`Nenhuma peça com o código ${digitado}. Para buscar pelo nome, aguarde a lista aparecer e escolha uma sugestão.`, 'danger')
+        toast(
+          digitado.length < MIN_CARACTERES
+            ? `Nenhuma peça com o código ${digitado}. Para buscar pelo nome, digite ao menos ${MIN_CARACTERES} caracteres.`
+            : `Nenhuma peça com o código ${digitado}. Para buscar pelo nome, aguarde a lista aparecer e escolha uma sugestão.`,
+          'danger',
+        )
       }
     } catch {
       toast('Erro ao buscar a peça pelo código. Tente de novo.', 'danger')
@@ -119,7 +130,7 @@ export function ProdutoCombobox({ selectedLabel, onSelect, placeholder, disabled
     <div style={{ position: 'relative', width: '100%' }}>
       <input
         role="combobox"
-        aria-expanded={aberto}
+        aria-expanded={buscaAtiva}
         aria-controls={listaId}
         aria-autocomplete="list"
         autoComplete="off"
@@ -132,7 +143,7 @@ export function ProdutoCombobox({ selectedLabel, onSelect, placeholder, disabled
         disabled={disabled}
         style={{ ...style, width: '100%', boxSizing: 'border-box' }}
       />
-      {aberto && (
+      {buscaAtiva && (
         <ul
           id={listaId}
           role="listbox"
