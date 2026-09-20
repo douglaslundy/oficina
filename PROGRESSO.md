@@ -1,6 +1,30 @@
 # Progresso do Projeto
 
 ## Última atualização
+2026-09-20 (7) — **Botão "Exportar" MOVIDO da tela de Pendências fiscais para a
+página principal de Produtos** (pedido do usuário). Extraído para
+`frontend/components/produtos/ExportarProdutosFiscais.tsx` (botão + modal de
+formato + download) e usado no cabeçalho de `produtos/page.tsx`, ao lado de
+"Pendências fiscais". A página de pendências voltou à versão anterior à
+exportação (`2c56e82`), mantendo só a correção do pill "Sem NCM". A página de
+produtos não tem filtro de categoria, então exporta TODOS os produtos ativos;
+o parâmetro `categoria` do endpoint continua existindo (testado), mas a UI não
+o usa mais. Backend inalterado. Usuário autorizou commit + deploy (inclui o
+ajuste de 3 caracteres do item (6)). O item (4) abaixo descreve o botão na
+tela de pendências — está superado por este.
+
+2026-09-20 (6) — **Combobox de peça: só abre a lista a partir de 3
+caracteres** (usuário reportou que ao clicar no campo já listava produtos;
+confirmou "3 caracteres", não 3 letras). `ProdutoCombobox`: `MIN_CARACTERES=3`;
+a lista (`buscaAtiva`) e a consulta ao servidor só ocorrem com ≥3 caracteres
+digitados; focar o campo não abre nada. O Enter com código exato continua
+funcionando com qualquer tamanho (SKU curto ok) e o toast de "não achou" muda
+pra pedir 3 caracteres quando o texto é menor. `listaPronta` impede que o Enter
+use resultados velhos de uma busca anterior. `tsc`/`eslint` limpos; NÃO
+verificado no navegador. Arquivo: `frontend/components/ui/ProdutoCombobox.tsx`.
+NÃO commitado/deployado (commit 1f30edb, já em produção, ainda abre a lista ao
+clicar).
+
 2026-09-20 (5) — **OS: campo ÚNICO de peça (código de barras / SKU / nome)**
 — pedido do usuário; ele escolheu a opção **b** (clicar numa sugestão também
 adiciona na hora, qtd 1). NÃO commitado/deployado.

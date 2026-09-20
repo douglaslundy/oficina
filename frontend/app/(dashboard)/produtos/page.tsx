@@ -8,6 +8,7 @@ import { StockBar } from '@/components/ui/StockBar'
 import { StatCard } from '@/components/ui/StatCard'
 import { formatarMoeda } from '@/lib/formatters'
 import { usePlanLimites } from '@/hooks/usePlanLimites'
+import { ExportarProdutosFiscais } from '@/components/produtos/ExportarProdutosFiscais'
 import api from '@/lib/api'
 import { toast } from '@/hooks/useToast'
 
@@ -221,6 +222,7 @@ export default function ProdutosPage() {
           >
             Pendências fiscais
           </Link>
+          <ExportarProdutosFiscais />
           <input
             value={search}
             onChange={e => setSearch(e.target.value)}
