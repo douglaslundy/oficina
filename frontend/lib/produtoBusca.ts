@@ -1,5 +1,4 @@
 import api from '@/lib/api'
-import { toast } from '@/hooks/useToast'
 
 export interface ProdutoBusca {
   id: string
@@ -44,26 +43,12 @@ export function classificarCodigo(produtos: ProdutoBusca[], total: number = prod
 }
 
 // Procura, no servidor, o produto cujo SKU ou código de barras é IGUAL ao
-// código digitado/lido (não parcial). Mostra o toast de erro por conta própria
-// e devolve null quando não há um único produto.
-export async function buscarProdutoPorCodigo(codigo: string): Promise<ProdutoBusca | null> {
-  let resultado: ResultadoCodigo
-  try {
-    const r = await api.get<{ data: ProdutoBusca[]; meta?: { total?: number } }>('/produtos', {
-      params: { codigo, per_page: 10 },
-    })
-    const produtos = r.data.data ?? []
-    resultado = classificarCodigo(produtos, r.data.meta?.total ?? produtos.length)
-  } catch {
-    toast('Erro ao buscar o produto pelo código.', 'danger')
-    return null
-  }
-
-  if (resultado.tipo === 'ok') return resultado.produto
-  if (resultado.tipo === 'duplicado') {
-    toast(`Mais de um produto com o código ${codigo}. Selecione manualmente pela busca de peça.`, 'danger')
-  } else {
-    toast('Nenhuma peça encontrada para este código (código de barras ou SKU).', 'danger')
-  }
-  return null
+// código digitado/lido (não parcial). Lança se a requisição falhar; quem chama
+// decide o que avisar em cada resultado.
+export async function resolverCodigoProduto(codigo: string): Promise<ResultadoCodigo> {
+  const r = await api.get<{ data: ProdutoBusca[]; meta?: { total?: number } }>('/produtos', {
+    params: { codigo, per_page: 10 },
+  })
+  const produtos = r.data.data ?? []
+  return classificarCodigo(produtos, r.data.meta?.total ?? produtos.length)
 }

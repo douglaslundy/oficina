@@ -5,7 +5,7 @@ import api from '@/lib/api'
 import { toast } from '@/hooks/useToast'
 import { formatarMoeda } from '@/lib/formatters'
 import { ProdutoCombobox } from '@/components/ui/ProdutoCombobox'
-import { buscarProdutoPorCodigo, type ProdutoBusca } from '@/lib/produtoBusca'
+import type { ProdutoBusca } from '@/lib/produtoBusca'
 
 interface OsItem {
   tipo: 'SERVICO' | 'PECA'
@@ -128,7 +128,6 @@ export function OSForm({ initialData, onSuccess, onConcluir, onCancelar }: OSFor
 
   const { fields, append, remove } = useFieldArray({ control, name: 'itens' })
   const [manualServiceFields, setManualServiceFields] = useState<Set<number>>(new Set<number>())
-  const [codigoBarrasNovo, setCodigoBarrasNovo] = useState('')
   const itens = watch('itens')
   const total = itens.reduce((acc, i) => acc + (Number(i.quantidade || 0) * Number(i.valor_unitario || 0)), 0)
 
@@ -240,15 +239,9 @@ export function OSForm({ initialData, onSuccess, onConcluir, onCancelar }: OSFor
     }
   }
 
-  async function handleCodigoBarrasNovoKeyDown(e: React.KeyboardEvent<HTMLInputElement>) {
-    if (e.key !== 'Enter') return
-    e.preventDefault()
-    const codigo = codigoBarrasNovo.trim()
-    if (!codigo) return
-    setCodigoBarrasNovo('')
-    // Código de barras OU SKU, exato; recusa (toast) se não achar ou se houver mais de um.
-    const produto = await buscarProdutoPorCodigo(codigo)
-    if (!produto) return
+  // Campo único de peça (código de barras, SKU ou nome): a peça escolhida
+  // entra numa nova linha, onde a quantidade se ajusta.
+  function handleAdicionarPeca(produto: ProdutoBusca) {
     append({ tipo: 'PECA', produto_id: produto.id, descricao: produto.nome, quantidade: 1, valor_unitario: produto.preco_venda ?? 0 })
   }
 
@@ -583,14 +576,12 @@ export function OSForm({ initialData, onSuccess, onConcluir, onCancelar }: OSFor
           <>
             <div style={{ marginBottom: 12 }}>
               <label style={{ color: 'var(--muted)', fontSize: 11, display: 'block', marginBottom: 4 }}>
-                📷 Código de barras ou SKU
+                🔎 Peça: código de barras, SKU ou nome
               </label>
-              <input
-                value={codigoBarrasNovo}
-                onChange={e => setCodigoBarrasNovo(e.target.value)}
-                onKeyDown={handleCodigoBarrasNovoKeyDown}
-                placeholder="Escaneie ou digite o código de barras ou SKU e pressione Enter..."
-                style={{ ...S, width: '100%' }}
+              <ProdutoCombobox
+                onSelect={p => handleAdicionarPeca(p)}
+                placeholder="Escaneie o código, digite o SKU ou busque pelo nome..."
+                style={S}
               />
             </div>
 
@@ -703,37 +694,29 @@ function NewItemInline({ osId, servicos, onAdded }: {
   servicos: Array<{ id: string; nome: string; valor_padrao: number }>
   onAdded?: (data: Record<string, unknown>) => void
 }) {
-  const [tipo, setTipo] = useState<'SERVICO' | 'PECA'>('SERVICO')
-  const [produtoId, setProdutoId] = useState('')
   const [descricao, setDescricao] = useState('')
   const [quantidade, setQuantidade] = useState(1)
   const [valorUnitario, setValorUnitario] = useState(0)
   const [loading, setLoading] = useState(false)
   const [servicoId, setServicoId] = useState('')
   const [isManual, setIsManual] = useState(false)
-  const [codigoBarras, setCodigoBarras] = useState('')
 
-  function handleProdutoSelect(p: ProdutoBusca) {
-    setProdutoId(p.id)
-    setDescricao(p.nome)
-    setValorUnitario(p.preco_venda ?? 0)
-  }
-
+  // Sem `overrides` adiciona o SERVIÇO montado no formulário; com `overrides`
+  // adiciona a PEÇA escolhida no campo de busca (quantidade = a do campo Qtd).
   async function handleAdd(overrides?: { produtoId: string; descricao: string; valorUnitario: number }) {
     const desc = overrides?.descricao ?? descricao
     if (!desc || quantidade <= 0) return
     setLoading(true)
     try {
       await api.post(`/os/${osId}/itens`, {
-        tipo: overrides ? 'PECA' : tipo,
-        produto_id: overrides?.produtoId ?? produtoId ?? null,
+        tipo: overrides ? 'PECA' : 'SERVICO',
+        produto_id: overrides?.produtoId ?? null,
         descricao: desc,
         quantidade,
         valor_unitario: overrides?.valorUnitario ?? valorUnitario,
       })
       toast('Item adicionado.', 'success')
       setDescricao('')
-      setProdutoId('')
       setServicoId('')
       setIsManual(false)
       setQuantidade(1)
@@ -747,17 +730,10 @@ function NewItemInline({ osId, servicos, onAdded }: {
     }
   }
 
-  async function handleCodigoBarrasKeyDown(e: React.KeyboardEvent<HTMLInputElement>) {
-    if (e.key !== 'Enter') return
-    e.preventDefault()
-    const codigo = codigoBarras.trim()
-    if (!codigo) return
-    setCodigoBarras('')
-    // Código de barras OU SKU, exato; recusa (toast) se não achar ou se houver mais de um.
-    const produto = await buscarProdutoPorCodigo(codigo)
-    if (!produto) return
-    setTipo('PECA')
-    handleAdd({ produtoId: produto.id, descricao: produto.nome, valorUnitario: produto.preco_venda ?? 0 })
+  // Campo único de peça (código de barras, SKU ou nome): tanto o leitor quanto
+  // a sugestão escolhida adicionam na hora.
+  function handleAdicionarPeca(produto: ProdutoBusca) {
+    void handleAdd({ produtoId: produto.id, descricao: produto.nome, valorUnitario: produto.preco_venda ?? 0 })
   }
 
   const SI: React.CSSProperties = {
@@ -771,40 +747,23 @@ function NewItemInline({ osId, servicos, onAdded }: {
 
       <div style={{ marginBottom: 10 }}>
         <label style={{ color: 'var(--muted)', fontSize: 11, display: 'block', marginBottom: 4 }}>
-          📷 Código de barras ou SKU
+          🔎 Peça: código de barras, SKU ou nome (adiciona na hora, com a quantidade abaixo)
         </label>
-        <input
-          value={codigoBarras}
-          onChange={e => setCodigoBarras(e.target.value)}
-          onKeyDown={handleCodigoBarrasKeyDown}
-          placeholder="Escaneie ou digite o código de barras ou SKU e pressione Enter..."
+        <ProdutoCombobox
+          onSelect={p => handleAdicionarPeca(p)}
+          placeholder="Escaneie o código, digite o SKU ou busque pelo nome..."
           disabled={loading}
-          style={{ ...SI, width: '100%', boxSizing: 'border-box' }}
+          style={SI}
         />
       </div>
 
-      <div style={{ display: 'grid', gridTemplateColumns: '100px 1fr', gap: 8, marginBottom: 8 }}>
-        <select value={tipo} onChange={e => {
-          setTipo(e.target.value as 'SERVICO' | 'PECA')
-          setProdutoId('')
-          setServicoId('')
-          setIsManual(false)
-          setDescricao('')
-          setValorUnitario(0)
-        }} style={SI}>
-          <option value="SERVICO">Serviço</option>
-          <option value="PECA">Peça</option>
-        </select>
-        {tipo === 'PECA' ? (
-          <ProdutoCombobox
-            selectedLabel={produtoId ? descricao : ''}
-            onSelect={handleProdutoSelect}
-            placeholder="Buscar peça pelo nome..."
-            style={SI}
-          />
-        ) : isManual ? (
+      <div style={{ marginBottom: 8 }}>
+        <label style={{ color: 'var(--muted)', fontSize: 11, display: 'block', marginBottom: 4 }}>
+          🔧 Serviço
+        </label>
+        {isManual ? (
           <input value={descricao} onChange={e => setDescricao(e.target.value)}
-            placeholder="Descrição do serviço" style={SI} />
+            placeholder="Descrição do serviço" style={{ ...SI, width: '100%', boxSizing: 'border-box' }} />
         ) : (
           <select
             value={servicoId}
@@ -823,7 +782,7 @@ function NewItemInline({ osId, servicos, onAdded }: {
                 }
               }
             }}
-            style={SI}
+            style={{ ...SI, width: '100%' }}
           >
             <option value="">Selecionar serviço...</option>
             {servicos.map(s => (

@@ -1,6 +1,72 @@
 # Progresso do Projeto
 
 ## Última atualização
+2026-09-20 (5) — **OS: campo ÚNICO de peça (código de barras / SKU / nome)**
+— pedido do usuário; ele escolheu a opção **b** (clicar numa sugestão também
+adiciona na hora, qtd 1). NÃO commitado/deployado.
+- `ProdutoCombobox` agora trata o Enter: 1º tenta o texto como código EXATO
+  (`resolverCodigoProduto`, consulta direta ao servidor — o leitor manda o
+  Enter em ms, antes da lista carregar) → 1 achado = escolhe (`via:'codigo'`);
+  >1 = toast, não escolhe; 0 = escolhe a sugestão em destaque SÓ se a lista já
+  respondeu ao texto atual, senão toast. Enter em campo vazio não faz nada
+  (evita adicionar "a primeira peça" por engano). `onSelect(p, via)`.
+- OSForm criação: campo único no topo adiciona linha PECA (a linha por-peça do
+  "+ Peça" continua, mesmo componente). OSForm edição (`NewItemInline`): campo
+  único no topo adiciona na hora usando a Qtd do formulário; o seletor de tipo
+  Serviço/Peça foi REMOVIDO (o formulário de baixo ficou só de serviço).
+- Removidos: `buscarProdutoPorCodigo` (lib) e os 2 inputs de código antigos.
+- Verificado: `tsc` e `eslint` limpos. NÃO verificado no navegador (sem
+  backend local, sem runner de testes de frontend): Enter com código exato,
+  duplicado, sugestão por clique, leitor de código de barras real.
+
+2026-09-20 (4) — **Pendências fiscais: pill "Sem NCM" quebrado + botão
+Exportar (PDF/XML/JSON/XLSX)** — pedido do usuário, design aprovado (opção A:
+todos os produtos ativos; sem nenhum campo fiscal por último). NÃO
+commitado/deployado. Independente da tarefa estacionada abaixo (não toca em
+preenchimento de dados fiscais).
+- **Pill:** `<span>` em linha sem `nowrap` quebrava "Sem NCM" em 2 linhas e
+  partia a borda (o `.pill` do design system é `inline-flex`, este era feito à
+  mão). Fix: `display:inline-block` + `whiteSpace:nowrap`.
+- **Export:** `GET /produtos/exportar-fiscal?formato=pdf|xml|json|xlsx&categoria=`
+  (`ProdutoFiscalController::exportar`, mesma permissão da tela, rota antes de
+  `produtos/{produto}`). Linhas montadas 1x em `Services/Fiscal/
+  ExportacaoProdutosFiscal` (ordem: grupo 0 = tem algum de NCM/CEST/origem/
+  tributação; grupo 1 = nenhum, por último; dentro: nome, sem acento/caixa,
+  ordem natural). XLSX: `App\Exports\ProdutosFiscaisExport`; PDF:
+  `resources/views/pdf/produtos_fiscais.blade.php` (A4 paisagem).
+  Frontend: botão "⬇ Exportar" + modal de escolha do formato.
+- **Bug achado e corrigido no caminho (5ª ocorrência do "0 ≠ ausente",
+  ver memória `project-zero-e-valor-fiscal-valido`):** o `fromArray` do
+  PhpSpreadsheet compara com `!=` frouxo → origem `0` saía como célula VAZIA
+  no XLSX. Só apareceu relendo o arquivo gerado (o array de linhas estava
+  certo). Fix: `WithStrictNullComparison`. Teste de regressão que gera e relê
+  o XLSX: `ProdutosFiscaisExportXlsxTest`. Também: `StringValueBinder` p/ não
+  perder zeros à esquerda do código de barras nem converter CEST.
+- **Verificado:** 15 testes novos (Unit) passam; suíte Unit 404 testes com os
+  MESMOS 11 erros pré-existentes; XLSX/JSON/XML gerados e relidos; PDF gerado
+  (2 págs, A4 paisagem, com texto) — **layout do PDF NÃO visto** (sem
+  renderizador de PDF aqui); `tsc` limpo. **Não verificado:** 4 Feature tests
+  novos em `ProdutoTest.php` (precisam de Postgres) e a tela no navegador.
+  ESLint acusa 1 erro em `page.tsx:86` que é código PRÉ-EXISTENTE
+  (`useEffect(() => { carregar() }...)`), não tocado.
+- Arquivos: `backend/app/Services/Fiscal/ExportacaoProdutosFiscal.php`,
+  `backend/app/Exports/ProdutosFiscaisExport.php`,
+  `backend/resources/views/pdf/produtos_fiscais.blade.php`,
+  `backend/app/Http/Controllers/ProdutoFiscalController.php`,
+  `backend/routes/api.php`, `backend/tests/Unit/Fiscal/ExportacaoProdutosFiscalTest.php`,
+  `backend/tests/Unit/Fiscal/ProdutosFiscaisExportXlsxTest.php`,
+  `backend/tests/Feature/ProdutoTest.php`,
+  `frontend/app/(dashboard)/produtos/pendencias-fiscais/page.tsx`.
+
+2026-09-20 (3) — **TAREFA ESTACIONADA (NÃO é a próxima tarefa): dados
+fiscais dos 209 produtos sem NCM.** Pesquisa feita com o Convênio ICMS 142/18
+(Anexo II); nada gravado no banco. Tudo salvo em
+`docs/tarefas-estacionadas/dados-fiscais-produtos/` (LEIA-ME.md + 2 TSVs).
+**⛔ Só retomar se o usuário pedir EXPRESSAMENTE, e mesmo assim confirmar com
+ele 2 vezes (mensagens separadas) antes de qualquer ação.** Não retomar em
+"continue de onde parou". Regra completa no topo do LEIA-ME.md e na memória
+`project-dados-fiscais-produtos-estacionada`. Arquivos ainda não commitados.
+
 2026-09-20 (2) — **Busca de produto: SKU no leitor de código + campo de
 busca no lugar do select** (pedido do usuário; design aprovado no chat,
 incluindo busca NO SERVIDOR enquanto digita). NÃO commitado/deployado.

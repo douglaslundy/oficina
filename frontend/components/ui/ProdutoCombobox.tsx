@@ -1,11 +1,16 @@
 'use client'
 import { useEffect, useId, useRef, useState } from 'react'
-import { buscarProdutos, produtoLabel, type ProdutoBusca } from '@/lib/produtoBusca'
+import { toast } from '@/hooks/useToast'
+import { buscarProdutos, produtoLabel, resolverCodigoProduto, type ProdutoBusca } from '@/lib/produtoBusca'
+
+// Como a peça foi escolhida: 'codigo' = Enter com um código de barras/SKU
+// exato (leitor); 'lista' = sugestão escolhida por clique ou Enter.
+export type ViaEscolha = 'codigo' | 'lista'
 
 interface ProdutoComboboxProps {
   // Texto do produto já escolhido; aparece quando o campo não está em uso.
   selectedLabel?: string
-  onSelect: (produto: ProdutoBusca) => void
+  onSelect: (produto: ProdutoBusca, via: ViaEscolha) => void
   placeholder?: string
   disabled?: boolean
   style?: React.CSSProperties
@@ -28,6 +33,7 @@ export function ProdutoCombobox({ selectedLabel, onSelect, placeholder, disabled
   const [ativo, setAtivo] = useState(0)
   const listaId = useId()
   const itensRef = useRef<Array<HTMLLIElement | null>>([])
+  const consultandoCodigo = useRef(false)
   const consulta = texto.trim()
   const carregando = resolvido !== consulta
 
@@ -57,17 +63,46 @@ export function ProdutoCombobox({ selectedLabel, onSelect, placeholder, disabled
     itensRef.current[ativo]?.scrollIntoView({ block: 'nearest' })
   }, [ativo])
 
-  function escolher(p: ProdutoBusca) {
-    onSelect(p)
+  function escolher(p: ProdutoBusca, via: ViaEscolha) {
+    onSelect(p, via)
     setAberto(false)
     setTexto('')
+  }
+
+  // Enter: primeiro tenta o texto como CÓDIGO exato (SKU ou código de barras).
+  // É a consulta direta ao servidor, sem esperar a lista de sugestões, porque
+  // o leitor de código de barras digita o código e o Enter em milissegundos.
+  async function confirmarEnter() {
+    const digitado = texto.trim()
+    // Enter em campo vazio não escolhe nada (não adiciona "a primeira peça" por engano).
+    if (digitado === '' || consultandoCodigo.current) return
+
+    // Lido ANTES do await: a lista só vale se já respondeu ao texto atual.
+    const destaque = !carregando && !erro ? resultados[ativo] : undefined
+    consultandoCodigo.current = true
+    try {
+      const r = await resolverCodigoProduto(digitado)
+      if (r.tipo === 'ok') {
+        escolher(r.produto, 'codigo')
+      } else if (r.tipo === 'duplicado') {
+        toast(`Mais de um produto com o código ${digitado}. Escolha na lista de sugestões.`, 'danger')
+      } else if (destaque) {
+        escolher(destaque, 'lista')
+      } else {
+        toast(`Nenhuma peça com o código ${digitado}. Para buscar pelo nome, aguarde a lista aparecer e escolha uma sugestão.`, 'danger')
+      }
+    } catch {
+      toast('Erro ao buscar a peça pelo código. Tente de novo.', 'danger')
+    } finally {
+      consultandoCodigo.current = false
+    }
   }
 
   function handleKeyDown(e: React.KeyboardEvent<HTMLInputElement>) {
     if (e.key === 'Enter') {
       // Campo de busca nunca deve submeter o formulário da OS/NF.
       e.preventDefault()
-      if (aberto && resultados[ativo]) escolher(resultados[ativo])
+      void confirmarEnter()
     } else if (e.key === 'ArrowDown') {
       e.preventDefault()
       if (!aberto) setAberto(true)
@@ -114,7 +149,7 @@ export function ProdutoCombobox({ selectedLabel, onSelect, placeholder, disabled
               role="option"
               aria-selected={i === ativo}
               // mouseDown (e não click) pra o blur do input não fechar a lista antes da escolha.
-              onMouseDown={e => { e.preventDefault(); escolher(p) }}
+              onMouseDown={e => { e.preventDefault(); escolher(p, 'lista') }}
               onMouseEnter={() => setAtivo(i)}
               style={{
                 padding: '7px 10px', cursor: 'pointer', fontSize: 13, color: 'var(--text)',
