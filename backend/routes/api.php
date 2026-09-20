@@ -250,6 +250,8 @@ Route::middleware(['tenant', 'auth:sanctum', 'tenant.verify', 'role:ADMIN,ATENDE
 Route::middleware(['tenant', 'auth:sanctum', 'tenant.verify'])->group(function () {
     Route::get('produtos',            [ProdutoController::class, 'index']);
     Route::get('produtos/pendencias-fiscais', [ProdutoFiscalController::class, 'pendencias']);
+    // Antes de `produtos/{produto}` (GET): o Laravel casa na ordem de registro.
+    Route::get('produtos/exportar-fiscal', [ProdutoFiscalController::class, 'exportar']);
     Route::get('produtos/{produto}',  [ProdutoController::class, 'show']);
     Route::get('produtos/{produto}/estoque/historico', [EstoqueController::class, 'historico']);
     Route::get('entradas-nf',      [EntradaNfController::class, 'index']);

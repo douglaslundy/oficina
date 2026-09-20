@@ -3,16 +3,29 @@ declare(strict_types=1);
 
 namespace App\Http\Controllers;
 
+use App\Exports\ProdutosFiscaisExport;
 use App\Http\Resources\ProdutoResource;
+use App\Models\Configuracao;
 use App\Models\Produto;
 use App\Models\ProdutoFiscalDivergencia;
+use App\Services\Fiscal\ExportacaoProdutosFiscal;
 use App\Services\Fiscal\ProdutoFiscalService;
+use Barryvdh\DomPDF\Facade\Pdf;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
+use Illuminate\Http\Response;
 use Illuminate\Support\Facades\DB;
+use Maatwebsite\Excel\Facades\Excel;
+use Symfony\Component\HttpFoundation\BinaryFileResponse;
 
 class ProdutoFiscalController extends Controller
 {
+    /** Largura (%) de cada coluna no PDF, na ordem de ExportacaoProdutosFiscal::COLUNAS (soma 100). */
+    private const LARGURAS_PDF = [
+        'nome' => 20, 'sku' => 8, 'codigo_barras' => 11, 'categoria' => 8, 'ncm' => 8, 'cest' => 8,
+        'origem' => 5, 'tributacao_icms' => 7, 'fiscal_fonte' => 6, 'revisado_em' => 8, 'situacao_fiscal' => 11,
+    ];
+
     /**
      * Produtos ativos que precisam de atenção fiscal: sem NCM, com valor
      * herdado do padrão da categoria (chute assistido), ou com divergência
@@ -85,6 +98,56 @@ class ProdutoFiscalController extends Controller
                 'current_page' => $page,
             ],
         ]);
+    }
+
+    /**
+     * Exporta TODOS os produtos ativos com os dados fiscais (não só as
+     * pendências), no formato pedido: pdf, xml, json ou xlsx. Respeita o
+     * filtro de categoria da tela. Produtos sem nenhum campo fiscal
+     * preenchido vão por último (ver ExportacaoProdutosFiscal::linhas()).
+     */
+    public function exportar(Request $request, ExportacaoProdutosFiscal $exportacao): Response|BinaryFileResponse|JsonResponse
+    {
+        $formato = strtolower((string) $request->query('formato'));
+        if (!in_array($formato, ['pdf', 'xml', 'json', 'xlsx'], true)) {
+            return response()->json(['message' => 'Formato inválido. Use pdf, xml, json ou xlsx.'], 422);
+        }
+
+        $categoria = $request->filled('categoria') ? (string) $request->string('categoria') : null;
+
+        $produtos = Produto::where('ativo', true)
+            ->when($categoria !== null, fn ($q) => $q->where('categoria', $categoria))
+            ->get();
+
+        $idsComDivergencia = ProdutoFiscalDivergencia::whereNull('resolvido_em')
+            ->pluck('produto_id')
+            ->unique()
+            ->values()
+            ->all();
+
+        $linhas   = $exportacao->linhas($produtos, $idsComDivergencia);
+        $geradoEm = now()->format('d/m/Y H:i');
+        $arquivo  = 'produtos-dados-fiscais-' . now()->format('Y-m-d') . '.' . $formato;
+
+        return match ($formato) {
+            'xlsx' => Excel::download(new ProdutosFiscaisExport($linhas), $arquivo),
+            'json' => response($exportacao->paraJson($linhas, $geradoEm), 200, [
+                'Content-Type'        => 'application/json; charset=UTF-8',
+                'Content-Disposition' => 'attachment; filename="' . $arquivo . '"',
+            ]),
+            'xml'  => response($exportacao->paraXml($linhas, $geradoEm), 200, [
+                'Content-Type'        => 'application/xml; charset=UTF-8',
+                'Content-Disposition' => 'attachment; filename="' . $arquivo . '"',
+            ]),
+            'pdf'  => Pdf::loadView('pdf.produtos_fiscais', [
+                'empresa'   => Configuracao::first()?->toArray() ?? [],
+                'linhas'    => $linhas,
+                'colunas'   => ExportacaoProdutosFiscal::COLUNAS,
+                'larguras'  => self::LARGURAS_PDF,
+                'geradoEm'  => $geradoEm,
+                'categoria' => $categoria,
+            ])->setPaper('a4', 'landscape')->download($arquivo),
+        };
     }
 
     /**

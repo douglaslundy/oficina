@@ -142,6 +142,61 @@ class ProdutoTest extends TestCase
         $this->assertSame(['Produto A', 'Produto B'], collect($r->json('data'))->pluck('nome')->all());
     }
 
+    public function test_exportar_fiscal_json_traz_todos_os_ativos_com_os_sem_fiscal_por_ultimo(): void
+    {
+        $token = $this->loginAdmin();
+        $this->criarProduto(['sku' => 'A-1', 'nome' => 'Alfa sem fiscal']);
+        $this->criarProduto(['sku' => 'B-1', 'nome' => 'Beta completo', 'ncm' => '65061000', 'origem' => 0]);
+        $this->criarProduto(['sku' => 'C-1', 'nome' => 'Inativo', 'ativo' => false]);
+
+        $r = $this->withToken($token)->get('/api/produtos/exportar-fiscal?formato=json');
+
+        $r->assertStatus(200);
+        $this->assertStringContainsString('application/json', (string) $r->headers->get('Content-Type'));
+        $this->assertStringContainsString('produtos-dados-fiscais-', (string) $r->headers->get('Content-Disposition'));
+        $dados = json_decode($r->getContent(), true, flags: JSON_THROW_ON_ERROR);
+        $this->assertSame(2, $dados['total'], 'só produtos ativos');
+        $this->assertSame(['Beta completo', 'Alfa sem fiscal'], array_column($dados['produtos'], 'nome'));
+        $this->assertSame(0, $dados['produtos'][0]['origem']);
+    }
+
+    public function test_exportar_fiscal_respeita_o_filtro_de_categoria(): void
+    {
+        $token = $this->loginAdmin();
+        $this->criarProduto(['sku' => 'A-1', 'nome' => 'Filtro X', 'categoria' => 'Filtros']);
+        $this->criarProduto(['sku' => 'B-1', 'nome' => 'Freio Y', 'categoria' => 'Freios']);
+
+        $r = $this->withToken($token)->get('/api/produtos/exportar-fiscal?formato=json&categoria=Freios');
+
+        $dados = json_decode($r->getContent(), true, flags: JSON_THROW_ON_ERROR);
+        $this->assertSame(['Freio Y'], array_column($dados['produtos'], 'nome'));
+    }
+
+    public function test_exportar_fiscal_aceita_os_quatro_formatos(): void
+    {
+        $token = $this->loginAdmin();
+        $this->criarProduto();
+
+        $tipos = ['xml' => 'application/xml', 'pdf' => 'application/pdf', 'json' => 'application/json'];
+        foreach ($tipos as $formato => $tipo) {
+            $r = $this->withToken($token)->get("/api/produtos/exportar-fiscal?formato={$formato}");
+            $r->assertStatus(200);
+            $this->assertStringContainsString($tipo, (string) $r->headers->get('Content-Type'), $formato);
+        }
+
+        $xlsx = $this->withToken($token)->get('/api/produtos/exportar-fiscal?formato=xlsx');
+        $xlsx->assertStatus(200);
+        $this->assertStringContainsString('spreadsheetml', (string) $xlsx->headers->get('Content-Type'));
+    }
+
+    public function test_exportar_fiscal_rejeita_formato_invalido(): void
+    {
+        $token = $this->loginAdmin();
+
+        $this->withToken($token)->getJson('/api/produtos/exportar-fiscal?formato=csv')->assertStatus(422);
+        $this->withToken($token)->getJson('/api/produtos/exportar-fiscal')->assertStatus(422);
+    }
+
     public function test_sku_unico(): void
     {
         $token = $this->loginAdmin();

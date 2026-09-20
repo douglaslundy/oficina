@@ -37,6 +37,15 @@ interface Meta {
 
 const metaInicial: Meta = { total: 0, per_page: 20, current_page: 1 }
 
+type FormatoExportacao = 'pdf' | 'xml' | 'json' | 'xlsx'
+
+const FORMATOS_EXPORTACAO: Array<{ id: FormatoExportacao; icone: string; rotulo: string; descricao: string }> = [
+  { id: 'pdf',  icone: '📄', rotulo: 'PDF',  descricao: 'Relatório para imprimir ou enviar' },
+  { id: 'xlsx', icone: '📊', rotulo: 'XLSX', descricao: 'Planilha do Excel' },
+  { id: 'json', icone: '{ }', rotulo: 'JSON', descricao: 'Dados para integração' },
+  { id: 'xml',  icone: '</>', rotulo: 'XML',  descricao: 'Dados em XML' },
+]
+
 export default function PendenciasFiscaisPage() {
   const [produtos, setProdutos] = useState<ProdutoPendente[]>([])
   const [divergencias, setDivergencias] = useState<Divergencia[]>([])
@@ -47,6 +56,8 @@ export default function PendenciasFiscaisPage() {
   const [erroCarregamento, setErroCarregamento] = useState<string | null>(null)
   const [page, setPage] = useState(1)
   const [categoriaFiltro, setCategoriaFiltro] = useState('')
+  const [exportarAberto, setExportarAberto] = useState(false)
+  const [exportando, setExportando] = useState<FormatoExportacao | null>(null)
 
   const carregar = useCallback(async () => {
     setCarregando(true)
@@ -104,6 +115,37 @@ export default function PendenciasFiscaisPage() {
       toast(e.response?.data?.message ?? 'Erro ao marcar produto como revisado.', 'danger')
     } finally {
       setMarcando(null)
+    }
+  }
+
+  // Baixa todos os produtos ativos com os dados fiscais (respeita o filtro de
+  // categoria) — mesmo mecanismo de download autenticado do histórico de NF.
+  async function exportar(formato: FormatoExportacao) {
+    if (exportando) return
+    setExportando(formato)
+    try {
+      const params = new URLSearchParams({ formato })
+      if (categoriaFiltro) params.set('categoria', categoriaFiltro)
+      const res = await fetch(`${window.location.origin}/api/produtos/exportar-fiscal?${params}`, {
+        credentials: 'include',
+        headers: { 'X-Tenant': localStorage.getItem('oficina_slug') ?? '' },
+      })
+      if (!res.ok) throw new Error()
+      const blob = await res.blob()
+      const nome = res.headers.get('Content-Disposition')?.match(/filename="([^"]+)"/)?.[1]
+        ?? `produtos-dados-fiscais.${formato}`
+      const url = URL.createObjectURL(blob)
+      const a = document.createElement('a')
+      a.href = url
+      a.download = nome
+      a.click()
+      URL.revokeObjectURL(url)
+      toast(`Exportação em ${formato.toUpperCase()} concluída.`, 'success')
+      setExportarAberto(false)
+    } catch {
+      toast('Erro ao exportar os produtos. Tente novamente.', 'danger')
+    } finally {
+      setExportando(null)
     }
   }
 
@@ -207,8 +249,18 @@ export default function PendenciasFiscaisPage() {
         <h2 style={{ fontFamily: 'Barlow Condensed', fontWeight: 700, fontSize: 18, margin: 0 }}>
           Produtos pendentes ({meta.total})
         </h2>
-        <div>
-          <label style={{ color: 'var(--muted)', fontSize: 12, marginRight: 8 }}>Categoria</label>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap' }}>
+          <button
+            onClick={() => setExportarAberto(true)}
+            title="Exporta todos os produtos ativos com os dados fiscais"
+            style={{
+              padding: '6px 14px', borderRadius: 6, background: 'var(--accent)', color: '#000',
+              border: 'none', cursor: 'pointer', fontSize: 13, fontWeight: 600, whiteSpace: 'nowrap',
+            }}
+          >
+            ⬇ Exportar
+          </button>
+          <label style={{ color: 'var(--muted)', fontSize: 12 }}>Categoria</label>
           <select
             value={categoriaFiltro}
             onChange={(e) => selecionarCategoria(e.target.value)}
@@ -255,7 +307,9 @@ export default function PendenciasFiscaisPage() {
                   <td style={{ padding: 10 }}>{p.categoria}</td>
                   <td style={{ padding: 10, fontFamily: 'JetBrains Mono', fontSize: 12 }}>{p.ncm ?? '—'}</td>
                   <td style={{ padding: 10 }}>
-                    <span style={{ padding: '2px 8px', borderRadius: 10, fontSize: 11, border: `1px solid ${s.cor}`, color: s.cor }}>
+                    {/* inline-block + nowrap: em coluna estreita um <span> em linha quebrava
+                        "Sem NCM" em duas linhas e partia a borda do pill ao meio. */}
+                    <span style={{ display: 'inline-block', whiteSpace: 'nowrap', padding: '2px 8px', borderRadius: 10, fontSize: 11, border: `1px solid ${s.cor}`, color: s.cor }}>
                       {s.texto}
                     </span>
                   </td>
@@ -293,6 +347,58 @@ export default function PendenciasFiscaisPage() {
             style={{ padding: '6px 14px', borderRadius: 6, background: 'none', border: '1px solid var(--border)', color: page >= lastPage ? 'var(--muted)' : 'var(--text)', cursor: page >= lastPage ? 'not-allowed' : 'pointer', fontSize: 13 }}>
             Próxima →
           </button>
+        </div>
+      )}
+
+      {exportarAberto && (
+        <div
+          onClick={() => { if (!exportando) setExportarAberto(false) }}
+          style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.6)', zIndex: 1000, display: 'flex', alignItems: 'center', justifyContent: 'center' }}
+        >
+          <div
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="exportar-titulo"
+            onClick={(e) => e.stopPropagation()}
+            style={{ background: 'var(--card)', border: '1px solid var(--border)', borderRadius: 12, padding: 32, width: 460, maxWidth: '90vw' }}
+          >
+            <h3 id="exportar-titulo" className="font-display" style={{ fontSize: 20, fontWeight: 800, color: 'var(--text)', marginBottom: 8 }}>
+              Exportar produtos e dados fiscais
+            </h3>
+            <p style={{ color: 'var(--muted)', fontSize: 14, marginBottom: 20 }}>
+              Em qual formato você quer exportar? Serão incluídos todos os produtos ativos
+              {categoriaFiltro ? ` da categoria ${categoriaFiltro}` : ''}, e os que não têm nenhum campo fiscal
+              preenchido aparecem por último.
+            </p>
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12, marginBottom: 20 }}>
+              {FORMATOS_EXPORTACAO.map((f) => (
+                <button
+                  key={f.id}
+                  onClick={() => exportar(f.id)}
+                  disabled={exportando !== null}
+                  style={{
+                    textAlign: 'left', padding: '12px 14px', borderRadius: 8, background: 'var(--bg)',
+                    border: `1px solid ${exportando === f.id ? 'var(--accent)' : 'var(--border)'}`,
+                    color: 'var(--text)', cursor: exportando ? 'not-allowed' : 'pointer',
+                    opacity: exportando && exportando !== f.id ? 0.5 : 1,
+                  }}
+                >
+                  <span className="font-mono" style={{ fontSize: 16, marginRight: 8 }}>{f.icone}</span>
+                  <span style={{ fontWeight: 700, fontSize: 15 }}>{exportando === f.id ? 'Gerando...' : f.rotulo}</span>
+                  <span style={{ display: 'block', color: 'var(--muted)', fontSize: 12, marginTop: 4 }}>{f.descricao}</span>
+                </button>
+              ))}
+            </div>
+            <div style={{ display: 'flex', justifyContent: 'flex-end' }}>
+              <button
+                onClick={() => setExportarAberto(false)}
+                disabled={exportando !== null}
+                style={{ background: 'none', border: '1px solid var(--border)', color: 'var(--muted)', borderRadius: 8, padding: '8px 20px', cursor: exportando ? 'not-allowed' : 'pointer', fontSize: 14 }}
+              >
+                Cancelar
+              </button>
+            </div>
+          </div>
         </div>
       )}
     </div>
