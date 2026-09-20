@@ -1,6 +1,47 @@
 # Progresso do Projeto
 
 ## Última atualização
+2026-09-20 — **Bug "não tenho permissão pra acessar a página de Nota
+Fiscal"** — usuário é ADMIN e foi bloqueado. Duas causas; a 1ª é a real pro
+ADMIN:
+
+1. **ROOT CAUSE (todos os roles, ADMIN incluso, em todas as telas de
+   `ROLE_RULES`: /fiscal, /configuracoes, /empresa, /usuarios, /auditoria,
+   /relatorios, /minhas-faturas, /alertas):** o `EnsureFrontendRequestsAreStateful`
+   do Sanctum inclui `EncryptCookies`, que criptografava TODO cookie de
+   resposta — inclusive `oficina_role`/`oficina_logado`, que o `proxy.ts` do
+   Next.js lê em texto puro (não tem a APP_KEY). O proxy recebia `eyJpdi...`
+   em vez de `ADMIN`, não achava na lista e redirecionava pra
+   `/?acesso=negado`. Introduzido em 29c37a6 (2026-09-16). Provado com
+   requisição real (script sem DB): antes `oficina_role = eyJpdiI6...`,
+   depois `oficina_role = ADMIN` (cookie de sessão segue criptografado).
+   Fix: `$middleware->encryptCookies(except: ['oficina_role','oficina_logado'])`
+   em `backend/bootstrap/app.php`. Defesa extra: `proxy.ts` só bloqueia se o
+   role estiver em `ROLES_CONHECIDOS` (novo em `lib/roleRules.ts`), então
+   quem ainda tem o cookie antigo criptografado não fica bloqueado sem
+   re-login. `LoginTest` já afirmava `'ADMIN'` em texto puro (teria pego o
+   bug, mas Feature test não roda local — sem Postgres).
+2. **Causa secundária (ATENDENTE/MECANICO):** a tela da OS redirecionava
+   sempre pra `/fiscal/historico` após gerar notas e o card "NF Emitidas" do
+   dashboard linkava pra lá, mas o role não podia abrir. Agora só
+   redireciona/linka se `papelPermitido`.
+
+**Decisão do usuário (2026-09-20):** ATENDENTE pode VER o histórico de NF
+(leitura). `api.php`: GET index/show/pdf/xml/status + POST download-zip agora
+`role:ADMIN,FINANCEIRO,ATENDENTE`; store/emitir/cancelar/retransmitir/
+destroy/inutilizar ficam ADMIN,FINANCEIRO. `ROLE_RULES`: `/fiscal/historico`
+(ADMIN,FINANCEIRO,ATENDENTE) antes de `/fiscal`. Página do histórico esconde
+botões de escrita pra quem não é ADMIN/FINANCEIRO (`podeEscrever`).
+3 testes novos em `RbacTest.php` (Feature, precisam de Postgres).
+
+Arquivos: `backend/bootstrap/app.php`, `backend/routes/api.php`,
+`backend/tests/Feature/RbacTest.php`, `frontend/proxy.ts`,
+`frontend/lib/roleRules.ts`, `frontend/app/(dashboard)/page.tsx`,
+`frontend/app/(dashboard)/os/[id]/page.tsx`,
+`frontend/app/(dashboard)/fiscal/historico/page.tsx`. `tsc --noEmit` e
+`php -l` limpos. Usuário autorizou commit + deploy (junto com os 2 fixes de
+ISS de 2026-09-17, ainda não deployados).
+
 2026-09-17 — **BUG SÉRIO reportado pelo usuário, corrigido**: mudou a
 alíquota de ISS de 5% pra 2,01% em Configurações › Empresa, gerou uma NF
 nova a partir de uma OS, e ela saiu com 5% mesmo assim — a alteração não

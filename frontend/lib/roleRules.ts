@@ -16,11 +16,16 @@ export const ROLE_RULES: RoleRule[] = [
   { prefix: '/empresa', roles: ['ADMIN'] },
   { prefix: '/usuarios', roles: ['ADMIN'] },
   { prefix: '/auditoria', roles: ['ADMIN'] },
+  // Histórico de NF: ATENDENTE só consulta (rotas GET no backend); emitir
+  // continua ADMIN/FINANCEIRO. Mais específico, então vem antes de /fiscal.
+  { prefix: '/fiscal/historico', roles: ['ADMIN', 'FINANCEIRO', 'ATENDENTE'] },
   { prefix: '/fiscal', roles: ['ADMIN', 'FINANCEIRO'] },
   { prefix: '/relatorios', roles: ['ADMIN', 'FINANCEIRO'] },
   { prefix: '/minhas-faturas', roles: ['ADMIN', 'FINANCEIRO'] },
   { prefix: '/alertas', roles: ['ADMIN', 'ATENDENTE'] },
 ]
+
+export const ROLES_CONHECIDOS = ['ADMIN', 'MECANICO', 'ATENDENTE', 'FINANCEIRO']
 
 export function regraRoleDe(pathname: string): RoleRule | undefined {
   return ROLE_RULES.find(r => pathname.startsWith(r.prefix))

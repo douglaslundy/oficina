@@ -6,6 +6,8 @@ import { StatusPill } from '@/components/ui/StatusPill'
 import { formatarMoeda, formatarDataHora } from '@/lib/formatters'
 import { toast } from '@/hooks/useToast'
 import api from '@/lib/api'
+import { useAuth } from '@/hooks/useAuth'
+import { papelPermitido } from '@/lib/roleRules'
 
 const FORMAS_PAGAMENTO = ['Dinheiro', 'Cartão de Crédito', 'Cartão de Débito', 'PIX', 'Cheque', 'Transferência', 'Boleto']
 
@@ -62,6 +64,7 @@ function toInputDate(val?: string | null): string | undefined {
 export default function OSDetailPage() {
   const { id } = useParams<{ id: string }>()
   const router = useRouter()
+  const { getUser } = useAuth()
   const [os, setOs] = useState<OsData | null>(null)
 
   const fetchOs = useCallback(() => {
@@ -141,8 +144,16 @@ export default function OSDetailPage() {
       const geradas: string[] = []
       if (r.data.nfe_id) geradas.push('NF-e (peças)')
       if (r.data.nfse_id) geradas.push('NFS-e (serviços)')
+      // ADMIN/ATENDENTE/MECANICO podem gerar notas pela OS, mas o histórico de
+      // NF (/fiscal) só é liberado pra ADMIN/FINANCEIRO — mandar os demais pra
+      // lá caía no bloqueio do proxy.ts ("sem permissão"). Eles ficam na OS.
+      const role = getUser()?.role
+      const podeVerHistorico = !!role && papelPermitido('/fiscal/historico', role)
       if (geradas.length) {
-        toast(`Enfileirado: ${geradas.join(' + ')}. Acompanhe em Notas Fiscais.`, 'success')
+        toast(
+          `Enfileirado: ${geradas.join(' + ')}.${podeVerHistorico ? ' Acompanhe em Notas Fiscais.' : ''}`,
+          'success',
+        )
       } else if ((r.data.avisos ?? []).length === 0) {
         // Nada gerado e nenhum aviso: não é erro, é "já estava tudo pronto"
         // (ex: clicou "Gerar nota faltante" mas outra aba já tinha gerado).
@@ -151,7 +162,8 @@ export default function OSDetailPage() {
         toast('Nenhuma nota gerada.', 'danger')
       }
       ;(r.data.avisos ?? []).forEach(a => toast(a, 'info'))
-      router.push('/fiscal/historico')
+      if (podeVerHistorico) router.push('/fiscal/historico')
+      else fetchOs()
     } catch (e: unknown) {
       const msg = (e as { response?: { data?: { message?: string } } })?.response?.data?.message
       toast(msg ?? 'Erro ao gerar as notas fiscais da OS.', 'danger')

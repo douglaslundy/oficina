@@ -4,6 +4,7 @@ import { StatusPill } from '@/components/ui/StatusPill'
 import { formatarMoeda, formatarDataHora } from '@/lib/formatters'
 import api, { xsrfHeader } from '@/lib/api'
 import { toast } from '@/hooks/useToast'
+import { useAuth } from '@/hooks/useAuth'
 
 interface NotaFiscal {
   id: string
@@ -19,6 +20,7 @@ interface NotaFiscal {
 }
 
 export default function HistoricoNFPage() {
+  const { getUser } = useAuth()
   const [notas, setNotas]               = useState<NotaFiscal[]>([])
   const [loading, setLoading]           = useState(true)
   const [selected, setSelected]         = useState<Set<string>>(new Set())
@@ -32,6 +34,15 @@ export default function HistoricoNFPage() {
   const [motivoModal, setMotivoModal]   = useState<{ numero: number | null; mensagem: string; amigavel: string | null; status: string } | null>(null)
   const [retransmitindo, setRetransmitindo] = useState<string | null>(null)
   const [reemitindo, setReemitindo] = useState<string | null>(null)
+  // ATENDENTE só consulta o histórico (leitura); cancelar/excluir/reemitir/
+  // retransmitir seguem restritos a ADMIN/FINANCEIRO no backend — esconde os
+  // botões em vez de deixar o clique cair num 403.
+  const [podeEscrever, setPodeEscrever] = useState(false)
+  useEffect(() => {
+    const role = getUser()?.role
+    setPodeEscrever(role === 'ADMIN' || role === 'FINANCEIRO')
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
 
   const fetchNotas = useCallback((opts?: { silent?: boolean }) => {
     if (!opts?.silent) setLoading(true)
@@ -370,7 +381,7 @@ export default function HistoricoNFPage() {
                           ⚠ Ver motivo
                         </button>
                       )}
-                      {(nota.status === 'REJEITADA' || nota.status === 'ERRO') && (
+                      {podeEscrever && (nota.status === 'REJEITADA' || nota.status === 'ERRO') && (
                         <button
                           onClick={() => reemitir(nota)}
                           disabled={reemitindo === nota.id}
@@ -403,7 +414,7 @@ export default function HistoricoNFPage() {
                           {'</>'} XML
                         </button>
                       )}
-                      {nota.status === 'CONTINGENCIA' && (
+                      {podeEscrever && nota.status === 'CONTINGENCIA' && (
                         <button
                           onClick={() => retransmitir(nota)}
                           disabled={retransmitindo === nota.id}
@@ -419,7 +430,7 @@ export default function HistoricoNFPage() {
                           {retransmitindo === nota.id ? '⟳ Tentando...' : '🔄 Tentar autorizar'}
                         </button>
                       )}
-                      {nota.status === 'AUTORIZADA' && (
+                      {podeEscrever && nota.status === 'AUTORIZADA' && (
                         <button
                           onClick={() => { setCancelModal({ id: nota.id }); setMotivo('') }}
                           title="Cancelável em até 30 minutos após a emissão — o prazo exato é decidido pela SEFAZ"
@@ -428,7 +439,7 @@ export default function HistoricoNFPage() {
                           Cancelar
                         </button>
                       )}
-                      {(nota.ambiente === 'HOMOLOGACAO' || nota.status === 'RASCUNHO') && (
+                      {podeEscrever && (nota.ambiente === 'HOMOLOGACAO' || nota.status === 'RASCUNHO') && (
                         <button
                           onClick={() => setExcluirModal({ id: nota.id, numero: nota.numero })}
                           title="Excluir — disponível para notas em homologação ou rascunhos nunca emitidos"

@@ -310,19 +310,26 @@ Route::middleware(['tenant', 'auth:sanctum', 'tenant.verify', 'role:ADMIN'])->gr
     Route::delete('os/{id}', [OrdemServicoController::class, 'destroy']);
 });
 
-// ─── Notas Fiscais — ADMIN e FINANCEIRO ─────────────────────────────────────
-Route::middleware(['tenant', 'auth:sanctum', 'tenant.verify', 'role:ADMIN,FINANCEIRO'])->group(function () {
+// ─── Notas Fiscais ───────────────────────────────────────────────────────────
+// Consulta (histórico, PDF, XML, status, ZIP): ADMIN, FINANCEIRO e ATENDENTE.
+// O ATENDENTE gera notas pela OS e precisa acompanhá-las. Nenhuma dessas
+// rotas altera dado (download-zip é POST só por levar a lista de ids).
+Route::middleware(['tenant', 'auth:sanctum', 'tenant.verify', 'role:ADMIN,FINANCEIRO,ATENDENTE'])->group(function () {
     Route::get('notas-fiscais',                [NotaFiscalController::class, 'index']);
     Route::get('notas-fiscais/{id}',           [NotaFiscalController::class, 'show']);
     Route::get('notas-fiscais/{id}/pdf',       [NotaFiscalController::class, 'pdf']);
     Route::get('notas-fiscais/{id}/xml',       [NotaFiscalController::class, 'xml']);
+    Route::get('notas-fiscais/{id}/status',    [NotaFiscalController::class, 'status']);
+    Route::post('notas-fiscais/download-zip',  [NotaFiscalController::class, 'downloadZip']);
+});
+
+// Emitir, cancelar, excluir, retransmitir, inutilizar — ADMIN e FINANCEIRO.
+Route::middleware(['tenant', 'auth:sanctum', 'tenant.verify', 'role:ADMIN,FINANCEIRO'])->group(function () {
     Route::post('notas-fiscais',               [NotaFiscalController::class, 'store']);
     Route::post('notas-fiscais/{id}/emitir',   [NotaFiscalController::class, 'emitir']);
-    Route::get('notas-fiscais/{id}/status',    [NotaFiscalController::class, 'status']);
     Route::post('notas-fiscais/{id}/cancelar', [NotaFiscalController::class, 'cancelar']);
     Route::post('notas-fiscais/{id}/retransmitir', [NotaFiscalController::class, 'retransmitirContingencia']);
     Route::delete('notas-fiscais/{id}',        [NotaFiscalController::class, 'destroy']);
-    Route::post('notas-fiscais/download-zip',  [NotaFiscalController::class, 'downloadZip']);
     Route::post('notas-fiscais/inutilizar-numeracao', [NotaFiscalController::class, 'inutilizarNumeracao']);
 });
 

@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server'
 import type { NextRequest } from 'next/server'
-import { papelPermitido } from './lib/roleRules'
+import { papelPermitido, ROLES_CONHECIDOS } from './lib/roleRules'
 
 const PUBLIC_PATHS = ['/login', '/forgot-password', '/reset-password', '/orcamento']
 
@@ -58,7 +58,10 @@ export function proxy(request: NextRequest) {
   // backend recusaria qualquer chamada real.
   if (logado) {
     const role = request.cookies.get('oficina_role')?.value
-    if (role && !papelPermitido(pathname, role)) {
+    // Só age sobre um role reconhecido: um valor ilegível (ex: cookie antigo
+    // criptografado pelo Laravel, de antes do fix de 2026-09-20) não pode
+    // bloquear ninguém — o backend continua autorizando de verdade.
+    if (role && ROLES_CONHECIDOS.includes(role) && !papelPermitido(pathname, role)) {
       return NextResponse.redirect(new URL('/?acesso=negado', request.url))
     }
   }

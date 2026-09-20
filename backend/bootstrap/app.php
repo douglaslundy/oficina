@@ -45,8 +45,18 @@ return Application::configure(basePath: dirname(__DIR__))
             append: [\App\Http\Middleware\SecurityHeaders::class],
         );
 
+        // Bug real (2026-09-20): o EncryptCookies que o Sanctum stateful
+        // aplica criptografava TODO cookie de resposta, inclusive
+        // `oficina_role`/`oficina_logado` — cookies de PRESENÇA/UX lidos em
+        // texto puro pelo proxy.ts do Next.js (não tem a APP_KEY). O proxy
+        // recebia um blob `eyJpdi...` no lugar de "ADMIN", não achava o
+        // role na lista e bloqueava até o ADMIN ("sem permissão"). Não são
+        // credenciais (a sessão real é o cookie httpOnly, que segue
+        // criptografado), então seguem de fora da criptografia.
+        $middleware->encryptCookies(except: ['oficina_role', 'oficina_logado']);
+
         $middleware->alias([
-            'tenant'        => \App\Http\Middleware\InitializeTenancyByHeader::class,
+            'tenant'        =>\App\Http\Middleware\InitializeTenancyByHeader::class,
             'role'          => \App\Http\Middleware\CheckRole::class,
             // Falha de segurança real corrigida em 2026-09-14: 'tenant'
             // resolve a oficina só pelo header X-Tenant (enviado pelo

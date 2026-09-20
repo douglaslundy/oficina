@@ -53,6 +53,31 @@ class RbacTest extends TestCase
         $response->assertStatus(201);
     }
 
+    public function test_atendente_pode_consultar_historico_de_notas_fiscais(): void
+    {
+        $token = $this->loginAs('ATENDENTE');
+
+        $this->withToken($token)->getJson('/api/notas-fiscais')->assertStatus(200);
+    }
+
+    public function test_atendente_nao_pode_cancelar_nem_excluir_nota_fiscal(): void
+    {
+        $token = $this->loginAs('ATENDENTE');
+        $id = '00000000-0000-0000-0000-000000000000';
+
+        // 403 vem do middleware de role, antes de procurar a nota.
+        $this->withToken($token)->postJson("/api/notas-fiscais/{$id}/cancelar", ['motivo' => 'teste de permissao'])->assertStatus(403);
+        $this->withToken($token)->deleteJson("/api/notas-fiscais/{$id}")->assertStatus(403);
+        $this->withToken($token)->postJson("/api/notas-fiscais/{$id}/emitir")->assertStatus(403);
+    }
+
+    public function test_mecanico_nao_pode_consultar_historico_de_notas_fiscais(): void
+    {
+        $token = $this->loginAs('MECANICO');
+
+        $this->withToken($token)->getJson('/api/notas-fiscais')->assertStatus(403);
+    }
+
     public function test_financeiro_nao_pode_criar_usuario(): void
     {
         $token = $this->loginAs('FINANCEIRO');

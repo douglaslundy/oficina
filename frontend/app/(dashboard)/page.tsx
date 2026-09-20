@@ -8,6 +8,8 @@ import { DataTable, Column } from '@/components/ui/DataTable'
 import { StatusPill } from '@/components/ui/StatusPill'
 import { formatarMoeda, formatarData } from '@/lib/formatters'
 import api from '@/lib/api'
+import { useAuth } from '@/hooks/useAuth'
+import { papelPermitido } from '@/lib/roleRules'
 
 interface DashData {
   stats: {
@@ -29,7 +31,16 @@ interface DashData {
 
 export default function DashboardPage() {
   const router = useRouter()
+  const { getUser } = useAuth()
   const [data, setData] = useState<DashData | null>(null)
+  // /fiscal só abre pra ADMIN/FINANCEIRO; pros demais o card não vira link
+  // (senão o clique cai no bloqueio do proxy.ts).
+  const [podeVerNotas, setPodeVerNotas] = useState(false)
+  useEffect(() => {
+    const role = getUser()?.role
+    setPodeVerNotas(!!role && papelPermitido('/fiscal/historico', role))
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
 
   useEffect(() => {
     api.get('/dashboard').then(r => setData(r.data)).catch(() => {})
@@ -81,7 +92,7 @@ export default function DashboardPage() {
       <div className="rcols-6" style={{ display: 'grid', gap: 12, marginBottom: 24 }}>
         <StatCard title="Faturamento" value={formatarMoeda(data.stats.faturamento_mes)} icon="💰" color="var(--success)" subtitle="Mês atual" href="/contas-a-receber" compact />
         <StatCard title="Dívidas" value={formatarMoeda(data.stats.dividas_abertas)} icon="⚠" color="var(--danger)" subtitle="Em aberto" href="/clientes?status=DEVEDOR,DIVIDA_VENCIDA" compact />
-        <StatCard title="NF Emitidas" value={data.stats.nf_emitidas_mes} icon="🧾" color="var(--info)" subtitle="Este mês" href="/fiscal/historico" compact />
+        <StatCard title="NF Emitidas" value={data.stats.nf_emitidas_mes} icon="🧾" color="var(--info)" subtitle="Este mês" href={podeVerNotas ? '/fiscal/historico' : undefined} compact />
         <StatCard title="Clientes" value={data.stats.clientes_ativos} icon="👥" color="var(--info)" subtitle="Ativos" href="/clientes" compact />
         <StatCard title="OS do Mês" value={data.stats.os_mes} icon="🔧" color="var(--accent)" subtitle={formatarMoeda(data.stats.os_mes_valor)} href="/os" compact />
         <StatCard title="Vendas Balcão" value={data.stats.vendas_mes} icon="🛒" color="var(--info)" subtitle={formatarMoeda(data.stats.vendas_mes_valor)} href="/contas-a-receber" compact />
