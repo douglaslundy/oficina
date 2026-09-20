@@ -77,6 +77,71 @@ class ProdutoTest extends TestCase
         $this->assertSame(2, $response->json('meta.total'));
     }
 
+    public function test_busca_parcial_ignora_acento_caixa_e_ordem_das_palavras(): void
+    {
+        $token = $this->loginAdmin();
+        $this->criarProduto(); // "Filtro de Óleo"
+        $this->criarProduto(['sku' => 'FLT-002', 'nome' => 'Filtro de Ar']);
+        $this->criarProduto(['sku' => 'PST-001', 'nome' => 'Pastilha de Freio']);
+
+        $nomes = fn (string $busca) => collect(
+            $this->withToken($token)->getJson('/api/produtos?search=' . urlencode($busca))->json('data')
+        )->pluck('nome')->all();
+
+        $this->assertSame(['Filtro de Óleo'], $nomes('oleo'));          // sem acento
+        $this->assertSame(['Filtro de Óleo'], $nomes('ÓLEO'));           // caixa + acento
+        $this->assertSame(['Filtro de Óleo'], $nomes('oleo filtro'));    // outra ordem
+        $this->assertSame(['Filtro de Ar', 'Filtro de Óleo'], $nomes('filt')); // parcial
+        $this->assertSame(['Pastilha de Freio'], $nomes('past fre'));    // várias palavras parciais
+        $this->assertSame([], $nomes('inexistente'));
+    }
+
+    public function test_busca_trata_percentual_e_underline_como_texto_literal(): void
+    {
+        $token = $this->loginAdmin();
+        $this->criarProduto(['sku' => 'A-1', 'nome' => 'Aditivo 100%']);
+        $this->criarProduto(['sku' => 'A-2', 'nome' => 'Aditivo 1000']);
+
+        $r = $this->withToken($token)->getJson('/api/produtos?search=' . urlencode('100%'));
+
+        $this->assertSame(['Aditivo 100%'], collect($r->json('data'))->pluck('nome')->all());
+    }
+
+    public function test_codigo_exato_acha_por_sku_ou_codigo_de_barras_sem_diferenciar_caixa(): void
+    {
+        $token = $this->loginAdmin();
+        $this->criarProduto(['sku' => 'FLT-001', 'codigo_barras' => '7891234567890']);
+        $this->criarProduto(['sku' => 'FLT-002', 'nome' => 'Filtro de Ar']);
+
+        $porSku = $this->withToken($token)->getJson('/api/produtos?codigo=flt-001');
+        $porBarras = $this->withToken($token)->getJson('/api/produtos?codigo=7891234567890');
+
+        $this->assertSame(['FLT-001'], collect($porSku->json('data'))->pluck('sku')->all());
+        $this->assertSame(['FLT-001'], collect($porBarras->json('data'))->pluck('sku')->all());
+    }
+
+    public function test_codigo_exato_nao_acha_correspondencia_parcial(): void
+    {
+        $token = $this->loginAdmin();
+        $this->criarProduto(['sku' => 'FLT-001']);
+
+        $r = $this->withToken($token)->getJson('/api/produtos?codigo=FLT-00');
+
+        $this->assertSame([], $r->json('data'));
+    }
+
+    public function test_codigo_exato_devolve_todos_quando_sku_de_um_e_barras_de_outro(): void
+    {
+        $token = $this->loginAdmin();
+        $this->criarProduto(['sku' => 'ABC123', 'nome' => 'Produto A']);
+        $this->criarProduto(['sku' => 'XYZ', 'nome' => 'Produto B', 'codigo_barras' => 'ABC123']);
+
+        $r = $this->withToken($token)->getJson('/api/produtos?codigo=ABC123');
+
+        // O frontend usa essa contagem (>1) pra recusar a escolha automática.
+        $this->assertSame(['Produto A', 'Produto B'], collect($r->json('data'))->pluck('nome')->all());
+    }
+
     public function test_sku_unico(): void
     {
         $token = $this->loginAdmin();

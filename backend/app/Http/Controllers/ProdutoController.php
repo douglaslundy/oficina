@@ -7,6 +7,7 @@ use App\Http\Resources\ProdutoResource;
 use App\Models\Produto;
 use App\Services\Fiscal\ProdutoFiscalService;
 use App\Services\PlanLimitService;
+use App\Support\BuscaTexto;
 use App\Tenancy\TenancyContext;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
@@ -24,11 +25,26 @@ class ProdutoController extends Controller
 
         $query = Produto::where('ativo', true);
 
+        // Busca parcial por palavras, em qualquer ordem e ignorando acento/caixa
+        // ("filtro oleo" acha "Filtro de Óleo"): cada palavra precisa aparecer
+        // no nome, SKU ou código de barras. Ver App\Support\BuscaTexto.
         if ($request->has('search')) {
-            $search = $request->search;
-            $query->where(fn($q) => $q->where('nome', 'ilike', "%{$search}%")
-                ->orWhere('sku', 'ilike', "%{$search}%")
-                ->orWhere('codigo_barras', 'ilike', "%{$search}%"));
+            foreach (BuscaTexto::tokens((string) $request->search) as $token) {
+                $like = '%' . BuscaTexto::escaparLike($token) . '%';
+                $query->where(function ($q) use ($like) {
+                    foreach (['nome', 'sku', 'codigo_barras'] as $coluna) {
+                        $q->orWhereRaw("translate({$coluna}, ?, ?) ilike ?", [BuscaTexto::ACENTOS, BuscaTexto::SEM_ACENTOS, $like]);
+                    }
+                });
+            }
+        }
+        // Código exato (leitor de código de barras / SKU digitado): devolve TODOS
+        // os produtos cujo SKU ou código de barras seja igual ao código, pra o
+        // frontend poder recusar a escolha quando houver mais de um.
+        if ($request->filled('codigo')) {
+            $codigo = mb_strtolower(trim((string) $request->codigo));
+            $query->where(fn($q) => $q->whereRaw('lower(sku) = ?', [$codigo])
+                ->orWhereRaw('lower(codigo_barras) = ?', [$codigo]));
         }
         if ($request->has('categoria')) {
             $query->where('categoria', $request->categoria);

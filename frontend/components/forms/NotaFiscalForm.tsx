@@ -3,23 +3,14 @@ import { useState, useEffect, useRef } from 'react'
 import api from '@/lib/api'
 import { toast } from '@/hooks/useToast'
 import { formatarMoeda } from '@/lib/formatters'
+import { ProdutoCombobox } from '@/components/ui/ProdutoCombobox'
+import type { ProdutoBusca } from '@/lib/produtoBusca'
 
 interface ItemNF {
   descricao: string
   quantidade: number
   valor_unitario: number
   produto_id?: string
-}
-
-interface ProdutoOpt {
-  id: string
-  nome: string
-  sku: string
-  ncm: string | null
-  origem: number | null
-  tributacao_icms: string | null
-  fiscal_pendente: boolean
-  preco_venda: number | null
 }
 
 interface ClienteOpt {
@@ -79,7 +70,6 @@ export function NotaFiscalForm() {
   const [loading, setLoading] = useState(false)
   const [empresa, setEmpresa] = useState<Empresa | null>(null)
   const [planInfo, setPlanInfo] = useState<PlanInfo | null>(null)
-  const [produtos, setProdutos] = useState<ProdutoOpt[]>([])
   const [forcarNfe, setForcarNfe] = useState(false)
   const [aguardandoConfirmacao, setAguardandoConfirmacao] = useState(false)
   const [loadingPreview, setLoadingPreview] = useState(false)
@@ -100,11 +90,14 @@ export function NotaFiscalForm() {
     }).catch(() => {})
   }, [])
 
-  useEffect(() => {
-    if (natureza === 'Venda de Mercadoria' && produtos.length === 0) {
-      api.get('/produtos?per_page=200').then(r => setProdutos(r.data.data ?? [])).catch(() => {})
-    }
-  }, [natureza, produtos.length])
+  function selecionarProduto(idx: number, p: ProdutoBusca) {
+    setItens(prev => prev.map((it, j) => j === idx ? {
+      ...it,
+      produto_id: p.id,
+      descricao: p.nome,
+      valor_unitario: p.preco_venda ?? 0,
+    } : it))
+  }
 
   const clienteSelecionado = clientes.find(c => c.id === clienteId)
   const ehVenda = natureza === 'Venda de Mercadoria'
@@ -364,26 +357,13 @@ export function NotaFiscalForm() {
           {itens.map((item, idx) => (
             <div key={idx} style={{ display: 'grid', gridTemplateColumns: '3fr 1fr 1fr auto', gap: 6, marginBottom: 6 }}>
               {natureza === 'Venda de Mercadoria' ? (
-                <select
-                  value={item.produto_id ?? ''}
-                  onChange={e => {
-                    const p = produtos.find(x => x.id === e.target.value)
-                    setItens(prev => prev.map((it, j) => j === idx ? {
-                      ...it,
-                      produto_id: p?.id,
-                      descricao: p?.nome ?? '',
-                      valor_unitario: p?.preco_venda ?? 0,
-                    } : it))
-                  }}
+                <ProdutoCombobox
+                  selectedLabel={item.produto_id ? item.descricao : ''}
+                  onSelect={p => selecionarProduto(idx, p)}
+                  placeholder="Buscar produto pelo nome..."
+                  sufixo={p => (p.fiscal_pendente ? '⚠ dados fiscais pendentes' : '')}
                   style={iStyle}
-                >
-                  <option value="">Selecionar produto...</option>
-                  {produtos.map(p => (
-                    <option key={p.id} value={p.id}>
-                      {p.nome} {p.fiscal_pendente ? '⚠ dados fiscais pendentes' : ''}
-                    </option>
-                  ))}
-                </select>
+                />
               ) : (
                 <input
                   value={item.descricao}

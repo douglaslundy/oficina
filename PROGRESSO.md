@@ -1,6 +1,42 @@
 # Progresso do Projeto
 
 ## Última atualização
+2026-09-20 (2) — **Busca de produto: SKU no leitor de código + campo de
+busca no lugar do select** (pedido do usuário; design aprovado no chat,
+incluindo busca NO SERVIDOR enquanto digita). NÃO commitado/deployado.
+- **Leitor de código** (OSForm, 2 cópias: criação e `NewItemInline`): antes só
+  `codigo_barras === codigo` na lista pré-carregada (per_page=200). Agora
+  `buscarProdutoPorCodigo()` (`frontend/lib/produtoBusca.ts`) chama
+  `GET /produtos?codigo=` — casa SKU **ou** código de barras, exato, sem
+  diferenciar caixa. 1 resultado → adiciona; >1 (ex: SKU de um = barras de
+  outro) → NÃO adiciona, toast pedindo escolha manual; 0 → toast de erro.
+  Usa `meta.total` (não o tamanho da página) pra detectar duplicado.
+- **Select → `ProdutoCombobox`** (`components/ui/ProdutoCombobox.tsx`): busca
+  no servidor com debounce 250ms, descarta resposta velha, teclado (↑↓ Enter
+  Esc), mouseDown pra escolher (blur não fecha antes). Usado em OSForm
+  (criação + edição) e NotaFiscalForm (itens de Venda de Mercadoria, com
+  sufixo "⚠ dados fiscais pendentes"). A lista pré-carregada `produtos`
+  (per_page=200, limite silencioso) foi REMOVIDA dos dois forms.
+- **Backend** `ProdutoController::index`: `search` agora quebra em palavras
+  (AND, qualquer ordem) e ignora acento/caixa via `translate()` +
+  `ilike` — SEM extensão `unaccent` (exigiria CREATE EXTENSION em prod).
+  Lógica em `app/Support/BuscaTexto.php` (mapa PHP e SQL testados
+  caractere a caractere). Efeito colateral BENÉFICO: PDV e tela Produtos
+  também passam a buscar sem acento/por palavras. `%`/`_` escapados.
+  Decisão: `search` continua incluindo sku/codigo_barras além do nome
+  (comportamento que já existia), embora o usuário tenha pedido "nome".
+- **Verificado:** `translate`+`ilike` rodados de verdade (SELECT só-leitura)
+  no Postgres de produção; SQL gerado conferido; `tsc` e `eslint` limpos;
+  `BuscaTextoTest` 6/6. **NÃO verificado:** os 5 Feature tests novos em
+  `ProdutoTest.php` (precisam de Postgres) e a UI no navegador (sem backend
+  local). Suíte Unit: baseline 383 testes/11 erros PRÉ-EXISTENTES (Job/
+  CertificadoStore, sem relação) → agora 389/mesmos 11.
+- Arquivos: `backend/app/Support/BuscaTexto.php`,
+  `backend/app/Http/Controllers/ProdutoController.php`,
+  `backend/tests/Unit/BuscaTextoTest.php`, `backend/tests/Feature/ProdutoTest.php`,
+  `frontend/lib/produtoBusca.ts`, `frontend/components/ui/ProdutoCombobox.tsx`,
+  `frontend/components/forms/OSForm.tsx`, `frontend/components/forms/NotaFiscalForm.tsx`.
+
 2026-09-20 — **Bug "não tenho permissão pra acessar a página de Nota
 Fiscal"** — usuário é ADMIN e foi bloqueado. Duas causas; a 1ª é a real pro
 ADMIN:

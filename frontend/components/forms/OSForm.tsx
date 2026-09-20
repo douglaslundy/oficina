@@ -4,6 +4,8 @@ import { useForm, useFieldArray } from 'react-hook-form'
 import api from '@/lib/api'
 import { toast } from '@/hooks/useToast'
 import { formatarMoeda } from '@/lib/formatters'
+import { ProdutoCombobox } from '@/components/ui/ProdutoCombobox'
+import { buscarProdutoPorCodigo, type ProdutoBusca } from '@/lib/produtoBusca'
 
 interface OsItem {
   tipo: 'SERVICO' | 'PECA'
@@ -89,17 +91,9 @@ function veiculoLabel(v: Veiculo): string {
   return parts.join(' — ')
 }
 
-// Rótulo do produto no select, com a quantidade em estoque entre parênteses.
-// Ex.: "Correia dentada - (20un)"
-function produtoLabel(p: { nome: string; qty_atual: number; unidade?: string }): string {
-  const un = (p.unidade ?? 'un').toLowerCase()
-  return `${p.nome} - (${p.qty_atual}${un})`
-}
-
 export function OSForm({ initialData, onSuccess, onConcluir, onCancelar }: OSFormProps) {
   const isEdit = !!initialData?.id
   const [mecanicos, setMecanicos] = useState<Array<{ id: string; nome: string }>>([])
-  const [produtos, setProdutos] = useState<Array<{ id: string; nome: string; qty_atual: number; unidade?: string; preco_venda: number | null; codigo_barras?: string | null }>>([])
   const [servicos, setServicos] = useState<Array<{ id: string; nome: string; valor_padrao: number }>>([])
 
   // New mode only
@@ -159,15 +153,6 @@ export function OSForm({ initialData, onSuccess, onConcluir, onCancelar }: OSFor
     }
   }, [initialData?.status, setValue])
 
-  // Recarrega a lista de produtos (com estoque atual) — usado após inserir/
-  // remover peça para o select refletir o estoque sem precisar de F5.
-  const fetchProdutos = useCallback(async () => {
-    try {
-      const r = await api.get('/produtos?per_page=200')
-      setProdutos(r.data.data ?? [])
-    } catch { /* mantém lista anterior */ }
-  }, [])
-
   const fetchServicos = useCallback(async () => {
     try {
       const r = await api.get('/servicos?ativo=1&per_page=200')
@@ -188,9 +173,8 @@ export function OSForm({ initialData, onSuccess, onConcluir, onCancelar }: OSFor
         setClientes((results[1] as { data: { data: typeof clientes } }).data.data ?? [])
       }
     }).catch(() => {})
-    fetchProdutos()
     fetchServicos()
-  }, [isEdit, fetchProdutos, fetchServicos]) // eslint-disable-line react-hooks/exhaustive-deps
+  }, [isEdit, fetchServicos]) // eslint-disable-line react-hooks/exhaustive-deps
 
   // Fetch vehicles (new mode only)
   useEffect(() => {
@@ -256,19 +240,24 @@ export function OSForm({ initialData, onSuccess, onConcluir, onCancelar }: OSFor
     }
   }
 
-  function handleCodigoBarrasNovoKeyDown(e: React.KeyboardEvent<HTMLInputElement>) {
+  async function handleCodigoBarrasNovoKeyDown(e: React.KeyboardEvent<HTMLInputElement>) {
     if (e.key !== 'Enter') return
     e.preventDefault()
     const codigo = codigoBarrasNovo.trim()
     if (!codigo) return
-    const produto = produtos.find(p => p.codigo_barras === codigo)
-    if (!produto) {
-      toast('Nenhuma peça encontrada para este código de barras.', 'danger')
-      setCodigoBarrasNovo('')
-      return
-    }
-    append({ tipo: 'PECA', produto_id: produto.id, descricao: produto.nome, quantidade: 1, valor_unitario: produto.preco_venda ?? 0 })
     setCodigoBarrasNovo('')
+    // Código de barras OU SKU, exato; recusa (toast) se não achar ou se houver mais de um.
+    const produto = await buscarProdutoPorCodigo(codigo)
+    if (!produto) return
+    append({ tipo: 'PECA', produto_id: produto.id, descricao: produto.nome, quantidade: 1, valor_unitario: produto.preco_venda ?? 0 })
+  }
+
+  function handleProdutoSelecionado(idx: number, produto: ProdutoBusca) {
+    setValue(`itens.${idx}.produto_id`, produto.id)
+    setValue(`itens.${idx}.descricao`, produto.nome)
+    if (produto.preco_venda != null) {
+      setValue(`itens.${idx}.valor_unitario`, produto.preco_venda)
+    }
   }
 
   function handleServicoSelect(idx: number, value: string) {
@@ -294,7 +283,6 @@ export function OSForm({ initialData, onSuccess, onConcluir, onCancelar }: OSFor
     try {
       await api.delete(`/os/${initialData!.id}/itens/${itemId}`)
       toast('Item removido.', 'success')
-      await fetchProdutos() // atualiza estoque exibido no select
       onSuccess?.({})
     } catch {
       toast('Erro ao remover item.', 'danger')
@@ -585,7 +573,7 @@ export function OSForm({ initialData, onSuccess, onConcluir, onCancelar }: OSFor
 
                 {/* Formulário para adicionar novo item (apenas quando editável) */}
                 {!['CONCLUIDA', 'CANCELADA'].includes(watch('status')) && initialData?.id && (
-                  <NewItemInline osId={initialData.id} produtos={produtos} servicos={servicos} onAdded={() => { fetchProdutos(); onSuccess?.({}) }} />
+                  <NewItemInline osId={initialData.id} servicos={servicos} onAdded={() => { onSuccess?.({}) }} />
                 )}
               </>
             )}
@@ -595,13 +583,13 @@ export function OSForm({ initialData, onSuccess, onConcluir, onCancelar }: OSFor
           <>
             <div style={{ marginBottom: 12 }}>
               <label style={{ color: 'var(--muted)', fontSize: 11, display: 'block', marginBottom: 4 }}>
-                📷 Leitor de código de barras
+                📷 Código de barras ou SKU
               </label>
               <input
                 value={codigoBarrasNovo}
                 onChange={e => setCodigoBarrasNovo(e.target.value)}
                 onKeyDown={handleCodigoBarrasNovoKeyDown}
-                placeholder="Escaneie ou digite o código e pressione Enter..."
+                placeholder="Escaneie ou digite o código de barras ou SKU e pressione Enter..."
                 style={{ ...S, width: '100%' }}
               />
             </div>
@@ -635,25 +623,15 @@ export function OSForm({ initialData, onSuccess, onConcluir, onCancelar }: OSFor
               return (
                 <div key={field.id} style={{ display: 'grid', gridTemplateColumns: '2fr 1fr 1fr auto', gap: 8, marginBottom: 8, padding: 8, background: 'var(--card)', borderRadius: 8 }}>
                   {tipo === 'PECA' ? (
-                    <select
-                      {...register(`itens.${idx}.produto_id`)}
-                      style={S}
-                      onChange={e => {
-                        setValue(`itens.${idx}.produto_id`, e.target.value)
-                        const produto = produtos.find(p => p.id === e.target.value)
-                        if (produto) {
-                          setValue(`itens.${idx}.descricao`, produto.nome)
-                          if (produto.preco_venda != null) {
-                            setValue(`itens.${idx}.valor_unitario`, produto.preco_venda)
-                          }
-                        }
-                      }}
-                    >
-                      <option value="">Selecionar peça...</option>
-                      {produtos.map(p => (
-                        <option key={p.id} value={p.id}>{produtoLabel(p)}</option>
-                      ))}
-                    </select>
+                    <>
+                      <input type="hidden" {...register(`itens.${idx}.produto_id`)} />
+                      <ProdutoCombobox
+                        selectedLabel={watch(`itens.${idx}.produto_id`) ? watch(`itens.${idx}.descricao`) : ''}
+                        onSelect={p => handleProdutoSelecionado(idx, p)}
+                        placeholder="Buscar peça pelo nome..."
+                        style={S}
+                      />
+                    </>
                   ) : manualServiceFields.has(idx) ? (
                     <input {...register(`itens.${idx}.descricao`)} placeholder="Descrição do serviço" style={S} />
                   ) : (
@@ -720,9 +698,8 @@ export function OSForm({ initialData, onSuccess, onConcluir, onCancelar }: OSFor
   )
 }
 
-function NewItemInline({ osId, produtos, servicos, onAdded }: {
+function NewItemInline({ osId, servicos, onAdded }: {
   osId: string
-  produtos: Array<{ id: string; nome: string; qty_atual: number; unidade?: string; preco_venda: number | null; codigo_barras?: string | null }>
   servicos: Array<{ id: string; nome: string; valor_padrao: number }>
   onAdded?: (data: Record<string, unknown>) => void
 }) {
@@ -736,13 +713,10 @@ function NewItemInline({ osId, produtos, servicos, onAdded }: {
   const [isManual, setIsManual] = useState(false)
   const [codigoBarras, setCodigoBarras] = useState('')
 
-  function handleProdutoSelect(id: string) {
-    setProdutoId(id)
-    const p = produtos.find(x => x.id === id)
-    if (p) {
-      setDescricao(p.nome)
-      setValorUnitario(p.preco_venda ?? 0)
-    }
+  function handleProdutoSelect(p: ProdutoBusca) {
+    setProdutoId(p.id)
+    setDescricao(p.nome)
+    setValorUnitario(p.preco_venda ?? 0)
   }
 
   async function handleAdd(overrides?: { produtoId: string; descricao: string; valorUnitario: number }) {
@@ -773,20 +747,17 @@ function NewItemInline({ osId, produtos, servicos, onAdded }: {
     }
   }
 
-  function handleCodigoBarrasKeyDown(e: React.KeyboardEvent<HTMLInputElement>) {
+  async function handleCodigoBarrasKeyDown(e: React.KeyboardEvent<HTMLInputElement>) {
     if (e.key !== 'Enter') return
     e.preventDefault()
     const codigo = codigoBarras.trim()
     if (!codigo) return
-    const produto = produtos.find(p => p.codigo_barras === codigo)
-    if (!produto) {
-      toast('Nenhuma peça encontrada para este código de barras.', 'danger')
-      setCodigoBarras('')
-      return
-    }
+    setCodigoBarras('')
+    // Código de barras OU SKU, exato; recusa (toast) se não achar ou se houver mais de um.
+    const produto = await buscarProdutoPorCodigo(codigo)
+    if (!produto) return
     setTipo('PECA')
     handleAdd({ produtoId: produto.id, descricao: produto.nome, valorUnitario: produto.preco_venda ?? 0 })
-    setCodigoBarras('')
   }
 
   const SI: React.CSSProperties = {
@@ -800,13 +771,13 @@ function NewItemInline({ osId, produtos, servicos, onAdded }: {
 
       <div style={{ marginBottom: 10 }}>
         <label style={{ color: 'var(--muted)', fontSize: 11, display: 'block', marginBottom: 4 }}>
-          📷 Leitor de código de barras
+          📷 Código de barras ou SKU
         </label>
         <input
           value={codigoBarras}
           onChange={e => setCodigoBarras(e.target.value)}
           onKeyDown={handleCodigoBarrasKeyDown}
-          placeholder="Escaneie ou digite o código e pressione Enter..."
+          placeholder="Escaneie ou digite o código de barras ou SKU e pressione Enter..."
           disabled={loading}
           style={{ ...SI, width: '100%', boxSizing: 'border-box' }}
         />
@@ -825,10 +796,12 @@ function NewItemInline({ osId, produtos, servicos, onAdded }: {
           <option value="PECA">Peça</option>
         </select>
         {tipo === 'PECA' ? (
-          <select value={produtoId} onChange={e => handleProdutoSelect(e.target.value)} style={SI}>
-            <option value="">Selecionar peça...</option>
-            {produtos.map(p => <option key={p.id} value={p.id}>{produtoLabel(p)}</option>)}
-          </select>
+          <ProdutoCombobox
+            selectedLabel={produtoId ? descricao : ''}
+            onSelect={handleProdutoSelect}
+            placeholder="Buscar peça pelo nome..."
+            style={SI}
+          />
         ) : isManual ? (
           <input value={descricao} onChange={e => setDescricao(e.target.value)}
             placeholder="Descrição do serviço" style={SI} />
