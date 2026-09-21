@@ -97,6 +97,12 @@ return [
             'prefix_indexes' => true,
             'search_path' => 'public',
             'sslmode' => env('DB_SSLMODE', 'prefer'),
+            // Sem isto a sessão do Postgres fica em UTC enquanto o PHP roda em
+            // America/Sao_Paulo: o Laravel grava now() como texto sem fuso
+            // ("2026-09-20 23:23:43") em colunas timestamptz e o banco lia como
+            // UTC — 3h antes do instante real (emitido_em, ultimo_acesso...).
+            // Mesmo fuso do app → o texto é interpretado no fuso em que foi gerado.
+            'timezone' => env('DB_TIMEZONE', env('APP_TIMEZONE', 'America/Sao_Paulo')),
         ],
 
         'sqlsrv' => [

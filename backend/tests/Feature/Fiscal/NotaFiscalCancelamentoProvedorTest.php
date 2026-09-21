@@ -70,6 +70,55 @@ class NotaFiscalCancelamentoProvedorTest extends TestCase
         $this->assertDatabaseHas('notas_fiscais', ['id' => $nota->id, 'status' => 'AUTORIZADA']);
     }
 
+    public function test_cancelamento_de_nfse_nfephp_registra_evento_no_sefin_com_a_chave(): void
+    {
+        [$token, $oficina, $nota] = $this->montarCenario('NFS-e', 'NFEPHP');
+        $chave = 'NFS31305072250388509000121000000000000126090586495160';
+        $nota->update(['chave_acesso' => $chave, 'ambiente' => 'PRODUCAO']);
+
+        $this->mock(\App\Services\Fiscal\NfePhp\MotorNfse::class, function ($m) use ($chave) {
+            $m->shouldReceive('cancelar')
+                ->once()
+                ->with($chave, 'Erro no valor lancado na nota', 'PRODUCAO')
+                ->andReturn(\App\Services\Fiscal\Data\EmissaoResultado::cancelada($chave));
+        });
+
+        $this->req($token, $oficina)
+            ->postJson("/api/notas-fiscais/{$nota->id}/cancelar", ['motivo' => 'Erro no valor lancado na nota'])
+            ->assertStatus(200);
+
+        $this->assertDatabaseHas('notas_fiscais', ['id' => $nota->id, 'status' => 'CANCELADA']);
+    }
+
+    public function test_falha_ao_cancelar_nfse_nfephp_nao_marca_cancelada_local(): void
+    {
+        [$token, $oficina, $nota] = $this->montarCenario('NFS-e', 'NFEPHP');
+        $nota->update(['chave_acesso' => 'NFS31305072250388509000121000000000000126090586495160', 'ambiente' => 'PRODUCAO']);
+
+        $this->mock(\App\Services\Fiscal\NfePhp\MotorNfse::class, function ($m) {
+            $m->shouldReceive('cancelar')->once()->andReturn(
+                \App\Services\Fiscal\Data\EmissaoResultado::erro('Falha técnica ao cancelar NFS-e via NFePHP: prazo expirado', 'x'),
+            );
+        });
+
+        $this->req($token, $oficina)
+            ->postJson("/api/notas-fiscais/{$nota->id}/cancelar", ['motivo' => 'Erro no valor lancado na nota'])
+            ->assertStatus(422);
+
+        $this->assertDatabaseHas('notas_fiscais', ['id' => $nota->id, 'status' => 'AUTORIZADA']);
+    }
+
+    public function test_nfse_nfephp_sem_chave_de_acesso_nao_cancela_so_no_banco(): void
+    {
+        [$token, $oficina, $nota] = $this->montarCenario('NFS-e', 'NFEPHP');
+
+        $this->req($token, $oficina)
+            ->postJson("/api/notas-fiscais/{$nota->id}/cancelar", ['motivo' => 'Erro no valor lancado na nota'])
+            ->assertStatus(422);
+
+        $this->assertDatabaseHas('notas_fiscais', ['id' => $nota->id, 'status' => 'AUTORIZADA']);
+    }
+
     public function test_cancelamento_de_nfce_focus_usa_o_recurso_nfce_nao_nfse(): void
     {
         [$token, $oficina, $nota] = $this->montarCenario('NFC-e', 'FOCUS');

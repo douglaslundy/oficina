@@ -1,6 +1,66 @@
 # Progresso do Projeto
 
 ## Última atualização
+2026-09-20 (9) — **Duas correções do item (8) FEITAS** (usuário: "execute as duas
+correções e depois faça o deploy"; escolheu "só corrigir daqui pra frente" no fuso).
+- **Cancelar NFS-e do NFEPHP:** `NotaFiscalController::cancelar()` agora chama
+  `MotorNfse::cancelar($nota->chave_acesso, motivo, ambiente)` e só marca CANCELADA
+  local se o evento 101101 for registrado (422 e nota intacta se falhar; 422 se a
+  nota não tem chave). Usa `chave_acesso`, NÃO `referencia_externa` (`nf-<uuid>`, que
+  o SEFIN não conhece). `MotorNfse::cancelar()` tinha o mesmo defeito do prefixo
+  `NFS`: evento extraído pra `montarEventoCancelamento()` (puro) com
+  `chNFSe = chaveNfse50()`. Testes: `MotorNfseMontarEventoCancelamentoTest` (3, vistos
+  falhar antes) + 3 Feature em `NotaFiscalCancelamentoProvedorTest` (motor mockado;
+  NÃO rodam local, precisam de Postgres). **Não observado ao vivo:** o cancelamento
+  real no SEFIN (só a montagem do evento é testada) — nunca cancelar a nota nº 1
+  (produção) só pra testar.
+- **Fuso:** `config/database.php` pgsql ganhou `'timezone' => env('DB_TIMEZONE',
+  env('APP_TIMEZONE','America/Sao_Paulo'))` (o PostgresConnector faz `set time zone`).
+  Teste: `tests/Unit/DatabaseTimezoneConfigTest`. Linhas ANTIGAS não mudam (timestamptz
+  guarda instante; a leitura devolve o mesmo instante) — continuam 3h deslocadas, sem
+  migration de correção (decisão do usuário). Efeito colateral bom: comparações SQL
+  como `criado_em < now()-Nmin` (ReconciliarNotasProcessando, Dashboard) deixam de ter
+  3h de desvio. Efeito colateral a saber: tokens de reset emitidos nos 30 min antes do
+  deploy aparecem expirados.
+- Suíte Unit: 416 testes, os MESMOS 11 erros pré-existentes (openssl no Windows).
+- Inclui no mesmo commit a correção de `MotorNfse::consultar()` do item (8).
+
+2026-09-20 (8) — **Verificação da 1ª NFS-e de PRODUÇÃO (stuntmotos, NFEPHP/ADN)
+contra o SEFIN Nacional — CONFIRMADA.** Nota nº 1, DPS nº 24, R$ 100,00,
+tomador ECT (CNPJ 34028316001509), chave `31305072250388509000121000000000000126090586495160`
+(50 dígitos, ver `chave_acesso` da nota `2c65c391…`). Consulta somente-leitura
+com o certificado da oficina: `GET sefin.nfse.gov.br/SefinNacional/nfse/{chave50}`
+achou a nota (tpAmb=1 produção, `cStat 100`, `SefinNacional_1.6.0`) e
+`dps/{idDps}` devolveu a mesma chave. Nenhuma alteração de dados.
+- **CORRIGIDO (NÃO commitado/deployado) — `MotorNfse::consultar()`:** dois defeitos.
+  (1) recebia a chave com prefixo `NFS` (53 chars) e a API só aceita os 50 dígitos →
+  novo `chaveNfse50()`. (2) checava cancelamento em `/eventos/101101`, rota que NÃO
+  existe (spec oficial: `/eventos/{tipo}/{numSeq}`; o 404 era HTML do IIS = rota
+  inexistente, **não** "sem evento" — minha 1ª leitura, dita ao usuário, estava
+  ERRADA e foi refeita testando ao vivo). Agora `existeEventoCancelamento()` consulta
+  `/eventos/101101/1`: 2xx = cancelada; 404 + corpo JSON da API = sem evento
+  (confirmado ao vivo); 404 em HTML/sem corpo/outro erro = incerteza (ERRO).
+  Teste: `tests/Unit/Fiscal/NfePhp/MotorNfseConsultarChaveEEventosTest.php` (8 testes,
+  vistos falhar antes). Validado ao vivo (classe temporária no container, sem
+  deploy): nota nº 1 → `AUTORIZADA`. **Não observado:** o 200 de uma nota
+  realmente cancelada (só o caminho "sem evento"). Ainda ninguém chama
+  `consultar()` do NFePHP/NFS-e; `MotorNfse::cancelar()` usa `chNFSe = $referencia`
+  e tem o MESMO problema do prefixo `NFS` se um dia for ligado.
+- **⚠ ACHADO GRAVE, NÃO corrigido:** `NotaFiscalController::cancelar()` só chama o
+  provedor pra NFEPHP NF-e/NFC-e e pra SPEDY/FOCUS. NFS-e do NFEPHP cai direto em
+  `update(['status'=>'CANCELADA'])` — cancela SÓ no nosso banco, a nota continua
+  válida no SEFIN Nacional. Cancelar a nota nº 1 pela tela hoje deixaria banco e
+  governo divergentes.
+- **`emitido_em` 3h antes de `criado_em` — causa raiz (NÃO corrigido):** PHP roda em
+  America/Sao_Paulo, a sessão do Postgres em UTC (`SHOW timezone`=UTC) e
+  `config/database.php` (pgsql) não define `timezone`. Laravel grava `now()` como
+  texto sem fuso ("2026-09-20 23:23:43") em coluna `timestamptz` → lido como UTC =
+  3h antes do instante real. `criado_em` (DEFAULT CURRENT_TIMESTAMP) sai certo.
+  Afeta as ~18 colunas `timestamptz` sem default escritas pelo app (emitido_em,
+  ultimo_acesso, expires_at dos resets, pago_em…) — 55 `timestamptz` em 33 tabelas
+  no total. Leituras/comparações feitas só via Laravel se compensam (por isso nada
+  quebrou); aparece ao misturar com default do banco ou exibir em fuso local. Corrigir
+  = `'timezone'` na conexão pgsql + decidir o que fazer com o histórico já gravado.
 2026-09-20 (7) — **Botão "Exportar" MOVIDO da tela de Pendências fiscais para a
 página principal de Produtos** (pedido do usuário). Extraído para
 `frontend/components/produtos/ExportarProdutosFiscais.tsx` (botão + modal de

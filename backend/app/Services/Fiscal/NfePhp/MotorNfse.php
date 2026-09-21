@@ -295,7 +295,7 @@ class MotorNfse
                 // tanto para "não encontrada" quanto para falha de API. Não
                 // há, a partir daqui, como distinguir os dois casos (o brief
                 // assumia que uma falha lançaria exceção; na verdade vira null).
-                $resultado = $nfse->contribuinte()->consultar($referencia);
+                $resultado = $nfse->contribuinte()->consultar($this->chaveNfse50($referencia));
 
                 if ($resultado === null) {
                     return EmissaoResultado::erro(
@@ -332,8 +332,12 @@ class MotorNfse
                 $eventosCancelamento = null;
                 $falhaAoListarEventos = null;
                 try {
-                    $chave = $resultado->infNfse?->id ?? $referencia;
-                    $eventosCancelamento = $nfse->contribuinte()->listarEventos($chave, 101101);
+                    $chave = $this->chaveNfse50($resultado->infNfse?->id ?? $referencia);
+                    // resultadoAposVerificarCancelamento() só olha se o array
+                    // está vazio; o conteúdo do evento não importa aqui.
+                    $eventosCancelamento = $this->existeEventoCancelamento(
+                        fn () => $nfse->contribuinte()->consultarEvento($chave, 101101, 1),
+                    ) ? [101101] : [];
                 } catch (\Throwable $e) {
                     $falhaAoListarEventos = $e;
                     Log::warning(
@@ -346,6 +350,62 @@ class MotorNfse
             });
         } catch (\Throwable $e) {
             return EmissaoResultado::erro('Falha ao consultar NFS-e: ' . $e->getMessage(), $referencia);
+        }
+    }
+
+    /**
+     * A API do SEFIN Nacional identifica a NFS-e pelos 50 dígitos da chave de
+     * acesso. O que guardamos em `notas_fiscais.chave_acesso` é o `Id` do
+     * infNFSe, que vem com o prefixo "NFS" (53 chars) — com ele a API
+     * responde "não encontrada" mesmo pra uma nota autorizada (confirmado ao
+     * vivo em 2026-09-20). Só remove o prefixo de uma chave de verdade
+     * ("NFS" + 50 dígitos); qualquer outra referência passa intacta.
+     */
+    private function chaveNfse50(string $chaveOuReferencia): string
+    {
+        if (preg_match('/^NFS(\d{50})$/', $chaveOuReferencia, $m) === 1) {
+            return $m[1];
+        }
+
+        return $chaveOuReferencia;
+    }
+
+    /**
+     * Existe evento de cancelamento (101101) registrado para a nota?
+     *
+     * $consultarEvento faz `GET /nfse/{chave}/eventos/101101/1` (rota da
+     * especificação oficial: /eventos/{tipoEvento}/{numSeqEvento}) e lança
+     * NfseApiException se a API não devolver 2xx. Interpretação:
+     * - sucesso → há evento (nota cancelada);
+     * - 404 COM corpo JSON da API → "Nenhum evento encontrado" (resposta
+     *   documentada da especificação; ao vivo vem um envelope
+     *   {tipoAmbiente, versaoAplicativo, ...});
+     * - qualquer outra coisa (inclusive 404 em HTML, que é o IIS dizendo que
+     *   a ROTA não existe, ou 404 sem corpo) → a exceção sobe: é incerteza,
+     *   nunca "sem cancelamento". A rota antiga `/eventos/101101` (sem a
+     *   sequência) dava exatamente esse 404 em HTML e era lida como falha.
+     *
+     * Só o caminho "sem evento" foi confirmado contra a API real; o formato
+     * da resposta 200 de uma nota de fato cancelada não foi observado.
+     *
+     * @param callable(): mixed $consultarEvento
+     * @throws \Nfse\Http\Exceptions\NfseApiException
+     */
+    private function existeEventoCancelamento(callable $consultarEvento): bool
+    {
+        try {
+            $consultarEvento();
+
+            return true;
+        } catch (\Nfse\Http\Exceptions\NfseApiException $e) {
+            $corpo = $e->getRawResponse();
+            $ehJsonDaApi = $corpo !== null && is_array(json_decode($corpo, true));
+
+            if ($e->getCode() === 404 && $ehJsonDaApi) {
+                return false;
+            }
+
+            throw $e;
         }
     }
 
@@ -457,22 +517,7 @@ class MotorNfse
 
                 $cnpjAutor = preg_replace('/\D/', '', $cfg->cnpj ?? '') ?? '';
 
-                $evento = new PedRegEventoData([
-                    'versao' => '1.01',
-                    'infPedReg' => [
-                        'tpAmb'      => $ambiente === 'PRODUCAO' ? 1 : 2,
-                        'verAplic'   => config('app.version', '1.0.0'),
-                        'dhEvento'   => now()->format('c'),
-                        'chNFSe'     => $referencia,
-                        'CNPJAutor'  => $cnpjAutor,
-                        'tipoEvento' => '101101', // Cancelamento — também forçado internamente por ContribuinteService::cancelar()
-                        'e101101' => [
-                            'xDesc'   => 'Cancelamento de NFS-e', // valor fixo exigido pelo XSD v1.01 (TE101101)
-                            'cMotivo' => $this->classificarMotivoCancelamento($motivo),
-                            'xMotivo' => $motivo,
-                        ],
-                    ],
-                ]);
+                $evento = $this->montarEventoCancelamento($referencia, $motivo, $ambiente, $cnpjAutor);
 
                 $resposta = $nfse->contribuinte()->cancelar($evento);
 
@@ -498,6 +543,32 @@ class MotorNfse
 
             return EmissaoResultado::erro('Falha técnica ao cancelar NFS-e via NFePHP: ' . $e->getMessage(), $referencia);
         }
+    }
+
+    /**
+     * Monta o pedido de registro do evento 101101 (puro — sem rede nem
+     * certificado, testável). `chNFSe` são os 50 dígitos da chave: o
+     * `chave_acesso` guardado vem com o prefixo "NFS" do `Id` do infNFSe
+     * (ver chaveNfse50()).
+     */
+    private function montarEventoCancelamento(string $referencia, string $motivo, string $ambiente, string $cnpjAutor): PedRegEventoData
+    {
+        return new PedRegEventoData([
+            'versao' => '1.01',
+            'infPedReg' => [
+                'tpAmb'      => $ambiente === 'PRODUCAO' ? 1 : 2,
+                'verAplic'   => config('app.version', '1.0.0'),
+                'dhEvento'   => now()->format('c'),
+                'chNFSe'     => $this->chaveNfse50($referencia),
+                'CNPJAutor'  => $cnpjAutor,
+                'tipoEvento' => '101101', // Cancelamento — também forçado internamente por ContribuinteService::cancelar()
+                'e101101' => [
+                    'xDesc'   => 'Cancelamento de NFS-e', // valor fixo exigido pelo XSD v1.01 (TE101101)
+                    'cMotivo' => $this->classificarMotivoCancelamento($motivo),
+                    'xMotivo' => $motivo,
+                ],
+            ],
+        ]);
     }
 
     /**

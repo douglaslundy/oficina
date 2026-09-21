@@ -214,6 +214,24 @@ class NotaFiscalController extends Controller
             }
         }
 
+        // NFS-e do NFEPHP (ADN/SEFIN Nacional): até 2026-09-20 este caso caía
+        // direto no update abaixo e cancelava SÓ no nosso banco — a nota
+        // seguia válida no governo. Só marca CANCELADA local se o evento 101101
+        // for registrado. Usa `chave_acesso` (o `Id` do infNFSe), não a
+        // referência interna `nf-<uuid>`, que o SEFIN não conhece.
+        if ($nota->provedor === 'NFEPHP' && $nota->modelo === 'NFS-e' && $nota->status === 'AUTORIZADA') {
+            if (empty($nota->chave_acesso)) {
+                return response()->json(['message' => 'Nota sem chave de acesso — não é possível cancelar via NFePHP.'], 422);
+            }
+
+            $resultado = app(\App\Services\Fiscal\NfePhp\MotorNfse::class)
+                ->cancelar($nota->chave_acesso, $request->motivo, $nota->ambiente ?? 'HOMOLOGACAO');
+
+            if ($resultado->status !== 'CANCELADA') {
+                return response()->json(['message' => $resultado->mensagemErro ?? 'Falha ao cancelar nota.'], 422);
+            }
+        }
+
         // Spedy/Focus (qualquer modelo — NFS-e, NF-e ou NFC-e): cancelamento
         // real via API do provedor. Até esta sessão os dois providers só
         // roteavam certo pra NFS-e; NF-e/NFC-e agora também têm o
