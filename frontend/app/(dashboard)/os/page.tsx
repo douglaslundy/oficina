@@ -66,6 +66,7 @@ export default function OSPage() {
   const [status, setStatus] = useState('')
   const [dataInicio, setDataInicio] = useState('')
   const [dataFim, setDataFim] = useState('')
+  const [mostrarCanceladas, setMostrarCanceladas] = useState(false)
 
   useEffect(() => {
     const t = setTimeout(() => {
@@ -75,13 +76,14 @@ export default function OSPage() {
       if (status)     params.status      = status
       if (dataInicio) params.data_inicio = dataInicio
       if (dataFim)    params.data_fim    = dataFim
+      if (mostrarCanceladas) params.incluir_canceladas = '1'
       api.get('/os', { params })
         .then(r => setOs(r.data.data ?? []))
         .catch(() => setOs([]))
         .finally(() => setLoading(false))
     }, 300)
     return () => clearTimeout(t)
-  }, [search, status, dataInicio, dataFim])
+  }, [search, status, dataInicio, dataFim, mostrarCanceladas])
 
   const columns: Column<OS>[] = [
     { key: 'numero',      label: '#OS',      render: r => <span className="font-mono" style={{ color: 'var(--accent)' }}>#{r.numero}</span> },
@@ -96,7 +98,7 @@ export default function OSPage() {
     { key: 'criado_em',   label: 'Data',     render: r => formatarData(r.criado_em) },
   ]
 
-  const temFiltro = !!(search || status || dataInicio || dataFim)
+  const temFiltro = !!(search || status || dataInicio || dataFim || mostrarCanceladas)
 
   return (
     <div>
@@ -126,9 +128,18 @@ export default function OSPage() {
           <span style={{ color: 'var(--muted)', fontSize: 13 }}>até</span>
           <input type="date" value={dataFim} onChange={e => setDataFim(e.target.value)} style={I} />
         </div>
+        <label style={{ display: 'flex', alignItems: 'center', gap: 8, color: 'var(--muted)', fontSize: 13, cursor: 'pointer' }}>
+          <input
+            type="checkbox"
+            checked={mostrarCanceladas}
+            onChange={e => setMostrarCanceladas(e.target.checked)}
+            style={{ width: 16, height: 16, accentColor: 'var(--accent)', cursor: 'pointer' }}
+          />
+          Mostrar OS canceladas
+        </label>
         {temFiltro && (
           <button
-            onClick={() => { setSearch(''); setStatus(''); setDataInicio(''); setDataFim('') }}
+            onClick={() => { setSearch(''); setStatus(''); setDataInicio(''); setDataFim(''); setMostrarCanceladas(false) }}
             style={{ ...I, background: 'transparent', color: 'var(--muted)', cursor: 'pointer' }}
           >
             Limpar

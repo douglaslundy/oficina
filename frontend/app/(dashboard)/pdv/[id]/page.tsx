@@ -64,6 +64,7 @@ export default function VendaDetalhe() {
   // Modal de pagamento multiplo
   const [showPagModal, setShowPagModal] = useState(false)
   const [entradas, setEntradas] = useState<{ forma: string; valor: string }[]>([{ forma: 'DINHEIRO', valor: '' }])
+  const [descontoModal, setDescontoModal] = useState('')
   const [salvandoPag, setSalvandoPag] = useState(false)
 
   const load = useCallback(() => {
@@ -81,12 +82,14 @@ export default function VendaDetalhe() {
 
   function abrirModal() {
     setEntradas([{ forma: 'DINHEIRO', valor: '' }])
+    setDescontoModal('')
     setShowPagModal(true)
   }
 
   function fecharModal() {
     setShowPagModal(false)
     setEntradas([{ forma: 'DINHEIRO', valor: '' }])
+    setDescontoModal('')
   }
 
   function addEntrada() {
@@ -106,10 +109,17 @@ export default function VendaDetalhe() {
     if (validas.length === 0) {
       setToast({ msg: 'Informe pelo menos um valor.', type: 'danger' }); return
     }
+    const desconto = parseFloat(descontoModal)
     setSalvandoPag(true)
     try {
-      for (const e of validas) {
-        await api.post(`/os/${id}/pagamentos`, { forma_pagamento: e.forma, valor: parseFloat(e.valor) })
+      for (const [idx, e] of validas.entries()) {
+        await api.post(`/os/${id}/pagamentos`, {
+          forma_pagamento: e.forma,
+          valor: parseFloat(e.valor),
+          // Desconto é um valor absoluto na OS — só precisa ir na primeira
+          // requisição do lote.
+          ...(idx === 0 && desconto > 0 ? { desconto } : {}),
+        })
       }
       setToast({ msg: `${validas.length > 1 ? validas.length + ' pagamentos registrados!' : 'Pagamento registrado!'}`, type: 'success' })
       fecharModal()
@@ -357,10 +367,21 @@ export default function VendaDetalhe() {
             <button onClick={addEntrada} style={{
               width: '100%', padding: '7px 0', borderRadius: 6, fontSize: 13,
               background: 'none', border: '1px dashed var(--border)', color: 'var(--muted)',
-              cursor: 'pointer', marginBottom: 18,
+              cursor: 'pointer', marginBottom: 14,
             }}>
               + Adicionar meio de pagamento
             </button>
+
+            {/* Desconto */}
+            <div style={{ marginBottom: 18 }}>
+              <label style={{ ...labelStyle, display: 'block', marginBottom: 4 }}>Desconto (R$)</label>
+              <input
+                type="number" min={0} step={0.01} placeholder="0,00"
+                value={descontoModal}
+                onChange={ev => setDescontoModal(ev.target.value)}
+                style={inputStyle}
+              />
+            </div>
 
             {/* Totalizador */}
             {entradas.length > 1 && (

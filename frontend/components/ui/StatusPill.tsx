@@ -10,10 +10,14 @@ const STATUS_MAP: Record<string, { label: string; cls: string }> = {
   AGUARDANDO_PECAS: { label: 'Aguard. Peças',  cls: 'pill-muted'   },
   CONCLUIDA:        { label: 'Concluída',      cls: 'pill-success' },
   CANCELADA:        { label: 'Cancelada',      cls: 'pill-danger'  },
-  ORCAMENTO_ENVIADO:  { label: 'ORÇAMENTO ENVIADO',  cls: 'pill-info'    },
-  ORCAMENTO_APROVADO: { label: 'ORÇAMENTO APROVADO', cls: 'pill-success' },
-  ORCAMENTO_PARCIAL:  { label: 'ORÇAMENTO PARCIAL',  cls: 'pill-accent'  },
-  ORCAMENTO_RECUSADO: { label: 'ORÇAMENTO RECUSADO', cls: 'pill-danger'  },
+  // Estados de orçamento (pré-OS) reaproveitam a mesma cor semântica do
+  // status "final" equivalente (ORÇAMENTO_RECUSADO ~ vermelho de CANCELADA,
+  // ORÇAMENTO_APROVADO ~ verde de CONCLUIDA etc.) — a variante "contorno"
+  // (pill-outline) os mantém visualmente distintos na coluna de Status.
+  ORCAMENTO_ENVIADO:  { label: 'Orçamento Enviado',   cls: 'pill-info pill-outline'    },
+  ORCAMENTO_APROVADO: { label: 'Orçamento Aprovado',  cls: 'pill-success pill-outline' },
+  ORCAMENTO_PARCIAL:  { label: 'Orçamento Parcial',   cls: 'pill-accent pill-outline'  },
+  ORCAMENTO_RECUSADO: { label: 'Orçamento Recusado',  cls: 'pill-danger pill-outline'  },
   NORMAL:           { label: 'Normal',         cls: 'pill-success' },
   BAIXO:            { label: 'Baixo',          cls: 'pill-accent'  },
   CRITICO:          { label: 'Crítico',        cls: 'pill-danger'  },

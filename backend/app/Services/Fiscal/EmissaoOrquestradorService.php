@@ -58,6 +58,27 @@ class EmissaoOrquestradorService
         $nfeId  = null;
         $nfseId = null;
 
+        // Rateio do desconto da OS (Tarefa 2026-09-22: desconto aplicado na
+        // OS/PDV) entre a NF-e e a NFS-e, proporcional ao subtotal de cada
+        // uma — não é um valor fiscal "chutado": é só a divisão do desconto
+        // já concedido ao cliente entre os 2 documentos que juntos compõem o
+        // valor total da venda, pra que a soma das notas bata com o que foi
+        // efetivamente cobrado. Peça sem produto (fora da NF-e) não entra na
+        // base do rateio — ela não tem como carregar desconto em documento
+        // fiscal nenhum.
+        $subtotalPecas    = (float) $pecas->sum(fn ($i) => (float) $i->quantidade * (float) $i->valor_unitario);
+        $subtotalServicos = (float) $servicos->sum(fn ($i) => (float) $i->quantidade * (float) $i->valor_unitario);
+        $subtotalRateio   = $subtotalPecas + $subtotalServicos;
+        // $os->desconto é clampado no subtotal de TODOS os itens da OS
+        // (OrdemServicoController::recalcularTotalComDesconto()), que pode
+        // incluir peça sem produto — essa não entra em nota fiscal nenhuma,
+        // então o desconto rateável aqui não pode passar do subtotal
+        // efetivamente faturável ($subtotalRateio), senão uma das notas
+        // sairia com valor_total negativo.
+        $descontoOs       = min((float) $os->desconto, $subtotalRateio);
+        $descontoPecas    = $subtotalRateio > 0 ? round($descontoOs * $subtotalPecas / $subtotalRateio, 2) : 0.0;
+        $descontoServicos = round($descontoOs - $descontoPecas, 2);
+
         if ($pecas->isNotEmpty() && !$nfeJaSatisfeita) {
             try {
                 $notaNfe = $this->criarNota->criar([
@@ -65,6 +86,7 @@ class EmissaoOrquestradorService
                     'os_id'             => $os->id,
                     'natureza_operacao' => 'Venda de Mercadoria',
                     'forma_pagamento'   => $os->forma_pagamento,
+                    'desconto'          => $descontoPecas,
                     'itens'             => $pecas->map(fn ($i) => [
                         'produto_id'     => $i->produto_id,
                         'quantidade'     => (float) $i->quantidade,
@@ -85,7 +107,8 @@ class EmissaoOrquestradorService
                     'os_id'             => $os->id,
                     'natureza_operacao' => 'Prestação de Serviços',
                     'forma_pagamento'   => $os->forma_pagamento,
-                    'subtotal'          => (float) $servicos->sum(fn ($i) => (float) $i->quantidade * (float) $i->valor_unitario),
+                    'desconto'          => $descontoServicos,
+                    'subtotal'          => $subtotalServicos,
                     'observacoes'       => $servicos->map(fn ($i) => $i->descricao)->join('; '),
                 ]);
                 $this->iniciarEmissao->iniciar($notaNfse);

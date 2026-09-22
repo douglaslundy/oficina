@@ -97,4 +97,28 @@ class OrcamentoAprovacaoTest extends TestCase
 
         $this->assertEquals(0, $c['os']->fresh()->valor_total);
     }
+
+    /**
+     * Tarefa 2026-09-22: um desconto pode já ter sido aplicado à OS antes
+     * do cliente responder o orçamento (ex.: sinal pago com desconto). Se
+     * só parte dos itens for aprovada, o subtotal aprovado pode ficar menor
+     * que o desconto já registrado — precisa reclampar, senão valor_total
+     * ficaria negativo.
+     */
+    public function test_desconto_ja_aplicado_e_reclampado_quando_aprovacao_parcial_reduz_o_subtotal(): void
+    {
+        $c = $this->cenario();
+        // Desconto de R$120 cabia no total original (100 serviço + 50 peça = 150).
+        $c['os']->update(['desconto' => 120]);
+
+        $this->postJson("/api/orcamento/{$c['token']}/responder", [
+            'servicos_aprovados' => [$c['servico']->id],
+            'pecas_aprovadas'    => [], // peça recusada — sobra só o serviço de R$100.
+        ])->assertOk()->assertJsonFragment(['status' => 'PARCIAL']);
+
+        $fresh = $c['os']->fresh();
+        // Subtotal aprovado (100) é menor que o desconto (120) — reclampa pra 100.
+        $this->assertSame(100.0, (float) $fresh->desconto);
+        $this->assertSame(0.0, (float) $fresh->valor_total);
+    }
 }

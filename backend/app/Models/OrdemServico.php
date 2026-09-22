@@ -26,7 +26,7 @@ class OrdemServico extends Model
         'cliente_id', 'mecanico_id', 'veiculo_id', 'veiculo_descricao', 'veiculo_placa',
         'km_atual',
         'problema_relatado', 'status', 'forma_pagamento', 'prazo_entrega',
-        'valor_total', 'valor_pago', 'numero', 'oficina_id',
+        'valor_total', 'valor_pago', 'desconto', 'numero', 'oficina_id',
         'venda_a_prazo', 'prazo_pagamento_dias', 'data_vencimento_pagamento',
         'tipo',
     ];
@@ -38,6 +38,7 @@ class OrdemServico extends Model
         'atualizado_em'              => 'datetime',
         'valor_total'                => 'float',
         'valor_pago'                 => 'float',
+        'desconto'                   => 'float',
         'venda_a_prazo'              => 'boolean',
         'km_atual'                   => 'integer',
     ];
@@ -45,7 +46,7 @@ class OrdemServico extends Model
     public function getActivitylogOptions(): LogOptions
     {
         return LogOptions::defaults()
-            ->logOnly(['status', 'valor_total', 'valor_pago', 'forma_pagamento'])
+            ->logOnly(['status', 'valor_total', 'valor_pago', 'desconto', 'forma_pagamento'])
             ->logOnlyDirty()
             ->dontLogEmptyChanges()
             ->useLogName(TenancyContext::getSlug() ?? 'default');

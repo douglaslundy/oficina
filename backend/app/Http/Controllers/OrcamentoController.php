@@ -200,10 +200,16 @@ class OrcamentoController extends Controller
                     }
                 }
 
-                // valor_total = soma dos itens aprovados (serviços + peças)
-                $valorTotal = round((float) $itens
+                // valor_total = soma dos itens aprovados (serviços + peças),
+                // reclampando um desconto que já tivesse sido aplicado à OS
+                // antes da aprovação do orçamento (ex.: sinal pago com
+                // desconto) — mesma regra usada em
+                // OrdemServicoController::recalcularTotalComDesconto().
+                $subtotalAprovado = round((float) $itens
                     ->whereIn('id', $aprovados)
                     ->sum('valor_total'), 2);
+                $desconto   = round(min((float) $ordem->desconto, $subtotalAprovado), 2);
+                $valorTotal = round($subtotalAprovado - $desconto, 2);
 
                 // Status conforme a proporção de itens (serviços + peças) aprovados
                 if ($qtdAprovados === 0) {
@@ -217,7 +223,7 @@ class OrcamentoController extends Controller
                     $statusOs  = 'ORCAMENTO_PARCIAL';
                 }
 
-                $ordem->update(['status' => $statusOs, 'valor_total' => $valorTotal]);
+                $ordem->update(['status' => $statusOs, 'valor_total' => $valorTotal, 'desconto' => $desconto]);
                 $orcamento->update(['status' => $statusOrc, 'respondido_em' => now()]);
 
                 // Alerta para a oficina

@@ -254,4 +254,98 @@ class EmissaoOrquestradorTest extends TestCase
         // ISS é "por dentro" — o total continua R$150, não R$153,02.
         $this->assertSame(150.0, (float) $nfse->valor_total);
     }
+
+    /**
+     * Tarefa 2026-09-22: campo de desconto na OS/PDV. O desconto da OS
+     * precisa ser rateado proporcionalmente entre a NF-e (peças) e a NFS-e
+     * (serviços) — não pode ser jogado inteiro num dos dois documentos nem
+     * ignorado. Cenário base: peças R$30 + serviços R$150 = R$180. Desconto
+     * de R$18 (10% do total) → 10% de cada subtotal: R$3 na NF-e, R$15 na
+     * NFS-e.
+     */
+    public function test_desconto_da_os_e_rateado_proporcionalmente_entre_nfe_e_nfse(): void
+    {
+        [$oficina, $token, $os] = $this->cenario();
+        $os->update(['desconto' => 18]);
+
+        Http::fake(['*focusnfe*' => Http::response(['status' => 'processando'], 202)]);
+
+        $res = $this->withToken($token)->withHeaders(['X-Tenant' => $oficina->slug])
+            ->postJson("/api/os/{$os->id}/emitir-notas")
+            ->assertStatus(202);
+
+        $nfe  = NotaFiscal::find($res->json('nfe_id'));
+        $nfse = NotaFiscal::find($res->json('nfse_id'));
+
+        $this->assertSame(3.0, (float) $nfe->desconto, 'NF-e leva 30/180 = 1/6 do desconto de R$18.');
+        $this->assertSame(27.0, (float) $nfe->valor_total);
+        $this->assertSame(15.0, (float) $nfse->desconto, 'NFS-e leva 150/180 = 5/6 do desconto de R$18.');
+        $this->assertSame(135.0, (float) $nfse->valor_total);
+        // A soma dos dois documentos tem que bater com o total cobrado do
+        // cliente (subtotal 180 - desconto 18 = 162) — nenhum centavo pode
+        // se perder ou duplicar no rateio.
+        $this->assertSame(162.0, (float) $nfe->valor_total + (float) $nfse->valor_total);
+    }
+
+    /**
+     * Quando só uma categoria existe (aqui: só peça, sem serviço), o
+     * desconto inteiro tem que ir pra ela — a fórmula proporcional
+     * degenera corretamente pra esse caso (subtotalServicos = 0).
+     */
+    public function test_desconto_vai_inteiro_para_a_unica_categoria_quando_so_ha_pecas(): void
+    {
+        [$oficina, $token, $os] = $this->cenario();
+        OsItem::where('os_id', $os->id)->where('tipo', 'SERVICO')->delete();
+        $os->update(['desconto' => 10]);
+
+        Http::fake(['*focusnfe*' => Http::response(['status' => 'processando'], 202)]);
+
+        $res = $this->withToken($token)->withHeaders(['X-Tenant' => $oficina->slug])
+            ->postJson("/api/os/{$os->id}/emitir-notas")
+            ->assertStatus(202);
+
+        $this->assertNull($res->json('nfse_id'));
+        $nfe = NotaFiscal::find($res->json('nfe_id'));
+        $this->assertSame(10.0, (float) $nfe->desconto);
+        $this->assertSame(20.0, (float) $nfe->valor_total, 'Peça de R$30 - desconto de R$10 = R$20.');
+    }
+
+    /**
+     * Achado ao escrever estes testes (2026-09-22): `$os->desconto` é
+     * clampado no subtotal de TODOS os itens da OS, incluindo peça sem
+     * produto — que nunca vira NF-e nem NFS-e. Sem reclampar aqui também,
+     * um desconto que "cabe" no subtotal total da OS podia não caber no
+     * subtotal faturável (só peça-com-produto + serviço), deixando uma das
+     * notas com valor_total negativo.
+     */
+    public function test_desconto_que_extrapola_o_subtotal_faturavel_e_reclampado(): void
+    {
+        [$oficina, $token, $os] = $this->cenario();
+        // Peça sem produto de R$50: entra no subtotal "bruto" da OS, mas
+        // nunca vira nota — não pode fazer parte da base do rateio.
+        OsItem::create([
+            'os_id' => $os->id, 'oficina_id' => $oficina->id, 'tipo' => 'PECA',
+            'produto_id' => null, 'descricao' => 'Peça avulsa sem cadastro', 'quantidade' => 1, 'valor_unitario' => 50,
+        ]);
+        // Subtotal faturável (peça c/ produto R$30 + serviço R$150) = R$180.
+        // Subtotal BRUTO da OS (com a peça avulsa de R$50) = R$230 — um
+        // desconto de R$200 cabe no bruto, mas ultrapassa o faturável.
+        $os->update(['desconto' => 200]);
+
+        Http::fake(['*focusnfe*' => Http::response(['status' => 'processando'], 202)]);
+
+        $res = $this->withToken($token)->withHeaders(['X-Tenant' => $oficina->slug])
+            ->postJson("/api/os/{$os->id}/emitir-notas")
+            ->assertStatus(202);
+
+        $nfe  = NotaFiscal::find($res->json('nfe_id'));
+        $nfse = NotaFiscal::find($res->json('nfse_id'));
+
+        $this->assertGreaterThanOrEqual(0.0, (float) $nfe->valor_total, 'NF-e não pode sair com valor_total negativo.');
+        $this->assertGreaterThanOrEqual(0.0, (float) $nfse->valor_total, 'NFS-e não pode sair com valor_total negativo.');
+        // Reclampado em 180 (subtotal faturável): NF-e leva 30/180 x 180 =
+        // 30 (zera), NFS-e leva 150/180 x 180 = 150 (zera). Nenhuma negativa.
+        $this->assertSame(0.0, (float) $nfe->valor_total);
+        $this->assertSame(0.0, (float) $nfse->valor_total);
+    }
 }

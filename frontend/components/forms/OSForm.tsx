@@ -294,7 +294,11 @@ export function OSForm({ initialData, onSuccess, onConcluir, onCancelar }: OSFor
           status:                data.status,
           mecanico_id:           data.mecanico_id || null,
           problema_relatado:     data.problema_relatado,
-          forma_pagamento:       data.forma_pagamento,
+          // forma_pagamento não é mais editável por aqui — o formulário de
+          // pagamento (na tela de detalhe da OS) é a única fonte dela agora
+          // que o campo duplicado foi removido. Reenviar o valor antigo
+          // capturado no mount deste form sobrescreveria silenciosamente o
+          // que o endpoint de pagamento já tiver gravado.
           prazo_entrega:         data.prazo_entrega || null,
           venda_a_prazo:         data.venda_a_prazo,
           prazo_pagamento_dias:  data.prazo_pagamento_dias,
@@ -316,7 +320,6 @@ export function OSForm({ initialData, onSuccess, onConcluir, onCancelar }: OSFor
   }
 
   const STATUS_OPTIONS = ['ABERTA', 'EM_ANDAMENTO', 'AGUARDANDO_PECAS', 'CONCLUIDA', 'CANCELADA']
-  const PAGAMENTO_OPTIONS = ['Dinheiro', 'Cartão de Crédito', 'Cartão de Débito', 'PIX', 'Cheque', 'Boleto']
 
   const clienteNome = initialData?.cliente?.nome
   const mecanicoNome = initialData?.mecanico?.nome
@@ -467,15 +470,6 @@ export function OSForm({ initialData, onSuccess, onConcluir, onCancelar }: OSFor
         <div>
           <label style={L}>Prazo de entrega</label>
           <input type="date" {...register('prazo_entrega')} style={S} />
-        </div>
-
-        {/* Forma de pagamento */}
-        <div>
-          <label style={L}>Forma de pagamento</label>
-          <select {...register('forma_pagamento')} style={S}>
-            <option value="">Selecionar...</option>
-            {PAGAMENTO_OPTIONS.map(p => <option key={p} value={p}>{p}</option>)}
-          </select>
         </div>
 
         {/* Venda a prazo */}
@@ -792,13 +786,19 @@ function NewItemInline({ osId, servicos, onAdded }: {
           </select>
         )}
       </div>
-      <div style={{ display: 'grid', gridTemplateColumns: '80px 130px 1fr', gap: 8, alignItems: 'center' }}>
-        <input type="number" value={quantidade} min={0.01} step={0.01}
-          onChange={e => setQuantidade(Number(e.target.value))}
-          placeholder="Qtd" style={SI} />
-        <input type="number" value={valorUnitario} min={0} step={0.01}
-          onChange={e => setValorUnitario(Number(e.target.value))}
-          placeholder="Valor unit. (R$)" style={SI} />
+      <div style={{ display: 'grid', gridTemplateColumns: '80px 130px 1fr', gap: 8, alignItems: 'end' }}>
+        <div>
+          <label style={{ color: 'var(--muted)', fontSize: 11, display: 'block', marginBottom: 4 }}>Quantidade</label>
+          <input type="number" value={quantidade} min={0.01} step={0.01}
+            onChange={e => setQuantidade(Number(e.target.value))}
+            placeholder="Qtd" style={SI} />
+        </div>
+        <div>
+          <label style={{ color: 'var(--muted)', fontSize: 11, display: 'block', marginBottom: 4 }}>Valor unit. (R$)</label>
+          <input type="number" value={valorUnitario} min={0} step={0.01}
+            onChange={e => setValorUnitario(Number(e.target.value))}
+            placeholder="Valor unit. (R$)" style={SI} />
+        </div>
         <button type="button" onClick={() => handleAdd()} disabled={loading}
           style={{ padding: '7px 16px', background: 'var(--accent)', color: '#000', borderRadius: 6, border: 'none', cursor: loading ? 'not-allowed' : 'pointer', fontSize: 13, fontWeight: 700 }}>
           {loading ? '...' : 'Adicionar'}

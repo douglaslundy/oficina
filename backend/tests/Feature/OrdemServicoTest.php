@@ -300,4 +300,158 @@ class OrdemServicoTest extends TestCase
 
         $this->assertEquals('CANCELADA', \App\Models\OrdemServico::find($os['id'])->status);
     }
+
+    /**
+     * Tarefa 2026-09-22: campo de desconto ao registrar pagamento (OS e
+     * PDV). Testes cobrindo o clamp (desconto nunca deixa o total negativo)
+     * e o reflexo do desconto no `valor_total`/`saldo_devedor` — a
+     * integração fiscal (rateio entre NF-e/NFS-e) tem cobertura própria em
+     * `Fiscal/EmissaoOrquestradorTest`.
+     */
+    public function test_criar_os_com_desconto_reduz_valor_total(): void
+    {
+        [$token, $mecId, $cliId] = $this->setupEntities();
+        $produto = $this->criarProduto(10);
+
+        $response = $this->withToken($token)->postJson('/api/os', [
+            'cliente_id' => $cliId, 'mecanico_id' => $mecId, 'status' => 'ABERTA', 'km_atual' => 1000,
+            'itens' => [[
+                'tipo' => 'PECA', 'produto_id' => $produto->id,
+                'descricao' => 'Filtro', 'quantidade' => 2, 'valor_unitario' => 50,
+            ]],
+            'desconto' => 30,
+        ]);
+
+        $response->assertStatus(201);
+        $os = \App\Models\OrdemServico::find($response->json('data.id'));
+        // Subtotal dos itens é 2 x R$50 = R$100 — com desconto de R$30, total = R$70.
+        $this->assertSame(30.0, (float) $os->desconto);
+        $this->assertSame(70.0, (float) $os->valor_total);
+    }
+
+    public function test_desconto_maior_que_subtotal_e_clampado_sem_deixar_total_negativo(): void
+    {
+        [$token, $mecId, $cliId] = $this->setupEntities();
+        $produto = $this->criarProduto(10);
+
+        $os = $this->withToken($token)->postJson('/api/os', [
+            'cliente_id' => $cliId, 'mecanico_id' => $mecId, 'status' => 'ABERTA', 'km_atual' => 1000,
+            'itens' => [[
+                'tipo' => 'PECA', 'produto_id' => $produto->id,
+                'descricao' => 'Filtro', 'quantidade' => 1, 'valor_unitario' => 50,
+            ]],
+            'desconto' => 500,
+        ])->json('data');
+
+        $fresh = \App\Models\OrdemServico::find($os['id']);
+        $this->assertSame(50.0, (float) $fresh->desconto, 'Desconto não pode ultrapassar o subtotal dos itens.');
+        $this->assertSame(0.0, (float) $fresh->valor_total);
+    }
+
+    public function test_atualizar_desconto_da_os_recalcula_valor_total(): void
+    {
+        [$token, $mecId, $cliId] = $this->setupEntities();
+        $produto = $this->criarProduto(10);
+
+        $os = $this->withToken($token)->postJson('/api/os', [
+            'cliente_id' => $cliId, 'mecanico_id' => $mecId, 'status' => 'ABERTA', 'km_atual' => 1000,
+            'itens' => [[
+                'tipo' => 'PECA', 'produto_id' => $produto->id,
+                'descricao' => 'Filtro', 'quantidade' => 2, 'valor_unitario' => 50,
+            ]],
+        ])->json('data');
+        $this->assertSame(100.0, (float) \App\Models\OrdemServico::find($os['id'])->valor_total);
+
+        $this->withToken($token)->putJson("/api/os/{$os['id']}", ['desconto' => 25])->assertOk();
+
+        $fresh = \App\Models\OrdemServico::find($os['id']);
+        $this->assertSame(25.0, (float) $fresh->desconto);
+        $this->assertSame(75.0, (float) $fresh->valor_total);
+    }
+
+    /**
+     * Item removido depois do desconto aplicado pode deixar o desconto
+     * maior que o novo subtotal — `recalcularTotalComDesconto()` precisa
+     * reclampar, não só recalcular o subtotal.
+     */
+    public function test_remover_item_reclampa_desconto_maior_que_o_novo_subtotal(): void
+    {
+        [$token, $mecId, $cliId] = $this->setupEntities();
+        $produtoA = $this->criarProduto(10);
+        $produtoB = $this->criarProduto(10);
+
+        $os = $this->withToken($token)->postJson('/api/os', [
+            'cliente_id' => $cliId, 'mecanico_id' => $mecId, 'status' => 'ABERTA', 'km_atual' => 1000,
+            'itens' => [
+                ['tipo' => 'PECA', 'produto_id' => $produtoA->id, 'descricao' => 'A', 'quantidade' => 1, 'valor_unitario' => 60],
+                ['tipo' => 'PECA', 'produto_id' => $produtoB->id, 'descricao' => 'B', 'quantidade' => 1, 'valor_unitario' => 40],
+            ],
+        ])->json('data');
+
+        $this->withToken($token)->putJson("/api/os/{$os['id']}", ['desconto' => 80])->assertOk();
+        $this->assertSame(20.0, (float) \App\Models\OrdemServico::find($os['id'])->valor_total);
+
+        $itemB = collect($os['itens'])->firstWhere('descricao', 'B');
+        $this->withToken($token)->deleteJson("/api/os/{$os['id']}/itens/{$itemB['id']}")->assertOk();
+
+        $fresh = \App\Models\OrdemServico::find($os['id']);
+        // Novo subtotal é só o item A (60) — o desconto de 80 não cabe mais.
+        $this->assertSame(60.0, (float) $fresh->desconto);
+        $this->assertSame(0.0, (float) $fresh->valor_total);
+    }
+
+    public function test_registrar_pagamento_com_desconto_reduz_saldo_devedor_e_grava_forma_pagamento(): void
+    {
+        [$token, $mecId, $cliId] = $this->setupEntities();
+        $produto = $this->criarProduto(10);
+
+        $os = $this->withToken($token)->postJson('/api/os', [
+            'cliente_id' => $cliId, 'mecanico_id' => $mecId, 'status' => 'ABERTA', 'km_atual' => 1000,
+            'itens' => [[
+                'tipo' => 'PECA', 'produto_id' => $produto->id,
+                'descricao' => 'Filtro', 'quantidade' => 2, 'valor_unitario' => 50,
+            ]],
+        ])->json('data');
+
+        $this->withToken($token)->postJson("/api/os/{$os['id']}/pagamentos", [
+            'forma_pagamento' => 'PIX', 'valor' => 80, 'desconto' => 20,
+        ])->assertStatus(201);
+
+        $fresh = \App\Models\OrdemServico::find($os['id']);
+        $this->assertSame(20.0, (float) $fresh->desconto);
+        $this->assertSame(80.0, (float) $fresh->valor_total, 'valor_total = 100 (subtotal) - 20 (desconto).');
+        $this->assertSame(80.0, (float) $fresh->valor_pago);
+        $this->assertSame(0.0, (float) $fresh->saldo_devedor);
+        // Formulário de pagamento é agora a única fonte de forma_pagamento da OS.
+        $this->assertSame('PIX', $fresh->forma_pagamento);
+    }
+
+    public function test_listagem_de_os_esconde_canceladas_por_padrao(): void
+    {
+        [$token, $mecId, $cliId] = $this->setupEntities();
+
+        $aberta = $this->withToken($token)->postJson('/api/os', [
+            'cliente_id' => $cliId, 'mecanico_id' => $mecId, 'status' => 'ABERTA', 'km_atual' => 1000,
+        ])->json('data');
+        $cancelada = $this->withToken($token)->postJson('/api/os', [
+            'cliente_id' => $cliId, 'mecanico_id' => $mecId, 'status' => 'ABERTA', 'km_atual' => 1000,
+        ])->json('data');
+        $this->withToken($token)->putJson("/api/os/{$cancelada['id']}", [
+            'status' => 'CANCELADA', 'devolver_estoque' => false,
+        ])->assertOk();
+
+        // Padrão (sem filtro): OS cancelada some da lista.
+        $semFiltro = $this->withToken($token)->getJson('/api/os')->json('data');
+        $this->assertTrue(collect($semFiltro)->contains('id', $aberta['id']));
+        $this->assertFalse(collect($semFiltro)->contains('id', $cancelada['id']));
+
+        // Checkbox "Mostrar OS canceladas" marcado: volta a aparecer.
+        $comCheckbox = $this->withToken($token)->getJson('/api/os?incluir_canceladas=1')->json('data');
+        $this->assertTrue(collect($comCheckbox)->contains('id', $cancelada['id']));
+
+        // Filtro explícito de status também prevalece sobre o padrão.
+        $filtroExplicito = $this->withToken($token)->getJson('/api/os?status=CANCELADA')->json('data');
+        $this->assertTrue(collect($filtroExplicito)->contains('id', $cancelada['id']));
+        $this->assertFalse(collect($filtroExplicito)->contains('id', $aberta['id']));
+    }
 }

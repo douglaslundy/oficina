@@ -110,6 +110,9 @@
   <div class="totals">
     <div class="total-row"><span>Subtotal serviços</span><span>R$ {{ number_format($os->itens->where('tipo','SERVICO')->sum('valor_total'), 2, ',', '.') }}</span></div>
     <div class="total-row"><span>Subtotal peças</span><span>R$ {{ number_format($os->itens->where('tipo','PECA')->sum('valor_total'), 2, ',', '.') }}</span></div>
+    @if($os->desconto > 0)
+    <div class="total-row"><span>Desconto</span><span>− R$ {{ number_format($os->desconto, 2, ',', '.') }}</span></div>
+    @endif
     <div class="total-final"><span>TOTAL</span><span>R$ {{ number_format($os->valor_total, 2, ',', '.') }}</span></div>
     <div class="total-row" style="margin-top:8px;"><span>Valor pago</span><span style="color:#2e7d32;">R$ {{ number_format($os->valor_pago, 2, ',', '.') }}</span></div>
     @if($os->saldo_devedor > 0)

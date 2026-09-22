@@ -69,7 +69,9 @@ export default function ClienteDetailPage() {
   useEffect(() => {
     Promise.all([
       api.get(`/clientes/${id}`),
-      api.get(`/os?cliente_id=${id}&tipo=OS,VENDA_BALCAO`),
+      // Histórico do cliente é um registro completo — inclui OS canceladas
+      // (o novo padrão de ocultá-las é só da listagem principal de OS).
+      api.get(`/os?cliente_id=${id}&tipo=OS,VENDA_BALCAO&incluir_canceladas=1`),
       api.get(`/clientes/${id}/veiculos`),
     ]).then(([c, o, v]) => {
       setCliente(c.data.data)

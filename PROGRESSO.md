@@ -5824,3 +5824,135 @@ o teste real confirmar o comportamento de cada provedor.
   — dev server não está rodando. Esta é uma pendência legítima; a lógica está
   correta e já compilada sem erros TypeScript.
 
+
+## 2026-09-22 — OS: cores de status, desconto no pagamento (OS+PDV), fluxo de pagamento a prazo
+
+Lista de 8 pedidos do usuário (colada de uma vez, sem spec/plano formal —
+já vinham com o comportamento desejado bem descrito). Não usei
+brainstorming/writing-plans por não haver ambiguidade real de requisito;
+usei investigação tipo systematic-debugging pra achar a causa raiz de cada
+"bug" antes de mexer.
+
+### O que foi feito
+1. **Cores de status da OS**: a causa raiz não era o mapeamento em si
+   (`StatusPill.tsx` já diferenciava ABERTA/EM_ANDAMENTO/AGUARDANDO_PECAS/
+   CONCLUIDA/CANCELADA) — era que os 4 status de orçamento (ORCAMENTO_
+   ENVIADO/APROVADO/PARCIAL/RECUSADO, que também aparecem na coluna Status
+   de uma OS) reusavam exatamente as mesmas 4 cores dos status "finais"
+   (ex.: ORCAMENTO_RECUSADO e CANCELADA, ambos vermelhos). Adicionei uma
+   variante `.pill-outline` (mesma cor, fundo transparente + borda) em
+   `globals.css`, aplicada só aos 4 status de orçamento.
+2. Checkbox "Mostrar OS canceladas" (default false) em `os/page.tsx` +
+   backend (`OrdemServicoController::index()`) esconde CANCELADA por
+   padrão quando não há filtro de status explícito nem o novo param
+   `incluir_canceladas=1`. **Corrigido de propósito**: a página de detalhe
+   do cliente (`clientes/[id]/page.tsx`) também lista OS via esse mesmo
+   endpoint — sem ajuste ela perderia as OS canceladas do histórico, então
+   passei `incluir_canceladas=1` explicitamente ali (histórico é registro
+   completo, não a fila de trabalho ativo).
+3. **Desconto** (OS e PDV): coluna nova `ordens_servico.desconto` (migration
+   `2026_09_22_000001`, não rodada ainda — sem Postgres neste ambiente).
+   Campo fica no formulário de pagamento (tanto na OS quanto no PDV/venda
+   balcão e na tela de detalhe da venda balcão), não num campo solto da OS
+   — é sempre um valor ABSOLUTO que substitui o desconto atual, não soma.
+   `OrdemServicoController` reclampa desconto ao subtotal em todo lugar que
+   recalcula valor_total (store/update/addItem/updateItem/removeItem/
+   addPagamento) via helper `recalcularTotalComDesconto()`.
+   `OrcamentoController::responderOrcamento` também reclampa (podia ter um
+   desconto já aplicado antes da aprovação do orçamento).
+   **Integração fiscal**: `EmissaoOrquestradorService` rateia o desconto da
+   OS proporcionalmente entre NF-e (peças) e NFS-e (serviços) pelo subtotal
+   de cada uma — decisão de design registrada no código, não inventa valor
+   fiscal, só divide o desconto já concedido entre os 2 documentos.
+   `CriarNotaFiscalService` já suportava `desconto` no payload (usado antes
+   só pelo form manual de NF) — não precisou mudar.
+4. **Venda a prazo**: card de pagamento (na tela de detalhe da OS) some
+   quando `venda_a_prazo=true`, substituído por botão "💳 Realizar
+   Pagamento" que revela os campos de novo.
+5. Removido o `<select>` de "Forma de pagamento" duplicado ao lado do
+   datepicker de Prazo de entrega em `OSForm.tsx`. Agora a única fonte da
+   forma de pagamento da OS é o próprio formulário de pagamento
+   (`addPagamento()` grava `os.forma_pagamento` a cada pagamento
+   registrado). **Achado ao remover**: `OSForm.onSubmit` reenviava
+   `data.forma_pagamento` (valor capturado no mount, nunca mais
+   sincronizado) em todo PUT de edição — teria sobrescrito silenciosamente
+   o valor gravado pelo endpoint de pagamento. Removido do payload de
+   update também.
+6. Placeholders "sumiam" (mascarados por valor default 1/0, nunca vazios)
+   nos campos Qtd/Valor unit. do bloco "+ Adicionar item" (`NewItemInline`,
+   usado ao editar uma OS existente) — trocado por `<label>` persistente
+   (mesmo padrão já usado no resto do formulário). O modo de criação de OS
+   nova já tinha cabeçalho de coluna, não precisou mexer.
+7. Bug: remover o último pagamento de uma OS abria o modal "Cancelar esta
+   OS?" (`handleRemovePagamento` tinha essa lógica explícita). Removida —
+   remover pagamento só remove o pagamento.
+8. Campos de pagamento (registrar/remover) trocaram de gate
+   `os.status !== 'CONCLUIDA'` pra `saldo_devedor > 0` — antes ficavam
+   escondidos numa OS concluída mesmo com saldo em aberto.
+
+### Validação feita nesta sessão (sem Docker/Postgres disponível aqui)
+- `npx tsc --noEmit` limpo.
+- `php -l` limpo nos arquivos PHP tocados.
+- `php vendor/bin/phpunit --testsuite=Unit`: 416 testes, 11 erros — todos
+  **pré-existentes**, nenhum nos arquivos tocados (4 exigem Postgres via
+  RefreshDatabase, ignorados aqui; 4 são `CertificadoStoreTest` batendo
+  num bug de tipagem do `openssl_csr_sign()` neste PHP/OpenSSL local,
+  também alheio a esta mudança). Confirmado via
+  `grep RefreshDatabase`/inspeção de arquivo, não só suposição.
+- PDF da OS (`resources/views/pdf/os.blade.php`) ganhou linha "Desconto"
+  entre os subtotais e o TOTAL (sem isso o PDF pareceria ter erro de soma
+  quando há desconto).
+
+### Pendente — precisa do ambiente Docker/Postgres do usuário
+- Rodar a migration nova (`php artisan migrate`).
+- Feature tests que usam `RefreshDatabase`
+  (`OrdemServicoTest`/`EmissaoOrquestradorTest`/`ClienteStatusServiceTest`/
+  `OrcamentoAprovacaoTest`) — nunca executados contra Postgres real nesta
+  sessão, mesma limitação recorrente já registrada em rodadas anteriores
+  deste arquivo.
+- Validação manual no navegador (Claude-in-Chrome não usado nesta sessão):
+  fluxo completo de pagamento com desconto na OS e no PDV, botão "Realizar
+  Pagamento" numa venda a prazo, checkbox de OS canceladas, cores dos pills
+  de orçamento lado a lado com os status finais.
+
+## 2026-09-22 (cont.) — Testes Feature novos pro desconto + achado real no rateio fiscal
+
+Usuário perguntou se as regras fiscais foram validadas de verdade — resposta
+honesta: não, só por leitura de código. Ele escolheu "escrever testes
+Feature novos" como próximo passo. Escrevi 20 testes novos (não rodam aqui,
+sem Postgres — confirmado: os 32 testes de `OrdemServicoTest` +
+`EmissaoOrquestradorTest` + `OrcamentoAprovacaoTest`, incluindo os 12 já
+comprovados que já existiam, falham todos com o **mesmo** erro idêntico
+`SQLSTATE[08006] could not connect to server: Connection refused` no
+`setUp()`/`RefreshDatabase` — ou seja, os testes novos carregam e executam
+igual aos antigos, só faltando o Postgres pra rodar de verdade).
+
+**Achado real ao escrever os testes** (exatamente o tipo de coisa que só
+aparece tentando cobrir o código, não só lendo): `EmissaoOrquestradorService`
+ratava `$os->desconto` proporcionalmente entre NF-e/NFS-e, mas
+`$os->desconto` é clampado (em `OrdemServicoController`) contra o subtotal
+de **todos** os itens da OS — incluindo peça sem produto, que nunca vira
+nota fiscal nenhuma. Um desconto que cabia no subtotal bruto da OS podia
+não caber no subtotal efetivamente faturável (só peça-com-produto +
+serviço), o que deixaria uma das notas com `valor_total` **negativo**.
+**Corrigido**: `EmissaoOrquestradorService::orquestrar()` agora reclampa
+`$os->desconto` no `$subtotalRateio` (peças com produto + serviços) antes
+de ratear. Teste de regressão:
+`test_desconto_que_extrapola_o_subtotal_faturavel_e_reclampado`.
+
+### Testes novos (arquivos existentes, métodos adicionados)
+- `tests/Feature/OrdemServicoTest.php`: criar/atualizar OS com desconto,
+  clamp de desconto > subtotal, reclamp ao remover item, `addPagamento`
+  com desconto (+ grava `forma_pagamento` na OS), checkbox "mostrar
+  canceladas" (endpoint `GET /api/os`, param `incluir_canceladas`).
+- `tests/Feature/Fiscal/EmissaoOrquestradorTest.php`: rateio proporcional
+  do desconto entre NF-e/NFS-e, caso de categoria única (só peça), e o
+  achado acima (reclamp contra subtotal faturável).
+- `tests/Feature/OrcamentoAprovacaoTest.php`: desconto já aplicado antes da
+  resposta do orçamento é reclampado quando a aprovação parcial reduz o
+  subtotal.
+
+### Pendente (continua igual)
+- Rodar `php artisan migrate` + esta suite completa no Docker do usuário
+  pra confirmar as asserções de verdade (só a mecânica de carregamento foi
+  confirmada aqui, não o resultado das asserções).

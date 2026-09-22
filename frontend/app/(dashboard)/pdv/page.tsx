@@ -75,6 +75,7 @@ export default function PdvPage() {
 
   const [itens, setItens] = useState<ItemVenda[]>([])
   const [pagamentos, setPagamentos] = useState<PagamentoEntry[]>([{ forma_pagamento: 'DINHEIRO', valor: '' }])
+  const [desconto, setDesconto] = useState('')
   const [vendaAPrazo, setVendaAPrazo] = useState(false)
   const [prazoEmDias, setPrazoEmDias] = useState(30)
   const [salvando, setSalvando] = useState(false)
@@ -176,6 +177,9 @@ export default function PdvPage() {
     return s + (isNaN(sub) ? 0 : sub)
   }, 0)
 
+  const descontoNum = Math.min(Math.max(parseFloat(desconto) || 0, 0), total)
+  const totalComDesconto = Math.max(0, total - descontoNum)
+
   // ─── Pagamentos ───────────────────────────────────────────────────────────
 
   const totalPago = pagamentos.reduce((s, p) => {
@@ -183,7 +187,7 @@ export default function PdvPage() {
     return s + (isNaN(v) ? 0 : v)
   }, 0)
 
-  const troco = !vendaAPrazo && totalPago > total ? totalPago - total : 0
+  const troco = !vendaAPrazo && totalPago > totalComDesconto ? totalPago - totalComDesconto : 0
 
   function adicionarPagamento() {
     setPagamentos(prev => [...prev, { forma_pagamento: 'DINHEIRO', valor: '' }])
@@ -226,7 +230,8 @@ export default function PdvPage() {
         cliente_id:           clienteSelecionado?.id ?? null,
         venda_a_prazo:        vendaAPrazo,
         prazo_pagamento_dias: vendaAPrazo ? prazoEmDias : undefined,
-        valor_pago:           vendaAPrazo ? 0 : Math.min(totalPago, total),
+        desconto:             descontoNum,
+        valor_pago:           vendaAPrazo ? 0 : Math.min(totalPago, totalComDesconto),
         pagamentos:           vendaAPrazo ? [] : pagValidos,
         itens: itens.map(i => ({
           tipo:           'PECA',
@@ -241,6 +246,7 @@ export default function PdvPage() {
       setClienteSelecionado(null)
       setClienteBusca('')
       setPagamentos([{ forma_pagamento: 'DINHEIRO', valor: '' }])
+      setDesconto('')
       setVendaAPrazo(false)
       setPrazoEmDias(30)
     } catch (e: unknown) {
@@ -478,6 +484,20 @@ export default function PdvPage() {
               <span style={{ fontSize: 14, color: 'var(--text)' }}>Venda a prazo</span>
             </label>
 
+            {/* Desconto na venda */}
+            <div style={{ marginBottom: 14 }}>
+              <label style={labelStyle}>Desconto (R$)</label>
+              <input
+                type="number"
+                min={0}
+                step={0.01}
+                placeholder="0,00"
+                value={desconto}
+                onChange={e => setDesconto(e.target.value)}
+                style={inputStyle}
+              />
+            </div>
+
             {vendaAPrazo ? (
               <div>
                 <label style={labelStyle}>Prazo (dias)</label>
@@ -540,18 +560,35 @@ export default function PdvPage() {
               <span style={{ fontSize: 13, color: 'var(--muted)' }}>Itens</span>
               <span style={{ fontSize: 13, fontFamily: 'monospace' }}>{itens.length}</span>
             </div>
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderTop: '1px solid var(--border)', paddingTop: 12, marginBottom: 10 }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderTop: '1px solid var(--border)', paddingTop: 12, marginBottom: descontoNum > 0 ? 4 : 10 }}>
               <span style={{ fontSize: 15, fontWeight: 700 }}>Total</span>
               <span style={{ fontSize: 22, fontWeight: 800, fontFamily: 'monospace', color: 'var(--accent)' }}>
                 {formatarMoeda(total)}
               </span>
             </div>
 
+            {descontoNum > 0 && (
+              <>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 4 }}>
+                  <span style={{ fontSize: 13, color: 'var(--accent)' }}>Desconto</span>
+                  <span style={{ fontSize: 14, fontFamily: 'monospace', color: 'var(--accent)' }}>
+                    − {formatarMoeda(descontoNum)}
+                  </span>
+                </div>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10 }}>
+                  <span style={{ fontSize: 13, color: 'var(--muted)', fontWeight: 600 }}>Total com desconto</span>
+                  <span style={{ fontSize: 15, fontWeight: 700, fontFamily: 'monospace' }}>
+                    {formatarMoeda(totalComDesconto)}
+                  </span>
+                </div>
+              </>
+            )}
+
             {/* Pago e troco (só quando não é a prazo e há valor) */}
             {!vendaAPrazo && totalPago > 0 && (
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 6 }}>
                 <span style={{ fontSize: 13, color: 'var(--muted)' }}>Pago</span>
-                <span style={{ fontSize: 14, fontFamily: 'monospace', color: totalPago >= total ? 'var(--success)' : 'var(--accent)' }}>
+                <span style={{ fontSize: 14, fontFamily: 'monospace', color: totalPago >= totalComDesconto ? 'var(--success)' : 'var(--accent)' }}>
                   {formatarMoeda(totalPago)}
                 </span>
               </div>
@@ -570,7 +607,7 @@ export default function PdvPage() {
               </div>
             )}
 
-            {!vendaAPrazo && troco === 0 && totalPago > 0 && totalPago < total && (
+            {!vendaAPrazo && troco === 0 && totalPago > 0 && totalPago < totalComDesconto && (
               <div style={{
                 display: 'flex', justifyContent: 'space-between', alignItems: 'center',
                 marginBottom: 12, padding: '8px 12px',
@@ -578,7 +615,7 @@ export default function PdvPage() {
               }}>
                 <span style={{ fontSize: 13, color: 'var(--danger)' }}>Falta</span>
                 <span style={{ fontSize: 14, fontWeight: 700, fontFamily: 'monospace', color: 'var(--danger)' }}>
-                  {formatarMoeda(total - totalPago)}
+                  {formatarMoeda(totalComDesconto - totalPago)}
                 </span>
               </div>
             )}

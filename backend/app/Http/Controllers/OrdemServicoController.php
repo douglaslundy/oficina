@@ -66,6 +66,13 @@ class OrdemServicoController extends Controller
                   ->where('valor_total', '>', 0)
                   ->whereNotIn('status', ['CANCELADA']);
         }
+        // Listagem principal: OS canceladas ficam ocultas por padrão (checkbox
+        // "Mostrar OS canceladas" no frontend, desmarcado por padrão). Um filtro
+        // de status explícito (ex.: escolher "CANCELADA" no dropdown) sempre
+        // prevalece sobre esse padrão.
+        if (!$request->boolean('incluir_canceladas') && !$request->has('status')) {
+            $query->where('status', '!=', 'CANCELADA');
+        }
         if ($request->has('search')) {
             $search = $request->search;
             $query->where(function ($q) use ($search) {
@@ -100,6 +107,7 @@ class OrdemServicoController extends Controller
             'prazo_entrega'           => ['nullable', 'date'],
             'venda_a_prazo'           => ['nullable', 'boolean'],
             'prazo_pagamento_dias'    => ['nullable', 'integer', 'min:1', 'max:365'],
+            'desconto'                => ['nullable', 'numeric', 'min:0'],
             'itens'                        => ['nullable', 'array'],
             'itens.*.tipo'                 => ['required', 'in:SERVICO,PECA'],
             'itens.*.produto_id'           => ['nullable', 'string', 'exists:produtos,id'],
@@ -168,6 +176,11 @@ class OrdemServicoController extends Controller
                 // pagamento completo.
                 $total = round($total, 2);
 
+                // Desconto nunca pode levar o total a negativo — clampa no subtotal
+                // dos itens (mesma regra aplicada em update()/addItem()/etc.).
+                $desconto = round(min((float) ($validated['desconto'] ?? 0), $total), 2);
+                $total    = round($total - $desconto, 2);
+
                 // Processar pagamentos múltiplos
                 $totalPago = 0;
                 foreach ($validated['pagamentos'] ?? [] as $pag) {
@@ -183,9 +196,9 @@ class OrdemServicoController extends Controller
                 // Para VENDA_BALCAO não-a-prazo: forçar valor_pago = valor_total
                 // para eliminar divergência de ponto flutuante JS vs PHP
                 if (!empty($osData['tipo']) && $osData['tipo'] === 'VENDA_BALCAO' && empty($osData['venda_a_prazo'])) {
-                    $os->update(['valor_total' => $total, 'valor_pago' => $total]);
+                    $os->update(['valor_total' => $total, 'desconto' => $desconto, 'valor_pago' => $total]);
                 } else {
-                    $os->update(['valor_total' => $total]);
+                    $os->update(['valor_total' => $total, 'desconto' => $desconto]);
                     if ($totalPago > 0) {
                         $os->update(['valor_pago' => min($totalPago, $total)]);
                     }
@@ -266,6 +279,7 @@ class OrdemServicoController extends Controller
             'prazo_entrega'        => ['sometimes', 'nullable', 'date'],
             'venda_a_prazo'        => ['sometimes', 'boolean'],
             'prazo_pagamento_dias' => ['sometimes', 'nullable', 'integer', 'min:1', 'max:365'],
+            'desconto'             => ['sometimes', 'numeric', 'min:0'],
             // KM só pode ser preenchido quando ainda está vazio (rascunho de OS
             // vindo de um agendamento, ou OS antiga anterior a este campo). Uma
             // leitura já registrada não é reescrita por aqui.
@@ -274,6 +288,14 @@ class OrdemServicoController extends Controller
 
         if (array_key_exists('km_atual', $validated) && $os->km_atual !== null) {
             unset($validated['km_atual']);
+        }
+
+        // Desconto nunca pode levar o total a negativo — clampa no subtotal dos
+        // itens (mesma regra do store()/addItem()/addPagamento()).
+        if (array_key_exists('desconto', $validated)) {
+            $subtotal = (float) $os->itens()->sum(DB::raw('quantidade * valor_unitario'));
+            $validated['desconto']    = round(min((float) $validated['desconto'], $subtotal), 2);
+            $validated['valor_total'] = round($subtotal - $validated['desconto'], 2);
         }
 
         // Devolução de estoque ao cancelar é opcional (o usuário decide no modal).
@@ -338,6 +360,20 @@ class OrdemServicoController extends Controller
         });
     }
 
+    /**
+     * Recalcula valor_total a partir do subtotal atual dos itens, reclampando
+     * o desconto já registrado na OS (pode ter ficado maior que o novo
+     * subtotal se um item foi removido/reduzido depois do desconto aplicado).
+     * Usado por addItem/updateItem/removeItem — nenhum deles altera o
+     * desconto em si, só o subtotal que ele é aplicado sobre.
+     */
+    private function recalcularTotalComDesconto(OrdemServico $os): void
+    {
+        $subtotal = (float) $os->itens()->sum(DB::raw('quantidade * valor_unitario'));
+        $desconto = round(min((float) $os->desconto, $subtotal), 2);
+        $os->update(['valor_total' => round($subtotal - $desconto, 2), 'desconto' => $desconto]);
+    }
+
     public function addItem(Request $request, string $osId): JsonResponse
     {
         $os = OrdemServico::findOrFail($osId);
@@ -360,8 +396,7 @@ class OrdemServicoController extends Controller
                 // Baixa imediata do estoque para peças.
                 $this->estoqueService->darSaidaItem($os, $item);
 
-                $total = $os->itens()->sum(DB::raw('quantidade * valor_unitario'));
-                $os->update(['valor_total' => $total]);
+                $this->recalcularTotalComDesconto($os);
 
                 return $item;
             });
@@ -401,8 +436,7 @@ class OrdemServicoController extends Controller
                     $this->estoqueService->darSaidaItem($os, $item);
                 }
 
-                $total = $os->itens()->sum(DB::raw('quantidade * valor_unitario'));
-                $os->update(['valor_total' => $total]);
+                $this->recalcularTotalComDesconto($os);
 
                 return $item;
             });
@@ -427,8 +461,7 @@ class OrdemServicoController extends Controller
             $this->estoqueService->devolverItem($os, $item);
             $item->delete();
 
-            $total = $os->itens()->sum(DB::raw('quantidade * valor_unitario'));
-            $os->update(['valor_total' => $total]);
+            $this->recalcularTotalComDesconto($os);
         });
 
         return response()->json(['message' => 'Item removido.']);
@@ -445,9 +478,23 @@ class OrdemServicoController extends Controller
         $validated = $request->validate([
             'forma_pagamento' => ['required', 'string', 'max:30'],
             'valor'           => ['required', 'numeric', 'min:0.01'],
+            // Desconto opcional aplicado no ato do pagamento (Tarefa do usuário
+            // 2026-09-22: campo de desconto junto do formulário de pagamento,
+            // tanto na OS quanto no PDV/venda balcão). Sempre um valor
+            // ABSOLUTO (substitui o desconto atual da OS, não soma) — reflete
+            // "o desconto combinado nesta venda", não um acúmulo por parcela.
+            'desconto'        => ['nullable', 'numeric', 'min:0'],
         ]);
 
         $pagamento = DB::transaction(function () use ($os, $validated) {
+            // Desconto (se enviado) é aplicado ANTES do pagamento, pra que o
+            // saldo devedor abaixo já reflita o valor_total com desconto.
+            if (array_key_exists('desconto', $validated) && $validated['desconto'] !== null) {
+                $subtotal = (float) $os->itens()->sum(DB::raw('quantidade * valor_unitario'));
+                $desconto = round(min((float) $validated['desconto'], $subtotal), 2);
+                $os->update(['desconto' => $desconto, 'valor_total' => round($subtotal - $desconto, 2)]);
+            }
+
             $pagamento = OsPagamento::create([
                 'os_id'           => $os->id,
                 'forma_pagamento' => $validated['forma_pagamento'],
@@ -455,7 +502,11 @@ class OrdemServicoController extends Controller
             ]);
 
             $totalPago = $os->pagamentos()->sum('valor');
-            $os->update(['valor_pago' => $totalPago]);
+            // Registra também a forma de pagamento na OS (usada como
+            // metadado em NF/recibo) — o formulário de pagamento é agora a
+            // única entrada de forma de pagamento da OS (campo duplicado no
+            // formulário principal foi removido).
+            $os->update(['valor_pago' => $totalPago, 'forma_pagamento' => $validated['forma_pagamento']]);
 
             if ($os->cliente_id) {
                 $this->clienteStatusService->recalcular($os->cliente_id);

@@ -35,6 +35,7 @@ interface OsData {
   saldo_devedor: number
   valor_total?: number
   valor_pago?: number
+  desconto?: number
   cliente_id: string
   cliente?: { id: string; nome: string; veiculo_placa?: string }
   mecanico_id?: string
@@ -124,8 +125,11 @@ export default function OSDetailPage() {
   const downloadPdf    = () => downloadFile('pdf',    `OS-${os?.numero ?? id}.pdf`)
   const downloadRecibo = () => downloadFile('recibo', `Recibo-OS-${os?.numero ?? id}.pdf`)
 
-  const [novoPag, setNovoPag] = useState({ forma: 'Dinheiro', valor: '' })
+  const [novoPag, setNovoPag] = useState({ forma: 'Dinheiro', valor: '', desconto: '' })
   const [addingPag, setAddingPag] = useState(false)
+  // "Venda a prazo" omite o card de pagamento por padrão — este botão o
+  // reexibe caso o cliente decida pagar antes do prazo combinado.
+  const [revelarPagamento, setRevelarPagamento] = useState(false)
 
   // Modais de conclusão/cancelamento da OS (Tarefas 1, 2 e 3).
   const [confirmConcluir, setConfirmConcluir] = useState(false)
@@ -233,11 +237,16 @@ export default function OSDetailPage() {
   async function handleAddPagamento() {
     const valor = parseFloat(novoPag.valor)
     if (!valor || valor <= 0) { toast('Informe um valor válido.', 'danger'); return }
+    const desconto = parseFloat(novoPag.desconto)
     setAddingPag(true)
     try {
-      await api.post(`/os/${id}/pagamentos`, { forma_pagamento: novoPag.forma, valor })
+      await api.post(`/os/${id}/pagamentos`, {
+        forma_pagamento: novoPag.forma,
+        valor,
+        ...(desconto > 0 ? { desconto } : {}),
+      })
       toast('Pagamento registrado!', 'success')
-      setNovoPag({ forma: 'Dinheiro', valor: '' })
+      setNovoPag({ forma: 'Dinheiro', valor: '', desconto: '' })
       await fetchOs()
       // Após registrar, pergunta se deseja concluir a OS.
       setConfirmConcluir(true)
@@ -249,16 +258,10 @@ export default function OSDetailPage() {
   }
 
   async function handleRemovePagamento(pagamentoId: string) {
-    // Se este for o último pagamento, ofereceremos o cancelamento da OS.
-    const eraUltimo = (os?.pagamentos ?? []).length <= 1
     try {
       await api.delete(`/os/${id}/pagamentos/${pagamentoId}`)
       toast('Pagamento removido.', 'success')
       await fetchOs()
-      if (eraUltimo) {
-        setDevolverEstoque(true)
-        setConfirmCancelar(true)
-      }
     } catch {
       toast('Erro ao remover pagamento.', 'danger')
     }
@@ -270,6 +273,12 @@ export default function OSDetailPage() {
     ...os,
     prazo_entrega: toInputDate(os.prazo_entrega),
   }
+
+  // Os campos de pagamento (registrar/remover) ficam disponíveis enquanto
+  // houver saldo devedor — independente do status da OS (Tarefa 2026-09-22:
+  // antes ficavam escondidos assim que a OS virava CONCLUIDA, mesmo com
+  // saldo em aberto).
+  const saldoDevedor = Number(os.saldo_devedor ?? 0)
 
   // Achado 2026-09-16: com pelo menos 1 nota vinculada a OS, o botão trocava
   // pra "Baixar" pra sempre — mesmo se só uma das 2 categorias (peça/
@@ -441,7 +450,7 @@ export default function OSDetailPage() {
                   </div>
                   <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
                     <span className="font-mono" style={{ color: 'var(--success)', fontWeight: 700 }}>{formatarMoeda(p.valor)}</span>
-                    {os.status !== 'CONCLUIDA' && (
+                    {saldoDevedor > 0 && (
                       <button onClick={() => handleRemovePagamento(p.id)}
                         style={{ background: 'none', border: 'none', color: 'var(--danger)', cursor: 'pointer', fontSize: 18, padding: '0 4px', lineHeight: 1 }}>
                         ×
@@ -450,6 +459,14 @@ export default function OSDetailPage() {
                   </div>
                 </div>
               ))}
+              {(os.desconto ?? 0) > 0 && (
+                <div style={{ display: 'flex', justifyContent: 'space-between', paddingTop: 12, marginTop: 4 }}>
+                  <span style={{ color: 'var(--accent)', fontSize: 13, fontWeight: 600 }}>Desconto aplicado</span>
+                  <span className="font-mono" style={{ color: 'var(--accent)', fontWeight: 700, fontSize: 15 }}>
+                    {formatarMoeda(os.desconto ?? 0)}
+                  </span>
+                </div>
+              )}
               {(() => {
                 const totalPago = (os.pagamentos ?? []).reduce((s, p) => s + Number(p.valor), 0)
                 const diff = totalPago - Number(os.valor_total ?? 0)
@@ -481,28 +498,45 @@ export default function OSDetailPage() {
             <p style={{ color: 'var(--muted)', fontSize: 14, marginBottom: 20 }}>Nenhum pagamento registrado.</p>
           )}
 
-          {/* Formulário novo pagamento */}
-          {os.status !== 'CONCLUIDA' && (
-            <div style={{ display: 'flex', gap: 10, alignItems: 'flex-end', flexWrap: 'wrap' }}>
-              <div>
-                <label style={{ color: 'var(--muted)', fontSize: 12, display: 'block', marginBottom: 4 }}>Forma</label>
-                <select value={novoPag.forma} onChange={e => setNovoPag(p => ({ ...p, forma: e.target.value }))}
-                  style={{ padding: '8px 12px', borderRadius: 8, background: 'var(--bg)', border: '1px solid var(--border)', color: 'var(--text)', fontSize: 14, outline: 'none' }}>
-                  {FORMAS_PAGAMENTO.map(f => <option key={f} value={f}>{f}</option>)}
-                </select>
-              </div>
-              <div>
-                <label style={{ color: 'var(--muted)', fontSize: 12, display: 'block', marginBottom: 4 }}>Valor (R$)</label>
-                <input type="number" step="0.01" min="0.01" value={novoPag.valor}
-                  onChange={e => setNovoPag(p => ({ ...p, valor: e.target.value }))}
-                  placeholder="0,00"
-                  style={{ padding: '8px 12px', borderRadius: 8, background: 'var(--bg)', border: '1px solid var(--border)', color: 'var(--text)', fontSize: 14, outline: 'none', width: 140 }} />
-              </div>
-              <button onClick={handleAddPagamento} disabled={addingPag} className="font-display"
-                style={{ padding: '9px 20px', background: addingPag ? 'var(--muted)' : 'var(--accent)', color: '#000', border: 'none', borderRadius: 8, fontWeight: 800, fontSize: 14, cursor: addingPag ? 'not-allowed' : 'pointer' }}>
-                {addingPag ? 'Registrando...' : '+ Registrar'}
+          {/* Formulário novo pagamento — disponível enquanto houver saldo
+              devedor, mesmo com a OS já concluída. Numa venda a prazo, fica
+              omitido até o usuário clicar em "Realizar Pagamento" (o
+              pagamento não era esperado ainda). */}
+          {saldoDevedor > 0 && (
+            os.venda_a_prazo && !revelarPagamento ? (
+              <button type="button" onClick={() => setRevelarPagamento(true)} className="font-display"
+                style={{ padding: '9px 20px', background: 'transparent', color: 'var(--accent)', border: '1px solid var(--accent)', borderRadius: 8, fontWeight: 800, fontSize: 14, cursor: 'pointer' }}>
+                💳 Realizar Pagamento
               </button>
-            </div>
+            ) : (
+              <div style={{ display: 'flex', gap: 10, alignItems: 'flex-end', flexWrap: 'wrap' }}>
+                <div>
+                  <label style={{ color: 'var(--muted)', fontSize: 12, display: 'block', marginBottom: 4 }}>Forma</label>
+                  <select value={novoPag.forma} onChange={e => setNovoPag(p => ({ ...p, forma: e.target.value }))}
+                    style={{ padding: '8px 12px', borderRadius: 8, background: 'var(--bg)', border: '1px solid var(--border)', color: 'var(--text)', fontSize: 14, outline: 'none' }}>
+                    {FORMAS_PAGAMENTO.map(f => <option key={f} value={f}>{f}</option>)}
+                  </select>
+                </div>
+                <div>
+                  <label style={{ color: 'var(--muted)', fontSize: 12, display: 'block', marginBottom: 4 }}>Valor (R$)</label>
+                  <input type="number" step="0.01" min="0.01" value={novoPag.valor}
+                    onChange={e => setNovoPag(p => ({ ...p, valor: e.target.value }))}
+                    placeholder="0,00"
+                    style={{ padding: '8px 12px', borderRadius: 8, background: 'var(--bg)', border: '1px solid var(--border)', color: 'var(--text)', fontSize: 14, outline: 'none', width: 140 }} />
+                </div>
+                <div>
+                  <label style={{ color: 'var(--muted)', fontSize: 12, display: 'block', marginBottom: 4 }}>Desconto (R$)</label>
+                  <input type="number" step="0.01" min="0" value={novoPag.desconto}
+                    onChange={e => setNovoPag(p => ({ ...p, desconto: e.target.value }))}
+                    placeholder="0,00"
+                    style={{ padding: '8px 12px', borderRadius: 8, background: 'var(--bg)', border: '1px solid var(--border)', color: 'var(--text)', fontSize: 14, outline: 'none', width: 120 }} />
+                </div>
+                <button onClick={handleAddPagamento} disabled={addingPag} className="font-display"
+                  style={{ padding: '9px 20px', background: addingPag ? 'var(--muted)' : 'var(--accent)', color: '#000', border: 'none', borderRadius: 8, fontWeight: 800, fontSize: 14, cursor: addingPag ? 'not-allowed' : 'pointer' }}>
+                  {addingPag ? 'Registrando...' : '+ Registrar'}
+                </button>
+              </div>
+            )
           )}
         </div>
       )}

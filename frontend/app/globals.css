@@ -80,6 +80,12 @@ html, body {
 .pill-info    { background: rgba(30,136,229,.15); color: var(--info);    }
 .pill-muted   { background: rgba(122,128,144,.15); color: var(--muted);  }
 
+/* Variante "contorno": mesma cor semântica do pill sólido, mas visualmente
+   distinta dele — usada quando dois status diferentes (ex: CANCELADA e
+   ORÇAMENTO_RECUSADO) compartilham a mesma cor do design system e
+   precisam continuar distinguíveis lado a lado numa coluna de tabela. */
+.pill-outline { background: transparent; border: 1px solid currentColor; }
+
 /* Barra de estoque */
 .stock-bar  { height: 4px; background: var(--border); border-radius: 2px; overflow: hidden; }
 .stock-fill { height: 100%; border-radius: 2px; transition: width 0.4s ease; }

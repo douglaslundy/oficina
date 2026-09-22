@@ -38,6 +38,7 @@ class OrdemServicoResource extends JsonResource
             'data_vencimento_pagamento'   => $this->data_vencimento_pagamento?->format('d/m/Y'),
             'valor_total'                 => $this->valor_total,
             'valor_pago'                  => $this->valor_pago,
+            'desconto'                    => (float) $this->desconto,
             'saldo_devedor'               => $this->saldo_devedor,
             'pagamentos'       => $this->whenLoaded('pagamentos', fn() => $this->pagamentos->map(fn($p) => [
                 'id'              => $p->id,
