@@ -5956,3 +5956,30 @@ de ratear. Teste de regressão:
 - Rodar `php artisan migrate` + esta suite completa no Docker do usuário
   pra confirmar as asserções de verdade (só a mecânica de carregamento foi
   confirmada aqui, não o resultado das asserções).
+
+## 2026-09-22 (cont.) — Deploy em produção
+
+Usuário pediu deploy explicitamente, ciente de que os testes Feature novos
+nunca rodaram de verdade (sem Postgres neste ambiente). Segui o
+procedimento já usado em deploys anteriores (Rodada 21): backup manual do
+Postgres antes (`pg_dump -F c`, `/opt/backups/backup_pre_desconto_
+20260922_204449.dump`) → commit (`5fc28db`) → push → `git pull` na VPS
+(fast-forward `ff9e561..5fc28db`, sem conflito com a edição local não
+commitada de `docker-compose.prod.yml`, arquivo que este commit não toca)
+→ `bash deploy-vps.sh` (build com cache, ~o script já roda um backup
+adicional automático via `php artisan backup:executar` antes da migration,
+achado ao ler o entrypoint).
+
+**Confirmado depois do deploy:**
+- `migrate:status`: `2026_09_22_000001_add_desconto_to_ordens_servico_table`
+  rodou (linha `[20] Ran`).
+- Coluna `desconto` existe, tipo `numeric`, default `'0'::numeric`.
+- 26 OS já existentes, todas com `desconto = 0.00` (migration não
+  retroage nada) — `sum(valor_total)` intacto.
+- Containers todos `healthy`; logs de backend e frontend sem erro/exceção.
+- `https://saas.dlsistemas.com.br/api/health` responde 200.
+
+**Não testado** (precisa do usuário, logado de verdade): fluxo de
+desconto na OS/PDV, botão "Realizar Pagamento", checkbox de OS canceladas,
+cores dos pills de orçamento — a infraestrutura do deploy está confirmada
+saudável, mas nenhum fluxo de UI foi clicado de ponta a ponta.
