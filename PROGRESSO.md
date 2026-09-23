@@ -1,6 +1,58 @@
 # Progresso do Projeto
 
 ## Última atualização
+2026-09-23 (11) — **Auditoria fiscal completa dos 3 motores (Focus NFe, Spedy,
+NFePHP) contra doc real do fornecedor + regras SEFAZ, via 4 agentes paralelos
+(um por motor + um pra camada de orquestração/domínio) — 6 bugs reais
+corrigidos, deployado em produção.**
+- **CRT/CSOSN inconsistente pra oficina MEI**: `TributacaoIcmsSaidaResolver`
+  não reconhecia "MEI" como Simples Nacional (`CrtResolver` já reconhecia) →
+  NF-e com CRT=1 mas CST em vez de CSOSN. Unificado numa só fonte
+  (`TributacaoIcmsSaidaResolver` agora delega pra `CrtResolver`).
+- **Corrida de dupla emissão real**: `IniciarEmissaoNotaService::iniciar()`
+  checava status sem lock antes de alocar número/despachar o job — duplo
+  clique ou retry podia emitir duas notas de verdade pro mesmo documento.
+  Envolvido em `DB::transaction()` + `NotaFiscal::lockForUpdate()`.
+- **Efeitos colaterais duplicados**: `AplicarResultadoNotaService::aplicar()`
+  disparava e-mail + `PlanLimitService::registrarNotaSeExcedente` de novo a
+  cada chamada que observasse `status=AUTORIZADA`, sem checar o status
+  anterior — job de emissão + cron `nfe:reconciliar-processando` podiam
+  duplicar ambos. `registrarNotaSeExcedente` nem sequer era idempotente
+  (gerava `Cobranca` duplicada de verdade) — migration nova
+  `cobrancas.nota_fiscal_id` + guarda de idempotência.
+- **Ambiente desatualizado**: `ambiente_fiscal` capturado no dispatch do job
+  podia divergir do ambiente real da execução — `aplicar()` agora resolve
+  ao vivo via `FiscalProviderManager`.
+- **NFePHP: falta o grupo `ICMSUFDest` (DIFAL, EC 87/2015)** pra CRT=3 em
+  venda interestadual a consumidor final não contribuinte — gatilho exato
+  da rejeição SEFAZ 694. Sem tabela real de alíquota interna por UF, NÃO
+  chutamos o cálculo: bloqueado localmente com `EmissaoBloqueadaException`
+  antes de reservar número (mesma disciplina do fix de IE/cStat=232).
+  Afeta só tenant CRT=3 (Lucro Presumido/Real) vendendo interestadual —
+  hoje nenhum tenant real está nessa situação, mas o branch existe pronto.
+  **Pendência real**: implementar o cálculo de fato exige uma tabela
+  confiável de alíquota interna por UF (não inventar).
+- **Spedy**: `isFinalCustomer` (indFinal) era derivado da presença de IE do
+  destinatário, conflando com `indIEDest` — corrigido pra sempre `true`
+  (oficina não revende), consistente com o NFePHP. NFC-e não mandava
+  `stateTaxNumber` pro destinatário PJ (mesma classe do bug original, no
+  fluxo de balcão). `mapStatus()` só cobria 5 dos 10 status reais da API —
+  `denied` (denegado, desfecho distinto de rejeitado) ficava preso como
+  PROCESSANDO pra sempre. Bônus: `presenceType` adicionado (confirmado no
+  schema real).
+- **Cosmético**: branch morta `'denegado'` no Focus (API não retorna mais
+  desde NT 2024.001); docblock desatualizado no Spedy.
+- **Decidido não corrigir**: `indFinal=1` fixo no NFePHP (mantido — mesma
+  regra de negócio agora aplicada nos dois motores, não é bug); `indPag`
+  sempre "à vista" (venda a prazo hoje só adia QUANDO cobrar, não modela
+  parcelas/vencimento — setar `indPag=1` sem dados reais de duplicata seria
+  pior que o atual; fica como feature futura, não bug).
+- 38 testes novos/atualizados. Suíte Unit: 445 testes, 14 erros — todos
+  Postgres/RefreshDatabase (7 baseline já conhecido + 7 dos testes novos),
+  zero regressão de lógica. Deploy em produção com backup Postgres prévio.
+- Segunda varredura de verificação (mesma estrutura, 4 agentes) ainda
+  **pendente** — próxima tarefa.
+
 2026-09-20 (9) — **Duas correções do item (8) FEITAS** (usuário: "execute as duas
 correções e depois faça o deploy"; escolheu "só corrigir daqui pra frente" no fuso).
 - **Cancelar NFS-e do NFEPHP:** `NotaFiscalController::cancelar()` agora chama
