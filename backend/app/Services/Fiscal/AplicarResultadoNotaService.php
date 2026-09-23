@@ -22,15 +22,32 @@ class AplicarResultadoNotaService
         private readonly PlanLimitService $planLimit,
         private readonly AlertaDispatchService $alertas,
         private readonly NotaFiscalDocumentoService $documentos,
+        private readonly FiscalProviderManager $providerManager,
     ) {}
 
     /**
      * @param array{status: string, chave?: ?string, protocolo?: ?string,
      *   xml_retorno?: ?string, qrcode_url?: ?string, mensagem_erro?: ?string,
      *   numero?: int|string|null} $resultado
+     * @param string $ambiente Mantido no assinatura por compatibilidade com
+     *   os chamadores existentes, mas NÃO é usado pra decidir se dispara os
+     *   efeitos colaterais de produção (ver comentário abaixo) — quem
+     *   dispatcha `EmitirNotaFiscalJob` captura esse valor no momento do
+     *   `iniciar()`, que pode preceder a execução real do job (fila) por
+     *   segundos ou minutos; se o ambiente for trocado nesse meio-tempo, o
+     *   valor capturado fica desatualizado em relação ao ambiente que o
+     *   provider realmente usou pra emitir.
      */
     public function aplicar(NotaFiscal $nota, array $resultado, string $ambiente): NotaFiscal
     {
+        // Capturado ANTES do update() — este método é compartilhado pelo job
+        // de emissão, pelo polling de status e pelo cron de reconciliação;
+        // duas chamadas quase simultâneas observando a MESMA transição pra
+        // AUTORIZADA não podem disparar o e-mail/cobrança duas vezes. Só a
+        // chamada que realmente vê a nota sair de um status != AUTORIZADA
+        // é que dispara os efeitos colaterais abaixo.
+        $statusAnterior = $nota->status;
+
         $nota->update([
             'status'        => $resultado['status'],
             'chave_acesso'  => $resultado['chave'] ?? $nota->chave_acesso,
@@ -50,7 +67,11 @@ class AplicarResultadoNotaService
             'emitido_em'    => $resultado['status'] === 'AUTORIZADA' ? now() : null,
         ]);
 
-        if ($resultado['status'] === 'AUTORIZADA' && $ambiente === 'PRODUCAO') {
+        // Ambiente lido AGORA, não o $ambiente recebido por parâmetro — ver
+        // docblock do método.
+        $ambienteAtual = $this->providerManager->ambienteDaOficina();
+
+        if ($resultado['status'] === 'AUTORIZADA' && $statusAnterior !== 'AUTORIZADA' && $ambienteAtual === 'PRODUCAO') {
             $notaFresh = $nota->fresh()->loadMissing(['cliente', 'itens']);
             $this->planLimit->registrarNotaSeExcedente($notaFresh);
             // Pedido explícito do usuário (2026-09-14): o e-mail de "NF

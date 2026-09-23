@@ -451,9 +451,10 @@ class FocusNfeProvider implements FiscalProvider, ConsultaNotaTerceiroProvider
         return match ($focusStatus) {
             'autorizado'              => 'AUTORIZADA',
             'cancelado'               => 'CANCELADA',
-            'erro_autorizacao',
-            'denegado'                => 'REJEITADA',
+            'erro_autorizacao'        => 'REJEITADA',
             'processando_autorizacao' => 'PROCESSANDO',
+            // 'denegado' nao e mais retornado pela Focus desde a NT 2024.001 (ago/2024):
+            // denegacao por irregularidade cadastral do emitente foi convertida em rejeicao comum.
             default                   => $this->statusDesconhecido($focusStatus),
         };
     }

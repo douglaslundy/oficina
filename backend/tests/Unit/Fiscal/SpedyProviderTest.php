@@ -40,6 +40,52 @@ class SpedyProviderTest extends TestCase
         $this->assertSame('CANCELADA', $p->mapStatus('canceled'));
     }
 
+    /**
+     * Os 10 valores reais de InvoiceStatus (confirmado ao vivo contra
+     * openapi/v1.json, 2026-09-23) — antes do fix, só 5 eram tratados e os
+     * outros 5 caíam em statusDesconhecido() (PROCESSANDO pra sempre). O
+     * caso mais grave era `denied` (Denegado), um desfecho terminal real
+     * que nunca aparecia como falha acionável.
+     */
+    public function test_map_status_cobre_todos_os_10_valores_reais_do_enum(): void
+    {
+        $p = new SpedyProvider('https://sandbox-api.spedy.com.br/v1', 'master', 'tok', 'emp-1');
+        $this->assertSame('PROCESSANDO', $p->mapStatus('created'));
+        $this->assertSame('PROCESSANDO', $p->mapStatus('enqueued'));
+        $this->assertSame('PROCESSANDO', $p->mapStatus('received'));
+        $this->assertSame('AUTORIZADA', $p->mapStatus('authorized'));
+        $this->assertSame('PROCESSANDO', $p->mapStatus('inContingent'));
+        $this->assertSame('REJEITADA', $p->mapStatus('rejected'));
+        $this->assertSame('CANCELADA', $p->mapStatus('canceled'));
+        $this->assertSame('REJEITADA', $p->mapStatus('denied'));
+        $this->assertSame('REJEITADA', $p->mapStatus('removed'));
+        $this->assertSame('REJEITADA', $p->mapStatus('disabled'));
+    }
+
+    /**
+     * `denied` não pode ficar indistinguível de um `rejected` comum na
+     * mensagem que o usuário/suporte vê — são juridicamente diferentes
+     * (denegação é problema cadastral do emitente, não do documento).
+     */
+    public function test_consultar_denegada_prefixa_a_mensagem_como_denegado_nao_generico(): void
+    {
+        Http::fake([
+            '*/product-invoices*' => Http::response([
+                'items' => [[
+                    'status' => 'denied',
+                    'processingDetail' => ['message' => 'CNPJ do emitente irregular junto à SEFAZ.'],
+                ]],
+            ], 200),
+        ]);
+
+        $p = new SpedyProvider('https://sandbox-api.spedy.com.br/v1', 'master', 'tok', 'emp-1');
+        $resultado = $p->consultar('os-123', 'NFE');
+
+        $this->assertSame('REJEITADA', $resultado->status);
+        $this->assertStringContainsString('[Denegado]', $resultado->mensagemErro);
+        $this->assertStringContainsString('CNPJ do emitente irregular', $resultado->mensagemErro);
+    }
+
     public function test_payload_nfse_usa_campos_spedy(): void
     {
         $p = new SpedyProvider('https://sandbox-api.spedy.com.br/v1', 'master', 'tok', 'emp-1');
@@ -422,8 +468,14 @@ class SpedyProviderTest extends TestCase
      * cadastrada precisa sair como contribuinte, não consumidor final.
      * Schema confirmado em openapi/v1.json (SefazInvoiceReceiverDto.
      * stateTaxNumber) — não adivinhado.
+     *
+     * Correção 2026-09-23 (continuação, auditoria fiscal completa):
+     * `isFinalCustomer` NÃO é mais derivado de `indicador_ie` — uma PJ com
+     * IE ainda é o consumidor final do serviço/peça pra esta oficina (não
+     * compra pra revenda), então continua `true` mesmo tendo IE. Só
+     * `stateTaxNumber` reflete a IE em si.
      */
-    public function test_payload_nfe_com_ie_do_destinatario_manda_state_tax_number_e_nao_e_consumidor_final(): void
+    public function test_payload_nfe_com_ie_do_destinatario_manda_state_tax_number_mas_continua_consumidor_final(): void
     {
         $p = new SpedyProvider('https://sandbox-api.spedy.com.br/v1', 'master', 'tok', 'emp-1');
         $nota = $this->notaNfeSimplesNacional([
@@ -437,7 +489,7 @@ class SpedyProviderTest extends TestCase
 
         $payload = $p->montarPayloadNfe($nota);
 
-        $this->assertFalse($payload['isFinalCustomer']);
+        $this->assertTrue($payload['isFinalCustomer']);
         $this->assertSame('1234567890', $payload['receiver']['stateTaxNumber']);
     }
 
@@ -455,7 +507,7 @@ class SpedyProviderTest extends TestCase
 
         $payload = $p->montarPayloadNfe($nota);
 
-        $this->assertFalse($payload['isFinalCustomer']);
+        $this->assertTrue($payload['isFinalCustomer']);
         $this->assertArrayNotHasKey('stateTaxNumber', $payload['receiver']);
     }
 
@@ -758,6 +810,52 @@ class SpedyProviderTest extends TestCase
             formaPagamento: 'Dinheiro',
             regimeTributario: 'Simples Nacional',
         );
+    }
+
+    /**
+     * Correção 2026-09-23 (auditoria fiscal completa): NFC-e nunca mandava
+     * a IE do destinatário — mesma classe de gap do bug original de NF-e
+     * (cStat=232), só que no fluxo de balcão (menos frequente na prática,
+     * maioria dos compradores de NFC-e é PF, mas o schema é o mesmo
+     * SefazInvoiceReceiverDto).
+     */
+    public function test_payload_nfce_com_ie_do_destinatario_manda_state_tax_number(): void
+    {
+        $p = new SpedyProvider('https://sandbox-api.spedy.com.br/v1', 'master', 'tok', 'emp-1');
+        $nota = $this->notaNfce([
+            'nome' => 'Empresa Compradora LTDA', 'cpf_cnpj' => '12345678000199',
+            'indicador_ie' => 1, 'inscricao_estadual' => '1234567890',
+        ]);
+
+        $payload = $p->montarPayloadNfce($nota);
+
+        $this->assertSame('1234567890', $payload['receiver']['stateTaxNumber']);
+        // NFC-e é sempre consumidor final por definição — indicador_ie não
+        // deve alterar isso (diferente de indFinal, que nunca foi o bug
+        // aqui, só na NF-e).
+        $this->assertTrue($payload['isFinalCustomer']);
+    }
+
+    public function test_payload_nfce_sem_ie_nao_manda_state_tax_number(): void
+    {
+        $p = new SpedyProvider('https://sandbox-api.spedy.com.br/v1', 'master', 'tok', 'emp-1');
+        $payload = $p->montarPayloadNfce($this->notaNfce());
+
+        $this->assertArrayNotHasKey('stateTaxNumber', $payload['receiver']);
+    }
+
+    /**
+     * Correção 2026-09-23: `presenceType` (indPres) nunca era mandado.
+     * Balcão de oficina é sempre operação presencial — mesma regra já
+     * hardcoded em MotorNfe::montarNfe() (`indPres => 1`), agora também
+     * mandada pra Spedy (campo confirmado ao vivo em openapi/v1.json).
+     */
+    public function test_payload_nfe_e_nfce_mandam_presence_type_operacao_presencial(): void
+    {
+        $p = new SpedyProvider('https://sandbox-api.spedy.com.br/v1', 'master', 'tok', 'emp-1');
+
+        $this->assertSame('presence', $p->montarPayloadNfe($this->notaNfeSimplesNacional())['presenceType']);
+        $this->assertSame('presence', $p->montarPayloadNfce($this->notaNfce())['presenceType']);
     }
 
     public function test_payload_nfce_manda_campos_tributaveis_obrigatorios(): void

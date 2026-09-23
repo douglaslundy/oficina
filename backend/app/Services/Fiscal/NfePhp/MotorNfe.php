@@ -3,6 +3,7 @@ declare(strict_types=1);
 
 namespace App\Services\Fiscal\NfePhp;
 
+use App\Exceptions\EmissaoBloqueadaException;
 use App\Models\Configuracao;
 use App\Models\NotaFiscal;
 use App\Services\Fiscal\CrtResolver;
@@ -86,6 +87,40 @@ class MotorNfe
         int $serieNfe,
     ): string {
         $crt = CrtResolver::resolver($cfg->regime_tributario ?? '');
+        $idDestino = $this->idDest($cfg->uf ?? '', $nota->tomador['uf'] ?? '');
+        $indIEDest = $nota->tomador['indicador_ie'] ?? 9;
+        $indFinal  = 1; // Consumidor final (venda B2B via NF-e nesta etapa — mesmo público da Etapa B)
+
+        // Achado de auditoria 2026-09-23: venda interestadual (idDest=2)
+        // para consumidor final (indFinal=1, sempre verdade nesta v1) não
+        // contribuinte (indIEDest=9) exige o grupo <ICMSUFDest> — DIFAL,
+        // Diferencial de Alíquota de ICMS (EC 87/2015, Convênio ICMS
+        // 236/2021). O cálculo depende da alíquota interna real de cada UF
+        // de destino (pICMSUFDest), uma tabela que este projeto não tem e
+        // que não vamos chutar — mesma disciplina de
+        // IndicadorIeDestinatarioResolver: dado fiscal real ausente
+        // bloqueia a emissão, não inventa um valor. CRT=1 (Simples
+        // Nacional/MEI) é dispensado de DIFAL por decisão do STF (ADI
+        // 5464) — só CRT=3 (Regime Normal) é afetado; hoje a oficina real
+        // deste projeto é CRT=1, então este branch nunca dispara na
+        // prática (mesma ressalva já aplicada ao bloco IBS/CBS abaixo),
+        // mas fica pronto para o primeiro tenant multi-UF em Regime
+        // Normal. Bloquear aqui, localmente e com mensagem acionável, é
+        // estritamente melhor que deixar a SEFAZ rejeitar (cStat 694) do
+        // outro lado depois de já ter reservado um número de NF-e.
+        if ($idDestino === 2 && $indFinal === 1 && $indIEDest === 9 && $crt !== 1) {
+            throw new EmissaoBloqueadaException(
+                'Esta NF-e é uma venda interestadual para consumidor final '
+                . 'não contribuinte de ICMS, sujeita ao Diferencial de '
+                . 'Alíquota (DIFAL — EC 87/2015). Este sistema ainda não '
+                . 'calcula o DIFAL (grupo ICMSUFDest) para o regime '
+                . 'tributário desta empresa (Regime Normal). A emissão foi '
+                . 'bloqueada para evitar uma rejeição certa da SEFAZ (cStat '
+                . '694, "grupo de ICMS para a UF de destino não '
+                . 'informado"). Entre em contato com o suporte antes de '
+                . 'emitir este tipo de nota.'
+            );
+        }
 
         // Guarda explícita — não confiar na Make/sped-nfe pra falhar sozinha
         // aqui. Fora do PHPUnit (que converte E_WARNING em exceção
@@ -122,13 +157,13 @@ class MotorNfe
             'nNF'      => $numeroNfe,
             'dhEmi'    => now()->format('c'),
             'tpNF'     => 1, // Saída
-            'idDest'   => $this->idDest($cfg->uf ?? '', $nota->tomador['uf'] ?? ''),
+            'idDest'   => $idDestino,
             'cMunFG'   => $cfg->codigo_ibge,
             'tpImp'    => 1, // DANFE normal, retrato
             'tpEmis'   => 1, // Normal — sobrescrito para 4 (EPEC) pelo chamador quando cai em contingência
             'tpAmb'    => $ambiente === 'PRODUCAO' ? 1 : 2,
             'finNFe'   => 1, // Normal
-            'indFinal' => 1, // Consumidor final (venda B2B via NF-e nesta etapa — mesmo público da Etapa B)
+            'indFinal' => $indFinal,
             'indPres'  => 1, // Operação presencial
             'procEmi'  => 0, // Emissão de aplicativo do contribuinte
             'verProc'  => config('app.version', '1.0.0'),
@@ -180,7 +215,7 @@ class MotorNfe
         $make->tagdest((object) array_filter([
             (strlen($docTomador) > 11 ? 'CNPJ' : 'CPF') => $docTomador,
             'xNome'     => $nota->tomador['nome'] ?? '',
-            'indIEDest' => $nota->tomador['indicador_ie'] ?? 9,
+            'indIEDest' => $indIEDest,
             'IE'        => $nota->tomador['inscricao_estadual'] ?? null,
         ]));
 

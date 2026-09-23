@@ -3,6 +3,7 @@ declare(strict_types=1);
 
 namespace Tests\Unit\Fiscal\NfePhp;
 
+use App\Exceptions\EmissaoBloqueadaException;
 use App\Models\Configuracao;
 use App\Services\Fiscal\Data\NotaFiscalData;
 use App\Services\Fiscal\NfePhp\MotorNfe;
@@ -68,6 +69,32 @@ class MotorNfeMontarNfeTest extends TestCase
             'logradouro' => 'Av Central', 'numero' => '100', 'bairro' => 'Centro', 'cep' => '37275000',
             'inscricao_estadual' => '1234567',
         ]);
+    }
+
+    private function configuracaoRegimeNormal(): Configuracao
+    {
+        return new Configuracao([
+            'razao_social' => 'Oficina Regime Normal Teste', 'regime_tributario' => 'Lucro Presumido',
+            'cnpj' => '11222333000181',
+            'uf' => 'MG', 'codigo_ibge' => '3132404', 'cidade' => 'Ilicínea',
+            'logradouro' => 'Av Central', 'numero' => '100', 'bairro' => 'Centro', 'cep' => '37275000',
+            'inscricao_estadual' => '1234567',
+        ]);
+    }
+
+    private function notaComTomador(array $tomadorOverrides, array $itemOverrides = []): NotaFiscalData
+    {
+        $nota = $this->notaVenda();
+
+        return new NotaFiscalData(
+            tipo: $nota->tipo, tomador: array_merge($nota->tomador, $tomadorOverrides),
+            descricao: $nota->descricao, valorServicos: $nota->valorServicos,
+            aliquotaIss: $nota->aliquotaIss, issRetido: $nota->issRetido,
+            codigoServicoFederal: $nota->codigoServicoFederal, codigoServicoMunicipal: $nota->codigoServicoMunicipal,
+            naturezaOperacao: $nota->naturezaOperacao, referenciaExterna: $nota->referenciaExterna,
+            modelo: $nota->modelo,
+            itens: $itemOverrides === [] ? $nota->itens : [array_merge($nota->itens[0], $itemOverrides)],
+        );
     }
 
     public function test_monta_xml_para_simples_nacional_sem_bloco_ibscbs(): void
@@ -292,6 +319,72 @@ class MotorNfeMontarNfeTest extends TestCase
         $xml = $motor->montarNfe($notaInterestadual, $cfg, 'HOMOLOGACAO', 1, 1);
 
         $this->assertStringContainsString('<idDest>2</idDest>', $xml);
+    }
+
+    /**
+     * Achado de auditoria 2026-09-23: venda interestadual (idDest=2) para
+     * consumidor final (indFinal=1) não contribuinte (indIEDest=9, o
+     * default quando o tomador não tem indicador_ie resolvido) exige o
+     * grupo <ICMSUFDest> (DIFAL) quando o emitente é CRT=3 (Regime Normal).
+     * Este projeto não tem tabela real de alíquota interna por UF — bloqueia
+     * a emissão em vez de chutar o valor e deixar a SEFAZ rejeitar (cStat
+     * 694) do outro lado.
+     */
+    public function test_bloqueia_emissao_regime_normal_venda_interestadual_para_nao_contribuinte(): void
+    {
+        $motor = new MotorNfe();
+        $nota  = $this->notaComTomador(['uf' => 'SP']); // MG -> SP, sem indicador_ie (default 9)
+
+        $this->expectException(EmissaoBloqueadaException::class);
+        $this->expectExceptionMessage('DIFAL');
+
+        $motor->montarNfe($nota, $this->configuracaoRegimeNormal(), 'HOMOLOGACAO', 1, 1);
+    }
+
+    /**
+     * CRT=1 (Simples Nacional/MEI) é dispensado de DIFAL por decisão do STF
+     * (ADI 5464) — a mesma venda interestadual para não contribuinte NÃO
+     * deve ser bloqueada quando o emitente é Simples Nacional. Já coberto
+     * implicitamente por test_uf_diferente_gera_iddest_interestadual (usa
+     * configuracaoSimplesNacional() e não lança), mas deixado explícito
+     * aqui como documentação da regra.
+     */
+    public function test_nao_bloqueia_simples_nacional_venda_interestadual_para_nao_contribuinte(): void
+    {
+        $motor = new MotorNfe();
+        $nota  = $this->notaComTomador(['uf' => 'SP']);
+
+        $xml = $motor->montarNfe($nota, $this->configuracaoSimplesNacional(), 'HOMOLOGACAO', 1, 1);
+
+        $this->assertStringContainsString('<idDest>2</idDest>', $xml);
+    }
+
+    public function test_nao_bloqueia_regime_normal_venda_intraestadual(): void
+    {
+        $motor = new MotorNfe();
+        // tomador em MG, mesma UF do emitente (configuracaoRegimeNormal()) -> idDest=1, nunca dispara a guarda de DIFAL.
+        // cst_csosn precisa ser um CST real (não CSOSN) pra CRT=3 — tagICMS() do vendor
+        // só monta o grupo <ICMS> pra CSTs conhecidos (00, 02, 10, 20...); CSOSN '102'
+        // (usado pelo fixture padrão, pensado pra CRT=1/tagICMSSN) faz tagICMS() retornar null.
+        $nota  = $this->notaComTomador(['uf' => 'MG'], ['cst_csosn' => '00']);
+
+        $xml = $motor->montarNfe($nota, $this->configuracaoRegimeNormal(), 'HOMOLOGACAO', 1, 1);
+
+        $this->assertStringContainsString('<idDest>1</idDest>', $xml);
+    }
+
+    public function test_nao_bloqueia_regime_normal_venda_interestadual_para_contribuinte(): void
+    {
+        $motor = new MotorNfe();
+        $nota  = $this->notaComTomador(
+            ['uf' => 'SP', 'indicador_ie' => 1, 'inscricao_estadual' => '110042490114'],
+            ['cst_csosn' => '00'],
+        );
+
+        $xml = $motor->montarNfe($nota, $this->configuracaoRegimeNormal(), 'HOMOLOGACAO', 1, 1);
+
+        $this->assertStringContainsString('<idDest>2</idDest>', $xml);
+        $this->assertStringContainsString('<indIEDest>1</indIEDest>', $xml);
     }
 
     /**

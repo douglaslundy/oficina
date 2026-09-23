@@ -19,7 +19,10 @@ final class TributacaoIcmsSaidaResolver
             throw new \InvalidArgumentException("tributacao_icms inválida: {$tributacaoIcms}");
         }
 
-        $simplesNacional = str_contains(strtolower($regimeTributario), 'simples');
+        // Delega a classificação Simples/MEI ao CrtResolver — fonte única de
+        // verdade, para não divergir da mesma classificação usada pra CRT
+        // (MEI é Simples Nacional mesmo quando o texto não contém "simples").
+        $simplesNacional = CrtResolver::resolver($regimeTributario) === 1;
         $st              = $tributacaoIcms === 'ST';
 
         return match (true) {

@@ -124,8 +124,19 @@ class PlanLimitService
         $preco = (float) $oficina->plano->preco_nota_excedente;
         if ($preco <= 0) return; // plano não cobra por excedente
 
+        // Idempotência: AplicarResultadoNotaService::aplicar() pode ser
+        // chamado mais de uma vez pra mesma nota já AUTORIZADA (o job de
+        // emissão e o cron nfe:reconciliar-processando podem observar o
+        // mesmo resultado quase ao mesmo tempo) — sem esta checagem, cada
+        // chamada extra gera uma Cobranca NOTA_EXCEDENTE duplicada real.
+        $jaCobrada = Cobranca::where('nota_fiscal_id', $nota->id)
+            ->where('tipo', 'NOTA_EXCEDENTE')
+            ->exists();
+        if ($jaCobrada) return;
+
         Cobranca::create([
             'oficina_id'     => $oficina->id,
+            'nota_fiscal_id' => $nota->id,
             'mes_referencia' => now()->startOfMonth()->toDateString(),
             'valor'          => $preco,
             'status'         => 'PENDENTE',

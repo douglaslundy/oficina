@@ -378,6 +378,14 @@ class SpedyProvider implements FiscalProvider, ConsultaNotaTerceiroProvider
             fn ($item) => (float) $item['quantidade'] * (float) $item['valor_unitario'],
             $n->itens
         )), 2);
+        // Corrigido 2026-09-23 (auditoria fiscal completa): este payload
+        // nunca mandava a IE do destinatário — mesma classe de gap do bug
+        // original de NF-e (cStat=232), só que no fluxo de NFC-e. Menos
+        // frequente na prática (maioria dos compradores de balcão é PF),
+        // o que provavelmente é por que nunca apareceu em produção, mas o
+        // schema (`CreateConsumerInvoiceDto.receiver`) é o mesmo
+        // SefazInvoiceReceiverDto da NF-e, com o mesmo `stateTaxNumber`.
+        $indicadorIe = $n->tomador['indicador_ie'] ?? 9;
 
         return array_filter([
             // integrationId: mesmo fix de reconciliação de montarPayloadNfse()
@@ -385,10 +393,19 @@ class SpedyProvider implements FiscalProvider, ConsultaNotaTerceiroProvider
             'integrationId'   => $this->integrationIdDe($n->referenciaExterna),
             'series'          => $n->serieNf,
             'number'          => $n->numeroAlocado !== null ? (int) $n->numeroAlocado : null,
+            // NFC-e é por definição venda a consumidor final — sempre true,
+            // nunca condicionado a IE (isso nunca foi o bug aqui, só na
+            // NF-e; ver montarPayloadNfe()).
             'isFinalCustomer' => true,
+            // Operação presencial (balcão) — mesma regra de montarPayloadNfe().
+            'presenceType'    => 'presence',
             'operationNature' => $n->naturezaOperacao,
-            'receiver' => array_merge(
-                ['name' => $n->tomador['nome'], 'federalTaxNumber' => $docTomador],
+            'receiver' => array_filter(array_merge(
+                [
+                    'name'             => $n->tomador['nome'],
+                    'federalTaxNumber' => $docTomador,
+                    'stateTaxNumber'   => $indicadorIe === 1 ? ($n->tomador['inscricao_estadual'] ?? null) : null,
+                ],
                 // NFC-e a consumidor final costuma dispensar endereço (venda de
                 // balcão sem cadastro). Só manda o bloco quando o cliente tem
                 // um logradouro cadastrado — senão a Spedy pode recusar um
@@ -396,7 +413,7 @@ class SpedyProvider implements FiscalProvider, ConsultaNotaTerceiroProvider
                 empty($n->tomador['logradouro'])
                     ? []
                     : ['address' => $this->enderecoDestinatario($n->tomador)],
-            ),
+            ), fn ($v) => $v !== null),
             'items' => array_map(fn (int $i, array $item) => [
                 'code'        => $item['sku'] ?? $item['produto_id'],
                 'description' => $item['descricao'],
@@ -435,10 +452,12 @@ class SpedyProvider implements FiscalProvider, ConsultaNotaTerceiroProvider
 
     /**
      * Schema confirmado contra docs.spedy.com.br/api-reference/nf-e/criar-nf-e.md
-     * (2026-09-04): POST /v1/product-invoices. Ao contrário de montarPayloadNfce()
-     * (que usa `cfop` string e um único campo `icmsTaxSituation`), este endpoint
-     * usa `cfop` **integer** e separa `cst`/`csosn` em campos distintos dentro de
-     * `taxes.icms` — dai o CrtResolver aqui.
+     * (2026-09-04): POST /v1/product-invoices. `cfop` é **integer** e `cst`/
+     * `csosn` ficam em campos distintos dentro de `taxes.icms` — dai o
+     * CrtResolver aqui. (Nota 2026-09-23: a afirmação original de que
+     * montarPayloadNfce() usava formato diferente — `cfop` string e um único
+     * `icmsTaxSituation` — estava desatualizada; os dois métodos usam o
+     * mesmo `SefazInvoiceItemDto` desde a correção de 2026-09-15.)
      *
      * Testado contra sandbox real em 2026-09-10: a SEFAZ rejeitou com 3 erros
      * de schema XML ("Id attribute invalid", "nNF valor '0' inválido",
@@ -500,12 +519,19 @@ class SpedyProvider implements FiscalProvider, ConsultaNotaTerceiroProvider
         // antes). Ver IndicadorIeDestinatarioResolver (NF-e #13, cStat=232)
         // pra a mesma correção nos outros dois motores.
         //
-        // Ainda não testado contra o sandbox real da Spedy (diferente do
-        // fix de SEFAZ 696 acima, que foi validado lá) — se
-        // isFinalCustomer=false gerar uma rejeição nova pra cliente PJ
-        // contribuinte, é sinal de que a Spedy exige mais alguma coisa
-        // além de stateTaxNumber que este schema não deixou claro; não
-        // chutar mais que isso sem validar.
+        // Corrigido 2026-09-23 (continuação, auditoria fiscal completa): o
+        // parágrafo acima já EXPLICAVA que indFinal e indIEDest são dois
+        // indicadores distintos, mas o código seguinte conflava os dois
+        // mesmo assim (isFinalCustomer derivado de indicador_ie). Pra uma
+        // oficina mecânica, a venda é sempre pro consumidor final de
+        // verdade do serviço/peça — mesmo quando esse cliente é uma PJ com
+        // IE (frota de empresa, por exemplo), ele não está comprando pra
+        // revenda. isFinalCustomer=false só faria sentido numa venda B2B
+        // pra revenda, que este negócio não faz. Mesma regra já usada no
+        // motor NFePHP (MotorNfe::montarNfe(), `indFinal => 1` fixo) —
+        // agora consistente entre os dois motores. `stateTaxNumber`
+        // continua condicionado a indicador_ie (isso sim está certo: é a
+        // IE em si, não o indFinal).
         $indicadorIe = $n->tomador['indicador_ie'] ?? 9;
 
         return array_filter([
@@ -516,7 +542,13 @@ class SpedyProvider implements FiscalProvider, ConsultaNotaTerceiroProvider
             // NotaFiscalData não os carrega (ex.: chamada direta em teste).
             'series'          => $n->serieNf,
             'number'          => $n->numeroAlocado !== null ? (int) $n->numeroAlocado : null,
-            'isFinalCustomer' => $indicadorIe === 9,
+            'isFinalCustomer' => true,
+            // Operação presencial (balcão da oficina) — mesma regra já
+            // hardcoded em MotorNfe::montarNfe() (`indPres => 1`), agora
+            // também mandada pra Spedy (campo `presenceType`, confirmado
+            // ao vivo em openapi/v1.json: enum inclui `presence` =
+            // "Operação presencial [indPres]").
+            'presenceType'    => 'presence',
             'operationNature' => $n->naturezaOperacao,
             'receiver' => array_filter([
                 'name'             => $n->tomador['nome'],
@@ -610,10 +642,9 @@ class SpedyProvider implements FiscalProvider, ConsultaNotaTerceiroProvider
 
         $status = $this->mapStatus((string) ($invoice['status'] ?? 'enqueued'));
         if ($status === 'REJEITADA') {
-            return EmissaoResultado::rejeitada(
-                $invoice['processingDetail']['message'] ?? 'Rejeitada pela SEFAZ.',
-                (string) $invoice['id'],
-            );
+            $msg = $this->prefixoDoStatusBruto((string) ($invoice['status'] ?? ''))
+                . ($invoice['processingDetail']['message'] ?? 'Rejeitada pela SEFAZ.');
+            return EmissaoResultado::rejeitada($msg, (string) $invoice['id']);
         }
 
         // Assíncrono: número/chave só existem depois de autorizada. A
@@ -719,7 +750,8 @@ class SpedyProvider implements FiscalProvider, ConsultaNotaTerceiroProvider
         $status = $this->mapStatus((string) ($json['status'] ?? 'enqueued'));
 
         if ($status === 'REJEITADA') {
-            $msg = $json['processingDetail']['message'] ?? ($json['message'] ?? 'Rejeitada pela SEFAZ.');
+            $msg = $this->prefixoDoStatusBruto((string) ($json['status'] ?? ''))
+                . ($json['processingDetail']['message'] ?? ($json['message'] ?? 'Rejeitada pela SEFAZ.'));
             return EmissaoResultado::rejeitada($msg, $ref);
         }
         if ($status === 'PROCESSANDO') {
@@ -745,14 +777,61 @@ class SpedyProvider implements FiscalProvider, ConsultaNotaTerceiroProvider
         );
     }
 
+    /**
+     * Bug real achado 2026-09-23 (auditoria fiscal completa): o `InvoiceStatus`
+     * real da Spedy (confirmado ao vivo em openapi/v1.json) tem 10 valores —
+     * `created, enqueued, received, authorized, inContingent, rejected,
+     * canceled, denied, removed, disabled` —, mas este `match` só cobria 5.
+     * Os outros 5 caíam no fallback `statusDesconhecido()`, que devolve
+     * PROCESSANDO. Pior caso real: `denied` (Denegado — problema no CADASTRO
+     * do emitente junto à SEFAZ, juridicamente diferente de `rejected`, que é
+     * problema no documento) ficava preso como "ainda processando" pra
+     * sempre, sem nunca virar uma falha real e acionável. `'processing'` foi
+     * removido do match: não é um valor real de `InvoiceStatus` (confirmado
+     * ao vivo), parece ter sido copiado por engano do enum não-relacionado
+     * `InvoiceProcessingStatus`.
+     *
+     * Vocabulário desta app só tem 4 status (AUTORIZADA/PROCESSANDO/
+     * REJEITADA/CANCELADA — ver EmissaoResultado) — os 10 valores da Spedy
+     * precisam encaixar em algum destes 4, nenhum mapeia perfeito:
+     * - `created`/`received`: pré-emissão / em trânsito — não são finais,
+     *   PROCESSANDO é o correto.
+     * - `inContingent`: contingência é estado transitório por definição
+     *   (documento ainda será transmitido de verdade) — PROCESSANDO.
+     * - `denied`/`removed`/`disabled`: os 3 são desfechos TERMINAIS
+     *   negativos (nunca vão virar autorizados) mas nenhum é a mesma coisa
+     *   que `rejected` — mapeados pra REJEITADA (a alternativa seria
+     *   PROCESSANDO pra sempre, repetindo o mesmo bug do `denied`), com a
+     *   mensagem prefixada em resultadoDe()/resultadoNfceDe()/
+     *   emitirViaOrders() (ver prefixoDoStatusBruto()) pra não ficarem
+     *   indistinguíveis de uma rejeição comum pra quem for debugar depois.
+     */
     public function mapStatus(string $spedyStatus): string
     {
         return match ($spedyStatus) {
-            'authorized'             => 'AUTORIZADA',
-            'rejected'               => 'REJEITADA',
-            'canceled'               => 'CANCELADA',
-            'enqueued', 'processing' => 'PROCESSANDO',
-            default                  => $this->statusDesconhecido($spedyStatus),
+            'authorized' => 'AUTORIZADA',
+            'canceled' => 'CANCELADA',
+            'rejected', 'denied', 'removed', 'disabled' => 'REJEITADA',
+            'created', 'enqueued', 'received', 'inContingent' => 'PROCESSANDO',
+            default => $this->statusDesconhecido($spedyStatus),
+        };
+    }
+
+    /**
+     * `denied` (Denegado), `removed` (Removido) e `disabled` (Inutilizado)
+     * mapeiam todos pra REJEITADA em mapStatus() (vocabulário de 4 status
+     * desta app não tem uma categoria própria pra cada um), mas são
+     * juridicamente diferentes entre si e de um `rejected` comum — sem essa
+     * distinção na mensagem, fica impossível saber depois qual dos quatro
+     * realmente aconteceu só olhando `notas_fiscais.mensagem_erro`.
+     */
+    private function prefixoDoStatusBruto(string $spedyStatus): string
+    {
+        return match ($spedyStatus) {
+            'denied'   => '[Denegado] ',
+            'removed'  => '[Removido pela Spedy antes da emissão] ',
+            'disabled' => '[Inutilizado] ',
+            default    => '',
         };
     }
 
@@ -792,7 +871,8 @@ class SpedyProvider implements FiscalProvider, ConsultaNotaTerceiroProvider
         $status = $this->mapStatus((string) ($json['status'] ?? 'enqueued'));
 
         if ($status === 'REJEITADA') {
-            $msg = $json['processingDetail']['message'] ?? ($json['message'] ?? 'Rejeitada pela SEFAZ/Prefeitura.');
+            $msg = $this->prefixoDoStatusBruto((string) ($json['status'] ?? ''))
+                . ($json['processingDetail']['message'] ?? ($json['message'] ?? 'Rejeitada pela SEFAZ/Prefeitura.'));
             return EmissaoResultado::rejeitada($msg, $ref);
         }
         if ($status === 'PROCESSANDO') {

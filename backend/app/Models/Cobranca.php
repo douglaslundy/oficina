@@ -18,6 +18,7 @@ class Cobranca extends Model
     protected $fillable = [
         'id',
         'oficina_id',
+        'nota_fiscal_id',
         'mes_referencia',
         'valor',
         'status',
