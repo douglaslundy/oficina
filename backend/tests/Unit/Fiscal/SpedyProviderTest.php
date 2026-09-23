@@ -413,6 +413,70 @@ class SpedyProviderTest extends TestCase
         $this->assertSame('Venda de Mercadoria', $payload['operationNature']);
 
         $item = $payload['items'][0];
+        unset($item); // mantém o teste original abaixo intacto
+    }
+
+    /**
+     * Correção 2026-09-23 (NF-e #13, cStat=232 — ver
+     * IndicadorIeDestinatarioResolverTest): destinatário PJ com IE real
+     * cadastrada precisa sair como contribuinte, não consumidor final.
+     * Schema confirmado em openapi/v1.json (SefazInvoiceReceiverDto.
+     * stateTaxNumber) — não adivinhado.
+     */
+    public function test_payload_nfe_com_ie_do_destinatario_manda_state_tax_number_e_nao_e_consumidor_final(): void
+    {
+        $p = new SpedyProvider('https://sandbox-api.spedy.com.br/v1', 'master', 'tok', 'emp-1');
+        $nota = $this->notaNfeSimplesNacional([
+            'tomador' => [
+                'nome' => 'Oficina Cliente LTDA', 'cpf_cnpj' => '12345678000199',
+                'cep' => '37175-000', 'logradouro' => 'Rua 15 de Novembro', 'numero' => '472',
+                'bairro' => 'Centro', 'cidade' => 'Ilicínea', 'uf' => 'MG', 'codigo_ibge' => '3130507',
+                'indicador_ie' => 1, 'inscricao_estadual' => '1234567890',
+            ],
+        ]);
+
+        $payload = $p->montarPayloadNfe($nota);
+
+        $this->assertFalse($payload['isFinalCustomer']);
+        $this->assertSame('1234567890', $payload['receiver']['stateTaxNumber']);
+    }
+
+    public function test_payload_nfe_destinatario_isento_de_ie_nao_manda_state_tax_number(): void
+    {
+        $p = new SpedyProvider('https://sandbox-api.spedy.com.br/v1', 'master', 'tok', 'emp-1');
+        $nota = $this->notaNfeSimplesNacional([
+            'tomador' => [
+                'nome' => 'Empresa Isenta LTDA', 'cpf_cnpj' => '12345678000199',
+                'cep' => '37175-000', 'logradouro' => 'Rua 15 de Novembro', 'numero' => '472',
+                'bairro' => 'Centro', 'cidade' => 'Ilicínea', 'uf' => 'MG', 'codigo_ibge' => '3130507',
+                'indicador_ie' => 2, 'inscricao_estadual' => null,
+            ],
+        ]);
+
+        $payload = $p->montarPayloadNfe($nota);
+
+        $this->assertFalse($payload['isFinalCustomer']);
+        $this->assertArrayNotHasKey('stateTaxNumber', $payload['receiver']);
+    }
+
+    public function test_payload_nfe_pessoa_fisica_continua_consumidor_final(): void
+    {
+        $p = new SpedyProvider('https://sandbox-api.spedy.com.br/v1', 'master', 'tok', 'emp-1');
+        // indicador_ie ausente do tomador (comportamento default/legado) —
+        // continua isFinalCustomer=true, mesmo resultado de antes da
+        // correção. Cobre o caso comum (pessoa física) e a ausência do
+        // campo em chamadas antigas/testes que não o populam.
+        $payload = $p->montarPayloadNfe($this->notaNfeSimplesNacional());
+
+        $this->assertTrue($payload['isFinalCustomer']);
+        $this->assertArrayNotHasKey('stateTaxNumber', $payload['receiver']);
+    }
+
+    public function test_payload_nfe_original_ainda_bate(): void
+    {
+        $p = new SpedyProvider('https://sandbox-api.spedy.com.br/v1', 'master', 'tok', 'emp-1');
+        $payload = $p->montarPayloadNfe($this->notaNfeSimplesNacional());
+        $item = $payload['items'][0];
         $this->assertSame('FLT-001', $item['code']);
         $this->assertSame('Filtro de óleo', $item['description']);
         $this->assertSame('84212300', $item['ncm']);

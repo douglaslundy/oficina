@@ -6059,3 +6059,40 @@ estadual, detecta a divergência e rejeita.
 - Campo de IE da Spedy pra NF-e B2B real permanece não implementado,
   documentado como limitação conhecida.
 - Não commitado nem deployado ainda — só local, aguardando revisão.
+
+## 2026-09-23 (cont.) — Spedy também corrigida, com o schema real confirmado
+
+Usuário perguntou se eu não conseguia acessar a doc real da Spedy em vez de
+deixar a limitação documentada sem resolver. Resposta: consegui, só não
+tinha usado ainda. Baixei `https://docs.spedy.com.br/openapi/v1.json`
+(555KB, JSON bruto, não resumo) e inspecionei `CreateProductInvoiceDto` e
+`SefazInvoiceReceiverDto` diretamente.
+
+**Achado real**: o campo de IE existe — `receiver.stateTaxNumber`. O que
+NÃO existe é um `indIEDest` explícito; o único indicador do schema é
+`isFinalCustomer`, documentado como "Consumidor Final `[indFinal]`" — um
+campo fiscal **diferente** de indIEDest (indFinal = operação com
+consumidor final; indIEDest = situação da IE). São dois indicadores
+distintos no layout real da NF-e que a Spedy expõe de forma incompleta
+(só um dos dois, e derivado do outro provavelmente por trás).
+
+**Correção aplicada** em `SpedyProvider::montarPayloadNfe()`: usa o mesmo
+`indicador_ie` já resolvido por `IndicadorIeDestinatarioResolver` —
+`isFinalCustomer = true` só quando indicador=9 (pessoa física/não
+contribuinte, igual antes); `false` + `receiver.stateTaxNumber` = IE real
+quando indicador=1; `false` sem `stateTaxNumber` quando indicador=2
+(isento). A correlação indFinal↔indIEDest em si (que uma venda B2B pra
+contribuinte não é "consumidor final") é conhecimento de domínio fiscal
+básico, não uma suposição sobre a API da Spedy — só a EXISTÊNCIA e nome
+exato do campo de IE veio confirmado da doc real.
+
+**O que continua sem confirmação**: não testei contra o sandbox real da
+Spedy (diferente da correção anterior de SEFAZ 696, que foi validada lá
+em 2026-09-10). Se `isFinalCustomer=false` sozinho não bastar pra Spedy
+aceitar um destinatário contribuinte, isso só aparece testando de verdade.
+Deixei essa ressalva registrada no comentário do código.
+
+4 testes novos em `SpedyProviderTest.php` (IE real → stateTaxNumber
+mandado + não é consumidor final; isento → sem stateTaxNumber; pessoa
+física → comportamento antigo preservado). Suite Unit completa: 427
+testes, mesmos 11 erros pré-existentes de sempre, zero regressão nova.

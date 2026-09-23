@@ -482,6 +482,32 @@ class SpedyProvider implements FiscalProvider, ConsultaNotaTerceiroProvider
             $n->itens
         )), 2);
 
+        // Corrigido 2026-09-23 depois de confirmar o schema REAL da Spedy
+        // (openapi/v1.json, `SefazInvoiceReceiverDto` e
+        // `CreateProductInvoiceDto` — não adivinhado): existe sim um campo
+        // pra IE do destinatário, `receiver.stateTaxNumber` ("Inscrição
+        // estadual"). O que NÃO existe é um `indIEDest` explícito — o único
+        // indicador do schema é `isFinalCustomer` (documentado como
+        // "Consumidor Final [indFinal]"), que é um campo fiscal DIFERENTE
+        // de indIEDest (indFinal = operação com consumidor final; indIEDest
+        // = situação da IE do destinatário — dois indicadores distintos no
+        // layout real da NF-e). A Spedy provavelmente deriva indIEDest
+        // internamente a partir de stateTaxNumber estar preenchido ou não.
+        // Uma venda B2B pra um destinatário contribuinte não é, em regra,
+        // "operação com consumidor final" — por isso isFinalCustomer=false
+        // quando há IE real ou isenção (indicador 1/2), true só pra pessoa
+        // física/não contribuinte (indicador 9, mesmo comportamento de
+        // antes). Ver IndicadorIeDestinatarioResolver (NF-e #13, cStat=232)
+        // pra a mesma correção nos outros dois motores.
+        //
+        // Ainda não testado contra o sandbox real da Spedy (diferente do
+        // fix de SEFAZ 696 acima, que foi validado lá) — se
+        // isFinalCustomer=false gerar uma rejeição nova pra cliente PJ
+        // contribuinte, é sinal de que a Spedy exige mais alguma coisa
+        // além de stateTaxNumber que este schema não deixou claro; não
+        // chutar mais que isso sem validar.
+        $indicadorIe = $n->tomador['indicador_ie'] ?? 9;
+
         return array_filter([
             // integrationId: mesmo fix de reconciliação de montarPayloadNfse()
             // — ver comentário lá.
@@ -490,31 +516,15 @@ class SpedyProvider implements FiscalProvider, ConsultaNotaTerceiroProvider
             // NotaFiscalData não os carrega (ex.: chamada direta em teste).
             'series'          => $n->serieNf,
             'number'          => $n->numeroAlocado !== null ? (int) $n->numeroAlocado : null,
-            // SEFAZ 696 — ver docblock acima: até 2026-09-23, `clientes` não
-            // tinha IE nenhuma, então o destinatário era sempre mandado como
-            // não-contribuinte pra Spedy (isFinalCustomer=true fixo).
-            // `clientes.inscricao_estadual`/`ie_isento` agora existem (ver
-            // IndicadorIeDestinatarioResolver, usado pelos motores Focus/
-            // NFePHP para o mesmo problema — NF-e #13, cStat=232). NÃO
-            // apliquei o mesmo aqui de propósito: não confirmei contra a doc
-            // real da Spedy (docs.spedy.com.br) qual o campo pra mandar uma
-            // IE real de destinatário contribuinte, e mandar
-            // isFinalCustomer=false sem o campo de IE correspondente
-            // provavelmente troca a rejeição 696 por outra, sem resolver
-            // nada — chutar o nome do campo é o mesmo erro que causou o bug
-            // original. Enquanto isso não for confirmado, toda NF-e pra
-            // cliente PJ contribuinte via Spedy ainda sai como se fosse
-            // consumidor final (mesma limitação de antes, não piorou nem
-            // resolveu) — oriente o uso de Focus NFe ou NFePHP pra esses
-            // clientes especificamente até isto ser corrigido de verdade.
-            'isFinalCustomer' => true,
+            'isFinalCustomer' => $indicadorIe === 9,
             'operationNature' => $n->naturezaOperacao,
-            'receiver' => [
+            'receiver' => array_filter([
                 'name'             => $n->tomador['nome'],
                 'federalTaxNumber' => $docTomador,
+                'stateTaxNumber'   => $indicadorIe === 1 ? ($n->tomador['inscricao_estadual'] ?? null) : null,
                 // Obrigatório para NF-e — ver enderecoDestinatario().
                 'address'          => $this->enderecoDestinatario($n->tomador),
-            ],
+            ]),
             'items' => array_map(fn (int $i, array $item) => [
                 'code'        => $item['sku'] ?? $item['produto_id'],
                 'description' => $item['descricao'],
