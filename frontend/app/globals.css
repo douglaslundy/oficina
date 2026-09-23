@@ -62,29 +62,41 @@ html, body {
 /* Linha de tabela com débito */
 .danger-row { background: rgba(229, 57, 53, 0.06) !important; }
 
-/* Pill de status */
+/* Pill de status — fundo SÓLIDO (não um tom translúcido em cima do fundo
+   escuro): usuário reportou que pills de cores diferentes (ex. CONCLUÍDA
+   verde vs CANCELADA vermelha) pareciam "a mesma cor" à primeira vista —
+   com só o texto colorido a 15% de opacidade de fundo, o contraste real
+   contra --card/--bg era baixo demais pra bater o olho rápido numa lista.
+   Fundo cheio + texto claro/escuro conforme a cor resolve isso. */
 .pill {
   display: inline-flex;
   align-items: center;
-  padding: 2px 10px;
+  padding: 3px 11px;
   border-radius: 999px;
   font-size: 11px;
-  font-weight: 600;
+  font-weight: 700;
   font-family: 'Barlow Condensed', sans-serif;
   letter-spacing: 0.04em;
   text-transform: uppercase;
 }
-.pill-success { background: rgba(67,160,71,.15); color: var(--success); }
-.pill-danger  { background: rgba(229,57,53,.15);  color: var(--danger);  }
-.pill-accent  { background: rgba(245,166,35,.15); color: var(--accent);  }
-.pill-info    { background: rgba(30,136,229,.15); color: var(--info);    }
-.pill-muted   { background: rgba(122,128,144,.15); color: var(--muted);  }
+.pill-success { background: var(--success); color: #ffffff; }
+.pill-danger  { background: var(--danger);  color: #ffffff; }
+.pill-accent  { background: var(--accent);  color: #1a1400; }
+.pill-info    { background: var(--info);    color: #ffffff; }
+.pill-muted   { background: var(--muted);   color: #ffffff; }
 
 /* Variante "contorno": mesma cor semântica do pill sólido, mas visualmente
    distinta dele — usada quando dois status diferentes (ex: CANCELADA e
    ORÇAMENTO_RECUSADO) compartilham a mesma cor do design system e
-   precisam continuar distinguíveis lado a lado numa coluna de tabela. */
-.pill-outline { background: transparent; border: 1px solid currentColor; }
+   precisam continuar distinguíveis lado a lado numa coluna de tabela.
+   Precisa de uma regra por cor (em vez de `currentColor`) porque a cor do
+   texto do pill sólido virou branco/preto fixo acima, não é mais a cor
+   semântica em si. */
+.pill-outline.pill-success { background: transparent; color: var(--success); border: 1.5px solid var(--success); }
+.pill-outline.pill-danger  { background: transparent; color: var(--danger);  border: 1.5px solid var(--danger); }
+.pill-outline.pill-accent  { background: transparent; color: var(--accent);  border: 1.5px solid var(--accent); }
+.pill-outline.pill-info    { background: transparent; color: var(--info);    border: 1.5px solid var(--info); }
+.pill-outline.pill-muted   { background: transparent; color: var(--muted);   border: 1.5px solid var(--muted); }
 
 /* Barra de estoque */
 .stock-bar  { height: 4px; background: var(--border); border-radius: 2px; overflow: hidden; }

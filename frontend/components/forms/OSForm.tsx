@@ -786,21 +786,21 @@ function NewItemInline({ osId, servicos, onAdded }: {
           </select>
         )}
       </div>
-      <div style={{ display: 'grid', gridTemplateColumns: '80px 130px 1fr', gap: 8, alignItems: 'end' }}>
+      <div style={{ display: 'flex', gap: 10, alignItems: 'flex-end', flexWrap: 'wrap' }}>
         <div>
           <label style={{ color: 'var(--muted)', fontSize: 11, display: 'block', marginBottom: 4 }}>Quantidade</label>
           <input type="number" value={quantidade} min={0.01} step={0.01}
             onChange={e => setQuantidade(Number(e.target.value))}
-            placeholder="Qtd" style={SI} />
+            placeholder="Qtd" style={{ ...SI, width: 80 }} />
         </div>
         <div>
           <label style={{ color: 'var(--muted)', fontSize: 11, display: 'block', marginBottom: 4 }}>Valor unit. (R$)</label>
           <input type="number" value={valorUnitario} min={0} step={0.01}
             onChange={e => setValorUnitario(Number(e.target.value))}
-            placeholder="Valor unit. (R$)" style={SI} />
+            placeholder="Valor unit. (R$)" style={{ ...SI, width: 130 }} />
         </div>
         <button type="button" onClick={() => handleAdd()} disabled={loading}
-          style={{ padding: '7px 16px', background: 'var(--accent)', color: '#000', borderRadius: 6, border: 'none', cursor: loading ? 'not-allowed' : 'pointer', fontSize: 13, fontWeight: 700 }}>
+          style={{ padding: '7px 16px', background: 'var(--accent)', color: '#000', borderRadius: 6, border: 'none', cursor: loading ? 'not-allowed' : 'pointer', fontSize: 13, fontWeight: 700, flexShrink: 0 }}>
           {loading ? '...' : 'Adicionar'}
         </button>
       </div>
