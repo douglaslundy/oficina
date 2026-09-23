@@ -42,9 +42,14 @@ class EmissaoOrquestradorTest extends TestCase
             'oficina_id' => $oficina->id,
         ]);
 
-        // Cliente PJ → sempre NF-e (não NFC-e).
+        // Cliente PJ → sempre NF-e (não NFC-e). Precisa de IE cadastrada
+        // (bug real corrigido 2026-09-23, NF-e #13, cStat=232 — ver
+        // IndicadorIeDestinatarioResolverTest) senão a emissão de NF-e
+        // bloqueia neste fixture, que é exatamente o comportamento correto
+        // que a correção introduziu.
         $cliente = Cliente::create([
             'nome' => 'Cliente PJ', 'cpf_cnpj' => '12345678000199', 'uf' => 'SP',
+            'inscricao_estadual' => '123456789',
             'oficina_id' => $oficina->id,
         ]);
 

@@ -490,10 +490,23 @@ class SpedyProvider implements FiscalProvider, ConsultaNotaTerceiroProvider
             // NotaFiscalData não os carrega (ex.: chamada direta em teste).
             'series'          => $n->serieNf,
             'number'          => $n->numeroAlocado !== null ? (int) $n->numeroAlocado : null,
-            // SEFAZ 696 — ver docblock acima: `clientes` não tem IE, então o
-            // destinatário é sempre não-contribuinte pra Spedy, e isso exige
-            // isFinalCustomer=true (era `false` até 2026-09-10, rejeitava
-            // toda NF-e real). Igual à NFC-e, que já mandava `true`.
+            // SEFAZ 696 — ver docblock acima: até 2026-09-23, `clientes` não
+            // tinha IE nenhuma, então o destinatário era sempre mandado como
+            // não-contribuinte pra Spedy (isFinalCustomer=true fixo).
+            // `clientes.inscricao_estadual`/`ie_isento` agora existem (ver
+            // IndicadorIeDestinatarioResolver, usado pelos motores Focus/
+            // NFePHP para o mesmo problema — NF-e #13, cStat=232). NÃO
+            // apliquei o mesmo aqui de propósito: não confirmei contra a doc
+            // real da Spedy (docs.spedy.com.br) qual o campo pra mandar uma
+            // IE real de destinatário contribuinte, e mandar
+            // isFinalCustomer=false sem o campo de IE correspondente
+            // provavelmente troca a rejeição 696 por outra, sem resolver
+            // nada — chutar o nome do campo é o mesmo erro que causou o bug
+            // original. Enquanto isso não for confirmado, toda NF-e pra
+            // cliente PJ contribuinte via Spedy ainda sai como se fosse
+            // consumidor final (mesma limitação de antes, não piorou nem
+            // resolveu) — oriente o uso de Focus NFe ou NFePHP pra esses
+            // clientes especificamente até isto ser corrigido de verdade.
             'isFinalCustomer' => true,
             'operationNature' => $n->naturezaOperacao,
             'receiver' => [

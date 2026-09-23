@@ -7,6 +7,7 @@ use App\Models\Configuracao;
 use App\Models\NotaFiscal;
 use App\Services\Fiscal\Data\NotaFiscalData;
 use App\Services\Fiscal\FiscalProviderManager;
+use App\Services\Fiscal\IndicadorIeDestinatarioResolver;
 use Illuminate\Support\Facades\DB;
 
 class NfeService
@@ -106,6 +107,25 @@ class NfeService
             ? (string) $nota->numero
             : null;
 
+        // indIEDest só existe de verdade pra NF-e — NFC-e já trata todo
+        // destinatário como não contribuinte (regra de domínio, não algo
+        // pra resolver aqui) e NFS-e não tem esse campo. Resolver aqui, uma
+        // vez, em vez de cada provider/motor decidir (ou não decidir, que
+        // foi o bug real: cStat=232 na NF-e #13 — ver
+        // IndicadorIeDestinatarioResolver).
+        $indicadorIe = null;
+        $ieDestinatario = null;
+        if ($modeloInterno === 'NFE') {
+            $resolvido = IndicadorIeDestinatarioResolver::resolver(
+                $cliente?->cpf_cnpj ?? '',
+                $cliente?->inscricao_estadual,
+                (bool) ($cliente?->ie_isento ?? false),
+                $cliente?->nome ?? 'cliente',
+            );
+            $indicadorIe    = $resolvido['indicador'];
+            $ieDestinatario = $resolvido['inscricao_estadual'];
+        }
+
         return new NotaFiscalData(
             tipo: 'NFSE',
             tomador: [
@@ -118,6 +138,8 @@ class NfeService
                 'bairro'      => $cliente?->bairro,
                 'cidade'      => $cliente?->cidade,
                 'uf'          => $cliente?->uf,
+                'indicador_ie'        => $indicadorIe,
+                'inscricao_estadual'  => $ieDestinatario,
                 // Gap de dados cross-provider (achado 2026-09-14, ver
                 // TAREFAS.md): antes disto, $codigoIbgeTomador SEMPRE vinha
                 // de $config->codigo_ibge (a própria oficina) — qualquer

@@ -398,6 +398,23 @@ class FocusNfeProvider implements FiscalProvider, ConsultaNotaTerceiroProvider
         $docTomador = preg_replace('/\D/', '', $n->tomador['cpf_cnpj']) ?? '';
         $chaveDoc   = strlen($docTomador) > 11 ? 'cnpj_destinatario' : 'cpf_destinatario';
 
+        // Bug real corrigido 2026-09-23 (NF-e #13, cStat=232 "IE do
+        // destinatário não informada"): este payload nunca mandava
+        // `indicador_inscricao_estadual_destinatario` nem
+        // `inscricao_estadual_destinatario` — diferente de
+        // montarPayloadNfce() acima, que corretamente hardcoda "não
+        // contribuinte" (regra de domínio real pra NFC-e). Pra NF-e o
+        // destinatário pode ser PJ contribuinte de verdade; omitir o campo
+        // deixava a Focus/SEFAZ inferir errado. Valor já resolvido em
+        // NfeService::montarNotaData() via IndicadorIeDestinatarioResolver.
+        // IE do destinatário só entra no payload quando há uma IE real pra
+        // mandar (indicador 1) — mandar o campo vazio/null junto de um
+        // indicador diferente de 1 é o tipo de inconsistência que a própria
+        // Focus/SEFAZ pode rejeitar por outro motivo.
+        $ieDestinatario = ($n->tomador['indicador_ie'] ?? 9) === 1
+            ? ['inscricao_estadual_destinatario' => $n->tomador['inscricao_estadual'] ?? null]
+            : [];
+
         return [
             'natureza_operacao'  => $n->naturezaOperacao,
             'data_emissao'       => date('Y-m-d'),
@@ -405,6 +422,8 @@ class FocusNfeProvider implements FiscalProvider, ConsultaNotaTerceiroProvider
             'finalidade_emissao' => 1, // normal
             'nome_destinatario'  => $n->tomador['nome'],
             $chaveDoc            => $docTomador,
+            'indicador_inscricao_estadual_destinatario' => $n->tomador['indicador_ie'] ?? 9,
+            ...$ieDestinatario,
             'logradouro_destinatario'   => $n->tomador['logradouro'] ?? '',
             'numero_destinatario'       => $n->tomador['numero'] ?? 'S/N',
             'bairro_destinatario'       => $n->tomador['bairro'] ?? '',

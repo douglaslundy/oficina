@@ -72,6 +72,10 @@ class ClienteController extends Controller
             'cidade'         => ['nullable', 'string', 'max:80'],
             'uf'             => ['nullable', 'string', 'size:2'],
             'codigo_ibge'    => ['nullable', 'string', 'max:10'],
+            // Ver IndicadorIeDestinatarioResolver — bloqueia emissão de NF-e
+            // pra cliente PJ sem IE nem isento marcado (NF-e #13, cStat=232).
+            'inscricao_estadual' => ['nullable', 'string', 'max:20'],
+            'ie_isento'          => ['nullable', 'boolean'],
             'veiculo_modelo' => ['nullable', 'string', 'max:80'],
             'veiculo_ano'    => ['nullable', 'integer', 'min:1900', 'max:2100'],
             'veiculo_placa'  => ['nullable', 'string', 'max:10'],
@@ -118,6 +122,8 @@ class ClienteController extends Controller
             'cidade'         => ['nullable', 'string', 'max:80'],
             'uf'             => ['nullable', 'string', 'size:2'],
             'codigo_ibge'    => ['nullable', 'string', 'max:10'],
+            'inscricao_estadual' => ['nullable', 'string', 'max:20'],
+            'ie_isento'          => ['nullable', 'boolean'],
             'veiculo_modelo' => ['nullable', 'string', 'max:80'],
             'veiculo_ano'    => ['nullable', 'integer'],
             'veiculo_placa'  => ['nullable', 'string', 'max:10'],

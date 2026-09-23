@@ -24,10 +24,11 @@ class Cliente extends Model
     protected $fillable = [
         'nome', 'cpf_cnpj', 'telefone', 'email',
         'cep', 'endereco', 'bairro', 'cidade', 'uf', 'codigo_ibge',
+        'inscricao_estadual', 'ie_isento',
         'veiculo_modelo', 'veiculo_ano', 'veiculo_placa', 'status', 'oficina_id',
     ];
 
-    protected $casts = ['criado_em' => 'datetime'];
+    protected $casts = ['criado_em' => 'datetime', 'ie_isento' => 'boolean'];
 
     public function getActivitylogOptions(): LogOptions
     {

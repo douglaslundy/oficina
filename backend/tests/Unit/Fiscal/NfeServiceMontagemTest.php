@@ -51,6 +51,11 @@ class NfeServiceMontagemTest extends TestCase
             'nome' => 'Fulano', 'cpf_cnpj' => '12345678000199',
             'email' => 'f@x.com', 'cep' => '01310100', 'endereco' => 'Av A',
             'bairro' => 'Centro', 'cidade' => 'São Paulo', 'uf' => 'SP',
+            // Cliente PJ precisa de IE (ou isento) pra NF-e não bloquear —
+            // ver IndicadorIeDestinatarioResolverTest pro comportamento
+            // detalhado; aqui só precisa não travar, o foco do teste é
+            // numeroReservado.
+            'inscricao_estadual' => '123456789',
         ]);
         $nota = new NotaFiscal([
             'valor_total' => 150.0, 'aliquota_iss' => 5.0,
@@ -105,6 +110,7 @@ class NfeServiceMontagemTest extends TestCase
             'nome' => 'Fulano', 'cpf_cnpj' => '12345678000199',
             'email' => 'f@x.com', 'cep' => '01310100', 'endereco' => 'Av A',
             'bairro' => 'Centro', 'cidade' => 'São Paulo', 'uf' => 'SP',
+            'inscricao_estadual' => '123456789',
         ]);
         $nota = new NotaFiscal([
             'valor_total' => 150.0, 'aliquota_iss' => 5.0,

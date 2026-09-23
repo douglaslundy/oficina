@@ -5983,3 +5983,79 @@ achado ao ler o entrypoint).
 desconto na OS/PDV, botão "Realizar Pagamento", checkbox de OS canceladas,
 cores dos pills de orçamento — a infraestrutura do deploy está confirmada
 saudável, mas nenhum fluxo de UI foi clicado de ponta a ponta.
+
+## 2026-09-23 — Bug real: NF-e #13 rejeitada (cStat=232, IE do destinatário)
+
+Usuário reportou rejeição real em produção: `cStat=232: IE do destinatario
+nao informada`, numa NF-e de produto (#13).
+
+### Causa raiz
+`clientes` **não tinha coluna nenhuma de Inscrição Estadual**. Os 3
+caminhos de emissão de NF-e tratavam TODO destinatário como não
+contribuinte, cada um de um jeito diferente:
+- `MotorNfe.php` (NFePHP): `indIEDest` hardcoded em `9`.
+- `FocusNfeProvider::montarPayloadNfe()`: campo simplesmente omitido do
+  payload (diferente de `montarPayloadNfce()`, que hardcoda `9`
+  corretamente — NFC-e é sempre consumidor final de verdade, isso nunca foi
+  bug).
+- `SpedyProvider::montarPayloadNfe()`: `isFinalCustomer` hardcoded `true`
+  desde 2026-09-10 (correção anterior real, documentada no próprio
+  arquivo — "SEFAZ 696" — mas que só tratou o sintoma daquele erro
+  específico, não a causa: `clientes` sem IE).
+
+Pra um cliente PJ que É contribuinte de verdade (tem IE real na SEFAZ), a
+nota afirmava "não contribuinte" — a SEFAZ cruza o CNPJ contra o cadastro
+estadual, detecta a divergência e rejeita.
+
+### Correção
+- Migration `2026_09_23_000001_add_inscricao_estadual_to_clientes_table`:
+  `clientes.inscricao_estadual` (nullable) + `ie_isento` (boolean,
+  default false).
+- `IndicadorIeDestinatarioResolver` (novo, `app/Services/Fiscal/`): CPF →
+  sempre 9. CNPJ com IE cadastrada → 1 + a IE. CNPJ marcado isento → 2.
+  **CNPJ sem IE nem isento → bloqueia com `EmissaoBloqueadaException`**,
+  mesma disciplina de "nunca chutar valor fiscal" já usada em
+  `CriarNotaFiscalService`.
+- `NfeService::montarNotaData()`: resolve o indicador uma vez (só quando
+  `modeloInterno === 'NFE'` — NFC-e continua com sua própria regra de
+  domínio, não passa pelo resolver) e inclui `indicador_ie`/
+  `inscricao_estadual` no array `tomador`.
+- `MotorNfe.php` e `FocusNfeProvider::montarPayloadNfe()`: usam o valor
+  resolvido em vez do hardcode/omissão.
+- `SpedyProvider.php`: **NÃO alterado o comportamento** — deixei um
+  comentário explícito explicando por quê (não confirmei contra
+  docs.spedy.com.br o nome do campo pra mandar uma IE real de contribuinte;
+  mudar `isFinalCustomer` sem isso arriscava trocar uma rejeição por outra
+  não verificada — mesmo erro de adivinhar campo que causou o bug
+  original). Limitação conhecida registrada: cliente PJ contribuinte via
+  Spedy ainda sai como consumidor final; usar Focus NFe ou NFePHP pra esses
+  clientes até confirmar o schema real da Spedy.
+- Frontend (`ClienteForm.tsx`): campo de IE + checkbox "isento" aparece só
+  quando o CPF/CNPJ digitado é CNPJ (>11 dígitos), com aviso de que a
+  emissão de NF-e bloqueia sem isso.
+- `ClienteController`/`ClienteResource`: validação e serialização dos 2
+  campos novos.
+
+### Testes
+- `IndicadorIeDestinatarioResolverTest` novo (7 casos, todos passando).
+- 2 regressões reais encontradas e corrigidas: `NfeServiceMontagemTest`
+  tinha 2 testes com cliente PJ fixture sem IE, que passaram a bloquear
+  corretamente — fixtures atualizadas com IE válida (o bloqueio em si era o
+  comportamento certo, só a fixture estava desatualizada).
+  `EmissaoOrquestradorTest.php` (Feature, não executável neste ambiente
+  sem Postgres) recebeu o mesmo ajuste preventivamente, já que seu cliente
+  fixture PJ passa pelo mesmo caminho de emissão.
+- Suite Unit completa: 423 testes, 11 erros — todos os mesmos 11
+  pré-existentes de sempre (ambiente sem Postgres/OpenSSL local), zero
+  regressão nova.
+- `npx tsc --noEmit` limpo no frontend.
+
+### Pendente
+- Migration não rodada em produção ainda (`php artisan migrate` — precisa
+  do Docker do usuário).
+- Cliente real da NF-e #13 precisa ter a IE cadastrada manualmente (ou
+  marcado isento) antes de reemitir — a correção de código não preenche
+  dado que só o usuário/contador sabe.
+- Campo de IE da Spedy pra NF-e B2B real permanece não implementado,
+  documentado como limitação conhecida.
+- Não commitado nem deployado ainda — só local, aguardando revisão.

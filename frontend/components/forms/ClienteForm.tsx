@@ -29,6 +29,13 @@ const schema = z.object({
   // emissão de NF-e pra não sair com o município da OFICINA no documento do
   // cliente (ver NfeService::montarNotaData()).
   codigo_ibge: z.string().optional(),
+  // Bug real de produção (2026-09-23, NF-e #13, cStat=232 "IE do
+  // destinatário não informada"): cliente pessoa jurídica sem Inscrição
+  // Estadual cadastrada bloqueia a emissão de NF-e (nunca é adivinhada —
+  // ver IndicadorIeDestinatarioResolver no backend). Só relevante pra CNPJ;
+  // pessoa física nunca tem IE.
+  inscricao_estadual: z.string().optional(),
+  ie_isento: z.boolean().optional(),
 })
 
 type FormData = z.infer<typeof schema>
@@ -65,6 +72,9 @@ export function ClienteForm({ initialData, onSuccess }: ClienteFormProps) {
   const [veiculos, setVeiculos] = useState<VeiculoRow[]>([])
 
   const cep = watch('cep')
+  const cpfCnpjDigits = (watch('cpf_cnpj') ?? '').replace(/\D/g, '')
+  const isPessoaJuridica = cpfCnpjDigits.length > 11
+  const ieIsento = watch('ie_isento')
   // O CEP salvo já vem preenchido em modo de edição, o que dispararia o
   // autofill do ViaCEP no primeiro render e sobrescreveria o endereço
   // carregado do banco — pular essa primeira execução.
@@ -196,6 +206,26 @@ export function ClienteForm({ initialData, onSuccess }: ClienteFormProps) {
           <input {...register('cpf_cnpj')} placeholder="000.000.000-00" style={{ ...inputStyle, borderColor: errors.cpf_cnpj ? 'var(--danger)' : 'var(--border)' }} />
           {errors.cpf_cnpj && <p style={{ color: 'var(--danger)', fontSize: 12, marginTop: 4 }}>{errors.cpf_cnpj.message}</p>}
         </div>
+        {isPessoaJuridica && (
+          <div>
+            <label style={labelStyle}>Inscrição Estadual {!ieIsento && '*'}</label>
+            <input
+              {...register('inscricao_estadual')}
+              disabled={ieIsento}
+              style={{ ...inputStyle, opacity: ieIsento ? 0.5 : 1 }}
+              placeholder="Obrigatória pra emitir NF-e pra este cliente"
+            />
+            <label style={{ display: 'flex', alignItems: 'center', gap: 6, marginTop: 6, cursor: 'pointer' }}>
+              <input type="checkbox" {...register('ie_isento')} style={{ width: 14, height: 14, accentColor: 'var(--accent)' }} />
+              <span style={{ color: 'var(--muted)', fontSize: 12 }}>Isento de Inscrição Estadual</span>
+            </label>
+            {!ieIsento && (
+              <p style={{ color: 'var(--muted)', fontSize: 11, marginTop: 4 }}>
+                Sem IE nem "isento" marcado, a emissão de NF-e pra este cliente fica bloqueada.
+              </p>
+            )}
+          </div>
+        )}
         <div>
           <label style={labelStyle}>Telefone</label>
           <input {...register('telefone')} style={inputStyle} placeholder="(11) 99999-9999" />

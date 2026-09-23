@@ -169,10 +169,19 @@ class MotorNfe
         ]);
 
         $docTomador = preg_replace('/\D/', '', $nota->tomador['cpf_cnpj'] ?? '') ?? '';
+        // Bug real corrigido 2026-09-23 (NF-e #13, cStat=232 "IE do
+        // destinatário não informada"): antes disto, todo destinatário de
+        // NF-e era tratado como não contribuinte (indIEDest=9) mesmo
+        // quando era uma PJ com IE real cadastrada na SEFAZ — a nota
+        // afirmava um fato fiscal falso e era rejeitada por divergência
+        // com o cadastro estadual de contribuintes. O valor correto já vem
+        // resolvido de NfeService::montarNotaData() via
+        // IndicadorIeDestinatarioResolver — nunca decidir de novo aqui.
         $make->tagdest((object) array_filter([
             (strlen($docTomador) > 11 ? 'CNPJ' : 'CPF') => $docTomador,
-            'xNome'   => $nota->tomador['nome'] ?? '',
-            'indIEDest' => 9, // Não contribuinte
+            'xNome'     => $nota->tomador['nome'] ?? '',
+            'indIEDest' => $nota->tomador['indicador_ie'] ?? 9,
+            'IE'        => $nota->tomador['inscricao_estadual'] ?? null,
         ]));
 
         $make->tagenderDest((object) [
