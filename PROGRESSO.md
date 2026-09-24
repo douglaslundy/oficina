@@ -1,6 +1,28 @@
 # Progresso do Projeto
 
 ## Última atualização
+2026-09-23 (13) — **Regressão real achada e corrigida ao consolidar a doc da
+Focus NFe num cache local da skill fiscal (não durante uma varredura do
+projeto — achado "de graça" ao verificar a doc real pra outro propósito).**
+- `FocusNfeProvider::mapStatus()` é compartilhado por NF-e/NFC-e/NFS-e (3
+  call sites). A limpeza de código morto do item (11) removeu `'denegado'`
+  checando só a doc de NF-e (onde de fato não é mais retornado desde a NT
+  2024.001) — mas a doc de NFC-e confirma ao vivo que `denegado` continua
+  sendo um 5º status real só daquele documento. Sem o arm, caía no fallback
+  e ficava preso como "ainda processando" pra sempre — reintroduzindo a
+  MESMA classe de bug que a auditoria inteira existiu pra corrigir.
+  Restaurado com prefixo `[Denegado]` na mensagem.
+- NF-e da Focus nunca mandava `consumidor_final` (campo real — uma
+  auditoria anterior desta sessão concluiu erroneamente que não existia,
+  checando só o payload de NFC-e). Setado `'1'` fixo, mesma regra dos
+  outros dois motores.
+- Suíte Unit: mesmos 14 erros do baseline, zero regressão nova. Deploy com
+  backup Postgres prévio.
+- **Lição**: uma "limpeza de código morto" em código fiscal compartilhado
+  entre tipos de documento precisa do Check 1 (espelhamento entre tipos de
+  documento) do `audit-checklist.md` da skill — checar SÓ a doc do tipo de
+  documento mais óbvio não é suficiente quando a função é compartilhada.
+
 2026-09-23 (12) — **Segunda varredura de verificação da auditoria fiscal (item
 11) — 4 agentes céticos re-checando cada fix + procurando o que passou batido.
 Achado 1 real corrigido e deployado; 2 itens levantados pra decisão do
