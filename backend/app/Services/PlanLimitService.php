@@ -11,6 +11,7 @@ use App\Models\OrdemServico;
 use App\Models\Produto;
 use App\Models\Usuario;
 use App\Tenancy\TenancyContext;
+use Illuminate\Database\QueryException;
 use Illuminate\Validation\ValidationException;
 
 class PlanLimitService
@@ -134,16 +135,33 @@ class PlanLimitService
             ->exists();
         if ($jaCobrada) return;
 
-        Cobranca::create([
-            'oficina_id'     => $oficina->id,
-            'nota_fiscal_id' => $nota->id,
-            'mes_referencia' => now()->startOfMonth()->toDateString(),
-            'valor'          => $preco,
-            'status'         => 'PENDENTE',
-            'tipo'           => 'NOTA_EXCEDENTE',
-            'descricao'      => "Nota fiscal excedente (#{$nota->numero}) — acima do limite de {$limite}/mês do plano {$oficina->plano->nome}",
-            'vencimento'     => now()->endOfMonth()->toDateString(),
-        ]);
+        // Defesa em profundidade (auditoria 2026-09-23, round 2): esta
+        // checagem-depois-cria ainda tem uma janela teórica de corrida (dois
+        // processos podem passar pelo `exists()` acima antes de qualquer um
+        // criar) — AplicarResultadoNotaService::aplicar() agora trava a
+        // linha da NotaFiscal antes de decidir chamar este método, o que já
+        // fecha a corrida na prática, mas o índice único parcial
+        // `cobrancas_nota_fiscal_tipo_excedente_uniq` garante isso também no
+        // nível do banco, caso outro caminho futuro chame este método sem
+        // passar por aquele lock. Se a constraint disparar mesmo assim, é
+        // exatamente o caso que ela existe pra pegar — trata como "já
+        // cobrada", não como erro real.
+        try {
+            Cobranca::create([
+                'oficina_id'     => $oficina->id,
+                'nota_fiscal_id' => $nota->id,
+                'mes_referencia' => now()->startOfMonth()->toDateString(),
+                'valor'          => $preco,
+                'status'         => 'PENDENTE',
+                'tipo'           => 'NOTA_EXCEDENTE',
+                'descricao'      => "Nota fiscal excedente (#{$nota->numero}) — acima do limite de {$limite}/mês do plano {$oficina->plano->nome}",
+                'vencimento'     => now()->endOfMonth()->toDateString(),
+            ]);
+        } catch (QueryException $e) {
+            if (! str_contains($e->getMessage(), 'cobrancas_nota_fiscal_tipo_excedente_uniq')) {
+                throw $e;
+            }
+        }
     }
 
     private function totalNotasMes(string $oficinaId): int

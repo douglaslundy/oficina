@@ -7,6 +7,7 @@ use App\Models\NotaFiscal;
 use App\Services\AlertaDispatchService;
 use App\Services\Fiscal\Pdf\NotaFiscalDocumentoService;
 use App\Services\PlanLimitService;
+use Illuminate\Support\Facades\DB;
 
 /**
  * Persiste na NotaFiscal o resultado de uma emissão/consulta de status e
@@ -40,39 +41,56 @@ class AplicarResultadoNotaService
      */
     public function aplicar(NotaFiscal $nota, array $resultado, string $ambiente): NotaFiscal
     {
-        // Capturado ANTES do update() — este método é compartilhado pelo job
-        // de emissão, pelo polling de status e pelo cron de reconciliação;
-        // duas chamadas quase simultâneas observando a MESMA transição pra
-        // AUTORIZADA não podem disparar o e-mail/cobrança duas vezes. Só a
-        // chamada que realmente vê a nota sair de um status != AUTORIZADA
-        // é que dispara os efeitos colaterais abaixo.
-        $statusAnterior = $nota->status;
+        // Achado de auditoria 2026-09-23 (round 2): capturar $statusAnterior
+        // a partir do $nota em memória (sem lock) reabria o MESMO formato de
+        // corrida que IniciarEmissaoNotaService::iniciar() já fechou noutro
+        // arquivo — duas chamadas concorrentes (job de emissão vs polling de
+        // status vs cron nfe:reconciliar-processando) podiam capturar
+        // $statusAnterior != AUTORIZADA cada uma, antes de qualquer update()
+        // persistir, e ambas disparar e-mail/cobrança. A checagem +
+        // atualização inteira agora roda dentro de DB::transaction() com a
+        // linha travada (lockForUpdate) — só a chamada que realmente vence a
+        // corrida pelo lock e vê a transição de verdade decide disparar os
+        // efeitos colaterais. Efeitos colaterais (e-mail, billing) ficam
+        // FORA da transação de propósito — são I/O externo (SMTP, etc.), não
+        // devem segurar a lock da linha, e uma falha neles não deve reverter
+        // a persistência do resultado fiscal em si.
+        $deveDispararEfeitos = false;
 
-        $nota->update([
-            'status'        => $resultado['status'],
-            'chave_acesso'  => $resultado['chave'] ?? $nota->chave_acesso,
-            'protocolo'     => $resultado['protocolo'] ?? $nota->protocolo,
-            'xml_retorno'   => $resultado['xml_retorno'] ?? $nota->xml_retorno,
-            'qrcode_url'    => $resultado['qrcode_url'] ?? null,
-            'mensagem_erro' => $resultado['mensagem_erro'] ?? null,
-            // Para NF-e/NFC-e o número que vale legalmente é o atribuído pela
-            // Focus/SEFAZ/MotorNfe, não o contador interno gravado antes da
-            // emissão. Fallback pro valor existente se o provedor não devolver
-            // um número (comportamento da NFS-e).
-            'numero'        => isset($resultado['numero']) ? (int) $resultado['numero'] : $nota->numero,
-            // Contingência EPEC: a reconciliação agendada precisa saber desde
-            // quando a nota está em contingência. Se ela sai desse estado por
-            // aqui, o campo é limpo.
-            'contingencia_desde' => $resultado['status'] === 'CONTINGENCIA' ? now() : null,
-            'emitido_em'    => $resultado['status'] === 'AUTORIZADA' ? now() : null,
-        ]);
+        $notaTravada = DB::transaction(function () use ($nota, $resultado, &$deveDispararEfeitos) {
+            $travada = NotaFiscal::lockForUpdate()->findOrFail($nota->id);
+            $statusAnterior = $travada->status;
+
+            $travada->update([
+                'status'        => $resultado['status'],
+                'chave_acesso'  => $resultado['chave'] ?? $travada->chave_acesso,
+                'protocolo'     => $resultado['protocolo'] ?? $travada->protocolo,
+                'xml_retorno'   => $resultado['xml_retorno'] ?? $travada->xml_retorno,
+                'qrcode_url'    => $resultado['qrcode_url'] ?? null,
+                'mensagem_erro' => $resultado['mensagem_erro'] ?? null,
+                // Para NF-e/NFC-e o número que vale legalmente é o atribuído
+                // pela Focus/SEFAZ/MotorNfe, não o contador interno gravado
+                // antes da emissão. Fallback pro valor existente se o
+                // provedor não devolver um número (comportamento da NFS-e).
+                'numero'        => isset($resultado['numero']) ? (int) $resultado['numero'] : $travada->numero,
+                // Contingência EPEC: a reconciliação agendada precisa saber
+                // desde quando a nota está em contingência. Se ela sai desse
+                // estado por aqui, o campo é limpo.
+                'contingencia_desde' => $resultado['status'] === 'CONTINGENCIA' ? now() : null,
+                'emitido_em'    => $resultado['status'] === 'AUTORIZADA' ? now() : null,
+            ]);
+
+            $deveDispararEfeitos = $resultado['status'] === 'AUTORIZADA' && $statusAnterior !== 'AUTORIZADA';
+
+            return $travada;
+        });
 
         // Ambiente lido AGORA, não o $ambiente recebido por parâmetro — ver
         // docblock do método.
         $ambienteAtual = $this->providerManager->ambienteDaOficina();
 
-        if ($resultado['status'] === 'AUTORIZADA' && $statusAnterior !== 'AUTORIZADA' && $ambienteAtual === 'PRODUCAO') {
-            $notaFresh = $nota->fresh()->loadMissing(['cliente', 'itens']);
+        if ($deveDispararEfeitos && $ambienteAtual === 'PRODUCAO') {
+            $notaFresh = $notaTravada->fresh()->loadMissing(['cliente', 'itens']);
             $this->planLimit->registrarNotaSeExcedente($notaFresh);
             // Pedido explícito do usuário (2026-09-14): o e-mail de "NF
             // Autorizada" pro cliente deve levar o PDF e o XML da nota, não
@@ -88,6 +106,6 @@ class AplicarResultadoNotaService
             ], anexos: $this->documentos->montarAnexosEmail($notaFresh));
         }
 
-        return $nota->fresh();
+        return $notaTravada->fresh();
     }
 }
