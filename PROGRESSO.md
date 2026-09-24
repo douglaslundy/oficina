@@ -1,6 +1,39 @@
 # Progresso do Projeto
 
 ## Última atualização
+2026-09-23 (12) — **Segunda varredura de verificação da auditoria fiscal (item
+11) — 4 agentes céticos re-checando cada fix + procurando o que passou batido.
+Achado 1 real corrigido e deployado; 2 itens levantados pra decisão do
+usuário, não corrigidos.**
+- **Corrigido**: `AplicarResultadoNotaService::aplicar()` tinha fechado a
+  duplicação de e-mail/cobrança checando `status` anterior, mas sem travar a
+  linha — reabria a MESMA corrida que `IniciarEmissaoNotaService` já tinha
+  fechado noutro arquivo (job de emissão vs polling vs cron podiam capturar
+  o status anterior quase ao mesmo tempo). Envolvido em `DB::transaction()` +
+  `lockForUpdate()`, igual ao outro arquivo. Mais índice único parcial em
+  `cobrancas(nota_fiscal_id, tipo)` como defesa em profundidade pro
+  check-then-create de `PlanLimitService::registrarNotaSeExcedente()`.
+- **Pendente de decisão do usuário, NÃO corrigido**: os 3 motores nunca
+  declaram a IE do destinatário em NFC-e — `NfeService::montarNotaData()`
+  só aciona `IndicadorIeDestinatarioResolver` pra `modeloInterno==='NFE'`,
+  nunca `'NFCE'` (comentário explícito no código: "NFC-e já trata todo
+  destinatário como não contribuinte — regra de domínio"). É uma assunção de
+  negócio deliberada, não um bug de código — mas é a MESMA forma de suposição
+  que o achado #5 (isFinalCustomer da Spedy) provou errada nesta sessão.
+  Efeito colateral: o fix #7 do Spedy (IE em NFC-e) está no código mas
+  inalcançável em produção até essa decisão ser tomada.
+- **Risco conhecido, não corrigido (janela estreita)**: se o processo cair
+  entre o commit da transação de `IniciarEmissaoNotaService::iniciar()`
+  (nota já PROCESSANDO, número já alocado) e o dispatch do job (fora da
+  transação de propósito), a nota fica presa em PROCESSANDO pra sempre — o
+  cron `nfe:reconciliar-processando` não recupera esse caso porque
+  `chave_acesso` está vazia (não foi de fato submetida) e `NfeService::
+  consultarStatus()` faz no-op nesse caso pra NFEPHP. Baixa probabilidade
+  (janela de poucos ms), mas real.
+- Suíte Unit: 445 testes, mesmos 14 erros do baseline (Postgres/RefreshDatabase
+  neste sandbox), zero regressão nova. Deploy em produção com backup Postgres
+  prévio, migration `2026_09_23_000003` confirmada.
+
 2026-09-23 (11) — **Auditoria fiscal completa dos 3 motores (Focus NFe, Spedy,
 NFePHP) contra doc real do fornecedor + regras SEFAZ, via 4 agentes paralelos
 (um por motor + um pra camada de orquestração/domínio) — 6 bugs reais
