@@ -210,10 +210,9 @@ class FocusNfeProvider implements FiscalProvider, ConsultaNotaTerceiroProvider
         $status = $this->mapStatus((string) ($json['status'] ?? 'processando_autorizacao'));
 
         if ($status === 'REJEITADA') {
-            return EmissaoResultado::rejeitada(
-                $json['mensagem'] ?? ($json['erros'][0]['mensagem'] ?? 'Rejeitada pela SEFAZ.'),
-                $ref,
-            );
+            $msg = $this->prefixoDoStatusBruto((string) ($json['status'] ?? ''))
+                . ($json['mensagem'] ?? ($json['erros'][0]['mensagem'] ?? 'Rejeitada pela SEFAZ.'));
+            return EmissaoResultado::rejeitada($msg, $ref);
         }
         if ($status === 'PROCESSANDO') {
             return EmissaoResultado::processando($ref);
@@ -420,6 +419,17 @@ class FocusNfeProvider implements FiscalProvider, ConsultaNotaTerceiroProvider
             'data_emissao'       => date('Y-m-d'),
             'tipo_documento'     => 1, // saída
             'finalidade_emissao' => 1, // normal
+            // Corrigido 2026-09-23 (auditoria fiscal completa, verificação
+            // adicional após consolidar a doc real na skill): este campo
+            // nunca era mandado — a Focus fica livre pra assumir o próprio
+            // default dela (não confirmado se é '0' Normal ou '1'
+            // Consumidor final). Igual à regra já aplicada nos outros dois
+            // motores (`indFinal => 1` no NFePHP, `isFinalCustomer: true`
+            // na Spedy): esta oficina vende sempre pro consumidor final de
+            // verdade do serviço/peça, nunca pra revenda — hardcoded, não
+            // condicionado à IE do destinatário (mesma lição do bug
+            // original cStat=232: IE presente não significa revenda).
+            'consumidor_final'   => '1',
             'nome_destinatario'  => $n->tomador['nome'],
             $chaveDoc            => $docTomador,
             'indicador_inscricao_estadual_destinatario' => $n->tomador['indicador_ie'] ?? 9,
@@ -446,17 +456,44 @@ class FocusNfeProvider implements FiscalProvider, ConsultaNotaTerceiroProvider
         ];
     }
 
+    /**
+     * Corrigido 2026-09-23 (achado ao consolidar a doc real da Focus na
+     * skill fiscal — cache local em assets/focus-nfe-schema-reference.md):
+     * este metodo e COMPARTILHADO por NF-e (resultadoNfeDe), NFC-e
+     * (resultadoNfceDe) e NFS-e (resultadoDe) — confirmado pelos 3 call
+     * sites abaixo. Uma "limpeza de codigo morto" anterior removeu
+     * 'denegado' com base SO na doc de status da NF-e (onde de fato nao e
+     * mais retornado desde a NT 2024.001), sem checar a doc de NFC-e
+     * separadamente — a Focus confirma ao vivo que consultar_nfce AINDA
+     * tem um 5o status real, 'denegado', que NF-e/NFS-e nao tem. Sem essa
+     * chave, um denegado de NFC-e caia no fallback e ficava preso como
+     * "ainda processando" pra sempre — exatamente a mesma classe de bug
+     * (status terminal tratado como transitorio) que esta auditoria
+     * inteira existiu pra corrigir, reintroduzida por engano na propria
+     * limpeza. NF-e/NFS-e nunca mandam esse valor, entao adicionar o arm
+     * de volta nao muda nada pra elas.
+     */
     public function mapStatus(string $focusStatus): string
     {
         return match ($focusStatus) {
             'autorizado'              => 'AUTORIZADA',
             'cancelado'               => 'CANCELADA',
             'erro_autorizacao'        => 'REJEITADA',
+            'denegado'                => 'REJEITADA', // real so em NFC-e — ver docblock acima
             'processando_autorizacao' => 'PROCESSANDO',
-            // 'denegado' nao e mais retornado pela Focus desde a NT 2024.001 (ago/2024):
-            // denegacao por irregularidade cadastral do emitente foi convertida em rejeicao comum.
             default                   => $this->statusDesconhecido($focusStatus),
         };
+    }
+
+    /**
+     * 'denegado' e juridicamente distinto de uma rejeicao comum (problema
+     * cadastral do EMITENTE junto a SEFAZ, nao do documento em si) — sem
+     * prefixo, fica indistinguivel de erro_autorizacao pra quem for
+     * debugar depois so olhando notas_fiscais.mensagem_erro.
+     */
+    private function prefixoDoStatusBruto(string $focusStatus): string
+    {
+        return $focusStatus === 'denegado' ? '[Denegado] ' : '';
     }
 
     private function statusDesconhecido(string $status): string
@@ -483,10 +520,9 @@ class FocusNfeProvider implements FiscalProvider, ConsultaNotaTerceiroProvider
         $status = $this->mapStatus((string) ($json['status'] ?? 'processando_autorizacao'));
 
         if ($status === 'REJEITADA') {
-            return EmissaoResultado::rejeitada(
-                $json['mensagem'] ?? ($json['erros'][0]['mensagem'] ?? 'Rejeitada pela Prefeitura.'),
-                $ref,
-            );
+            $msg = $this->prefixoDoStatusBruto((string) ($json['status'] ?? ''))
+                . ($json['mensagem'] ?? ($json['erros'][0]['mensagem'] ?? 'Rejeitada pela Prefeitura.'));
+            return EmissaoResultado::rejeitada($msg, $ref);
         }
         if ($status === 'PROCESSANDO') {
             return EmissaoResultado::processando($ref);
@@ -518,10 +554,9 @@ class FocusNfeProvider implements FiscalProvider, ConsultaNotaTerceiroProvider
         $status = $this->mapStatus((string) ($json['status'] ?? 'processando_autorizacao'));
 
         if ($status === 'REJEITADA') {
-            return EmissaoResultado::rejeitada(
-                $json['mensagem'] ?? ($json['erros'][0]['mensagem'] ?? 'Rejeitada pela SEFAZ.'),
-                $ref,
-            );
+            $msg = $this->prefixoDoStatusBruto((string) ($json['status'] ?? ''))
+                . ($json['mensagem'] ?? ($json['erros'][0]['mensagem'] ?? 'Rejeitada pela SEFAZ.'));
+            return EmissaoResultado::rejeitada($msg, $ref);
         }
         if ($status === 'PROCESSANDO') {
             return EmissaoResultado::processando($ref);
