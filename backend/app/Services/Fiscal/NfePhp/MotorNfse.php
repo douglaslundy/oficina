@@ -191,6 +191,12 @@ class MotorNfse
                         'cTribMun'  => preg_match('/^\d{3}$/', $nota->codigoServicoMunicipal) ? $nota->codigoServicoMunicipal : null,
                         'xDescServ' => $nota->descricao,
                     ], static fn ($v) => $v !== null),
+                    // "Optante pelo Simples" + Placa/Modelo/KM (exigência
+                    // Correios) — grupo opcional (0-1) do schema, só vai
+                    // quando há texto.
+                    ...($nota->informacoesComplementares
+                        ? ['infoCompl' => ['xInfComp' => $nota->informacoesComplementares]]
+                        : []),
                 ],
                 'valores' => [
                     'vServPrest' => ['vServ' => $nota->valorServicos],

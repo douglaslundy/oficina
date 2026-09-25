@@ -8,6 +8,7 @@ use App\Models\NotaFiscal;
 use App\Services\Fiscal\Data\NotaFiscalData;
 use App\Services\Fiscal\FiscalProviderManager;
 use App\Services\Fiscal\IndicadorIeDestinatarioResolver;
+use App\Services\Fiscal\InformacoesComplementaresResolver;
 use Illuminate\Support\Facades\DB;
 
 class NfeService
@@ -206,6 +207,14 @@ class NfeService
             cnpjEmitente: $config?->cnpj,
             inscricaoMunicipalEmitente: $config?->inscricao_municipal,
             codigoIbgeEmitente: $config?->codigo_ibge,
+            informacoesComplementares: InformacoesComplementaresResolver::montar(
+                $nota,
+                $config,
+                incluirObservacoes: $temItens,
+                limite: $temItens
+                    ? InformacoesComplementaresResolver::LIMITE_NFE
+                    : InformacoesComplementaresResolver::LIMITE_NFSE,
+            ),
         );
     }
 

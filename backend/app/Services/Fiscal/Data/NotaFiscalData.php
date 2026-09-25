@@ -78,5 +78,9 @@ final class NotaFiscalData
         public readonly ?string $cnpjEmitente = null,
         public readonly ?string $inscricaoMunicipalEmitente = null,
         public readonly ?string $codigoIbgeEmitente = null,
+        // Dados adicionais (NF-e infCpl / NFS-e xInfComp): "optante pelo
+        // Simples Nacional" + Placa/Modelo/KM da OS. Montado uma vez por
+        // InformacoesComplementaresResolver; cada motor só escolhe onde pôr.
+        public readonly ?string $informacoesComplementares = null,
     ) {}
 }

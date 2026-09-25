@@ -345,6 +345,12 @@ class NotaFiscalController extends Controller
         foreach ($notas as $nota) {
             $arquivo = $doc->montarPdfArquivo($nota, $empresa);
             $zip->addFromString($arquivo['filename'], $arquivo['pdf']->output());
+
+            // Exigência dos Correios: o XML de cada nota junto com o PDF.
+            $xml = $doc->xml($nota);
+            if ($xml !== null) {
+                $zip->addFromString($xml['filename'], $xml['conteudo']);
+            }
         }
 
         $zip->close();

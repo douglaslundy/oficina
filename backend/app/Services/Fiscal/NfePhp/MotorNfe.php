@@ -422,6 +422,10 @@ class MotorNfe
             'vPag'   => $vProdTotal,
         ]);
 
+        if (!empty($nota->informacoesComplementares)) {
+            $make->taginfAdic((object) ['infCpl' => $nota->informacoesComplementares]);
+        }
+
         // Confirmado: getXML() chama render() internamente quando $this->xml
         // ainda está vazio (Make.php linha ~350) — não precisamos chamar
         // montaNFe()/render() explicitamente antes, como o brief já supunha.

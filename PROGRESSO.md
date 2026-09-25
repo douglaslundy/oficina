@@ -1,6 +1,32 @@
 # Progresso do Projeto
 
 ## Última atualização
+2026-09-25 (14) — **Exigências dos Correios (NF-e peças + NFS-e serviços de
+oficina Simples): dados adicionais com "optante pelo Simples Nacional" +
+Placa/Modelo/KM da OS, XML no ZIP. Motor NFEPHP feito; Spedy/Focus, skill e
+deploy PENDENTES (aguardando autorização do usuário pro 1º deploy).**
+- Novo `InformacoesComplementaresResolver` (fonte única pros 3 motores):
+  monta o texto a partir de `Configuracao.regime_tributario` (CrtResolver=1)
+  + `OrdemServico` (veiculo_placa, veiculo_descricao/modelo, km_atual). Em
+  NF-e inclui também `observacoes` (antes ignorado por todos os motores); em
+  NFS-e NÃO, porque `observacoes` já é o `xDescServ`.
+- `NotaFiscalData.informacoesComplementares` populado em
+  `NfeService::montarNotaData()`. NFEPHP: `MotorNfe` → `taginfAdic(infCpl)`
+  (limite 5000); `MotorNfse` → `serv/infoCompl/xInfComp` (limite 255, o do DTO
+  da lib). `downloadZip` agora inclui o XML de cada nota junto do PDF.
+- Código 1401 já atendido (14.01 → cTribNac 140101). Anexo 4 = manual, fora
+  do escopo (decisão do usuário).
+- Testes: 38 verdes nos 3 arquivos tocados. Suíte Unit: 18 erros, TODOS de
+  ambiente (14 Postgres + 4 `CertificadoStoreTest` `openssl_csr_sign` no
+  Windows), nenhum no código alterado.
+- Arquivos: Fiscal/InformacoesComplementaresResolver.php (novo),
+  Fiscal/Data/NotaFiscalData.php, NfeService.php, NfePhp/MotorNfe.php,
+  NfePhp/MotorNfse.php, NotaFiscalController.php, +3 arquivos de teste.
+- **Sequência combinada com o usuário**: (1) deploy NFEPHP após autorização →
+  (2) Spedy + Focus (`additionalInformation`/equivalente Focus, ler doc real)
+  → (3) registrar o padrão na skill fiscal → (4) 2º deploy → (5) push da
+  skill pro GitHub.
+
 2026-09-23 (13) — **Regressão real achada e corrigida ao consolidar a doc da
 Focus NFe num cache local da skill fiscal (não durante uma varredura do
 projeto — achado "de graça" ao verificar a doc real pra outro propósito).**
