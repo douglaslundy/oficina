@@ -5,6 +5,7 @@ import { formatarMoeda, formatarDataHora } from '@/lib/formatters'
 import api, { xsrfHeader } from '@/lib/api'
 import { toast } from '@/hooks/useToast'
 import { useAuth } from '@/hooks/useAuth'
+import { nomeArquivoFiscal } from '@/lib/arquivoFiscal'
 
 interface NotaFiscal {
   id: string
@@ -136,7 +137,7 @@ export default function HistoricoNFPage() {
       const url  = URL.createObjectURL(blob)
       const a    = document.createElement('a')
       a.href     = url
-      a.download = `NF-${nota.numero}.pdf`
+      a.download = nomeArquivoFiscal(res, nota.modelo, nota.numero, 'pdf')
       a.click()
       URL.revokeObjectURL(url)
     } catch {
@@ -163,7 +164,7 @@ export default function HistoricoNFPage() {
       const url  = URL.createObjectURL(blob)
       const a    = document.createElement('a')
       a.href     = url
-      a.download = `NF-${nota.numero}.xml`
+      a.download = nomeArquivoFiscal(res, nota.modelo, nota.numero, 'xml')
       a.click()
       URL.revokeObjectURL(url)
     } catch {
@@ -173,7 +174,7 @@ export default function HistoricoNFPage() {
 
   async function confirmarCancelamento() {
     if (!cancelModal) return
-    if (motivo.length < 10) { toast('O motivo deve ter no mínimo 10 caracteres.', 'danger'); return }
+    if (motivo.trim().length < 15) { toast('O motivo deve ter no mínimo 15 caracteres (exigência da SEFAZ).', 'danger'); return }
     setCancelando(true)
     try {
       await api.post(`/notas-fiscais/${cancelModal.id}/cancelar`, { motivo })
@@ -473,18 +474,19 @@ export default function HistoricoNFPage() {
             <textarea
               value={motivo}
               onChange={e => setMotivo(e.target.value)}
+              maxLength={255}
               rows={3}
-              placeholder="Descreva o motivo do cancelamento (mínimo 10 caracteres)..."
+              placeholder="Descreva o motivo do cancelamento (mínimo 15 caracteres)..."
               style={{
                 width: '100%', background: 'var(--card)',
-                border: `1px solid ${motivo.length > 0 && motivo.length < 10 ? 'var(--danger)' : 'var(--border)'}`,
+                border: `1px solid ${motivo.length > 0 && motivo.trim().length < 15 ? 'var(--danger)' : 'var(--border)'}`,
                 borderRadius: 8, color: 'var(--text)', padding: '10px 12px',
                 fontSize: 14, resize: 'vertical', outline: 'none', boxSizing: 'border-box',
               }}
             />
-            {motivo.length > 0 && motivo.length < 10 && (
+            {motivo.length > 0 && motivo.trim().length < 15 && (
               <p style={{ color: 'var(--danger)', fontSize: 12, marginTop: 4 }}>
-                Mínimo 10 caracteres ({motivo.length}/10)
+                Mínimo 15 caracteres, exigência da SEFAZ ({motivo.trim().length}/15)
               </p>
             )}
             <div style={{ display: 'flex', gap: 12, marginTop: 24, justifyContent: 'flex-end' }}>

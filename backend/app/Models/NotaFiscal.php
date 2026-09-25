@@ -25,7 +25,7 @@ class NotaFiscal extends Model
         'numero', 'serie', 'modelo', 'cliente_id', 'os_id',
         'natureza_operacao', 'forma_pagamento', 'subtotal', 'desconto',
         'aliquota_iss', 'valor_iss', 'valor_total', 'status',
-        'chave_acesso', 'protocolo', 'xml_retorno', 'pdf_url', 'qrcode_url', 'mensagem_erro', 'observacoes', 'emitido_em',
+        'chave_acesso', 'protocolo', 'xml_retorno', 'pdf_url', 'qrcode_url', 'mensagem_erro', 'observacoes', 'informacoes_complementares', 'emitido_em',
         'oficina_id',
         'provedor', 'ambiente', 'referencia_externa', 'contingencia_desde',
     ];
@@ -57,14 +57,19 @@ class NotaFiscal extends Model
      */
     public function getInformacoesComplementaresXmlAttribute(): ?string
     {
-        if (empty($this->xml_retorno)
-            || preg_match('#<(infCpl|xInfComp)>(.*?)</\1>#s', (string) $this->xml_retorno, $m) !== 1) {
-            return null;
+        if (!empty($this->xml_retorno)
+            && preg_match('#<(infCpl|xInfComp)>(.*?)</\1>#s', (string) $this->xml_retorno, $m) === 1) {
+            $texto = trim(html_entity_decode($m[2], ENT_QUOTES | ENT_XML1, 'UTF-8'));
+            if ($texto !== '') {
+                return $texto;
+            }
         }
 
-        $texto = trim(html_entity_decode($m[2], ENT_QUOTES | ENT_XML1, 'UTF-8'));
+        // Spedy/Focus nem sempre devolvem o campo no XML: cai pro snapshot do
+        // que foi enviado na emissão (coluna informacoes_complementares).
+        $snapshot = trim((string) $this->getAttribute('informacoes_complementares'));
 
-        return $texto === '' ? null : $texto;
+        return $snapshot === '' ? null : $snapshot;
     }
 
     public function cliente(): BelongsTo { return $this->belongsTo(Cliente::class, 'cliente_id'); }

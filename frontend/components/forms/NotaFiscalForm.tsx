@@ -5,6 +5,7 @@ import { toast } from '@/hooks/useToast'
 import { formatarMoeda } from '@/lib/formatters'
 import { ProdutoCombobox } from '@/components/ui/ProdutoCombobox'
 import type { ProdutoBusca } from '@/lib/produtoBusca'
+import { nomeArquivoFiscal } from '@/lib/arquivoFiscal'
 
 interface ItemNF {
   descricao: string
@@ -143,7 +144,7 @@ export function NotaFiscalForm() {
       const url  = URL.createObjectURL(blob)
       const a    = document.createElement('a')
       a.href     = url
-      a.download = `NF-${numero ?? notaId}.pdf`
+      a.download = nomeArquivoFiscal(res, modeloExibido, numero ?? notaId, 'pdf')
       a.click()
       URL.revokeObjectURL(url)
     } catch {

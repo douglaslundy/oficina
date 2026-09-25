@@ -196,7 +196,9 @@ class NotaFiscalController extends Controller
     public function cancelar(Request $request, string $id): JsonResponse
     {
         $nota = NotaFiscal::findOrFail($id);
-        $request->validate(['motivo' => ['required', 'string', 'min:10']]);
+        // SEFAZ (xJust da NF-e e motivo do evento da NFS-e nacional): 15 a 255 caracteres.
+        // Com min:10 um motivo curto passava aqui e só era recusado lá ("Era um teste").
+        $request->validate(['motivo' => ['required', 'string', 'min:15', 'max:255']]);
 
         if ($nota->provedor === 'NFEPHP' && in_array($nota->modelo, ['NF-e', 'NFC-e'], true) && $nota->status === 'AUTORIZADA') {
             if (empty($nota->chave_acesso) || empty($nota->protocolo)) {

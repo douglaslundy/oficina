@@ -1310,4 +1310,29 @@ XML;
         Http::assertSent(fn ($req) => str_contains($req->url(), '/product-invoices'));
         Http::assertNotSent(fn ($req) => str_contains($req->url(), '/orders'));
     }
+
+    private const INFO_CORREIOS = 'Empresa optante pelo Simples Nacional. Placa: QXI3449 | Modelo: HONDA CG 160 | KM: 40332';
+
+    private function comInfo(NotaFiscalData $base): NotaFiscalData
+    {
+        return new NotaFiscalData(...array_merge(get_object_vars($base), ['informacoesComplementares' => self::INFO_CORREIOS]));
+    }
+
+    public function test_payload_nfse_manda_informacoes_adicionais(): void
+    {
+        $p = new SpedyProvider('https://sandbox-api.spedy.com.br/v1', 'master', 'tok', 'emp-1');
+
+        $this->assertSame(self::INFO_CORREIOS, $p->montarPayloadNfse($this->comInfo($this->nota()))['additionalInformation']);
+        $this->assertArrayNotHasKey('additionalInformation', $p->montarPayloadNfse($this->nota()));
+    }
+
+    public function test_payload_nfe_e_nfce_mandam_additional_information_infcpl(): void
+    {
+        $p = new SpedyProvider('https://sandbox-api.spedy.com.br/v1', 'master', 'tok', 'emp-1');
+        $nota = $this->comInfo($this->notaNfeSimplesNacional());
+
+        $this->assertSame(self::INFO_CORREIOS, $p->montarPayloadNfe($nota)['additionalInformation']);
+        $this->assertSame(self::INFO_CORREIOS, $p->montarPayloadNfce($nota)['additionalInformation']);
+        $this->assertArrayNotHasKey('additionalInformation', $p->montarPayloadNfe($this->notaNfeSimplesNacional()));
+    }
 }

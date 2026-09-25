@@ -36,7 +36,7 @@ class NotaFiscalDocumentoService
             $dados['barcodeDataUri'] = $this->gerarBarcodeChaveDataUri($nota->chave_acesso);
             $pdf = Pdf::loadView('pdf.danfe', $dados)->setPaper('a4', 'portrait');
 
-            return ['conteudo' => $pdf->output(), 'filename' => 'DANFE-' . ($nota->numero ?? $nota->id) . '.pdf'];
+            return ['conteudo' => $pdf->output(), 'filename' => 'NFe-' . ($nota->numero ?? $nota->id) . '.pdf'];
         }
 
         $empresa = Configuracao::first()?->toArray() ?? [];

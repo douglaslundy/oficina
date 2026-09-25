@@ -235,6 +235,12 @@ class NfeService
             config: $config,
         );
 
+        // Snapshot do texto de dados adicionais enviado (PDF local de Spedy/Focus, que
+        // nem sempre devolvem o campo no XML). update() direto: não sujar o model.
+        if ($data->informacoesComplementares !== null) {
+            NotaFiscal::where('id', $nota->id)->update(['informacoes_complementares' => $data->informacoesComplementares]);
+        }
+
         $resultado = $provider->emitir($data);
 
         return [

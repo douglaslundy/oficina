@@ -27,7 +27,7 @@ Falta o teste em homologação (NF-e + NFS-e a partir de uma OS).**
   real são os 50 dígitos. Corrigido: `chaveDoInfNfse()` em emitir()/consultar()
   + migration `2026_09_25_000001` que tira o prefixo das NFS-e já gravadas
   (seguro: `chaveNfse50()` aceita as duas formas). 32 testes verdes.
-  **NÃO deployado — aguardando autorização.** Spedy/Focus não usam esse Id.
+  DEPLOYADO junto com o bug 4 (f24cc1e). Spedy/Focus não usam esse Id.
 - **Bug 4 + pedido (usuário, 2026-09-25) — texto não saía no PDF; OS sem campo
   de informações complementares.** (a) Os PDFs (DANFE `danfe_corpo` e
   `nota_fiscal_nfse`) imprimiam só `nota.observacoes`, nunca o `infCpl`/
@@ -41,7 +41,50 @@ Falta o teste em homologação (NF-e + NFS-e a partir de uma OS).**
   hora da emissão: precisa estar preenchida ANTES de emitir as notas.
   Testes: 10 do resolver + NfePhp/Pdf verdes (só os 4 do CertificadoStore de
   ambiente); `tsc --noEmit` limpo. Bugs 3 e 4 deployam juntos (2 migrations).
-  **NÃO deployado — aguardando autorização.** Não foi coberto: NF-e via
+  **DEPLOYADO (f24cc1e, 2026-09-25, backup pre-deploy 15-32-47).**
+- **Bug 5 (usuário, 2026-09-25) — cancelar nota com motivo "Era um teste"
+  (12 chars) dava erro:** front e back aceitavam min 10, mas a SEFAZ (xJust
+  da NF-e / motivo do evento da NFS-e nacional) exige 15–255. Corrigido:
+  `NotaFiscalController::cancelar` → `min:15|max:255`; modal do histórico com
+  mínimo 15, contador e `maxLength=255`. `tsc` limpo; testes existentes de
+  cancelamento já usam motivos ≥ 15. **NÃO deployado — aguardando autorização.**
+- **Validação dos XMLs contra os XSD oficiais (2026-09-25):** NF-e nº 18
+  (homolog.) VÁLIDA em `procNFe_v4.00.xsd` (sped-nfe PL_009_V4), DV da chave
+  ok. NFS-e nº 2 VÁLIDA no ADN (cStat 100) mas o `NFSe_v1.01.xsd` da lib
+  (validado c/ 1 regex `(?!…)` trocada por equivalente, libxml não suporta)
+  acusa `cServ` sem `cNBS` — o ADN aceita sem; NBS só é obrigatório na DPS em
+  cenário de exterior (dps-servico.txt). **ACHADO: a NFS-e nº 2 foi emitida em
+  PRODUÇÃO (tpAmb=1, notas_fiscais.ambiente=PRODUCAO, AUTORIZADA, tomador
+  Correios) — `configuracoes.ambiente_fiscal` já era PRODUCAO; as notas 15/16/17/18
+  foram HOMOLOGACAO.** Avisado o usuário (cancelar só no Emissor Nacional prod.).
+- **Spedy + Focus (2026-09-25) — mesmas correções do NFEPHP, campos conferidos
+  na doc oficial dos provedores:** Spedy NF-e/NFC-e/NFS-e `additionalInformation`
+  (infCpl); Focus NF-e/NFC-e `informacoes_adicionais_contribuinte` (String
+  1-5000 → infCpl); Focus NFS-e municipal `/v2/nfse` NÃO tem campo próprio →
+  texto vai no fim de `servico.discriminacao` (`' - '`). Sanitização (E1235)
+  já vale pros 3 (mora no `InformacoesComplementaresResolver`). Nova coluna
+  `notas_fiscais.informacoes_complementares` (migration `2026_09_25_000003`)
+  = snapshot do texto enviado, gravado em `NfeService::emitir()`; o accessor
+  `informacoes_complementares_xml` prefere o texto do XML e cai no snapshot
+  (PDF de Spedy/Focus). N/A nos outros motores: chave "NFS" (só NFEPHP tem
+  esse Id) e 539 (laço de número é do NFEPHP; Spedy/Focus retornam a rejeição
+  como REJEITADA, sem retry de número — lacuna conhecida, registrada na
+  skill como Check 9). NÃO coberto: Spedy modo `/orders` (AUTOMATICO_PROVEDOR).
+  Testes: 462 Unit, só os 18 de ambiente. **Skill `br-fiscal-note-emission`
+  (repo douglaslundy/br-fiscal-note-emission, commit 3b01101, pushado)**:
+  pitfalls #20–#25, tabela de campos por motor, checks 7–9, baseline p/ nova
+  ferramenta. **Pendente: commit+deploy do projeto (bugs 5, 6, Spedy/Focus,
+  snapshot; 1 migration nova) — aguardando autorização.**
+- **Bug 6 (usuário, 2026-09-25) — download saía sempre "NF-<n>":** o backend
+  já mandava o nome certo no Content-Disposition (NFSe-/NFe-/NFCe-), mas o
+  frontend forçava `NF-${numero}` em 4 pontos (historico PDF e XML,
+  NotaFiscalForm, OS). Novo `frontend/lib/arquivoFiscal.ts` (usa o header do
+  servidor, fallback por modelo) nos 4 pontos; backend: DANFE da NF-e NFEPHP
+  passou de `DANFE-<n>.pdf` p/ `NFe-<n>.pdf` (consistente c/ Spedy/Focus). ZIP
+  já vinha certo. `tsc` limpo. **NÃO deployado — aguardando autorização.**
+  Cuidado: `sed -i` no Git Bash converte CRLF→LF (aconteceu em
+  NotaFiscalForm.tsx, revertido) — editar arquivos CRLF via php.
+  Não foi coberto: NF-e via
   Spedy/Focus (PDF vem do provedor).
 - Novo `InformacoesComplementaresResolver` (fonte única pros 3 motores):
   monta o texto a partir de `Configuracao.regime_tributario` (CrtResolver=1)

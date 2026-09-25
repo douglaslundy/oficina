@@ -274,6 +274,7 @@ class SpedyProvider implements FiscalProvider, ConsultaNotaTerceiroProvider
             // nosso banco mesmo já autorizada lá. `integrationId` é o campo
             // que consultar() usa como filtro (?integrationId=) pra achá-la.
             'integrationId'       => $this->integrationIdDe($n->referenciaExterna),
+            ...($n->informacoesComplementares !== null ? ['additionalInformation' => $n->informacoesComplementares] : []), // NFS-e: "Informações adicionais" (doc Spedy)
             'effectiveDate'       => now()->toDateString(),
             'sendEmailToCustomer' => false,
             'description'         => $n->descricao,
@@ -391,6 +392,7 @@ class SpedyProvider implements FiscalProvider, ConsultaNotaTerceiroProvider
             // integrationId: mesmo fix de reconciliação de montarPayloadNfse()
             // — ver comentário lá.
             'integrationId'   => $this->integrationIdDe($n->referenciaExterna),
+            'additionalInformation' => $n->informacoesComplementares, // NF-e/NFC-e: infCpl (doc Spedy)
             'series'          => $n->serieNf,
             'number'          => $n->numeroAlocado !== null ? (int) $n->numeroAlocado : null,
             // NFC-e é por definição venda a consumidor final — sempre true,
@@ -538,6 +540,7 @@ class SpedyProvider implements FiscalProvider, ConsultaNotaTerceiroProvider
             // integrationId: mesmo fix de reconciliação de montarPayloadNfse()
             // — ver comentário lá.
             'integrationId'   => $this->integrationIdDe($n->referenciaExterna),
+            'additionalInformation' => $n->informacoesComplementares, // NF-e/NFC-e: infCpl (doc Spedy)
             // series/number: ver docblock acima — omitidos (null) quando
             // NotaFiscalData não os carrega (ex.: chamada direta em teste).
             'series'          => $n->serieNf,

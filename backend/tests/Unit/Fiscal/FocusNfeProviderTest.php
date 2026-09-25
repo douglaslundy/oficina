@@ -709,4 +709,32 @@ class FocusNfeProviderTest extends TestCase
         $this->assertStringContainsString('não é suportado pela Focus', (string) $r->mensagemErro);
         Http::assertNothingSent();
     }
+
+    private const INFO_CORREIOS = 'Empresa optante pelo Simples Nacional. Placa: QXI3449 | Modelo: HONDA CG 160 | KM: 40332';
+
+    private function comInfo(NotaFiscalData $base): NotaFiscalData
+    {
+        return new NotaFiscalData(...array_merge(get_object_vars($base), ['informacoesComplementares' => self::INFO_CORREIOS]));
+    }
+
+    public function test_payload_nfe_e_nfce_mandam_informacoes_adicionais_contribuinte(): void
+    {
+        $p = new FocusNfeProvider('https://homologacao.focusnfe.com.br', 'master', 'HOMOLOGACAO', 'tok');
+        $nota = $this->comInfo($this->notaNfe());
+
+        $this->assertSame(self::INFO_CORREIOS, $p->montarPayloadNfe($nota)['informacoes_adicionais_contribuinte']);
+        $this->assertSame(self::INFO_CORREIOS, $p->montarPayloadNfce($nota)['informacoes_adicionais_contribuinte']);
+        $this->assertArrayNotHasKey('informacoes_adicionais_contribuinte', $p->montarPayloadNfe($this->notaNfe()));
+    }
+
+    public function test_payload_nfse_poe_o_texto_no_fim_da_discriminacao_pois_nao_ha_campo_proprio(): void
+    {
+        $p = new FocusNfeProvider('https://homologacao.focusnfe.com.br', 'master', 'HOMOLOGACAO', 'tok');
+
+        $this->assertSame(
+            'Serviço de troca de óleo - ' . self::INFO_CORREIOS,
+            $p->montarPayloadNfse($this->comInfo($this->nota()))['servico']['discriminacao'],
+        );
+        $this->assertSame('Serviço de troca de óleo', $p->montarPayloadNfse($this->nota())['servico']['discriminacao']);
+    }
 }

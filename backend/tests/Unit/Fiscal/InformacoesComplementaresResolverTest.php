@@ -128,4 +128,17 @@ class InformacoesComplementaresResolverTest extends TestCase
         $this->assertSame('Simples. Placa: X', $nfse->informacoes_complementares_xml);
         $this->assertNull((new NotaFiscal())->informacoes_complementares_xml);
     }
+
+    public function test_pdf_cai_no_snapshot_quando_o_xml_do_provedor_nao_traz_o_campo(): void
+    {
+        $n = new NotaFiscal();
+        $n->xml_retorno = '<NFe><infNFe/></NFe>';
+        $n->informacoes_complementares = 'Empresa optante pelo Simples Nacional. Placa: X';
+
+        $this->assertSame('Empresa optante pelo Simples Nacional. Placa: X', $n->informacoes_complementares_xml);
+
+        // O que está no XML tem prioridade sobre o snapshot.
+        $n->xml_retorno = '<NFe><infAdic><infCpl>do XML</infCpl></infAdic></NFe>';
+        $this->assertSame('do XML', $n->informacoes_complementares_xml);
+    }
 }

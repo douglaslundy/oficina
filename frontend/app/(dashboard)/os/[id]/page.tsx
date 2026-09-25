@@ -8,6 +8,7 @@ import { toast } from '@/hooks/useToast'
 import api from '@/lib/api'
 import { useAuth } from '@/hooks/useAuth'
 import { papelPermitido } from '@/lib/roleRules'
+import { nomeArquivoFiscal } from '@/lib/arquivoFiscal'
 
 const FORMAS_PAGAMENTO = ['Dinheiro', 'Cartão de Crédito', 'Cartão de Débito', 'PIX', 'Cheque', 'Transferência', 'Boleto']
 
@@ -199,7 +200,7 @@ export default function OSDetailPage() {
         const url  = URL.createObjectURL(blob)
         const a = document.createElement('a')
         a.href = url
-        a.download = `${nota.modelo}-${nota.numero ?? nota.id}.pdf`
+        a.download = nomeArquivoFiscal(response, nota.modelo, nota.numero ?? nota.id, 'pdf')
         a.click()
         URL.revokeObjectURL(url)
       }

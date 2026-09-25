@@ -159,6 +159,7 @@ class FocusNfeProvider implements FiscalProvider, ConsultaNotaTerceiroProvider
         return [
             'cnpj_emitente'      => preg_replace('/\D/', '', $n->cnpjEmitente ?? ''),
             'natureza_operacao'  => $n->naturezaOperacao,
+            ...($n->informacoesComplementares !== null ? ['informacoes_adicionais_contribuinte' => $n->informacoesComplementares] : []),
             'data_emissao'       => date('c'),
             'presenca_comprador' => 1, // presencial — único cenário coberto na v1
             'modalidade_frete'   => 9, // sem frete
@@ -381,7 +382,12 @@ class FocusNfeProvider implements FiscalProvider, ConsultaNotaTerceiroProvider
                 ],
             ],
             'servico' => [
-                'discriminacao'               => $n->descricao,
+                // A Focus NFS-e (/v2/nfse, doc emitir_nfse) NÃO tem campo de informações complementares
+                // — só `discriminacao` (2026-09-25, conferido na doc oficial). Então o texto dos Correios
+                // (Simples + placa/modelo/KM) vai ao final da discriminação, que é o que a prefeitura imprime.
+                'discriminacao'               => $n->informacoesComplementares !== null
+                    ? $n->descricao . ' - ' . $n->informacoesComplementares
+                    : $n->descricao,
                 'item_lista_servico'          => $n->codigoServicoFederal,
                 'codigo_tributario_municipio' => $n->codigoServicoMunicipal,
                 'codigo_municipio'            => $n->codigoIbgeEmitente ?? '',
@@ -416,6 +422,7 @@ class FocusNfeProvider implements FiscalProvider, ConsultaNotaTerceiroProvider
 
         return [
             'natureza_operacao'  => $n->naturezaOperacao,
+            ...($n->informacoesComplementares !== null ? ['informacoes_adicionais_contribuinte' => $n->informacoesComplementares] : []),
             'data_emissao'       => date('Y-m-d'),
             'tipo_documento'     => 1, // saída
             'finalidade_emissao' => 1, // normal
