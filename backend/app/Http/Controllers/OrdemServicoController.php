@@ -102,6 +102,7 @@ class OrdemServicoController extends Controller
             // envolve veículo, então o campo não se aplica.
             'km_atual'                => [$isVendaBalcao ? 'nullable' : 'required', 'integer', 'min:0', 'max:9999999'],
             'problema_relatado'       => ['nullable', 'string'],
+            'informacoes_complementares' => ['nullable', 'string', 'max:500'],
             'status'                  => ['nullable', 'string'],
             'forma_pagamento'         => ['nullable', 'string'],
             'prazo_entrega'           => ['nullable', 'date'],
@@ -280,6 +281,8 @@ class OrdemServicoController extends Controller
             'venda_a_prazo'        => ['sometimes', 'boolean'],
             'prazo_pagamento_dias' => ['sometimes', 'nullable', 'integer', 'min:1', 'max:365'],
             'desconto'             => ['sometimes', 'numeric', 'min:0'],
+            // Vai nos dados adicionais das notas fiscais (NF-e/NFS-e) geradas desta OS.
+            'informacoes_complementares' => ['sometimes', 'nullable', 'string', 'max:500'],
             // KM só pode ser preenchido quando ainda está vazio (rascunho de OS
             // vindo de um agendamento, ou OS antiga anterior a este campo). Uma
             // leitura já registrada não é reescrita por aqui.

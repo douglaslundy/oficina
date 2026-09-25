@@ -25,7 +25,7 @@ class OrdemServico extends Model
     protected $fillable = [
         'cliente_id', 'mecanico_id', 'veiculo_id', 'veiculo_descricao', 'veiculo_placa',
         'km_atual',
-        'problema_relatado', 'status', 'forma_pagamento', 'prazo_entrega',
+        'problema_relatado', 'informacoes_complementares', 'status', 'forma_pagamento', 'prazo_entrega',
         'valor_total', 'valor_pago', 'desconto', 'numero', 'oficina_id',
         'venda_a_prazo', 'prazo_pagamento_dias', 'data_vencimento_pagamento',
         'tipo',

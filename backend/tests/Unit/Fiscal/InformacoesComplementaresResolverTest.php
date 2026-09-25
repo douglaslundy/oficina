@@ -106,4 +106,26 @@ class InformacoesComplementaresResolverTest extends TestCase
     {
         $this->assertNull(R::montar($this->nota(null, '🔧🔧'), $this->cfg('Lucro Presumido'), true, R::LIMITE_NFE));
     }
+
+    public function test_informacoes_complementares_da_os_entram_depois_do_veiculo(): void
+    {
+        $os = $this->os();
+        $os->informacoes_complementares = 'Contrato 123/2026 - Centro de custo BH';
+
+        $t = R::montar($this->nota($os), $this->cfg('Simples Nacional'), false, R::LIMITE_NFE);
+
+        $this->assertStringContainsString('KM: 84500 Contrato 123/2026 - Centro de custo BH', $t);
+    }
+
+    public function test_pdf_le_o_texto_que_foi_no_xml_da_nota(): void
+    {
+        $nfe = new NotaFiscal();
+        $nfe->xml_retorno = '<NFe><infAdic><infCpl>Placa: A &amp; B | KM: 1</infCpl></infAdic></NFe>';
+        $nfse = new NotaFiscal();
+        $nfse->xml_retorno = '<DPS><serv><infoCompl><xInfComp>Simples. Placa: X</xInfComp></infoCompl></serv></DPS>';
+
+        $this->assertSame('Placa: A & B | KM: 1', $nfe->informacoes_complementares_xml);
+        $this->assertSame('Simples. Placa: X', $nfse->informacoes_complementares_xml);
+        $this->assertNull((new NotaFiscal())->informacoes_complementares_xml);
+    }
 }

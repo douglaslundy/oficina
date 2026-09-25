@@ -7,8 +7,8 @@ Placa/Modelo/KM da OS, XML no ZIP. Motor NFEPHP feito; Spedy/Focus, skill e
 2º deploy PENDENTES. 1º deploy FEITO 2026-09-25 (commit 685507e, backup
 pre-deploy prévio, domínio público 200, código confirmado no container).
 Falta o teste em homologação (NF-e + NFS-e a partir de uma OS).**
-- **Homologação (2026-09-25) achou 2 bugs, corrigidos localmente, SEM deploy
-  ainda (aguardando autorização):** (a) NFS-e E1235 — `xInfComp` recusado por
+- **Homologação (2026-09-25) achou 2 bugs, corrigidos localmente, DEPLOYADO (63d44eb, 2026-09-25, backup pre-deploy 14-50-53).
+  (aguardava autorização — feito):** (a) NFS-e E1235 — `xInfComp` recusado por
   'Pattern constraint' porque o modelo do veículo tinha travessão "—"
   (TSString só aceita U+0021–U+00FF). `InformacoesComplementaresResolver::
   sanitizar()` (travessão→"-", descarta emoji/controles, colapsa espaços).
@@ -21,6 +21,28 @@ Falta o teste em homologação (NF-e + NFS-e a partir de uma OS).**
   MotorNfce tem o mesmo padrão e NÃO foi alterado (fora do escopo Correios).
   Laço de retry sem teste unitário (exige SEFAZ real); só o guard é testado.
   Notas rejeitadas #15 (NF-e) e #33 (NFS-e) precisam ser reemitidas após deploy.
+- **Bug 3 (reportado pelo usuário, 2026-09-25) — chave da NFS-e saía com
+  prefixo "NFS" ("NFS313…", 53 chars):** `MotorNfse` gravava o `Id` do infNFSe
+  como chave; o "NFS" é só exigência do XML (ID começa com letra), a chave
+  real são os 50 dígitos. Corrigido: `chaveDoInfNfse()` em emitir()/consultar()
+  + migration `2026_09_25_000001` que tira o prefixo das NFS-e já gravadas
+  (seguro: `chaveNfse50()` aceita as duas formas). 32 testes verdes.
+  **NÃO deployado — aguardando autorização.** Spedy/Focus não usam esse Id.
+- **Bug 4 + pedido (usuário, 2026-09-25) — texto não saía no PDF; OS sem campo
+  de informações complementares.** (a) Os PDFs (DANFE `danfe_corpo` e
+  `nota_fiscal_nfse`) imprimiam só `nota.observacoes`, nunca o `infCpl`/
+  `xInfComp` do XML. Novo accessor `NotaFiscal::informacoes_complementares_xml`
+  (lê o texto que FOI no XML) usado nos 2 templates — vale também pras notas
+  já emitidas. Renderizei o template NFS-e com o XML real da nota de teste:
+  texto aparece. (b) Nova coluna `ordens_servico.informacoes_complementares`
+  (varchar 500, migration `2026_09_25_000002`), validada em store()/update(),
+  no Resource, no `OSForm.tsx` (criar e editar; arquivo é CRLF) e somada pelo
+  `InformacoesComplementaresResolver` depois de placa/modelo/KM. É lida na
+  hora da emissão: precisa estar preenchida ANTES de emitir as notas.
+  Testes: 10 do resolver + NfePhp/Pdf verdes (só os 4 do CertificadoStore de
+  ambiente); `tsc --noEmit` limpo. Bugs 3 e 4 deployam juntos (2 migrations).
+  **NÃO deployado — aguardando autorização.** Não foi coberto: NF-e via
+  Spedy/Focus (PDF vem do provedor).
 - Novo `InformacoesComplementaresResolver` (fonte única pros 3 motores):
   monta o texto a partir de `Configuracao.regime_tributario` (CrtResolver=1)
   + `OrdemServico` (veiculo_placa, veiculo_descricao/modelo, km_atual). Em

@@ -50,6 +50,23 @@ class NotaFiscal extends Model
         static::creating(fn($m) => $m->id = $m->id ?: (string) Str::uuid());
     }
 
+    /**
+     * Texto de dados adicionais que foi de fato enviado no XML (NF-e `infCpl` /
+     * NFS-e `xInfComp`) — é ele que os PDFs mostram, pra a nota impressa bater
+     * com o documento fiscal. Null em nota sem XML ou sem esse campo.
+     */
+    public function getInformacoesComplementaresXmlAttribute(): ?string
+    {
+        if (empty($this->xml_retorno)
+            || preg_match('#<(infCpl|xInfComp)>(.*?)</\1>#s', (string) $this->xml_retorno, $m) !== 1) {
+            return null;
+        }
+
+        $texto = trim(html_entity_decode($m[2], ENT_QUOTES | ENT_XML1, 'UTF-8'));
+
+        return $texto === '' ? null : $texto;
+    }
+
     public function cliente(): BelongsTo { return $this->belongsTo(Cliente::class, 'cliente_id'); }
     public function ordemServico(): BelongsTo { return $this->belongsTo(OrdemServico::class, 'os_id'); }
     public function itens(): \Illuminate\Database\Eloquent\Relations\HasMany

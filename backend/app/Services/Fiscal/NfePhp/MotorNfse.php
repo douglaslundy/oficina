@@ -60,7 +60,11 @@ class MotorNfse
                 // campo "chaveAcesso" separado (o brief tinha assumido
                 // $resultado->chaveAcesso, que não existe em NfseData).
                 return EmissaoResultado::autorizada(
-                    chave: $resultado->infNfse?->id,
+                    // Chave = 50 dígitos. O `Id` do infNFSe vem com o prefixo
+                    // "NFS" (exigência do XML: um ID começa com letra) — NÃO faz
+                    // parte da chave; gravar com ele fazia a nota sair com
+                    // "NFS313..." na tela/PDF (reportado 2026-09-25).
+                    chave: $this->chaveDoInfNfse($resultado->infNfse?->id),
                     protocolo: null, // NFS-e nacional não expõe protocolo distinto da chave de acesso
                     numero: $resultado->infNfse?->numeroNfse,
                     xml: $resultado->nfseXml,
@@ -359,6 +363,12 @@ class MotorNfse
         }
     }
 
+    /** Chave (50 dígitos) a partir do `Id` do infNFSe, que vem com o prefixo "NFS". */
+    private function chaveDoInfNfse(?string $idInfNfse): ?string
+    {
+        return $idInfNfse === null ? null : $this->chaveNfse50($idInfNfse);
+    }
+
     /**
      * A API do SEFIN Nacional identifica a NFS-e pelos 50 dígitos da chave de
      * acesso. O que guardamos em `notas_fiscais.chave_acesso` é o `Id` do
@@ -473,7 +483,7 @@ class MotorNfse
 
         if ($status !== null && in_array($status, $statusAutorizados, true)) {
             return EmissaoResultado::autorizada(
-                chave: $resultado->infNfse?->id ?? $referencia,
+                chave: $this->chaveDoInfNfse($resultado->infNfse?->id) ?? $referencia,
                 protocolo: null,
                 numero: $resultado->infNfse?->numeroNfse,
                 xml: $resultado->nfseXml,

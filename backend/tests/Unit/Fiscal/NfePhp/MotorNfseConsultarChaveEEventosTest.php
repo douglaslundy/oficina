@@ -43,6 +43,14 @@ class MotorNfseConsultarChaveEEventosTest extends TestCase
         $this->assertSame(self::CHAVE_50, $this->invocar('chaveNfse50', 'NFS' . self::CHAVE_50));
     }
 
+    public function test_chave_gravada_vem_do_id_do_infnfse_sem_o_prefixo_nfs(): void
+    {
+        // Bug reportado 2026-09-25: a nota saía com "NFS313..." porque o Id do
+        // infNFSe (que começa com letra por exigência do XML) era gravado como chave.
+        $this->assertSame(self::CHAVE_50, $this->invocar('chaveDoInfNfse', 'NFS' . self::CHAVE_50));
+        $this->assertNull($this->invocar('chaveDoInfNfse', null));
+    }
+
     public function test_chave_que_ja_tem_50_digitos_fica_como_esta(): void
     {
         $this->assertSame(self::CHAVE_50, $this->invocar('chaveNfse50', self::CHAVE_50));

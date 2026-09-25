@@ -38,6 +38,7 @@ interface OSFormData {
   veiculo_placa?: string
   km_atual?: number
   problema_relatado?: string
+  informacoes_complementares?: string
   status: string
   forma_pagamento?: string
   prazo_entrega?: string
@@ -57,6 +58,7 @@ interface OSFormProps {
     veiculo_placa?: string
     km_atual?: number | null
     problema_relatado?: string
+    informacoes_complementares?: string | null
     status?: string
     forma_pagamento?: string
     prazo_entrega?: string
@@ -118,6 +120,7 @@ export function OSForm({ initialData, onSuccess, onConcluir, onCancelar }: OSFor
       veiculo_placa: initialData?.veiculo_placa ?? '',
       km_atual: initialData?.km_atual ?? undefined,
       problema_relatado: initialData?.problema_relatado ?? '',
+      informacoes_complementares: initialData?.informacoes_complementares ?? '',
       forma_pagamento: initialData?.forma_pagamento ?? '',
       prazo_entrega: initialData?.prazo_entrega ?? '',
       venda_a_prazo: initialData?.venda_a_prazo ?? false,
@@ -294,6 +297,7 @@ export function OSForm({ initialData, onSuccess, onConcluir, onCancelar }: OSFor
           status:                data.status,
           mecanico_id:           data.mecanico_id || null,
           problema_relatado:     data.problema_relatado,
+          informacoes_complementares: data.informacoes_complementares || null,
           // forma_pagamento não é mais editável por aqui — o formulário de
           // pagamento (na tela de detalhe da OS) é a única fonte dela agora
           // que o campo duplicado foi removido. Reenviar o valor antigo
@@ -464,6 +468,22 @@ export function OSForm({ initialData, onSuccess, onConcluir, onCancelar }: OSFor
           ) : (
             <textarea {...register('problema_relatado')} rows={3} style={{ ...S, resize: 'vertical' as const }} />
           )}
+        </div>
+
+        {/* Informações complementares (vão nos dados adicionais das notas fiscais) */}
+        <div style={{ gridColumn: '1 / -1' }}>
+          <label style={L}>Informações complementares</label>
+          <textarea
+            {...register('informacoes_complementares')}
+            rows={2}
+            maxLength={500}
+            placeholder="Ex.: nº do contrato/pedido, centro de custo…"
+            style={{ ...S, resize: 'vertical' as const }}
+          />
+          <span style={{ color: 'var(--muted)', fontSize: 12 }}>
+            Sai nos dados adicionais da NF-e e da NFS-e desta OS, junto com a placa, o modelo e o KM
+            (e a menção ao Simples Nacional, quando a empresa é optante). Preencha antes de emitir as notas.
+          </span>
         </div>
 
         {/* Prazo de entrega */}

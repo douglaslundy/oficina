@@ -51,6 +51,10 @@ final class InformacoesComplementaresResolver
             }
         }
 
+        if ($os !== null && !empty($os->informacoes_complementares)) {
+            $partes[] = trim((string) $os->informacoes_complementares);
+        }
+
         if ($incluirObservacoes && !empty($nota->observacoes)) {
             $partes[] = trim((string) $nota->observacoes);
         }

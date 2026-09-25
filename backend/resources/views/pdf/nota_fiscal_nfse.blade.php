@@ -153,6 +153,11 @@
 <div class="section-lbl">Discriminação dos Serviços</div>
 <div class="grid discriminacao">{{ $nota->observacoes ?? 'Serviços automotivos prestados conforme acordado.' }}</div>
 
+@if($nota->informacoes_complementares_xml)
+<div class="section-lbl">Informações Complementares</div>
+<div class="grid" style="padding:4px 6px; font-size:8px;">{{ $nota->informacoes_complementares_xml }}</div>
+@endif
+
 {{--
   Código de Classificação do Serviço (LC116) — pedido explícito do usuário
   (2026-09-14, análise visual comparando com o modelo oficial): faltava

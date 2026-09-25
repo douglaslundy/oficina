@@ -360,7 +360,7 @@
   <tr>
     <td style="width:65%; border-right:0.75px solid #000; min-height:34px;">
       <div class="lbl">Informações complementares</div>
-      <div style="font-size:8px; margin-top:3px; line-height:1.4;">{{ $nota->observacoes ?? '-' }}</div>
+      <div style="font-size:8px; margin-top:3px; line-height:1.4;">{{ $nota->informacoes_complementares_xml ?? $nota->observacoes ?? '-' }}</div>
     </td>
     <td style="width:35%;">
       <div class="lbl">Reservado ao Fisco</div>
