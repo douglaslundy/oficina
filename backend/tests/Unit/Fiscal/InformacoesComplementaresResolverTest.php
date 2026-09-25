@@ -76,4 +76,34 @@ class InformacoesComplementaresResolverTest extends TestCase
 
         $this->assertSame(40, mb_strlen($t));
     }
+
+    /** Mesmo padrão de TSString no XSD da NFS-e nacional (E1235 real de 2026-09-25). */
+    private const PADRAO_XSD = '/^(?:[!-\x{00FF}][ -\x{00FF}]*[!-\x{00FF}]|[!-\x{00FF}])$/u';
+
+    public function test_travessao_do_modelo_do_veiculo_nao_quebra_o_padrao_do_schema(): void
+    {
+        $os = new OrdemServico();
+        $os->veiculo_placa = 'QXI3449';
+        $os->veiculo_descricao = 'HONDA CG 160 CARGO C — 2019 — QXI3449';
+        $os->km_atual = 40332;
+        $os->setRelation('veiculo', null);
+
+        $t = R::montar($this->nota($os), $this->cfg('Simples Nacional'), false, R::LIMITE_NFSE);
+
+        $this->assertStringContainsString('HONDA CG 160 CARGO C - 2019 - QXI3449', $t);
+        $this->assertMatchesRegularExpression(self::PADRAO_XSD, $t);
+    }
+
+    public function test_sanitizar_remove_emoji_quebra_de_linha_e_espacos_nas_pontas(): void
+    {
+        $t = R::sanitizar("  Troca\r\nde óleo 🔧 “ok” – ção\t ");
+
+        $this->assertSame('Troca de óleo "ok" - ção', $t);
+        $this->assertMatchesRegularExpression(self::PADRAO_XSD, $t);
+    }
+
+    public function test_texto_so_com_caracteres_invalidos_vira_null(): void
+    {
+        $this->assertNull(R::montar($this->nota(null, '🔧🔧'), $this->cfg('Lucro Presumido'), true, R::LIMITE_NFE));
+    }
 }

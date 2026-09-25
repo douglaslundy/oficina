@@ -297,4 +297,15 @@ XML;
 
         $this->assertSame('', $cStat);
     }
+
+    public function test_539_sem_chave_na_mensagem_nao_pula_o_numero(): void
+    {
+        // Sem "chNFe: <44 dígitos>" não há como confirmar que o número está
+        // ocupado por nota CANCELADA — nunca pula (evita emitir duplicata).
+        $m = new \ReflectionMethod(MotorNfe::class, 'numeroOcupadoPorNotaCancelada');
+        $m->setAccessible(true);
+
+        $this->assertFalse($m->invoke(new MotorNfe(), 'cStat=539: Rejeicao: Duplicidade de NF-e', 'HOMOLOGACAO'));
+        $this->assertFalse($m->invoke(new MotorNfe(), 'cStat=539: [chNFe: 123]', 'HOMOLOGACAO'));
+    }
 }

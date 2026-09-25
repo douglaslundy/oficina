@@ -59,6 +59,33 @@ final class InformacoesComplementaresResolver
             return null;
         }
 
-        return mb_substr(implode(' ', $partes), 0, $limite);
+        $texto = self::sanitizar(implode(' ', $partes));
+
+        return $texto === '' ? null : mb_substr($texto, 0, $limite);
+    }
+
+    /**
+     * O schema fiscal (TSString da NFS-e nacional; TString da NF-e) só aceita
+     * caracteres de ! a ÿ (U+0021–U+00FF), sem espaço nas pontas. Bug real de
+     * produção (2026-09-25, E1235 na ADN): o modelo do veículo digitado na OS
+     * tinha travessão ("HONDA CG 160 CARGO C — 2019") e a nota inteira foi
+     * recusada por 'Pattern constraint failed'. Texto livre de OS/observação
+     * é digitado por humano — nunca confiar nele cru num campo de schema.
+     */
+    public static function sanitizar(string $texto): string
+    {
+        $texto = strtr($texto, [
+            '–' => '-', '—' => '-', '―' => '-', '−' => '-',
+            '‘' => "'", '’' => "'", '“' => '"', '”' => '"',
+            '…' => '...',
+        ]);
+        // Quebras de linha/tabs viram espaço; o que sobrar fora de
+        // U+0020–U+007E e U+00A0–U+00FF (emoji, CJK, controles C1 etc.) é
+        // descartado. NBSP (U+00A0) é aceito pelo schema, mas vira espaço comum.
+        $texto = preg_replace('/[\r\n\t\x{00A0}]+/u', ' ', $texto) ?? '';
+        $texto = preg_replace('/[^\x{0020}-\x{007E}\x{00A1}-\x{00FF}]/u', '', $texto) ?? '';
+        $texto = preg_replace('/ {2,}/', ' ', $texto) ?? '';
+
+        return trim($texto);
     }
 }

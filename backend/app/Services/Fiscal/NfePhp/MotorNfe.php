@@ -67,6 +67,9 @@ use NFePHP\NFe\Tools;
  */
 class MotorNfe
 {
+    /** Quantos números seguidos descartar quando a SEFAZ responde 539 antes de desistir. */
+    private const MAX_TENTATIVAS_NUMERO_OCUPADO = 5;
+
     // processarRespostaAutorizacao()/extrairCStatEvento()/
     // processarRespostaCancelamento()/processarRespostaConsulta() — extraído
     // pra ProcessaRespostaSefaz (2026-09-14) pra ser reusado por MotorNfce
@@ -529,62 +532,93 @@ class MotorNfe
             $tools = new Tools($this->configJson($cfg, $ambiente), $certificate);
             $tools->model(55);
 
-            $xml = $this->montarNfe($nota, $cfg, $ambiente, $numeroNfe, $serieNfe);
+            // Laço só repete em cStat=539 (número já usado na SEFAZ) — ver abaixo.
+            for ($tentativaNumero = 1; ; $tentativaNumero++) {
+                $xml = $this->montarNfe($nota, $cfg, $ambiente, $numeroNfe, $serieNfe);
 
-            try {
-                // Corrigido: o brief passava $xml (NÃO assinado) direto pra
-                // sefazEnviaLote(). Confirmado em Tools::sefazEnviaLote()
-                // (Tools.php ~65) que ele NÃO assina internamente — só monta
-                // o envelope e chama Common/Tools::isValid(), que por sua
-                // vez chama Validator::isValid() (sped-common), que LANÇA
-                // ValidatorException se o XML não bater com o XSD (o retorno
-                // bool de Tools::isValid() é descartado pelo chamador, mas a
-                // exception já escapou antes disso — confirmado lendo
-                // sped-common/src/Validator.php). O schema da NF-e exige
-                // <Signature>; sem assinar, TODA tentativa de emissão
-                // falharia localmente (nunca chegaria a rede) e seria
-                // classificada como "falha de comunicação" por este mesmo
-                // catch, caindo sempre pra EPEC — o oposto do que EPEC
-                // deveria ser (contingência excepcional, não o caminho
-                // padrão). Assinamos aqui via Tools::signNFe(), confirmado
-                // em Common/Tools.php ~367.
-                $xmlAssinado = $tools->signNFe($xml);
+                try {
+                    // Corrigido: o brief passava $xml (NÃO assinado) direto pra
+                    // sefazEnviaLote(). Confirmado em Tools::sefazEnviaLote()
+                    // (Tools.php ~65) que ele NÃO assina internamente — só monta
+                    // o envelope e chama Common/Tools::isValid(), que por sua
+                    // vez chama Validator::isValid() (sped-common), que LANÇA
+                    // ValidatorException se o XML não bater com o XSD (o retorno
+                    // bool de Tools::isValid() é descartado pelo chamador, mas a
+                    // exception já escapou antes disso — confirmado lendo
+                    // sped-common/src/Validator.php). O schema da NF-e exige
+                    // <Signature>; sem assinar, TODA tentativa de emissão
+                    // falharia localmente (nunca chegaria a rede) e seria
+                    // classificada como "falha de comunicação" por este mesmo
+                    // catch, caindo sempre pra EPEC — o oposto do que EPEC
+                    // deveria ser (contingência excepcional, não o caminho
+                    // padrão). Assinamos aqui via Tools::signNFe(), confirmado
+                    // em Common/Tools.php ~367.
+                    $xmlAssinado = $tools->signNFe($xml);
 
-                // indSinc=1: processamento síncrono — resposta já vem com o
-                // resultado da autorização, sem precisar de sefazConsultaRecibo()
-                // separado. Mesmo nível de "síncrono dentro da requisição" que
-                // Spedy/Focus/NFS-e já usam (ver Global Constraints do spec).
-                $resp = $tools->sefazEnviaLote([$xmlAssinado], (string) $numeroNfe, 1);
+                    // indSinc=1: processamento síncrono — resposta já vem com o
+                    // resultado da autorização, sem precisar de sefazConsultaRecibo()
+                    // separado. Mesmo nível de "síncrono dentro da requisição" que
+                    // Spedy/Focus/NFS-e já usam (ver Global Constraints do spec).
+                    $resp = $tools->sefazEnviaLote([$xmlAssinado], (string) $numeroNfe, 1);
 
-                return $this->processarRespostaAutorizacao($resp, $nota->referenciaExterna, $xmlAssinado, (string) $numeroNfe);
-            } catch (SoapException $eTransmissao) {
-                // CORRIGIDO — achado do review desta task: o brief original
-                // capturava `\Throwable` aqui, o que faria QUALQUER erro
-                // (schema inválido do signNFe(), URL de serviço mal
-                // configurada, InvalidArgumentException de entrada ruim,
-                // etc.) cair pra EPEC — registrando um evento de
-                // contingência real, legalmente vinculante, na SEFAZ por um
-                // motivo que nunca foi de comunicação. O spec é explícito:
-                // EPEC só entra por falha de COMUNICAÇÃO (timeout/conexão),
-                // nunca como reação a qualquer outro tipo de erro. Restrito
-                // a SoapException — confirmado em
-                // sped-common/src/Soap/SoapCurl.php que é essa a classe
-                // lançada pela camada HTTP (SoapCurl::send()) pra timeout,
-                // conexão recusada, resposta não-200, corpo vazio/não-XML —
-                // ou seja, exatamente "falha de comunicação". Qualquer outro
-                // \Throwable (ex.: ValidatorException de schema) propaga pro
-                // catch externo e retorna ERRO direto, sem tentar EPEC.
-                //
-                // Passamos o XML NÃO assinado — tentarEpec() precisa
-                // reassiná-lo com os ajustes de contingência (tpEmis=4
-                // etc), então reaproveitar o já assinado pra modo normal
-                // (tpEmis=1) seria descartado de qualquer forma.
-                Log::warning(
-                    'MotorNfe: falha na transmissão normal, tentando EPEC.',
-                    ['erro' => $eTransmissao->getMessage(), 'ref' => $nota->referenciaExterna],
-                );
+                    $resultado = $this->processarRespostaAutorizacao($resp, $nota->referenciaExterna, $xmlAssinado, (string) $numeroNfe);
 
-                return $this->tentarEpec($tools, $xml, $nota->referenciaExterna, (string) $numeroNfe);
+                    // Bug real de produção (2026-09-25, NF-e #15): cStat=539
+                    // "Duplicidade de NF-e, com diferença na Chave de Acesso" =
+                    // esse nNF/série JÁ foi usado na SEFAZ por outra NF-e (aqui,
+                    // uma nota de teste antiga, CANCELADA, que nosso banco não
+                    // conhecia — nota cancelada NÃO libera o número). Reenviar o
+                    // mesmo número nunca resolve, e a retentativa manual reusa o
+                    // número reservado (numeroReservado), então caía no mesmo erro
+                    // pra sempre. Descarta o número ocupado e tenta o próximo (a
+                    // numeração é transacional), até um limite pra nunca queimar
+                    // números sem fim se algo maior estiver errado.
+                    //
+                    // Só pula o número se a SEFAZ confirmar que a nota que o
+                    // ocupa está CANCELADA. Se estiver AUTORIZADA (ex.: a
+                    // resposta de uma tentativa nossa anterior se perdeu), pular
+                    // emitiria uma SEGUNDA nota real — aí devolve a rejeição pra
+                    // reconciliação manual em vez de duplicar.
+                    if (($resultado->status === 'REJEITADA') && str_contains((string) $resultado->mensagemErro, 'cStat=539')
+                        && $tentativaNumero < self::MAX_TENTATIVAS_NUMERO_OCUPADO
+                        && $this->numeroOcupadoPorNotaCancelada((string) $resultado->mensagemErro, $ambiente)) {
+                        Log::warning('MotorNfe: número já usado na SEFAZ (539), tentando o próximo.', [
+                            'ref' => $nota->referenciaExterna, 'numero_ocupado' => $numeroNfe, 'tentativa' => $tentativaNumero,
+                        ]);
+                        $numeroNfe = $this->numeracao->proximoNumeroNfe();
+                        continue;
+                    }
+
+                    return $resultado;
+                } catch (SoapException $eTransmissao) {
+                    // CORRIGIDO — achado do review desta task: o brief original
+                    // capturava `\Throwable` aqui, o que faria QUALQUER erro
+                    // (schema inválido do signNFe(), URL de serviço mal
+                    // configurada, InvalidArgumentException de entrada ruim,
+                    // etc.) cair pra EPEC — registrando um evento de
+                    // contingência real, legalmente vinculante, na SEFAZ por um
+                    // motivo que nunca foi de comunicação. O spec é explícito:
+                    // EPEC só entra por falha de COMUNICAÇÃO (timeout/conexão),
+                    // nunca como reação a qualquer outro tipo de erro. Restrito
+                    // a SoapException — confirmado em
+                    // sped-common/src/Soap/SoapCurl.php que é essa a classe
+                    // lançada pela camada HTTP (SoapCurl::send()) pra timeout,
+                    // conexão recusada, resposta não-200, corpo vazio/não-XML —
+                    // ou seja, exatamente "falha de comunicação". Qualquer outro
+                    // \Throwable (ex.: ValidatorException de schema) propaga pro
+                    // catch externo e retorna ERRO direto, sem tentar EPEC.
+                    //
+                    // Passamos o XML NÃO assinado — tentarEpec() precisa
+                    // reassiná-lo com os ajustes de contingência (tpEmis=4
+                    // etc), então reaproveitar o já assinado pra modo normal
+                    // (tpEmis=1) seria descartado de qualquer forma.
+                    Log::warning(
+                        'MotorNfe: falha na transmissão normal, tentando EPEC.',
+                        ['erro' => $eTransmissao->getMessage(), 'ref' => $nota->referenciaExterna],
+                    );
+
+                    return $this->tentarEpec($tools, $xml, $nota->referenciaExterna, (string) $numeroNfe);
+                }
             }
         } catch (\Throwable $e) {
             Log::warning('MotorNfe: falha ao emitir.', ['erro' => $e->getMessage(), 'ref' => $nota->referenciaExterna]);
@@ -602,6 +636,27 @@ class MotorNfe
                 $nota->referenciaExterna,
                 isset($numeroNfe) ? (string) $numeroNfe : null,
             );
+        }
+    }
+
+    /**
+     * cStat=539 traz a chave da NF-e que já ocupa o número ("chNFe: <44 dígitos>").
+     * Consulta essa chave na SEFAZ: true só se ela estiver CANCELADA (número
+     * queimado, sem risco de duplicar uma nota real). Qualquer dúvida (chave
+     * ausente, falha na consulta, status diferente) = false.
+     */
+    private function numeroOcupadoPorNotaCancelada(string $mensagemErro, string $ambiente): bool
+    {
+        if (! preg_match('/chNFe:\s*(\d{44})/', $mensagemErro, $m)) {
+            return false;
+        }
+
+        try {
+            return $this->consultar($m[1], $ambiente)->status === 'CANCELADA';
+        } catch (\Throwable $e) {
+            Log::warning('MotorNfe: não foi possível consultar a nota que ocupa o número (539).', ['erro' => $e->getMessage()]);
+
+            return false;
         }
     }
 

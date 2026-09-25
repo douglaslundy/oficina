@@ -4,7 +4,23 @@
 2026-09-25 (14) — **Exigências dos Correios (NF-e peças + NFS-e serviços de
 oficina Simples): dados adicionais com "optante pelo Simples Nacional" +
 Placa/Modelo/KM da OS, XML no ZIP. Motor NFEPHP feito; Spedy/Focus, skill e
-deploy PENDENTES (aguardando autorização do usuário pro 1º deploy).**
+2º deploy PENDENTES. 1º deploy FEITO 2026-09-25 (commit 685507e, backup
+pre-deploy prévio, domínio público 200, código confirmado no container).
+Falta o teste em homologação (NF-e + NFS-e a partir de uma OS).**
+- **Homologação (2026-09-25) achou 2 bugs, corrigidos localmente, SEM deploy
+  ainda (aguardando autorização):** (a) NFS-e E1235 — `xInfComp` recusado por
+  'Pattern constraint' porque o modelo do veículo tinha travessão "—"
+  (TSString só aceita U+0021–U+00FF). `InformacoesComplementaresResolver::
+  sanitizar()` (travessão→"-", descarta emoji/controles, colapsa espaços).
+  (b) NF-e cStat=539 — nº 15 já existia na SEFAZ homologação como NF-e
+  CANCELADA (consultei a chave: CANCELADA) que nosso banco não conhecia (48
+  notas foram deletadas do banco entre 14–20/09; nota cancelada não libera
+  número). `MotorNfe::emitir()` agora, em 539, consulta a chave citada e SÓ
+  pula pro próximo número se estiver CANCELADA (se estiver AUTORIZADA não
+  pula: evitaria duplicar nota real se uma resposta nossa se perdeu); máx 5.
+  MotorNfce tem o mesmo padrão e NÃO foi alterado (fora do escopo Correios).
+  Laço de retry sem teste unitário (exige SEFAZ real); só o guard é testado.
+  Notas rejeitadas #15 (NF-e) e #33 (NFS-e) precisam ser reemitidas após deploy.
 - Novo `InformacoesComplementaresResolver` (fonte única pros 3 motores):
   monta o texto a partir de `Configuracao.regime_tributario` (CrtResolver=1)
   + `OrdemServico` (veiculo_placa, veiculo_descricao/modelo, km_atual). Em
