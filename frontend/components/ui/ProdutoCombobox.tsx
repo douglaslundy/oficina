@@ -16,6 +16,11 @@ interface ProdutoComboboxProps {
   style?: React.CSSProperties
   // Texto extra ao lado do rótulo de cada sugestão (ex: aviso fiscal).
   sufixo?: (produto: ProdutoBusca) => string
+  // Foca o campo ao montar — usado no campo principal "código do produto"
+  // de OS/PDV, para o leitor de código de barras poder escanear direto sem
+  // precisar clicar no campo primeiro. Não usar nos campos de edição por
+  // linha (evitaria roubar o foco de outro lugar da página sem motivo).
+  autoFocus?: boolean
 }
 
 const ATRASO_MS = 250
@@ -25,7 +30,7 @@ const MIN_CARACTERES = 3
 
 // Campo de busca de produto: filtra no servidor enquanto digita (parcial, sem
 // diferenciar acento/caixa) no lugar do <select> com todos os produtos.
-export function ProdutoCombobox({ selectedLabel, onSelect, placeholder, disabled, style, sufixo }: ProdutoComboboxProps) {
+export function ProdutoCombobox({ selectedLabel, onSelect, placeholder, disabled, style, sufixo, autoFocus }: ProdutoComboboxProps) {
   const [aberto, setAberto] = useState(false)
   const [texto, setTexto] = useState('')
   const [resultados, setResultados] = useState<ProdutoBusca[]>([])
@@ -36,6 +41,7 @@ export function ProdutoCombobox({ selectedLabel, onSelect, placeholder, disabled
   const [ativo, setAtivo] = useState(0)
   const listaId = useId()
   const itensRef = useRef<Array<HTMLLIElement | null>>([])
+  const inputRef = useRef<HTMLInputElement | null>(null)
   const consultandoCodigo = useRef(false)
   const consulta = texto.trim()
   const buscaAtiva = aberto && consulta.length >= MIN_CARACTERES
@@ -73,6 +79,12 @@ export function ProdutoCombobox({ selectedLabel, onSelect, placeholder, disabled
     onSelect(p, via)
     setAberto(false)
     setTexto('')
+    // Devolve o foco pro campo depois de QUALQUER forma de escolha (Enter
+    // com código, Enter na sugestão destacada, ou clique) — é o que permite
+    // escanear o próximo item em sequência sem tocar em nada. O nó do input
+    // continua o mesmo através do re-render (não é recriado), então chamar
+    // focus() aqui é seguro mesmo antes do estado acima já ter comitado.
+    inputRef.current?.focus()
   }
 
   // Enter: primeiro tenta o texto como CÓDIGO exato (SKU ou código de barras).
@@ -129,11 +141,13 @@ export function ProdutoCombobox({ selectedLabel, onSelect, placeholder, disabled
   return (
     <div style={{ position: 'relative', width: '100%' }}>
       <input
+        ref={inputRef}
         role="combobox"
         aria-expanded={buscaAtiva}
         aria-controls={listaId}
         aria-autocomplete="list"
         autoComplete="off"
+        autoFocus={autoFocus}
         value={aberto ? texto : (selectedLabel ?? '')}
         onChange={e => { setTexto(e.target.value); if (!aberto) setAberto(true) }}
         onFocus={() => { setTexto(''); setResolvido(null); setAberto(true) }}

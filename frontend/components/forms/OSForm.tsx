@@ -576,6 +576,7 @@ export function OSForm({ initialData, onSuccess, onConcluir, onCancelar }: OSFor
                 onSelect={p => handleAdicionarPeca(p)}
                 placeholder="Escaneie o código, digite o SKU ou busque pelo nome..."
                 style={S}
+                autoFocus
               />
             </div>
 
@@ -748,6 +749,7 @@ function NewItemInline({ osId, servicos, onAdded }: {
           placeholder="Escaneie o código, digite o SKU ou busque pelo nome..."
           disabled={loading}
           style={SI}
+          autoFocus
         />
       </div>
 

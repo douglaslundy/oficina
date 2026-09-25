@@ -3,17 +3,10 @@
 import { useState, useEffect, useCallback, useRef } from 'react'
 import api from '@/lib/api'
 import { formatarMoeda } from '@/lib/formatters'
+import { ProdutoCombobox } from '@/components/ui/ProdutoCombobox'
+import type { ProdutoBusca } from '@/lib/produtoBusca'
 
 // ─── Types ────────────────────────────────────────────────────────────────────
-
-interface Produto {
-  id: string
-  nome: string
-  sku: string
-  preco_venda: number
-  qty_atual: number
-  unidade: string
-}
 
 interface Cliente {
   id: string
@@ -62,11 +55,6 @@ function Toast({ msg, type, onClose }: { msg: string; type: ToastType; onClose: 
 // ─── Page ─────────────────────────────────────────────────────────────────────
 
 export default function PdvPage() {
-  const [produtoBusca, setProdutoBusca] = useState('')
-  const [produtos, setProdutos] = useState<Produto[]>([])
-  const [buscandoProdutos, setBuscandoProdutos] = useState(false)
-  const [showSugestoes, setShowSugestoes] = useState(false)
-
   const [clienteBusca, setClienteBusca] = useState('')
   const [clientes, setClientes] = useState<Cliente[]>([])
   const [buscandoClientes, setBuscandoClientes] = useState(false)
@@ -81,31 +69,9 @@ export default function PdvPage() {
   const [salvando, setSalvando] = useState(false)
   const [toast, setToast] = useState<{ msg: string; type: ToastType } | null>(null)
 
-  const produtoTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
   const clienteTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
 
   const showToast = useCallback((msg: string, type: ToastType) => setToast({ msg, type }), [])
-
-  // ─── Busca de produtos ────────────────────────────────────────────────────
-
-  useEffect(() => {
-    if (produtoBusca.length < 2) { setProdutos([]); return }
-    if (produtoTimer.current) clearTimeout(produtoTimer.current)
-    produtoTimer.current = setTimeout(async () => {
-      setBuscandoProdutos(true)
-      try {
-        const r = await api.get<{ data: Produto[] }>('/produtos', {
-          params: { search: produtoBusca, per_page: 8, ativo: 1 },
-        })
-        setProdutos(r.data.data ?? [])
-        setShowSugestoes(true)
-      } catch {
-        setProdutos([])
-      } finally {
-        setBuscandoProdutos(false)
-      }
-    }, 280)
-  }, [produtoBusca])
 
   // ─── Busca de clientes ────────────────────────────────────────────────────
 
@@ -130,7 +96,7 @@ export default function PdvPage() {
 
   // ─── Itens ────────────────────────────────────────────────────────────────
 
-  function adicionarProduto(p: Produto) {
+  function adicionarProduto(p: ProdutoBusca) {
     setItens(prev => {
       const idx = prev.findIndex(i => i.produto_id === p.id)
       if (idx >= 0) {
@@ -142,11 +108,9 @@ export default function PdvPage() {
         produto_id: p.id,
         nome: p.nome,
         quantidade: 1,
-        valor_unitario: p.preco_venda,
+        valor_unitario: p.preco_venda ?? 0,
       }]
     })
-    setProdutoBusca('')
-    setShowSugestoes(false)
   }
 
   function removerItem(idx: number) {
@@ -297,51 +261,17 @@ export default function PdvPage() {
             borderRadius: 10, padding: 20, marginBottom: 16,
           }}>
             <label style={labelStyle}>Buscar produto</label>
-            <div style={{ position: 'relative' }}>
-              <input
-                style={inputStyle}
-                placeholder="Nome ou SKU do produto..."
-                value={produtoBusca}
-                onChange={e => { setProdutoBusca(e.target.value); setShowSugestoes(true) }}
-                onBlur={() => setTimeout(() => setShowSugestoes(false), 180)}
-              />
-              {buscandoProdutos && (
-                <span style={{ position: 'absolute', right: 10, top: '50%', transform: 'translateY(-50%)', color: 'var(--muted)', fontSize: 12 }}>
-                  ⟳
-                </span>
-              )}
-              {showSugestoes && produtos.length > 0 && (
-                <div style={{
-                  position: 'absolute', top: '100%', left: 0, right: 0, zIndex: 50,
-                  background: 'var(--surface)', border: '1px solid var(--border)',
-                  borderRadius: 8, boxShadow: '0 8px 24px rgba(0,0,0,.4)', overflow: 'hidden',
-                  marginTop: 4,
-                }}>
-                  {produtos.map(p => (
-                    <div key={p.id}
-                      onMouseDown={() => adicionarProduto(p)}
-                      style={{
-                        padding: '10px 14px', cursor: 'pointer', display: 'flex',
-                        alignItems: 'center', justifyContent: 'space-between',
-                        borderBottom: '1px solid var(--border)',
-                      }}
-                      onMouseEnter={e => (e.currentTarget.style.background = 'rgba(245,166,35,.06)')}
-                      onMouseLeave={e => (e.currentTarget.style.background = '')}
-                    >
-                      <div>
-                        <div style={{ fontSize: 13, fontWeight: 600 }}>{p.nome}</div>
-                        <div style={{ fontSize: 11, color: 'var(--muted)', fontFamily: 'monospace' }}>
-                          {p.sku} · Estoque: {p.qty_atual} {p.unidade}
-                        </div>
-                      </div>
-                      <div style={{ fontSize: 13, fontWeight: 700, color: 'var(--accent)', fontFamily: 'monospace' }}>
-                        {formatarMoeda(p.preco_venda)}
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              )}
-            </div>
+            {/* Escaneie o código, digite o SKU ou busque pelo nome — Enter com
+                um código exato adiciona na hora (leitor de código de barras) e
+                o foco volta pro campo depois, pra escanear o próximo item em
+                sequência sem tocar em nada. */}
+            <ProdutoCombobox
+              onSelect={p => adicionarProduto(p)}
+              placeholder="Escaneie o código, digite o SKU ou busque pelo nome..."
+              sufixo={p => `· ${p.sku ?? p.codigo_barras ?? '—'} · ${formatarMoeda(p.preco_venda ?? 0)}`}
+              style={inputStyle}
+              autoFocus
+            />
           </div>
 
           {/* Tabela de itens */}
