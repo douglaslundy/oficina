@@ -57,6 +57,42 @@ Falta o teste em homologação (NF-e + NFS-e a partir de uma OS).**
   PRODUÇÃO (tpAmb=1, notas_fiscais.ambiente=PRODUCAO, AUTORIZADA, tomador
   Correios) — `configuracoes.ambiente_fiscal` já era PRODUCAO; as notas 15/16/17/18
   foram HOMOLOGACAO.** Avisado o usuário (cancelar só no Emissor Nacional prod.).
+- **Verificação dos 3 motores de NFS-e (2026-09-25) — 2 bugs REAIS no Focus, corrigidos:**
+  mesma nota nos 3 motores (NFEPHP DPS via `DpsXmlBuilder`, Spedy e Focus payloads):
+  informação idêntica (prestador, tomador, valor, código, descrição, texto Correios).
+  Focus NFS-e: (1) `natureza_operacao` é enum de CÓDIGO "1"–"6" na doc oficial e
+  mandávamos texto → agora "1"; (2) `optante_simples_nacional` só reconhecia a
+  palavra "simples" → MEI ia como não-optante (divergia do `CrtResolver`); agora usa
+  CrtResolver + `regime_especial_tributacao`="5" pra MEI; (3) `data_emissao` agora
+  date-time ISO 8601 (doc). Spedy NFS-e: `nationalTaxationCode`=cTribNac de 6 dígitos
+  (paridade com a DPS; omitido se o código não tem mapeamento oficial). NFEPHP: DPS só
+  acusa o `cNBS` do XSD local (a ADN aceita sem). Não sanitizei `xDescServ`/`xNome`:
+  o XSD só restringe caracteres em TSString (`xInfComp`). **Privacidade: os 2 repositórios
+  (oficina, br-fiscal-note-emission) são PÚBLICOS** — dados reais (placa, CNPJ, endereço) fora
+  dos testes/fixtures que adicionei (anonimizados); o PDF-modelo do DANFSe está no
+  `.gitignore` e NUNCA versionar. Commits anteriores desta sessão já contêm a placa real
+  em 3 testes (não reescrevi histórico).
+- **DANFSe v2.0 — clone do PDF oficial da NFS-e (pedido do usuário, 2026-09-25;
+  modelo `doc_documentos_fiscais/modelo_nota/NFS.pdf`, o DANFSe real da NFS-e nº 2):**
+  novo `Pdf/DanfseRenderer` + view `pdf.danfse` (posição absoluta em pt, A4
+  595x842 igual ao original) substituem `nota_fiscal_nfse.blade.php` (removido).
+  Geometria/fontes/cores extraídas do PDF com `mupdf` (npm, fora do repo):
+  4 colunas x=11,9/156,5/301,0/445,6; Arial Bold 6/7 e valor 7pt (Helvetica no
+  lugar do "Microsoft Sans Serif", não redistribuível); células #f2f2f2; filetes
+  0,5pt; logo (recorte do original, `resources/images/danfse-logo.png`); QR
+  = `https://www.nfse.gov.br/ConsultaPublica?tpc=1&chave=<50 dígitos>` (decodifiquei
+  o QR do original; o gerado decodifica igual). Dados: XML nacional autorizado
+  (`infNFSe`), com fallback pro banco p/ Spedy/Focus (campos ausentes = "-").
+  Verificado: 155/155 textos casam (conteúdo, fonte, negrito, tamanho; erro de
+  posição ≤ 0,09pt), `pdftotext` idêntico ao original, filetes/células/moldura/
+  rodapé idênticos, MediaBox igual. Descrição longa/info complementar quebram e
+  empurram o resto (o original não mostra esse caso; comportamento nosso).
+  Peculiaridades copiadas do original: "VALOR LÍQUIDO DA NFS-e + IBS/CBS" = R$ 0,00
+  quando não há grupo IBS/CBS; fone/e-mail do prestador vêm da DPS (`prest`), não
+  de `emit` (por isso saem "-"). Texto de regApTribSN 2/3 e tribISSQN 2-4 NÃO
+  confirmados no original (só o caso 1 apareceu): usei a descrição da lib.
+  Testes: `DanfseRendererTest` (6) + fixture `tests/Fixtures/nfse_nacional_autorizada.xml`
+  (assinatura removida). Unit: 468, só os 18 de ambiente. **NÃO deployado.**
 - **Spedy + Focus (2026-09-25) — mesmas correções do NFEPHP, campos conferidos
   na doc oficial dos provedores:** Spedy NF-e/NFC-e/NFS-e `additionalInformation`
   (infCpl); Focus NF-e/NFC-e `informacoes_adicionais_contribuinte` (String
@@ -73,7 +109,7 @@ Falta o teste em homologação (NF-e + NFS-e a partir de uma OS).**
   Testes: 462 Unit, só os 18 de ambiente. **Skill `br-fiscal-note-emission`
   (repo douglaslundy/br-fiscal-note-emission, commit 3b01101, pushado)**:
   pitfalls #20–#25, tabela de campos por motor, checks 7–9, baseline p/ nova
-  ferramenta. **Pendente: commit+deploy do projeto (bugs 5, 6, Spedy/Focus,
+  ferramenta. **DEPLOYADO (5a01f1c, backup 16-51-49): (bugs 5, 6, Spedy/Focus,
   snapshot; 1 migration nova) — aguardando autorização.**
 - **Bug 6 (usuário, 2026-09-25) — download saía sempre "NF-<n>":** o backend
   já mandava o nome certo no Content-Disposition (NFSe-/NFe-/NFCe-), mas o

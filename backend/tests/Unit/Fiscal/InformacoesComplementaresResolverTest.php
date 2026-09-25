@@ -83,14 +83,14 @@ class InformacoesComplementaresResolverTest extends TestCase
     public function test_travessao_do_modelo_do_veiculo_nao_quebra_o_padrao_do_schema(): void
     {
         $os = new OrdemServico();
-        $os->veiculo_placa = 'QXI3449';
-        $os->veiculo_descricao = 'HONDA CG 160 CARGO C — 2019 — QXI3449';
+        $os->veiculo_placa = 'ABC1D23';
+        $os->veiculo_descricao = 'HONDA CG 160 CARGO C — 2019 — ABC1D23';
         $os->km_atual = 40332;
         $os->setRelation('veiculo', null);
 
         $t = R::montar($this->nota($os), $this->cfg('Simples Nacional'), false, R::LIMITE_NFSE);
 
-        $this->assertStringContainsString('HONDA CG 160 CARGO C - 2019 - QXI3449', $t);
+        $this->assertStringContainsString('HONDA CG 160 CARGO C - 2019 - ABC1D23', $t);
         $this->assertMatchesRegularExpression(self::PADRAO_XSD, $t);
     }
 

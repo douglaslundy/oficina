@@ -264,6 +264,15 @@ class SpedyProvider implements FiscalProvider, ConsultaNotaTerceiroProvider
      *   são `taxationType`/`federalServiceCode`/`cityServiceCode`, já
      *   enviados. Removido.
      */
+    private function codigoTributacaoNacional(string $codigoServicoFederal): ?string
+    {
+        try {
+            return \App\Services\Fiscal\CodigoTributacaoNacionalResolver::resolver($codigoServicoFederal);
+        } catch (\InvalidArgumentException) {
+            return null; // código sem mapeamento oficial confirmado: não chuta, omite (campo opcional)
+        }
+    }
+
     public function montarPayloadNfse(NotaFiscalData $n): array
     {
         return [
@@ -280,6 +289,9 @@ class SpedyProvider implements FiscalProvider, ConsultaNotaTerceiroProvider
             'description'         => $n->descricao,
             'federalServiceCode'  => $n->codigoServicoFederal,
             'cityServiceCode'     => $n->codigoServicoMunicipal,
+            // Doc Spedy ("Código de Tributação Nacional", opcional): mesmo cTribNac de 6 dígitos que a DPS do
+            // NFEPHP manda, pra a NFS-e nacional sair igual nos 3 motores.
+            ...($this->codigoTributacaoNacional($n->codigoServicoFederal) !== null ? ['nationalTaxationCode' => $this->codigoTributacaoNacional($n->codigoServicoFederal)] : []),
             'taxationType'        => 'taxationInMunicipality',
             'receiver'            => [
                 'name'             => $n->tomador['nome'],

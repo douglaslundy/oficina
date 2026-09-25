@@ -355,15 +355,34 @@ class FocusNfeProvider implements FiscalProvider, ConsultaNotaTerceiroProvider
      *   prefeitura — mandado de qualquer forma por ser confirmado no schema
      *   geral e não ter custo mandar mesmo onde é opcional).
      */
+    private function ehSimplesNacional(string $regime): bool
+    {
+        return trim($regime) !== '' && \App\Services\Fiscal\CrtResolver::resolver($regime) === 1;
+    }
+
+    private function ehMei(string $regime): bool
+    {
+        return $this->ehSimplesNacional($regime) && str_contains(strtolower($regime), 'mei');
+    }
+
     public function montarPayloadNfse(NotaFiscalData $n): array
     {
         $docTomador = preg_replace('/\D/', '', $n->tomador['cpf_cnpj']) ?? '';
         $chaveDoc   = strlen($docTomador) > 11 ? 'cnpj' : 'cpf';
 
         return [
-            'data_emissao'      => date('Y-m-d'),
-            'natureza_operacao' => $n->naturezaOperacao,
-            'optante_simples_nacional' => str_contains(strtolower($n->regimeTributario), 'simples'),
+            // Doc oficial (emitir_nfse): `data_emissao` é date-time ISO 8601; municípios que não usam
+            // hora descartam a hora. (Antes mandava só a data.)
+            'data_emissao'      => now()->toIso8601String(),
+            // Doc oficial: `natureza_operacao` da NFS-e é um CÓDIGO (enum "1"–"6", padrão "1" =
+            // Tributação no município), não texto. O texto livre ("Prestação de Serviços") que ia aqui
+            // nunca é um valor válido do enum. ISS de oficina = município do prestador → "1".
+            'natureza_operacao' => '1',
+            // Mesma regra de CrtResolver (Simples OU MEI); antes só a palavra "simples" era reconhecida,
+            // então uma oficina cadastrada como "MEI" ia como NÃO optante.
+            'optante_simples_nacional' => $this->ehSimplesNacional($n->regimeTributario),
+            // Doc: regime_especial_tributacao "5" = MEI - Simples Nacional.
+            ...($this->ehMei($n->regimeTributario) ? ['regime_especial_tributacao' => '5'] : []),
             'prestador' => [
                 'cnpj'                => preg_replace('/\D/', '', $n->cnpjEmitente ?? ''),
                 'inscricao_municipal' => $n->inscricaoMunicipalEmitente ?? '',

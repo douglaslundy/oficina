@@ -270,7 +270,8 @@ class FocusNfeProviderTest extends TestCase
         $this->assertSame('1401', $payload['servico']['codigo_tributario_municipio']);
         $this->assertSame(5.0, $payload['servico']['aliquota']);
         $this->assertSame('12345678000199', $payload['tomador']['cnpj']);
-        $this->assertSame('Prestação de Serviços', $payload['natureza_operacao']);
+        // Doc Focus (emitir_nfse): natureza_operacao é o código "1" (tributação no município), não texto.
+        $this->assertSame('1', $payload['natureza_operacao']);
     }
 
     /**
@@ -710,7 +711,7 @@ class FocusNfeProviderTest extends TestCase
         Http::assertNothingSent();
     }
 
-    private const INFO_CORREIOS = 'Empresa optante pelo Simples Nacional. Placa: QXI3449 | Modelo: HONDA CG 160 | KM: 40332';
+    private const INFO_CORREIOS = 'Empresa optante pelo Simples Nacional. Placa: ABC1D23 | Modelo: HONDA CG 160 | KM: 40332';
 
     private function comInfo(NotaFiscalData $base): NotaFiscalData
     {
@@ -736,5 +737,24 @@ class FocusNfeProviderTest extends TestCase
             $p->montarPayloadNfse($this->comInfo($this->nota()))['servico']['discriminacao'],
         );
         $this->assertSame('Serviço de troca de óleo', $p->montarPayloadNfse($this->nota())['servico']['discriminacao']);
+    }
+
+    public function test_nfse_mei_vai_como_optante_simples_com_regime_especial_5(): void
+    {
+        $p = new FocusNfeProvider('https://homologacao.focusnfe.com.br', 'master', 'HOMOLOGACAO', 'tok');
+        $mei = new NotaFiscalData(...array_merge(get_object_vars($this->nota()), ['regimeTributario' => 'MEI']));
+        $normal = new NotaFiscalData(...array_merge(get_object_vars($this->nota()), ['regimeTributario' => 'Lucro Presumido']));
+
+        $this->assertTrue($p->montarPayloadNfse($mei)['optante_simples_nacional']);
+        $this->assertSame('5', $p->montarPayloadNfse($mei)['regime_especial_tributacao']);
+        $this->assertFalse($p->montarPayloadNfse($normal)['optante_simples_nacional']);
+        $this->assertArrayNotHasKey('regime_especial_tributacao', $p->montarPayloadNfse($normal));
+    }
+
+    public function test_nfse_data_emissao_e_date_time_iso8601(): void
+    {
+        $p = new FocusNfeProvider('https://homologacao.focusnfe.com.br', 'master', 'HOMOLOGACAO', 'tok');
+
+        $this->assertMatchesRegularExpression('/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}[+-]\d{2}:\d{2}$/', $p->montarPayloadNfse($this->nota())['data_emissao']);
     }
 }

@@ -111,8 +111,14 @@ class NotaFiscalDocumentoService
             return ['pdf' => $pdf, 'filename' => 'NFe-' . ($nota->numero ?? $nota->id) . '.pdf'];
         }
 
-        $pdf = Pdf::loadView('pdf.nota_fiscal_nfse', compact('nota', 'empresa'))
-            ->setPaper('a4', 'portrait');
+        // NFS-e: DANFSe v2.0, clone do PDF oficial do Emissor Nacional (ver DanfseRenderer).
+        $dados = app(DanfseRenderer::class)->dadosParaTemplate(
+            $nota,
+            $empresa,
+            $this->gerarQrCodeNfseDataUri($nota),
+            $this->logoDanfseDataUri(),
+        );
+        $pdf = Pdf::loadView('pdf.danfse', $dados)->setPaper([0, 0, 595, 842], 'portrait'); // 595x842pt, igual ao original
 
         return ['pdf' => $pdf, 'filename' => 'NFSe-' . ($nota->numero ?? $nota->id) . '.pdf'];
     }
@@ -148,6 +154,30 @@ class NotaFiscalDocumentoService
         $png = $gerador->getBarcode($chaveAcesso, \Picqer\Barcode\BarcodeGeneratorPNG::TYPE_CODE_128_C, 1, 40);
 
         return 'data:image/png;base64,' . base64_encode($png);
+    }
+
+    /**
+     * QR do DANFSe: mesma URL do original (decodificada do PDF oficial):
+     * https://www.nfse.gov.br/ConsultaPublica?tpc=1&chave=<50 dígitos>.
+     */
+    private function gerarQrCodeNfseDataUri(NotaFiscal $nota): ?string
+    {
+        $chave = (string) preg_replace('/^NFS/', '', (string) ($nota->chave_acesso ?? ''));
+        if (preg_match('/^\d{50}$/', $chave) !== 1) {
+            return null;
+        }
+
+        return (new \Endroid\QrCode\Builder\Builder(
+            writer: new \Endroid\QrCode\Writer\PngWriter(),
+            data: 'https://www.nfse.gov.br/ConsultaPublica?tpc=1&chave=' . $chave,
+            size: 450,
+            margin: 22, // o QR do original traz zona de silêncio dentro da imagem de 45pt
+        ))->build()->getDataUri();
+    }
+
+    private function logoDanfseDataUri(): string
+    {
+        return 'data:image/png;base64,' . base64_encode((string) file_get_contents(resource_path('images/danfse-logo.png')));
     }
 
     private function gerarQrCodeDataUri(NotaFiscal $nota): ?string

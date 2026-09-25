@@ -1311,7 +1311,7 @@ XML;
         Http::assertNotSent(fn ($req) => str_contains($req->url(), '/orders'));
     }
 
-    private const INFO_CORREIOS = 'Empresa optante pelo Simples Nacional. Placa: QXI3449 | Modelo: HONDA CG 160 | KM: 40332';
+    private const INFO_CORREIOS = 'Empresa optante pelo Simples Nacional. Placa: ABC1D23 | Modelo: HONDA CG 160 | KM: 40332';
 
     private function comInfo(NotaFiscalData $base): NotaFiscalData
     {
@@ -1334,5 +1334,20 @@ XML;
         $this->assertSame(self::INFO_CORREIOS, $p->montarPayloadNfe($nota)['additionalInformation']);
         $this->assertSame(self::INFO_CORREIOS, $p->montarPayloadNfce($nota)['additionalInformation']);
         $this->assertArrayNotHasKey('additionalInformation', $p->montarPayloadNfe($this->notaNfeSimplesNacional()));
+    }
+
+    public function test_payload_nfse_manda_codigo_de_tributacao_nacional_de_6_digitos(): void
+    {
+        $p = new SpedyProvider('https://sandbox-api.spedy.com.br/v1', 'master', 'tok', 'emp-1');
+
+        $this->assertSame('140101', $p->montarPayloadNfse($this->nota())['nationalTaxationCode']);
+    }
+
+    public function test_payload_nfse_omite_codigo_nacional_quando_nao_ha_mapeamento_oficial(): void
+    {
+        $p = new SpedyProvider('https://sandbox-api.spedy.com.br/v1', 'master', 'tok', 'emp-1');
+        $outro = new NotaFiscalData(...array_merge(get_object_vars($this->nota()), ['codigoServicoFederal' => '07.02']));
+
+        $this->assertArrayNotHasKey('nationalTaxationCode', $p->montarPayloadNfse($outro));
     }
 }

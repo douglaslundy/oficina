@@ -8,3 +8,6 @@ frontend/.next/
 docker/nginx/logs/
 # Backups do banco (bind mount ./backups no docker-compose.prod.yml).
 /backups/
+
+# Documento fiscal particular usado como modelo do layout do DANFSe — NUNCA versionar.
+doc_documentos_fiscais/modelo_nota/NFS.pdf
