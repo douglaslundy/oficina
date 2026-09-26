@@ -71,7 +71,7 @@ Falta o teste em homologação (NF-e + NFS-e a partir de uma OS).**
   (oficina, br-fiscal-note-emission) são PÚBLICOS** — dados reais (placa, CNPJ, endereço) fora
   dos testes/fixtures que adicionei (anonimizados); o PDF-modelo do DANFSe está no
   `.gitignore` e NUNCA versionar. Commits anteriores desta sessão já contêm a placa real
-  em 3 testes (não reescrevi histórico).
+  em 3 testes (não reescrevi histórico). DEPLOYADO (1a5a8a1, backup 19-14-59); DANFSe gerado em produção com a nota real = texto idêntico ao oficial; NFS-e de teste em homologação (NFEPHP) AUTORIZADA (nº 17, nDPS 29, sem linha no banco).
 - **DANFSe v2.0 — clone do PDF oficial da NFS-e (pedido do usuário, 2026-09-25;
   modelo `doc_documentos_fiscais/modelo_nota/NFS.pdf`, o DANFSe real da NFS-e nº 2):**
   novo `Pdf/DanfseRenderer` + view `pdf.danfse` (posição absoluta em pt, A4
