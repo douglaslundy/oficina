@@ -158,7 +158,7 @@ export default function SaasAdminLoginPage() {
                   type="email"
                   value={email}
                   onChange={(e) => setEmail(e.target.value)}
-                  placeholder="super@mecanicapro.com"
+                  placeholder="seu@email.com.br"
                   autoComplete="email"
                   style={{ ...inputStyle(!!fieldErrors.email), paddingLeft: 36 }}
                 />

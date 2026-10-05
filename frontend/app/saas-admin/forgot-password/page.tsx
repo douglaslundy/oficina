@@ -143,7 +143,7 @@ export default function SaasAdminForgotPasswordPage() {
                   type="email"
                   value={email}
                   onChange={(e) => setEmail(e.target.value)}
-                  placeholder="super@mecanicapro.com"
+                  placeholder="seu@email.com.br"
                   autoComplete="email"
                   style={{ ...inputStyle, paddingLeft: 36 }}
                 />
