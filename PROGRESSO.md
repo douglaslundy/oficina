@@ -3,8 +3,10 @@
 ## Última atualização
 2026-10-05 (15) — **Devolução de compra (NF-e finNFe=4, 3 motores), retirada de
 estoque por nota de entrada, DANFE NFC-e oficial 80mm/A4, config de impressão,
-cupom não fiscal e rename MecânicaPro→MecânicaOficial. NADA deployado, nada
-commitado (aguardando autorização). Migration nova: `2026_10_05_000001`.**
+cupom não fiscal e rename MecânicaPro→MecânicaOficial. **DEPLOYADO
+2026-10-05 (commit 69ee364, backup `/opt/backups/pre-deploy-devolucao-2026-10-05_11-05-08.dump`,
+migration `2026_10_05_000001` rodou, 7 containers ok, saas.dlsistemas.com.br 200, código e
+APP_NAME confirmados no container).** Rename é só de MARCA; próximo: rename de infra.**
 - **Devolução** (`DevolucaoCompraService`, `CfopDevolucaoCompraResolver`): rascunho
   NF-e `finalidade=DEVOLUCAO` + `chave_referenciada` (nota de entrada) → emissão pelo
   fluxo normal. CFOP 5202/6202 (5411/6411 se ST), CSOSN/CST pelo resolver de saída.
