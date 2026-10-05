@@ -1,6 +1,21 @@
 # Progresso do Projeto
 
 ## Última atualização
+2026-10-05 (16) — **Último acesso dos usuários + página Mensagens + placeholders da marca. Commit
+976a1be NÃO deployado (aguardando autorização). Migration nova: `2026_10_05_000002` (alerta_logs.assunto).**
+- **Último acesso**: causa = `ultimo_acesso` fora do `$fillable` de `Usuario`, então `update()` no login
+  era ignorado em silêncio. Novo `Usuario::registrarAcesso()` (forceFill) usado no `LoginController`.
+  Telas de usuários mostram `dd/mm/aaaa, HH:mm` (`formatarDataHoraVirgula`). Usuários que não logaram
+  depois do deploy aparecem "-" até o próximo login (não há como reconstruir).
+- **Mensagens** (`/mensagens`, API `GET /api/mensagens`, ADMIN/ATENDENTE): lista `alerta_logs` (WhatsApp +
+  e-mail), filtro de canal com padrão "Todos", mais tipo/status/período/busca. `/alertas/logs` redireciona.
+  Passaram a ser registrados também e-mails de orçamento, NPS e recuperação de senha
+  (`MensagemLogService`; a recuperação grava só o fato do envio, sem o link/token). E-mails da plataforma
+  sem oficina (boas-vindas, cobrança do SaaS) NÃO entram (tabela exige `oficina_id`).
+- **Marca**: placeholders do login do super admin trocados (já em a0e5b90); varredura final: só restam
+  itens internos/dev (instâncias WhatsApp, demo seeder, logins de demo só em `NODE_ENV=development`).
+- Testes: `MensagensTest` (8) ok; suíte 837, mesmas 26 falhas de ambiente do baseline; build do front ok.
+
 2026-10-05 (15) — **Devolução de compra (NF-e finNFe=4, 3 motores), retirada de
 estoque por nota de entrada, DANFE NFC-e oficial 80mm/A4, config de impressão,
 cupom não fiscal e rename MecânicaPro→MecânicaOficial. **DEPLOYADO
