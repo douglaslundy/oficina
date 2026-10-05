@@ -9,6 +9,7 @@ use Illuminate\Contracts\Queue\ShouldQueue;
 use Illuminate\Foundation\Bus\Dispatchable;
 use Illuminate\Queue\InteractsWithQueue;
 use Illuminate\Queue\SerializesModels;
+use App\Services\MensagemLogService;
 use Illuminate\Support\Facades\Mail;
 
 class EnviarEmailRecuperacao implements ShouldQueue
@@ -25,12 +26,31 @@ class EnviarEmailRecuperacao implements ShouldQueue
         $link = config('app.frontend_url', 'http://localhost:3000')
             . '/reset-password?token=' . $this->token;
 
-        Mail::raw(
-            "Olá {$this->usuario->nome},\n\nClique no link abaixo para redefinir sua senha:\n{$link}\n\nO link expira em 30 minutos.",
-            function ($message) {
-                $message->to($this->usuario->email)
-                        ->subject('Redefinição de senha — MecânicaOficial');
-            }
-        );
+        $erro = null;
+
+        try {
+            Mail::raw(
+                "Olá {$this->usuario->nome},\n\nClique no link abaixo para redefinir sua senha:\n{$link}\n\nO link expira em 30 minutos.",
+                function ($message) {
+                    $message->to($this->usuario->email)
+                            ->subject('Redefinição de senha — MecânicaOficial');
+                }
+            );
+        } catch (\Throwable $e) {
+            $erro = $e->getMessage();
+        }
+
+        // O histórico guarda só o fato do envio: o corpo traz o link com o token de redefinição (segredo).
+        if ($this->usuario->oficina_id) {
+            app(MensagemLogService::class)->registrarEmail(
+                (string) $this->usuario->oficina_id, 'RECUPERACAO_SENHA', $this->usuario->email,
+                'Redefinição de senha — MecânicaOficial', 'Link de redefinição de senha enviado ao usuário (conteúdo omitido por segurança).',
+                $erro === null, $erro, 'USUARIO',
+            );
+        }
+
+        if ($erro !== null) {
+            throw new \RuntimeException($erro);
+        }
     }
 }

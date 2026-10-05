@@ -59,7 +59,7 @@ class LoginController extends Controller
         }
 
         RateLimiter::clear($key);
-        $usuario->update(['ultimo_acesso' => now()]);
+        $usuario->registrarAcesso();
 
         // Falha de segurança grave corrigida em 2026-09-14: era um token
         // Bearer devolvido no corpo da resposta e guardado pelo frontend em

@@ -85,7 +85,11 @@ class OrcamentoController extends Controller
             }
 
             if ($cliente->email && $this->email->configurado()) {
-                $r = $this->email->enviar([$cliente->email], "Orçamento · OS #{$ordem->numero}", $msg);
+                $assunto = "Orçamento · OS #{$ordem->numero}";
+                $r = $this->email->enviar([$cliente->email], $assunto, $msg);
+                app(\App\Services\MensagemLogService::class)->registrarEmail(
+                    (string) $ordem->oficina_id, 'ORCAMENTO', $cliente->email, $assunto, $msg, $r['ok'], $r['error'] ?? null, 'CLIENTE',
+                );
                 if ($r['ok']) $canais[] = 'EMAIL';
             }
 

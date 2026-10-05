@@ -393,6 +393,7 @@ Route::middleware(['tenant', 'auth:sanctum', 'tenant.verify', 'role:ADMIN,ATENDE
     Route::post('alertas/{id}/toggle',  [AlertaConfigController::class, 'toggle']);
     Route::delete('alertas/{id}',       [AlertaConfigController::class, 'destroy']);
     Route::get('alertas/logs',          [AlertaLogController::class, 'index']);
+    Route::get('mensagens',             [AlertaLogController::class, 'index']);
 });
 
 // ─── Agendamentos — todos os roles ───────────────────────────────────────────

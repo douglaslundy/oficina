@@ -4,7 +4,7 @@ import { useRouter } from 'next/navigation'
 import Link from 'next/link'
 import { DataTable, Column } from '@/components/ui/DataTable'
 import { StatusPill } from '@/components/ui/StatusPill'
-import { formatarData } from '@/lib/formatters'
+import { formatarDataHoraVirgula } from '@/lib/formatters'
 import { usePlanLimites } from '@/hooks/usePlanLimites'
 import api from '@/lib/api'
 
@@ -48,7 +48,7 @@ export default function UsuariosPage() {
     { key: 'nome', label: 'Nome', render: r => <span style={{ color: 'var(--text)', fontWeight: 500 }}>{r.nome}</span> },
     { key: 'email', label: 'E-mail', render: r => <span style={{ color: 'var(--muted)', fontSize: 13 }}>{r.email}</span> },
     { key: 'role', label: 'Perfil', render: r => <span className="pill pill-info">{r.role}</span> },
-    { key: 'ultimo_acesso', label: 'Último acesso', render: r => formatarData(r.ultimo_acesso) },
+    { key: 'ultimo_acesso', label: 'Último acesso', render: r => formatarDataHoraVirgula(r.ultimo_acesso) },
     { key: 'status', label: 'Status', render: r => <StatusPill status={r.status} /> },
     {
       key: 'id', label: '',

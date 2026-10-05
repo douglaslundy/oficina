@@ -34,6 +34,16 @@ class Usuario extends Authenticatable
         'criado_em'     => 'datetime',
     ];
 
+    /**
+     * Grava o último acesso. `ultimo_acesso` não é mass-assignable (não vem de
+     * formulário), então `update([...])` o ignorava em silêncio e a coluna nunca
+     * era preenchida — por isso forceFill.
+     */
+    public function registrarAcesso(): void
+    {
+        $this->forceFill(['ultimo_acesso' => now()])->save();
+    }
+
     public function getActivitylogOptions(): LogOptions
     {
         return LogOptions::defaults()

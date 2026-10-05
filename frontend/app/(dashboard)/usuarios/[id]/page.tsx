@@ -3,7 +3,7 @@ import { useEffect, useState } from 'react'
 import { useParams, useRouter } from 'next/navigation'
 import { UsuarioForm } from '@/components/forms/UsuarioForm'
 import { StatusPill } from '@/components/ui/StatusPill'
-import { formatarData } from '@/lib/formatters'
+import { formatarDataHoraVirgula } from '@/lib/formatters'
 import api from '@/lib/api'
 
 interface Usuario {
@@ -69,7 +69,7 @@ export default function UsuarioDetailPage() {
       <div className="rform" style={{ display: 'grid', gap: 12, marginBottom: 24 }}>
         {[
           { label: 'E-mail',        value: usuario.email },
-          { label: 'Último acesso', value: formatarData(usuario.ultimo_acesso) },
+          { label: 'Último acesso', value: formatarDataHoraVirgula(usuario.ultimo_acesso) },
         ].map(({ label, value }) => (
           <div
             key={label}

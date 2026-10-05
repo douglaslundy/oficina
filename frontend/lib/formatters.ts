@@ -52,6 +52,19 @@ export const formatarDataUTC = (iso?: string | null): string => {
   }
 }
 
+/**
+ * Data e hora no formato "dd/mm/aaaa, HH:mm" (ex.: 05/10/2026, 11:30), no fuso
+ * do navegador. Valor vazio (nunca registrado) volta '-'.
+ */
+export const formatarDataHoraVirgula = (iso?: string | null): string => {
+  if (!iso) return '-'
+  const d = new Date(iso.replace(' ', 'T'))
+  if (isNaN(d.getTime())) return '-'
+  const data = d.toLocaleDateString('pt-BR')
+  const hora = d.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })
+  return `${data}, ${hora}`
+}
+
 export const formatarDataHora = (iso?: string | null): string => {
   if (!iso) return '-'
   // Alguns endpoints (ex.: NotaFiscalResource::emitido_em) já formatam no

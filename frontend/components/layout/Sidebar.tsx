@@ -43,7 +43,7 @@ const NAV_ITEMS: NavItem[] = [
   { href: '/relatorios',            label: 'Relatórios',        icon: '📈' },
   { href: '/minhas-faturas',        label: 'Minhas Faturas',    icon: '💳' },
   { href: '/alertas',               label: 'Alertas',           icon: '💬', gate: 'alertas' },
-  { href: '/alertas/logs',          label: 'Histórico Alertas', icon: '📜', gate: 'alertas' },
+  { href: '/mensagens',             label: 'Mensagens',         icon: '📨' },
   { href: '/contratar',             label: 'Contratar Serviços',icon: '🛍️' },
   { href: '/usuarios',              label: 'Usuários',          icon: '👤' },
   { href: '/empresa',               label: 'Empresa',           icon: '🏢' },

@@ -43,6 +43,7 @@ class EnviarAlertaEmailJob implements ShouldQueue
                 'oficina_id'        => $this->oficina_id,
                 'tipo'              => $this->tipo,
                 'canal'             => 'EMAIL',
+                'assunto'           => $this->assunto,
                 'destinatario'      => implode(', ', $this->destinatarios),
                 'destinatario_tipo' => $this->destinatarioTipo,
                 'mensagem'          => $this->corpo,

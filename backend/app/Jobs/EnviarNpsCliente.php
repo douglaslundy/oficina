@@ -9,6 +9,7 @@ use Illuminate\Contracts\Queue\ShouldQueue;
 use Illuminate\Foundation\Bus\Dispatchable;
 use Illuminate\Queue\InteractsWithQueue;
 use Illuminate\Queue\SerializesModels;
+use App\Services\MensagemLogService;
 use Illuminate\Support\Facades\Mail;
 
 class EnviarNpsCliente implements ShouldQueue
@@ -51,9 +52,26 @@ Atenciosamente,
 Equipe {$nomeOficina}
 TEXT;
 
-        Mail::raw($corpo, function ($message) use ($cliente, $nomeOficina, $osNumero) {
-            $message->to($cliente->email, $cliente->nome)
-                    ->subject("Como foi sua experiência na {$nomeOficina}? (OS #{$osNumero})");
-        });
+        $assunto = "Como foi sua experiência na {$nomeOficina}? (OS #{$osNumero})";
+        $erro    = null;
+
+        try {
+            Mail::raw($corpo, function ($message) use ($cliente, $assunto) {
+                $message->to($cliente->email, $cliente->nome)->subject($assunto);
+            });
+        } catch (\Throwable $e) {
+            $erro = $e->getMessage();
+        }
+
+        if ($this->os->oficina_id) {
+            app(MensagemLogService::class)->registrarEmail(
+                (string) $this->os->oficina_id, 'NPS', $cliente->email, $assunto, $corpo, $erro === null, $erro, 'CLIENTE',
+            );
+        }
+
+        // Mantém o comportamento de retry da fila quando o envio falha.
+        if ($erro !== null) {
+            throw new \RuntimeException($erro);
+        }
     }
 }

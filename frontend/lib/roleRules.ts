@@ -23,6 +23,7 @@ export const ROLE_RULES: RoleRule[] = [
   { prefix: '/relatorios', roles: ['ADMIN', 'FINANCEIRO'] },
   { prefix: '/minhas-faturas', roles: ['ADMIN', 'FINANCEIRO'] },
   { prefix: '/alertas', roles: ['ADMIN', 'ATENDENTE'] },
+  { prefix: '/mensagens', roles: ['ADMIN', 'ATENDENTE'] },
 ]
 
 export const ROLES_CONHECIDOS = ['ADMIN', 'MECANICO', 'ATENDENTE', 'FINANCEIRO']

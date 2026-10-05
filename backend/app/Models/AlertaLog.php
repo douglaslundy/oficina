@@ -21,6 +21,7 @@ class AlertaLog extends Model
         'oficina_id',
         'tipo',
         'canal',
+        'assunto',
         'destinatario',
         'destinatario_tipo',
         'mensagem',

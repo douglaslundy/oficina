@@ -13,6 +13,16 @@ class AlertaLogController extends Controller
     {
         $query = AlertaLog::query()->orderBy('enviado_em', 'desc');
 
+        // Canal: sem filtro (padrão) traz tudo; WHATSAPP ou EMAIL restringe.
+        if ($request->filled('canal') && in_array(strtoupper((string) $request->input('canal')), ['WHATSAPP', 'EMAIL'], true)) {
+            $query->where('canal', strtoupper((string) $request->input('canal')));
+        }
+        if ($request->filled('busca')) {
+            $termo = '%' . str_replace(['%', '_'], ['\%', '\_'], (string) $request->input('busca')) . '%';
+            $query->where(fn ($q) => $q->where('destinatario', 'ilike', $termo)
+                ->orWhere('mensagem', 'ilike', $termo)
+                ->orWhere('assunto', 'ilike', $termo));
+        }
         if ($request->filled('tipo')) {
             $query->where('tipo', $request->string('tipo'));
         }
