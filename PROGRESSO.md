@@ -1,8 +1,8 @@
 # Progresso do Projeto
 
 ## Última atualização
-2026-10-05 (16) — **Último acesso dos usuários + página Mensagens + placeholders da marca. Commit
-976a1be NÃO deployado (aguardando autorização). Migration nova: `2026_10_05_000002` (alerta_logs.assunto).**
+2026-10-05 (16) — **Último acesso dos usuários + página Mensagens + placeholders da marca. **DEPLOYADO
+2026-10-05** (commit 0440663, backup `/opt/backups/pre-deploy-mensagens-2026-10-05_13-40-15.dump`, migration rodou, 7 containers ok, health 200). Migration nova: `2026_10_05_000002` (alerta_logs.assunto).**
 - **Último acesso**: causa = `ultimo_acesso` fora do `$fillable` de `Usuario`, então `update()` no login
   era ignorado em silêncio. Novo `Usuario::registrarAcesso()` (forceFill) usado no `LoginController`.
   Telas de usuários mostram `dd/mm/aaaa, HH:mm` (`formatarDataHoraVirgula`). Usuários que não logaram
