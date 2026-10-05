@@ -11,6 +11,10 @@ export default function ConfiguracoesPage() {
     email_alertas: '',
     markup_padrao_entrada_nf: 40,
     atualizar_custo_entrada_nf: true,
+    impressora_cupom: '80MM',
+    tipo_cupom: 'FISCAL',
+    imprimir_automaticamente: false,
+    percentual_tributos_aproximados: '' as string | number,
   })
   const [saving, setSaving] = useState(false)
 
@@ -23,6 +27,10 @@ export default function ConfiguracoesPage() {
         email_alertas: d.email_alertas ?? '',
         markup_padrao_entrada_nf: d.markup_padrao_entrada_nf ?? 40,
         atualizar_custo_entrada_nf: d.atualizar_custo_entrada_nf ?? true,
+        impressora_cupom: d.impressora_cupom ?? '80MM',
+        tipo_cupom: d.tipo_cupom ?? 'FISCAL',
+        imprimir_automaticamente: d.imprimir_automaticamente ?? false,
+        percentual_tributos_aproximados: d.percentual_tributos_aproximados ?? '',
       })
     }).catch(() => {})
   }, [])
@@ -30,7 +38,10 @@ export default function ConfiguracoesPage() {
   async function salvar() {
     setSaving(true)
     try {
-      await api.put('/configuracoes', form)
+      await api.put('/configuracoes', {
+        ...form,
+        percentual_tributos_aproximados: form.percentual_tributos_aproximados === '' ? null : Number(form.percentual_tributos_aproximados),
+      })
       toast('Configurações salvas!', 'success')
     } catch {
       toast('Erro ao salvar.', 'danger')
@@ -72,6 +83,50 @@ export default function ConfiguracoesPage() {
             <input type="checkbox" checked={form.atualizar_custo_entrada_nf}
               onChange={e => setForm(f => ({ ...f, atualizar_custo_entrada_nf: e.target.checked }))} />
             <span style={{ color: 'var(--text)', fontSize: 14 }}>Atualizar o custo do produto ao lançar entrada por NF</span>
+          </label>
+        </div>
+
+        <h3 className="font-display" style={{ fontSize: 16, fontWeight: 700, color: 'var(--text)', marginBottom: 16, marginTop: 24 }}>Impressão do cupom</h3>
+        <div style={{ marginBottom: 20 }}>
+          <label htmlFor="impressora_cupom" style={lStyle}>Impressora usada para o cupom</label>
+          <select id="impressora_cupom" value={form.impressora_cupom}
+            onChange={e => setForm(f => ({ ...f, impressora_cupom: e.target.value }))}
+            style={{ ...iStyle, width: '100%', boxSizing: 'border-box' as const }}>
+            <option value="80MM">Térmica de bobina — 80 mm</option>
+            <option value="A4">Folha A4 (jato de tinta / laser)</option>
+          </select>
+          <p style={{ color: 'var(--muted)', fontSize: 12, marginTop: 4 }}>
+            Vale para o DANFE NFC-e e para o cupom não fiscal. Na térmica, o cupom sai com a altura exata do conteúdo.
+          </p>
+        </div>
+        <div style={{ marginBottom: 20 }}>
+          <label htmlFor="tipo_cupom" style={lStyle}>Tipo de cupom</label>
+          <select id="tipo_cupom" value={form.tipo_cupom}
+            onChange={e => setForm(f => ({ ...f, tipo_cupom: e.target.value }))}
+            style={{ ...iStyle, width: '100%', boxSizing: 'border-box' as const }}>
+            <option value="FISCAL">Cupom fiscal — DANFE NFC-e</option>
+            <option value="NAO_FISCAL">Cupom não fiscal — só os dados da venda</option>
+          </select>
+          <p style={{ color: 'var(--muted)', fontSize: 12, marginTop: 4 }}>
+            O cupom não fiscal sai marcado &quot;SEM VALOR FISCAL&quot;, apenas com itens, valores e pagamento da venda.
+            O cupom fiscal só pode ser impresso depois que a NFC-e é autorizada.
+          </p>
+        </div>
+        <div style={{ marginBottom: 20 }}>
+          <label htmlFor="pct_tributos" style={lStyle}>Percentual aproximado de tributos (%) — Lei 12.741/2012</label>
+          <input id="pct_tributos" type="number" min={0} max={100} step="0.01" value={form.percentual_tributos_aproximados}
+            onChange={e => setForm(f => ({ ...f, percentual_tributos_aproximados: e.target.value }))}
+            style={{ ...iStyle, width: 120 }} placeholder="Ex.: 31,5" />
+          <p style={{ color: 'var(--muted)', fontSize: 12, marginTop: 4 }}>
+            Informe o percentual médio fornecido pelo seu contador (tabela IBPT). Ele preenche o valor dos tributos no cupom NFC-e e,
+            no motor NFePHP, também no XML. Em branco, a informação não é impressa.
+          </p>
+        </div>
+        <div style={{ marginBottom: 24 }}>
+          <label style={{ display: 'flex', alignItems: 'center', gap: 10, cursor: 'pointer' }}>
+            <input type="checkbox" checked={form.imprimir_automaticamente}
+              onChange={e => setForm(f => ({ ...f, imprimir_automaticamente: e.target.checked }))} />
+            <span style={{ color: 'var(--text)', fontSize: 14 }}>Imprimir o cupom automaticamente ao emitir a NFC-e / concluir a venda</span>
           </label>
         </div>
 

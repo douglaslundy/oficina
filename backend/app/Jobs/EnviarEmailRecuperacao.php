@@ -29,7 +29,7 @@ class EnviarEmailRecuperacao implements ShouldQueue
             "Olá {$this->usuario->nome},\n\nClique no link abaixo para redefinir sua senha:\n{$link}\n\nO link expira em 30 minutos.",
             function ($message) {
                 $message->to($this->usuario->email)
-                        ->subject('Redefinição de senha — MecânicaPro');
+                        ->subject('Redefinição de senha — MecânicaOficial');
             }
         );
     }

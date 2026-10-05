@@ -63,7 +63,7 @@ export function AssinaturaAlertaModal() {
       <PagamentoTransparenteModal
         cobrancaId={alerta.cobranca_id}
         valor={Number(alerta.valor)}
-        descricao={vencida ? 'Fatura vencida — MecânicaPro' : 'Mensalidade/Anuidade — MecânicaPro'}
+        descricao={vencida ? 'Fatura vencida — MecânicaOficial' : 'Mensalidade/Anuidade — MecânicaOficial'}
         onClose={() => setShowPagamento(false)}
         onSuccess={() => setVisible(false)}
       />

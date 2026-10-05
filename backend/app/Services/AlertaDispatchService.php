@@ -111,7 +111,7 @@ class AlertaDispatchService
                 EnviarAlertaEmailJob::dispatch(
                     oficina_id:       $oficinaId,
                     destinatarios:    [(string) $email],
-                    assunto:          'MecânicaPro · ' . ($alerta->nome ?: 'Alerta'),
+                    assunto:          'MecânicaOficial · ' . ($alerta->nome ?: 'Alerta'),
                     corpo:            $mensagem,
                     tipo:             $tipo,
                     destinatarioTipo: $origem,

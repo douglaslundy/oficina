@@ -18,7 +18,7 @@ class NotaEntradaItem extends Model
     protected $fillable = [
         'nota_entrada_id', 'produto_id', 'codigo_barras_xml', 'descricao_xml',
         'quantidade', 'valor_unitario', 'produto_criado',
-        'ncm_xml', 'cfop_xml', 'cest_xml', 'origem_xml', 'cst_csosn_xml', 'unidade_xml',
+        'qtd_devolvida_estoque', 'ncm_xml', 'cfop_xml', 'cest_xml', 'origem_xml', 'cst_csosn_xml', 'unidade_xml',
     ];
 
     protected $casts = [

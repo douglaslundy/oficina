@@ -112,4 +112,51 @@ class NotaEntradaXmlParser
         return $vazio;
     }
 
+    /**
+     * Dados cadastrais do EMITENTE (fornecedor) do XML — usados pra montar o
+     * destinatário da NF-e de devolução. Null quando o XML não é uma NF-e ou
+     * não traz CNPJ/CPF. Campos ausentes vêm null (nunca chutados).
+     *
+     * @return array{nome: ?string, cpf_cnpj: string, inscricao_estadual: ?string,
+     *   logradouro: ?string, numero: ?string, bairro: ?string, codigo_ibge: ?string,
+     *   cidade: ?string, uf: ?string, cep: ?string, telefone: ?string}|null
+     */
+    public function extrairEmitente(string $xmlContent): ?array
+    {
+        $semNamespace = preg_replace('/xmlns="[^"]*"/', '', $xmlContent);
+
+        libxml_use_internal_errors(true);
+        $sxml = simplexml_load_string((string) $semNamespace);
+        libxml_clear_errors();
+        if ($sxml === false) {
+            return null;
+        }
+
+        $emit = $sxml->infNFe->emit ?? $sxml->NFe->infNFe->emit ?? null;
+        if ($emit === null) {
+            return null;
+        }
+
+        $doc = preg_replace('/\D/', '', (string) ($emit->CNPJ ?? $emit->CPF ?? '')) ?? '';
+        if ($doc === '') {
+            return null;
+        }
+
+        $ender = $emit->enderEmit;
+        $texto = static fn ($v): ?string => ($t = trim((string) $v)) === '' ? null : $t;
+
+        return [
+            'nome'               => $texto($emit->xNome),
+            'cpf_cnpj'           => $doc,
+            'inscricao_estadual' => $texto(preg_replace('/\D/', '', (string) ($emit->IE ?? ''))),
+            'logradouro'         => $texto($ender->xLgr ?? null),
+            'numero'             => $texto($ender->nro ?? null),
+            'bairro'             => $texto($ender->xBairro ?? null),
+            'codigo_ibge'        => $texto($ender->cMun ?? null),
+            'cidade'             => $texto($ender->xMun ?? null),
+            'uf'                 => $texto($ender->UF ?? null),
+            'cep'                => $texto($ender->CEP ?? null),
+            'telefone'           => $texto($ender->fone ?? null),
+        ];
+    }
 }

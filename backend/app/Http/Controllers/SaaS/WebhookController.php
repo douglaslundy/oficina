@@ -59,7 +59,7 @@ class WebhookController extends Controller
             Mail::raw(
                 "A oficina {$oficina->nome} está inadimplente. Pagamento vencido.",
                 fn($m) => $m->to($oficina->admin_email ?? config('mail.from.address'))
-                             ->subject("MecânicaPro — Pagamento vencido: {$oficina->nome}")
+                             ->subject("MecânicaOficial — Pagamento vencido: {$oficina->nome}")
             );
         } catch (\Throwable) {}
     }

@@ -28,6 +28,7 @@ class NotaFiscal extends Model
         'chave_acesso', 'protocolo', 'xml_retorno', 'pdf_url', 'qrcode_url', 'mensagem_erro', 'observacoes', 'informacoes_complementares', 'emitido_em',
         'oficina_id',
         'provedor', 'ambiente', 'referencia_externa', 'contingencia_desde',
+        'finalidade', 'chave_referenciada', 'nota_entrada_id',
     ];
 
     protected $casts = [

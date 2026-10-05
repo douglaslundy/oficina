@@ -139,7 +139,7 @@ class PagamentoReconciliacaoService
                         . 'Pago em: ' . now()->format('d/m/Y H:i') . "\n"
                         . "Gateway: {$gatewayLabel}";
 
-                    $this->emailService->enviar($emails, "MecânicaPro — Pagamento recebido: {$oficina->nome}", $corpo);
+                    $this->emailService->enviar($emails, "MecânicaOficial — Pagamento recebido: {$oficina->nome}", $corpo);
                 }
             }
         } catch (\Throwable $e) {

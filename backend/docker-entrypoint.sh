@@ -1,7 +1,7 @@
 #!/bin/sh
 set -e
 
-echo "=== MecânicaPro Backend Starting ==="
+echo "=== MecânicaOficial Backend Starting ==="
 
 # Generate APP_KEY if not set
 if [ -z "$APP_KEY" ]; then

@@ -258,7 +258,7 @@ export default function SaasAdminDashboardPage() {
             Dashboard
           </h1>
           <p style={{ color: 'var(--muted)', fontSize: 14, margin: '4px 0 0' }}>
-            Visão geral da plataforma MecânicaPro SaaS
+            Visão geral da plataforma MecânicaOficial SaaS
           </p>
         </div>
 

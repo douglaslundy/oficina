@@ -52,7 +52,7 @@ export default function SaasAdminLayout({ children }: { children: React.ReactNod
         {/* Logo + badge */}
         <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginRight: 16, flexShrink: 0 }}>
           <span className="font-display" style={{ fontSize: 18, fontWeight: 700, color: 'var(--text)' }}>
-            🔧 MecânicaPro
+            🔧 MecânicaOficial
           </span>
           <span style={{
             background: 'var(--accent)',

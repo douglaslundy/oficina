@@ -183,7 +183,7 @@ export default function SaasConfigPage() {
   const [smtpPassword, setSmtpPassword] = useState('')
   const [smtpEncryption, setSmtpEncryption] = useState('tls')
   const [smtpFromAddress, setSmtpFromAddress] = useState('')
-  const [smtpFromName, setSmtpFromName] = useState('MecânicaPro')
+  const [smtpFromName, setSmtpFromName] = useState('MecânicaOficial')
   const [smtpAtivo, setSmtpAtivo] = useState(false)
   const [savingSmtp, setSavingSmtp] = useState(false)
   const [smtpTestTo, setSmtpTestTo] = useState('')
@@ -236,7 +236,7 @@ export default function SaasConfigPage() {
         setSmtpFromAddress(d.smtp_from_address ?? '')
         setEvolutionUrl(d.evolution_url ?? '')
         setEvolutionApiKey(d.evolution_api_key ?? '')
-        setSmtpFromName(d.smtp_from_name ?? 'MecânicaPro')
+        setSmtpFromName(d.smtp_from_name ?? 'MecânicaOficial')
         setSmtpAtivo(d.smtp_ativo ?? false)
         setProvedorFiscal(d.provedor_fiscal_padrao ?? 'SPEDY')
         setModoEmissao(d.emissao_fiscal_modo_padrao ?? 'MANUAL')
@@ -610,7 +610,7 @@ export default function SaasConfigPage() {
             <label style={{ display: 'block', fontSize: 12, fontWeight: 600, color: 'var(--muted)', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: 6 }}>
               Nome remetente
             </label>
-            <input value={smtpFromName} onChange={e => setSmtpFromName(e.target.value)} placeholder="MecânicaPro"
+            <input value={smtpFromName} onChange={e => setSmtpFromName(e.target.value)} placeholder="MecânicaOficial"
               style={{ width: '100%', padding: '9px 12px', borderRadius: 7, border: '1px solid var(--border)', background: 'var(--card)', color: 'var(--text)', fontSize: 14, outline: 'none', boxSizing: 'border-box' }} />
           </div>
         </div>

@@ -1,6 +1,55 @@
 # Progresso do Projeto
 
 ## Última atualização
+2026-10-05 (15) — **Devolução de compra (NF-e finNFe=4, 3 motores), retirada de
+estoque por nota de entrada, DANFE NFC-e oficial 80mm/A4, config de impressão,
+cupom não fiscal e rename MecânicaPro→MecânicaOficial. NADA deployado, nada
+commitado (aguardando autorização). Migration nova: `2026_10_05_000001`.**
+- **Devolução** (`DevolucaoCompraService`, `CfopDevolucaoCompraResolver`): rascunho
+  NF-e `finalidade=DEVOLUCAO` + `chave_referenciada` (nota de entrada) → emissão pelo
+  fluxo normal. CFOP 5202/6202 (5411/6411 se ST), CSOSN/CST pelo resolver de saída.
+  Valor unitário = o da nota de compra (só a quantidade pode ser menor; teto =
+  quantidade da nota − devoluções em RASCUNHO/PROCESSANDO/AUTORIZADA/CONTINGENCIA;
+  rejeitada/cancelada libera). Fornecedor vira `Cliente` (acha por CNPJ ou cria do
+  `xml_original` via `NotaEntradaXmlParser::extrairEmitente`; sem XML nem cadastro → bloqueia).
+  Motores: NFePHP (`MotorNfe`: finNFe=4, `tagrefNFe`, indFinal=0, indPres=9, tPag=90/vPag=0),
+  Spedy (`purposeType=devolution`, `operationType`, `referencedDocuments[].accessKey`,
+  `noPayment`), Focus (`finalidade_emissao=4`, `notas_referenciadas[].chave_nfe`,
+  `consumidor_final=0`, `presenca_comprador=9`, forma 90). Campos conferidos na doc
+  oficial (OpenAPI da Spedy; campos.focusnfe.com.br). XML do NFePHP validado no XSD v4.00
+  (só falta a assinatura, esperado). **A CONFIRMAR EM HOMOLOGAÇÃO:** indPres=9 e tPag=90
+  em finNFe=4 (não consegui provar a regra SEFAZ por doc; se rejeitar, ajustar).
+- **Estoque**: `POST entradas-nf/{id}/devolucao-estoque` (`EstoqueService::registrarSaidaDevolucao`,
+  coluna `notas_entrada_itens.qtd_devolvida_estoque`): inteiros, ≤ saldo da nota e ≤ estoque atual.
+  Rotas: `GET/POST entradas-nf/{id}/devolucao`. Tela: `/produtos/entrada-nf/devolucao/[id]`
+  (botão "Devolver" no histórico de entradas), qtd já vem cheia.
+- **NFC-e**: `CupomRenderer` + `CupomPdfService` + views `pdf/cupom/{nfce,nao_fiscal}`
+  substituem `nota_fiscal_nfce` (removida). Leiaute DANFE NFC-e do MOC (itens, totais,
+  pagamento, tributos Lei 12.741 só se vier `vTotTrib` no XML, mensagem fiscal
+  homologação/contingência, URL+chave em grupos de 4, consumidor, protocolo, QR). Dados do
+  XML autorizado, com fallback pro banco (Spedy/Focus não devolvem XML) → vale nos 3
+  motores. 80mm: renderiza 2x (mede e ajusta a altura); A4: coluna de 80mm.
+  Config: `impressora_cupom` (80MM|A4), `tipo_cupom` (FISCAL|NAO_FISCAL),
+  `imprimir_automaticamente`; `GET os/{id}/cupom`, `GET impressao/config`; UI em
+  /configuracoes, botão "Imprimir cupom" na OS e "Imprimir" no histórico (NFC-e).
+- **Rename**: só texto de marca (e-mails, PDFs, UI, APP_NAME, landing, CLAUDE.md).
+  **NÃO renomeei infra** (banco/usuário `mecanicapro`, containers, volumes, `/opt/mecanicapro`,
+  domínios `*.mecanicapro.com`, e-mails de login/demo `@mecanicapro.com`, labels Traefik,
+  fail2ban): trocar quebra produção/credenciais — decisão pendente do usuário.
+- **Correções pós-revisão (mesmo dia):** (a) `indPres` voltou a 1 nos 3 motores: 2/3/4/9
+  exigem `indIntermed` (NT 2020.006) e Spedy/Focus não têm campo documentado; `tPag=90` em
+  finNFe=4 está CONFIRMADO (rejeição 871, NT 2020.006/2023.004) — mantido. (b) Lei 12.741:
+  novo `configuracoes.percentual_tributos_aproximados` (% do contador/IBPT, campo em
+  /configuracoes); `MotorNfce` manda `vTotTrib` por item (a Make soma no total) e o cupom
+  calcula quando o XML não traz (Spedy/Focus). Sem % configurado, nada é enviado/impresso.
+  (c) Testes de feature rodados num Postgres 16 portátil local (zip EDB em scratchpad):
+  `DevolucaoCompraTest` 4/4 OK e as migrations novas rodam. Suíte completa: 829 testes,
+  26 falhas/erros (login, isolamento de tenant etc.) IDÊNTICAS ao código sem minhas
+  alterações (verificado com `git stash`) → problema do Postgres local de teste, não meu.
+- Testes: `DevolucaoCompraTresMotoresTest` (9), `CupomRendererTest` (7), MotorNfce (+2) verdes;
+  `tsc` limpo. **Pendente: pergunta de deploy ao usuário; depois rename completo de infra
+  (domínio provisório atual: `*.dlsistemas.com.br`; definitivo vem depois).**
+
 2026-09-25 (14) — **Exigências dos Correios (NF-e peças + NFS-e serviços de
 oficina Simples): dados adicionais com "optante pelo Simples Nacional" +
 Placa/Modelo/KM da OS, XML no ZIP. Motor NFEPHP feito; Spedy/Focus, skill e
@@ -6346,3 +6395,95 @@ Deixei essa ressalva registrada no comentário do código.
 mandado + não é consumidor final; isento → sem stateTaxNumber; pessoa
 física → comportamento antigo preservado). Suite Unit completa: 427
 testes, mesmos 11 erros pré-existentes de sempre, zero regressão nova.
+
+## 2026-09-28 — Tarefa avulsa (fora do roadmap fiscal): material de marketing em `landinpage/`
+
+Usuário pediu 3 entregáveis de marketing pra anunciar o sistema no Mercado
+Livre, **não relacionado** à Etapa C2/NFePHP que continua sendo a
+verdadeira "próxima tarefa" do roadmap (ver seção acima). Tudo salvo em
+`landinpage/` (pasta nova na raiz do projeto).
+
+### Feito
+- `landinpage/descricao-anuncio-mercadolivre.txt` — descrição completa
+  estilo anúncio (PAS: problema/agitação/solução, benefícios por módulo,
+  FAQ, CTA pro WhatsApp) já concluída.
+- `landinpage/index.html` — landing page completa (single-file, dark theme
+  usando as CSS variables oficiais do design system deste CLAUDE.md:
+  `--bg/--surface/--card/--accent` etc., fontes Barlow Condensed/Barlow/
+  JetBrains Mono). Tabs pra alternar entre 5 telas (login, dashboard, OS,
+  veículos, histórico fiscal), FAQ em accordion, botão flutuante de
+  WhatsApp. Os dois CTAs ("Assinar agora" e "Falar no WhatsApp") apontam
+  pra `wa.me/5535984297193` com mensagens pré-preenchidas diferentes —
+  **decisão do usuário**: confirmei que não existe cadastro público de
+  oficina no sistema hoje (`oficinas` só é criada pelo saas-admin
+  protegido, `backend/routes/api.php:69`), então não havia URL de cadastro
+  real pra apontar o botão "Assinar".
+- Imagens referenciadas em `landinpage/imagens/tela-*.png` (login,
+  dashboard, os, veiculos, fiscal-historico) têm fallback visual inline
+  (CSS) caso o arquivo ainda não exista, pra a landing nunca quebrar.
+
+### Concluído (screenshots)
+Extensão Claude in Chrome conectada pelo usuário durante a sessão. Login
+feito manualmente pelo usuário (não pela IA — bloqueado uma vez pelo
+classificador de permissão do Claude Code ao tentar editar o campo de
+e-mail, "Browser Input Exfil"; não foi contornado, só se esperou o
+usuário logar). Tenant real usado: `stuntmotos.dlsistemas.com.br` (dados
+reais de cliente/estoque/faturamento aparecem nos prints de Dashboard,
+OS e Histórico de NF — usuário confirmou explicitamente "deixa eu logar,
+você só tira o print", ciente disso). 5 screenshots salvos em
+`landinpage/imagens/` como `.jpg` (não `.png` como o HTML previa
+originalmente — `index.html` foi atualizado via `sed` pra apontar pro
+`.jpg` certo):
+- `tela-login.jpg` — e-mail do usuário (`douglaslundy@gmail.com`,
+  autofill do Chrome) foi **borrado com Gaussian blur via PIL** antes de
+  salvar, pra não vazar e-mail pessoal num anúncio público. Senha (pontos)
+  ficou visível mas não é informação real recuperável.
+- `tela-dashboard.jpg`, `tela-os.jpg`, `tela-fiscal-historico.jpg` — têm
+  dados reais de negócio (nome de cliente real "EMPRESA BRASILEIRA DE
+  CORREIOS E TELEGRAFO", valores de faturamento/dívida reais). Não
+  editados. **Usuário deve revisar antes de publicar no Mercado Livre**
+  se não quiser expor esses dados publicamente.
+- `tela-veiculos.jpg` — tela de busca por placa, vazia por padrão, sem
+  dado sensível.
+
+`landinpage/index.html` revisado visualmente inteiro (servido localmente
+via `python3 -m http.server`, aberto no Chrome real, todas as 5 abas de
+telas clicadas uma a uma) — hero, pain cards, features, tabs de telas,
+FAQ e CTAs todos renderizando corretamente com os screenshots reais.
+
+### Os 3 entregáveis da tarefa avulsa estão TODOS concluídos
+1. `landinpage/descricao-anuncio-mercadolivre.txt`
+2. `landinpage/imagens/` — ver correção abaixo (dados reais substituídos)
+3. `landinpage/index.html`
+
+### Correção pós-entrega: dados reais trocados por fictícios
+Usuário pediu pra trocar os 3 prints que expunham dado real de negócio
+(dashboard, OS, histórico de NF — cliente real "EMPRESA BRASILEIRA DE
+CORREIOS E TELEGRAFO", faturamento/dívida reais). Em vez de mascarar a
+imagem real, **recriei as 3 telas como mockups HTML estáticos** fiéis ao
+layout capturado (sidebar, topbar, stat cards, tabelas, pills de status —
+mesmas cores/fontes do design system) com dados 100% fictícios ("Oficina
+Modelo", "João da Silva", "Maria Oliveira" etc.), servidos localmente e
+fotografados com `npx playwright@1.63.0 screenshot` (CLI, sem precisar
+instalar o pacote nem depender da extensão do Chrome, que caiu de novo
+durante essa etapa). Fonte dos mockups ficou em `landinpage/_mock/`
+(pasta temporária, **já removida** depois de gerar os PNGs finais).
+- `imagens/tela-dashboard.png`, `tela-os.png`,
+  `tela-fiscal-historico.png` — agora fictícios (`.png`, substituíram os
+  `.jpg` reais anteriores, que foram apagados).
+- `imagens/tela-login.jpg` e `tela-veiculos.jpg` — mantidos como estavam
+  (login com e-mail borrado, veículos com tela vazia por padrão — já não
+  tinham dado sensível, não foi preciso recriar).
+- `index.html` teve as extensões das 3 imagens re-apontadas pra `.png`
+  (`sed`), revisado de novo servindo localmente — hero renderiza correto
+  com o novo dashboard fictício.
+
+## Próxima tarefa (retomar exatamente aqui)
+
+Tarefa avulsa de marketing (`landinpage/`) **encerrada** — nada pendente
+aqui a menos que o usuário peça ajuste (ex: trocar cliente real exposto
+nos prints de OS/fiscal por um exemplo genérico). O roadmap fiscal
+(Etapa C2/NFePHP, worktree `worktree-etapa-c1-nfephp-nfse`) continua
+parado no mesmo ponto descrito na seção "Próxima tarefa" mais antiga
+deste arquivo (linha ~5372), inalterado por esta sessão — é o que deve
+ser retomado se o usuário disser "continue" sem especificar o quê.

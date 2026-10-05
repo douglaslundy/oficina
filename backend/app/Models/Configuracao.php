@@ -33,10 +33,13 @@ class Configuracao extends Model
         'csc_id_producao', 'csc_token_producao_encrypted',
         'modelo_venda_padrao', 'proximo_numero_nfce_nfephp',
         'dist_dfe_ultimo_nsu', 'notas_terceiro_ultima_verificacao',
+        'impressora_cupom', 'tipo_cupom', 'imprimir_automaticamente', 'percentual_tributos_aproximados',
     ];
 
     protected $casts = [
         'alertas_email'              => 'boolean',
+        'imprimir_automaticamente'   => 'boolean',
+        'percentual_tributos_aproximados' => 'float',
         'atualizar_custo_entrada_nf' => 'boolean',
         'markup_padrao_entrada_nf'   => 'float',
     ];

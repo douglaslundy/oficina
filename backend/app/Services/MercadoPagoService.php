@@ -64,7 +64,7 @@ class MercadoPagoService
                 'start_date'      => $nextDate . 'T00:00:00.000-03:00',
             ],
             'back_url'            => config('app.url'),
-            'reason'              => 'Assinatura MecânicaPro',
+            'reason'              => 'Assinatura MecânicaOficial',
             'status'              => 'authorized',
         ]);
 
@@ -125,7 +125,7 @@ class MercadoPagoService
     {
         $response = $this->http()->post('/checkout/preferences', [
             'items' => [[
-                'title'       => 'Cobrança avulsa — MecânicaPro',
+                'title'       => 'Cobrança avulsa — MecânicaOficial',
                 'quantity'    => 1,
                 'currency_id' => 'BRL',
                 'unit_price'  => $valor,

@@ -35,7 +35,7 @@
 
 <div class="header">
   <div>
-    <div class="logo">MecânicaPro</div>
+    <div class="logo">MecânicaOficial</div>
     <div class="empresa">{{ $empresa['nome_fantasia'] ?? $empresa['razao_social'] ?? 'Oficina Mecânica' }}</div>
     @if(!empty($empresa['cnpj']))
     <div class="empresa">CNPJ: {{ $empresa['cnpj'] }}</div>
@@ -126,7 +126,7 @@
 </div>
 
 <div class="footer">
-  Documento gerado em {{ now()->format('d/m/Y \à\s H:i') }} — MecânicaPro Sistema de Gestão para Oficinas
+  Documento gerado em {{ now()->format('d/m/Y \à\s H:i') }} — MecânicaOficial Sistema de Gestão para Oficinas
 </div>
 
 </body>

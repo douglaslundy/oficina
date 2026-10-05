@@ -82,5 +82,18 @@ final class NotaFiscalData
         // Simples Nacional" + Placa/Modelo/KM da OS. Montado uma vez por
         // InformacoesComplementaresResolver; cada motor só escolhe onde pôr.
         public readonly ?string $informacoesComplementares = null,
+        // Finalidade da NF-e (finNFe): 'NORMAL' (1) | 'DEVOLUCAO' (4). Só
+        // 'DEVOLUCAO' muda o documento: finNFe=4, NFref/refNFe com
+        // $chaveReferenciada (44 dígitos, a NF-e de compra devolvida),
+        // indFinal=0 (o destinatário é o fornecedor, que revende) e
+        // pagamento "sem pagamento" (tPag=90, rejeição 871 se diferente). indPres
+        // fica 1 como nas notas normais. Cada motor aplica o mesmo conjunto.
+        public readonly string $finalidade = 'NORMAL',
+        public readonly ?string $chaveReferenciada = null,
     ) {}
+
+    public function ehDevolucao(): bool
+    {
+        return $this->finalidade === 'DEVOLUCAO';
+    }
 }

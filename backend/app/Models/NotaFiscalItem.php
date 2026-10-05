@@ -21,7 +21,7 @@ class NotaFiscalItem extends Model
     protected $fillable = [
         'nota_fiscal_id', 'produto_id', 'sku', 'oficina_id', 'descricao', 'unidade',
         'ncm', 'cfop', 'origem', 'tributacao_icms', 'cst_csosn',
-        'quantidade', 'valor_unitario',
+        'quantidade', 'valor_unitario', 'nota_entrada_item_id',
     ];
 
     protected $casts = [
@@ -38,4 +38,5 @@ class NotaFiscalItem extends Model
     }
 
     public function produto(): BelongsTo { return $this->belongsTo(Produto::class, 'produto_id'); }
+    public function notaFiscal(): BelongsTo { return $this->belongsTo(NotaFiscal::class, 'nota_fiscal_id'); }
 }

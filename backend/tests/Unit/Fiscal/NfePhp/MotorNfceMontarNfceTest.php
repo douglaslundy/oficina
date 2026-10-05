@@ -68,6 +68,24 @@ class MotorNfceMontarNfceTest extends TestCase
         $this->assertStringContainsString('<indFinal>1</indFinal>', $xml);
     }
 
+    public function test_sem_percentual_configurado_nao_envia_vtottrib(): void
+    {
+        $xml = (new MotorNfce())->montarNfce($this->notaVenda(), $this->configuracaoSimplesNacional(), 'HOMOLOGACAO', 1, 1);
+
+        $this->assertStringNotContainsString('<vTotTrib>', $xml);
+    }
+
+    public function test_percentual_configurado_envia_vtottrib_no_item_e_no_total_lei_12741(): void
+    {
+        $cfg = $this->configuracaoSimplesNacional();
+        $cfg->percentual_tributos_aproximados = 10.0;
+
+        $xml = (new MotorNfce())->montarNfce($this->notaVenda(), $cfg, 'HOMOLOGACAO', 1, 1);
+
+        // 2 x 35,50 = 71,00 → 10% = 7,10 no item e no total
+        $this->assertSame(2, substr_count($xml, '<vTotTrib>7.10</vTotTrib>'));
+    }
+
     public function test_iddest_continua_1_mesmo_com_tomador_de_outro_estado(): void
     {
         // Contraprova de MotorNfeMontarNfeTest::test_uf_diferente_gera_

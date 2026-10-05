@@ -149,7 +149,7 @@ class AdminWhatsAppService
             return ['ok' => false, 'error' => 'Configure o número de destino das notificações antes de testar.'];
         }
 
-        $mensagem = "✅ *MecânicaPro*\n\nMensagem de teste do WhatsApp do admin da plataforma. Se você recebeu isto, a integração está funcionando! 🚀";
+        $mensagem = "✅ *MecânicaOficial*\n\nMensagem de teste do WhatsApp do admin da plataforma. Se você recebeu isto, a integração está funcionando! 🚀";
 
         return $this->enviarMensagemForcado($mensagem);
     }

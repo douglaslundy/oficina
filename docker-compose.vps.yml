@@ -37,7 +37,7 @@ services:
       dockerfile: Dockerfile.prod
     container_name: mecanicapro-backend
     environment:
-      APP_NAME: "MecânicaPro"
+      APP_NAME: "MecânicaOficial"
       APP_ENV: production
       APP_DEBUG: "false"
       APP_URL: https://oficina.dlsistemas.com.br
@@ -80,7 +80,7 @@ services:
       dockerfile: Dockerfile.prod
     container_name: mecanicapro-worker
     environment:
-      APP_NAME: "MecânicaPro"
+      APP_NAME: "MecânicaOficial"
       APP_ENV: production
       APP_DEBUG: "false"
       APP_URL: https://oficina.dlsistemas.com.br

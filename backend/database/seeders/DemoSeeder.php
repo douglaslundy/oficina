@@ -35,8 +35,8 @@ class DemoSeeder extends Seeder
 
         // Configurações padrão
         Configuracao::create([
-            'razao_social'          => 'Oficina MecânicaPro Ltda',
-            'nome_fantasia'         => 'MecânicaPro',
+            'razao_social'          => 'Oficina MecânicaOficial Ltda',
+            'nome_fantasia'         => 'MecânicaOficial',
             'cnpj'                  => '11222333000181',
             'regime_tributario'     => 'Simples Nacional',
             'cidade'                => 'São Paulo',

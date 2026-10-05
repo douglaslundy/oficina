@@ -444,7 +444,11 @@ class FocusNfeProvider implements FiscalProvider, ConsultaNotaTerceiroProvider
             ...($n->informacoesComplementares !== null ? ['informacoes_adicionais_contribuinte' => $n->informacoesComplementares] : []),
             'data_emissao'       => date('Y-m-d'),
             'tipo_documento'     => 1, // saída
-            'finalidade_emissao' => 1, // normal
+            'finalidade_emissao' => $n->ehDevolucao() ? 4 : 1, // 1 normal | 4 devolução
+            ...($n->ehDevolucao() ? [
+                // NFref/refNFe (campos.focusnfe.com.br: notas_referenciadas/chave_nfe, 44 dígitos)
+                'notas_referenciadas' => [['chave_nfe' => preg_replace('/\D/', '', (string) $n->chaveReferenciada)]],
+            ] : []),
             // Corrigido 2026-09-23 (auditoria fiscal completa, verificação
             // adicional após consolidar a doc real na skill): este campo
             // nunca era mandado — a Focus fica livre pra assumir o próprio
@@ -455,7 +459,7 @@ class FocusNfeProvider implements FiscalProvider, ConsultaNotaTerceiroProvider
             // verdade do serviço/peça, nunca pra revenda — hardcoded, não
             // condicionado à IE do destinatário (mesma lição do bug
             // original cStat=232: IE presente não significa revenda).
-            'consumidor_final'   => '1',
+            'consumidor_final'   => $n->ehDevolucao() ? '0' : '1',
             'nome_destinatario'  => $n->tomador['nome'],
             $chaveDoc            => $docTomador,
             'indicador_inscricao_estadual_destinatario' => $n->tomador['indicador_ie'] ?? 9,
@@ -479,6 +483,8 @@ class FocusNfeProvider implements FiscalProvider, ConsultaNotaTerceiroProvider
                 'icms_origem'               => (int) $item['origem'],
                 'icms_situacao_tributaria'  => $item['cst_csosn'],
             ], array_keys($n->itens), $n->itens),
+            // Devolução não tem pagamento: forma "90" (sem pagamento), valor 0.
+            ...($n->ehDevolucao() ? ['formas_pagamento' => [['forma_pagamento' => '90', 'valor_pagamento' => 0]]] : []),
         ];
     }
 

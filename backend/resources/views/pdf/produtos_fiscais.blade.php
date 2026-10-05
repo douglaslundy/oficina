@@ -70,7 +70,7 @@
   </tbody>
 </table>
 
-<div class="footer">MecânicaPro · relatório gerado automaticamente</div>
+<div class="footer">MecânicaOficial · relatório gerado automaticamente</div>
 
 </body>
 </html>

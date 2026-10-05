@@ -141,7 +141,7 @@ export default function BloqueadoPage() {
       <PagamentoTransparenteModal
         cobrancaId={status.cobranca_id}
         valor={Number(status.valor)}
-        descricao="Regularização de fatura — MecânicaPro"
+        descricao="Regularização de fatura — MecânicaOficial"
         onClose={() => setShowPagamento(false)}
         onSuccess={() => router.push('/')}
       />

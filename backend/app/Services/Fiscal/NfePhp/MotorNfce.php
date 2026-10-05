@@ -174,6 +174,17 @@ class MotorNfce
                 'indTot'  => 1,
             ]);
 
+            // Lei 12.741/2012: valor aproximado dos tributos do item (vTotTrib), a partir do
+            // percentual informado pela oficina (Empresa > Impressão; vem do contador/IBPT).
+            // Sem percentual configurado não se envia valor — nunca se inventa um. A Make
+            // soma os itens no vTotTrib do total.
+            if ($cfg->percentual_tributos_aproximados !== null) {
+                $make->tagimposto((object) [
+                    'item'     => $nItem,
+                    'vTotTrib' => round((float) $item['quantidade'] * (float) $item['valor_unitario'] * (float) $cfg->percentual_tributos_aproximados / 100, 2),
+                ]);
+            }
+
             $tributacaoSt = $item['tributacao_icms'] === 'ST';
 
             // Mesma lógica ICMS/ICMSSN de MotorNfe::montarNfe() — schema

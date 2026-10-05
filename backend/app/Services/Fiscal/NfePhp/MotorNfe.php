@@ -92,7 +92,8 @@ class MotorNfe
         $crt = CrtResolver::resolver($cfg->regime_tributario ?? '');
         $idDestino = $this->idDest($cfg->uf ?? '', $nota->tomador['uf'] ?? '');
         $indIEDest = $nota->tomador['indicador_ie'] ?? 9;
-        $indFinal  = 1; // Consumidor final (venda B2B via NF-e nesta etapa — mesmo público da Etapa B)
+        // Devolução de compra: destinatário é o fornecedor (revende) → indFinal=0.
+        $indFinal  = $nota->ehDevolucao() ? 0 : 1; // Consumidor final (venda B2B via NF-e nesta etapa — mesmo público da Etapa B)
 
         // Achado de auditoria 2026-09-23: venda interestadual (idDest=2)
         // para consumidor final (indFinal=1, sempre verdade nesta v1) não
@@ -165,8 +166,9 @@ class MotorNfe
             'tpImp'    => 1, // DANFE normal, retrato
             'tpEmis'   => 1, // Normal — sobrescrito para 4 (EPEC) pelo chamador quando cai em contingência
             'tpAmb'    => $ambiente === 'PRODUCAO' ? 1 : 2,
-            'finNFe'   => 1, // Normal
+            'finNFe'   => $nota->ehDevolucao() ? 4 : 1, // 1 Normal | 4 Devolução
             'indFinal' => $indFinal,
+            // Devolução mantém 1: indPres 2/3/4/9 obrigariam o grupo de intermediador (indIntermed, NT 2020.006).
             'indPres'  => 1, // Operação presencial
             'procEmi'  => 0, // Emissão de aplicativo do contribuinte
             'verProc'  => config('app.version', '1.0.0'),
@@ -205,6 +207,16 @@ class MotorNfe
             'cPais'   => '1058',
             'xPais'   => 'Brasil',
         ]);
+
+        // NFref/refNFe: obrigatório em finNFe=4 (rejeição cStat 321 sem a nota
+        // referenciada). Fica logo depois do ide, antes do emit (ordem do XSD).
+        if ($nota->ehDevolucao()) {
+            $chaveRef = preg_replace('/\D/', '', (string) $nota->chaveReferenciada) ?? '';
+            if (strlen($chaveRef) !== 44) {
+                throw new EmissaoBloqueadaException('NF-e de devolução sem a chave de acesso (44 dígitos) da nota referenciada.');
+            }
+            $make->tagrefNFe((object) ['refNFe' => $chaveRef]);
+        }
 
         $docTomador = preg_replace('/\D/', '', $nota->tomador['cpf_cnpj'] ?? '') ?? '';
         // Bug real corrigido 2026-09-23 (NF-e #13, cStat=232 "IE do
@@ -416,13 +428,14 @@ class MotorNfe
         // mandado aqui. `MotorNfce::tPagDe()` já fazia esse mapeamento
         // corretamente; replicado aqui + `xPag` adicionado em ambos os
         // motores (ver comentário de `tPagDe()` abaixo).
-        $tPag = $this->tPagDe($nota->formaPagamento);
+        // Devolução (finNFe=4) não tem pagamento: tPag=90 "Sem pagamento", vPag=0.
+        $tPag = $nota->ehDevolucao() ? '90' : $this->tPagDe($nota->formaPagamento);
         $make->tagpag((object) []);
         $make->tagdetPag((object) [
             'indPag' => 0,
             'tPag'   => $tPag,
             'xPag'   => $tPag === '99' ? ($nota->formaPagamento ?: 'Outros') : null,
-            'vPag'   => $vProdTotal,
+            'vPag'   => $nota->ehDevolucao() ? 0 : $vProdTotal,
         ]);
 
         if (!empty($nota->informacoesComplementares)) {

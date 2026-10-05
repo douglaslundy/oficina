@@ -7,7 +7,7 @@ DEPLOY_DIR="$(cd "$(dirname "$(readlink -f "$0")")" && pwd)"
 PROJECT="mecanicapro"
 
 echo "=============================================="
-echo "  MecânicaPro - Deploy na VPS"
+echo "  MecânicaOficial - Deploy na VPS"
 echo "  Diretório: $DEPLOY_DIR"
 echo "=============================================="
 

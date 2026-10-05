@@ -62,8 +62,8 @@ class EmailService
     {
         return $this->enviar(
             [$destinatario],
-            'MecânicaPro — E-mail de teste',
-            "✅ Este é um e-mail de teste do MecânicaPro.\n\nSe você recebeu esta mensagem, a configuração de SMTP está funcionando corretamente!"
+            'MecânicaOficial — E-mail de teste',
+            "✅ Este é um e-mail de teste do MecânicaOficial.\n\nSe você recebeu esta mensagem, a configuração de SMTP está funcionando corretamente!"
         );
     }
 

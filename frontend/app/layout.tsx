@@ -3,7 +3,7 @@ import { ThemeProvider } from 'next-themes'
 import './globals.css'
 
 export const metadata: Metadata = {
-  title: 'MecânicaPro',
+  title: 'MecânicaOficial',
   description: 'Sistema de Gestão para Oficinas Mecânicas',
 }
 

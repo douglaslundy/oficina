@@ -87,7 +87,7 @@
 
 <div class="footer">
   Emitido em {{ now()->format('d/m/Y \à\s H:i') }}
-  — {{ $empresa['nome_fantasia'] ?? $empresa['razao_social'] ?? 'MecânicaPro' }}
+  — {{ $empresa['nome_fantasia'] ?? $empresa['razao_social'] ?? 'MecânicaOficial' }}
 </div>
 
 </body>

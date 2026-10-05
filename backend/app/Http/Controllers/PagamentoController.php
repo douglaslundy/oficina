@@ -84,7 +84,7 @@ class PagamentoController extends Controller
             return response()->json(['message' => 'Esta fatura não é do Mercado Pago.'], 422);
         }
 
-        $descricao = $cobranca->descricao ?: ($cobranca->tipo === 'ASSINATURA' ? 'Mensalidade MecânicaPro' : 'Cobrança avulsa MecânicaPro');
+        $descricao = $cobranca->descricao ?: ($cobranca->tipo === 'ASSINATURA' ? 'Mensalidade MecânicaOficial' : 'Cobrança avulsa MecânicaOficial');
 
         try {
             $pagamento = $this->mercadoPago->criarPagamento(

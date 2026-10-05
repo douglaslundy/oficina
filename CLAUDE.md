@@ -124,7 +124,7 @@ Asaas / Efí (gateway de pagamento — módulo SaaS Admin)
 │  Painel de marca             │  Formulário ativo    │
 │                              │                      │
 │  • Logo âmbar (72px, br 18)  │  Alterna entre:      │
-│  • "MecânicaPro" 36px 800    │  • panel-login       │
+│  • "MecânicaOficial" 36px 800    │  • panel-login       │
 │  • tagline muted             │  • panel-forgot      │
 │  • 5 feature bullets         │  • panel-reset       │
 │                              │                      │
@@ -981,7 +981,7 @@ Todo componente React deve produzir saída idêntica ao equivalente HTML do prot
 
 ---
 
-*MecânicaPro — Sistema SaaS de Gestão para Oficinas*
+*MecânicaOficial — Sistema SaaS de Gestão para Oficinas*
 *Stack: Next.js 14 + Laravel 11 + PostgreSQL 16 + Redis 7*
 
 ---

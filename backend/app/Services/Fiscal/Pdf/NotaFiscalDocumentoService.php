@@ -88,19 +88,15 @@ class NotaFiscalDocumentoService
     }
 
     /**
-     * Escolhe o template certo — cupom 80mm pra NFC-e, DANFE-style A4 pra
+     * Escolhe o template certo — cupom (80mm ou A4, ver gerarCupomNfce) pra NFC-e, DANFE-style A4 pra
      * NF-e (produto), layout de NFS-e municipal pra NFS-e (serviço).
      *
-     * @return array{pdf: \Barryvdh\DomPDF\PDF, filename: string}
+     * @return array{pdf: \Barryvdh\DomPDF\PDF|PdfPronto, filename: string}
      */
     public function montarPdfArquivo(NotaFiscal $nota, array $empresa): array
     {
         if ($nota->modelo === 'NFC-e') {
-            $qrCodeDataUri = $this->gerarQrCodeDataUri($nota);
-            $pdf = Pdf::loadView('pdf.nota_fiscal_nfce', compact('nota', 'empresa', 'qrCodeDataUri'))
-                ->setPaper([0, 0, 226.77, $this->alturaCupomNfce($nota)], 'portrait');
-
-            return ['pdf' => $pdf, 'filename' => 'NFCe-' . ($nota->numero ?? $nota->id) . '.pdf'];
+            return ['pdf' => new PdfPronto($this->gerarCupomNfce($nota, $empresa)), 'filename' => 'NFCe-' . ($nota->numero ?? $nota->id) . '.pdf'];
         }
 
         if ($nota->modelo === 'NF-e') {
@@ -123,12 +119,18 @@ class NotaFiscalDocumentoService
         return ['pdf' => $pdf, 'filename' => 'NFSe-' . ($nota->numero ?? $nota->id) . '.pdf'];
     }
 
-    // ~260pt de cabeçalho/rodapé/totais fixos + ~14pt por item + ~110pt pro QR
-    // code quando presente. Altura dinâmica porque o cupom térmico não tem
-    // página de tamanho fixo como o A4.
-    private function alturaCupomNfce(NotaFiscal $nota): float
+    /**
+     * DANFE NFC-e (leiaute oficial, ver CupomRenderer) no papel configurado na
+     * empresa: bobina 80 mm ou A4 (`configuracoes.impressora_cupom`).
+     *
+     * @param array<string, mixed> $empresa
+     */
+    public function gerarCupomNfce(NotaFiscal $nota, array $empresa): string
     {
-        return 260.0 + ($nota->itens->count() * 14) + ($nota->qrcode_url ? 110.0 : 0.0);
+        $nota->loadMissing(['cliente', 'itens']);
+        $dados = app(CupomRenderer::class)->dadosNfce($nota, $empresa, $this->gerarQrCodeDataUri($nota));
+
+        return app(CupomPdfService::class)->gerar('pdf.cupom.nfce', $dados, $empresa['impressora_cupom'] ?? null);
     }
 
     /**

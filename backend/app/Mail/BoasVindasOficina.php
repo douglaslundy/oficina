@@ -24,7 +24,7 @@ class BoasVindasOficina extends Mailable
 
     public function envelope(): Envelope
     {
-        return new Envelope(subject: 'Bem-vindo ao MecânicaPro! Sua oficina está pronta.');
+        return new Envelope(subject: 'Bem-vindo ao MecânicaOficial! Sua oficina está pronta.');
     }
 
     public function content(): Content
@@ -47,7 +47,7 @@ class BoasVindasOficina extends Mailable
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width,initial-scale=1">
-  <title>Bem-vindo ao MecânicaPro!</title>
+  <title>Bem-vindo ao MecânicaOficial!</title>
 </head>
 <body style="margin:0;padding:0;background:#0e0f11;font-family:'Helvetica Neue',Arial,sans-serif;-webkit-font-smoothing:antialiased;">
   <div style="max-width:560px;margin:40px auto;background:#161719;border-radius:12px;overflow:hidden;border:1px solid #2a2d33;">
@@ -55,7 +55,7 @@ class BoasVindasOficina extends Mailable
     <!-- Header âmbar -->
     <div style="background:#f5a623;padding:28px 32px;text-align:center;">
       <div style="font-size:30px;font-weight:800;color:#000;letter-spacing:-.5px;font-family:Georgia,serif;">
-        MecânicaPro
+        MecânicaOficial
       </div>
       <div style="font-size:13px;color:rgba(0,0,0,.65);margin-top:5px;font-weight:500;">
         Sistema SaaS de Gestão para Oficinas
@@ -70,7 +70,7 @@ class BoasVindasOficina extends Mailable
       </h1>
       <p style="color:#7a8090;font-size:14px;line-height:1.7;margin:0 0 28px;">
         A oficina <strong style="color:#e8eaf0;">{$oficina}</strong> foi cadastrada com sucesso
-        na plataforma MecânicaPro. Use as credenciais abaixo para acessar o sistema.
+        na plataforma MecânicaOficial. Use as credenciais abaixo para acessar o sistema.
       </p>
 
       <!-- Credenciais -->
@@ -125,7 +125,7 @@ class BoasVindasOficina extends Mailable
     <!-- Footer -->
     <div style="padding:16px 32px 20px;border-top:1px solid #2a2d33;text-align:center;">
       <p style="color:#7a8090;font-size:12px;margin:0;line-height:1.6;">
-        MecânicaPro &mdash; Sistema SaaS de Gestão para Oficinas Mecânicas<br>
+        MecânicaOficial &mdash; Sistema SaaS de Gestão para Oficinas Mecânicas<br>
         <span style="font-size:11px;">Este e-mail foi gerado automaticamente. Não responda.</span>
       </p>
     </div>

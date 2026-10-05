@@ -102,7 +102,7 @@ export default function SaasAdminLoginPage() {
             🔧
           </div>
           <h1 className="font-display" style={{ fontSize: 36, fontWeight: 800, color: 'var(--text)', margin: 0 }}>
-            MecânicaPro
+            MecânicaOficial
           </h1>
           <p style={{ color: 'var(--muted)', marginTop: 8, fontSize: 16 }}>
             Painel SaaS Admin

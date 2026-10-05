@@ -6,6 +6,7 @@ import { formatarMoeda } from '@/lib/formatters'
 import { ProdutoCombobox } from '@/components/ui/ProdutoCombobox'
 import type { ProdutoBusca } from '@/lib/produtoBusca'
 import { nomeArquivoFiscal } from '@/lib/arquivoFiscal'
+import { imprimirPdf } from '@/lib/imprimir'
 
 interface ItemNF {
   descricao: string
@@ -133,6 +134,15 @@ export function NotaFiscalForm() {
 
   async function abrirPdf(notaId: string, numero?: number | string) {
     try {
+      // NFC-e com "imprimir automaticamente" ligado (Empresa > Impressão): manda o
+      // cupom direto pra impressora em vez de baixar o PDF.
+      if (modeloExibido === 'NFC-e') {
+        const cfg = await api.get<{ imprimir_automaticamente: boolean }>('/impressao/config').catch(() => null)
+        if (cfg?.data.imprimir_automaticamente) {
+          await imprimirPdf(`/notas-fiscais/${notaId}/pdf`)
+          return
+        }
+      }
       const res = await fetch(`${window.location.origin}/api/notas-fiscais/${notaId}/pdf`, {
         credentials: 'include',
         headers: {

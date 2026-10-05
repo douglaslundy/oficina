@@ -10,6 +10,9 @@ use App\Models\NotaEntradaItem;
 use App\Models\Produto;
 use App\Services\EstoqueService;
 use App\Services\Fiscal\Contracts\ConsultaNotaTerceiroProvider;
+use App\Exceptions\EmissaoBloqueadaException;
+use App\Http\Resources\NotaFiscalResource;
+use App\Services\Fiscal\DevolucaoCompraService;
 use App\Services\Fiscal\FiscalProviderManager;
 use App\Services\Fiscal\ProdutoFiscalService;
 use App\Services\Fiscal\VerificarNotasTerceiroService;
@@ -288,6 +291,69 @@ class EntradaNfController extends Controller
         }
 
         return (new NotaEntradaResource($nota->load('itens')))->response()->setStatusCode(201);
+    }
+
+    /** Itens da nota de entrada com o saldo ainda devolvível (fiscal e estoque). */
+    public function devolucaoItens(string $id, DevolucaoCompraService $devolucao): JsonResponse
+    {
+        $nota = NotaEntrada::findOrFail($id);
+
+        return response()->json(['data' => [
+            'nota' => [
+                'id'              => $nota->id,
+                'numero_nf'       => $nota->numero_nf,
+                'serie'           => $nota->serie,
+                'chave_acesso'    => $nota->chave_acesso,
+                'fornecedor_nome' => $nota->fornecedor_nome,
+                'fornecedor_cnpj' => $nota->fornecedor_cnpj,
+                'data_emissao'    => $nota->data_emissao?->format('Y-m-d'),
+            ],
+            'itens' => $devolucao->itensDisponiveis($nota),
+        ]]);
+    }
+
+    /**
+     * Cria o RASCUNHO da NF-e de devolução de compra (a emissão é o
+     * POST notas-fiscais/{id}/emitir de sempre — vale pros 3 motores).
+     */
+    public function devolucaoCriar(Request $request, string $id, DevolucaoCompraService $devolucao): JsonResponse
+    {
+        $validated = $request->validate([
+            'itens'              => ['required', 'array', 'min:1'],
+            'itens.*.item_id'    => ['required', 'uuid'],
+            'itens.*.quantidade' => ['required', 'numeric', 'min:0.01'],
+            'observacoes'        => ['nullable', 'string', 'max:2000'],
+        ]);
+
+        $nota = NotaEntrada::findOrFail($id);
+
+        try {
+            $nf = $devolucao->criarRascunho($nota, $validated['itens'], $validated['observacoes'] ?? null);
+        } catch (EmissaoBloqueadaException $e) {
+            return response()->json(['message' => $e->getMessage()], 422);
+        }
+
+        return (new NotaFiscalResource($nf->load(['cliente', 'itens'])))->response()->setStatusCode(201);
+    }
+
+    /** Retira do estoque itens de uma nota de entrada (sem emitir nota). */
+    public function devolucaoEstoque(Request $request, string $id, DevolucaoCompraService $devolucao): JsonResponse
+    {
+        $validated = $request->validate([
+            'itens'              => ['required', 'array', 'min:1'],
+            'itens.*.item_id'    => ['required', 'uuid'],
+            'itens.*.quantidade' => ['required', 'integer', 'min:1'],
+        ]);
+
+        $nota = NotaEntrada::findOrFail($id);
+
+        try {
+            $feitos = $devolucao->baixarEstoque($nota, $validated['itens'], (string) auth()->id());
+        } catch (\InvalidArgumentException|\RuntimeException $e) {
+            return response()->json(['message' => $e->getMessage()], 422);
+        }
+
+        return response()->json(['message' => 'Estoque atualizado.', 'itens_baixados' => count($feitos)]);
     }
 
     public function atualizarFiscal(Request $request, ProdutoFiscalService $fiscalService): JsonResponse

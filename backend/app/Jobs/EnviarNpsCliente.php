@@ -29,7 +29,7 @@ class EnviarNpsCliente implements ShouldQueue
             return;
         }
 
-        $nomeOficina = config('app.name', 'MecânicaPro');
+        $nomeOficina = config('app.name', 'MecânicaOficial');
         $osNumero    = $this->os->numero;
         $clienteNome = $cliente->nome;
         $valorTotal  = 'R$ ' . number_format((float)$this->os->valor_total, 2, ',', '.');

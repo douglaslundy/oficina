@@ -212,7 +212,7 @@ class WhatsAppService
             return ['ok' => false, 'error' => 'WhatsApp ainda não configurado para esta oficina. Escaneie o QR code primeiro.'];
         }
 
-        $mensagem = "✅ *MecânicaPro*\n\nMensagem de teste. Se você recebeu isto, a integração com o WhatsApp está funcionando! 🚀";
+        $mensagem = "✅ *MecânicaOficial*\n\nMensagem de teste. Se você recebeu isto, a integração com o WhatsApp está funcionando! 🚀";
 
         return $this->dispararMensagem($telefone, $mensagem, 'TESTE');
     }

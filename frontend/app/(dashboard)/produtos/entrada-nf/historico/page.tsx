@@ -143,6 +143,14 @@ export default function HistoricoEntradaNfPage() {
     {
       key: 'acoes', label: '',
       render: r => (
+        <div style={{ display: 'flex', gap: 8 }}>
+        <button
+          onClick={e => { e.stopPropagation(); router.push(`/produtos/entrada-nf/devolucao/${r.id}`) }}
+          title="Devolver mercadoria ao fornecedor: NF-e de devolução e/ou retirada do estoque"
+          style={{ padding: '6px 12px', borderRadius: 6, fontSize: 12, whiteSpace: 'nowrap', background: 'none', border: '1px solid var(--border)', color: 'var(--text)', cursor: 'pointer' }}
+        >
+          Devolver
+        </button>
         <button
           onClick={e => { e.stopPropagation(); conciliarNota(r.id) }}
           disabled={r.status_fiscal === 'SEM_CHAVE' || conciliando.has(r.id)}
@@ -156,6 +164,7 @@ export default function HistoricoEntradaNfPage() {
         >
           {conciliando.has(r.id) ? '⟳ Enfileirando...' : 'Conciliar'}
         </button>
+        </div>
       ),
     },
   ]

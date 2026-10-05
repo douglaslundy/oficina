@@ -207,6 +207,8 @@ class NfeService
             cnpjEmitente: $config?->cnpj,
             inscricaoMunicipalEmitente: $config?->inscricao_municipal,
             codigoIbgeEmitente: $config?->codigo_ibge,
+            finalidade: $nota->finalidade === 'DEVOLUCAO' ? 'DEVOLUCAO' : 'NORMAL',
+            chaveReferenciada: $nota->finalidade === 'DEVOLUCAO' ? $nota->chave_referenciada : null,
             informacoesComplementares: InformacoesComplementaresResolver::montar(
                 $nota,
                 $config,

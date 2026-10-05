@@ -74,7 +74,7 @@ export default function MinhasFaturasPage() {
         <div style={{ marginBottom: 20 }}>
           <h1 className="font-display" style={{ fontSize: 26, fontWeight: 800, margin: 0 }}>Minhas Faturas</h1>
           <p style={{ color: 'var(--muted)', fontSize: 14, margin: '4px 0 0' }}>
-            Mensalidade/anuidade e cobranças avulsas da sua oficina no MecânicaPro
+            Mensalidade/anuidade e cobranças avulsas da sua oficina no MecânicaOficial
           </p>
         </div>
 

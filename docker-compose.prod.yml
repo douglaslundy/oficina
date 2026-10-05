@@ -40,7 +40,7 @@ services:
       context: ./backend
       dockerfile: Dockerfile.prod
     environment: &backend-env
-      APP_NAME: MecânicaPro
+      APP_NAME: MecânicaOficial
       APP_ENV: production
       APP_DEBUG: "false"
       APP_URL: https://oficina.dlsistemas.com.br

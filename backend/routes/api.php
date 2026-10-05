@@ -256,6 +256,7 @@ Route::middleware(['tenant', 'auth:sanctum', 'tenant.verify'])->group(function (
     Route::get('produtos/{produto}/estoque/historico', [EstoqueController::class, 'historico']);
     Route::get('entradas-nf',      [EntradaNfController::class, 'index']);
     Route::get('entradas-nf/{id}', [EntradaNfController::class, 'show']);
+    Route::get('entradas-nf/{id}/devolucao', [EntradaNfController::class, 'devolucaoItens']);
     Route::get('categorias-fiscais', [CategoriaPadraoFiscalController::class, 'index']);
 });
 Route::middleware(['tenant', 'auth:sanctum', 'tenant.verify', 'role:ADMIN,ATENDENTE'])->group(function () {
@@ -275,6 +276,9 @@ Route::middleware(['tenant', 'auth:sanctum', 'tenant.verify', 'role:ADMIN,ATENDE
     // (rota com segmento fixo casaria como `{id}` se viesse depois).
     Route::post('entradas-nf/conciliar-pendentes', [EntradaNfController::class, 'conciliarPendentes']);
     Route::post('entradas-nf/{id}/conciliar', [EntradaNfController::class, 'conciliar']);
+    // Devolução de compra: rascunho da NF-e finNFe=4 (emitir via notas-fiscais/{id}/emitir) e baixa de estoque.
+    Route::post('entradas-nf/{id}/devolucao', [EntradaNfController::class, 'devolucaoCriar']);
+    Route::post('entradas-nf/{id}/devolucao-estoque', [EntradaNfController::class, 'devolucaoEstoque']);
     Route::put('categorias-fiscais', [CategoriaPadraoFiscalController::class, 'update']);
 });
 
@@ -296,6 +300,8 @@ Route::middleware(['tenant', 'auth:sanctum', 'tenant.verify'])->group(function (
     Route::get('os/{id}',        [OrdemServicoController::class, 'show']);
     Route::get('os/{id}/pdf',    [OrdemServicoController::class, 'pdf']);
     Route::get('os/{id}/recibo', [OrdemServicoController::class, 'recibo']);
+    Route::get('os/{id}/cupom',  [OrdemServicoController::class, 'cupom']);
+    Route::get('impressao/config', [ConfiguracaoController::class, 'impressao']);
 });
 Route::middleware(['tenant', 'auth:sanctum', 'tenant.verify', 'role:ADMIN,ATENDENTE,MECANICO'])->group(function () {
     Route::post('os',         [OrdemServicoController::class, 'store']);

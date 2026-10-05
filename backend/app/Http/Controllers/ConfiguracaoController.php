@@ -16,6 +16,18 @@ class ConfiguracaoController extends Controller
         return response()->json($this->sanitizar($config));
     }
 
+    /** Preferências de impressão do cupom — leitura aberta a quem opera a venda (o resto da configuração é restrito). */
+    public function impressao(): JsonResponse
+    {
+        $config = Configuracao::first();
+
+        return response()->json([
+            'impressora_cupom'         => $config?->impressora_cupom ?? '80MM',
+            'tipo_cupom'               => $config?->tipo_cupom ?? 'FISCAL',
+            'imprimir_automaticamente' => (bool) ($config?->imprimir_automaticamente ?? false),
+        ]);
+    }
+
     /**
      * Bug real de produção (2026-09-14, achado ao testar o switch de NFC-e
      * recém-criado): `update()` devolvia `$config` inteiro, cru — nunca
@@ -83,6 +95,13 @@ class ConfiguracaoController extends Controller
             // ambiente porque a SEFAZ cadastra CSC separado pra homologação
             // e produção.
             'modelo_venda_padrao'   => ['nullable', 'in:NF-e,NFC-e'],
+            // Impressão do cupom: papel (bobina térmica 80 mm ou A4), tipo
+            // (DANFE NFC-e fiscal ou cupom não fiscal, só com os dados da
+            // venda) e abertura automática pra imprimir.
+            'impressora_cupom'         => ['nullable', 'in:80MM,A4'],
+            'tipo_cupom'               => ['nullable', 'in:FISCAL,NAO_FISCAL'],
+            'imprimir_automaticamente' => ['nullable', 'boolean'],
+            'percentual_tributos_aproximados' => ['nullable', 'numeric', 'min:0', 'max:100'],
             'csc_id_homologacao'    => ['nullable', 'string', 'max:10'],
             'csc_token_homologacao' => ['nullable', 'string'],
             'csc_id_producao'       => ['nullable', 'string', 'max:10'],

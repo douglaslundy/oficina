@@ -11,7 +11,7 @@ export default function GlobalError({ error, reset }: GlobalErrorProps) {
   return (
     <html lang="pt-BR">
       <head>
-        <title>Erro — MecânicaPro</title>
+        <title>Erro — MecânicaOficial</title>
         <link
           rel="preconnect"
           href="https://fonts.googleapis.com"

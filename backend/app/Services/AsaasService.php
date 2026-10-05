@@ -96,7 +96,7 @@ class AsaasService
             'billingType' => 'BOLETO',
             'value'       => $value,
             'dueDate'     => $dueDate,
-            'description' => 'Cobrança avulsa — MecânicaPro',
+            'description' => 'Cobrança avulsa — MecânicaOficial',
         ];
 
         if ($externalReference !== null) {

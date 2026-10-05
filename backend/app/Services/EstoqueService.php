@@ -85,6 +85,39 @@ class EstoqueService
     }
 
     /**
+     * Saída de estoque por devolução ao fornecedor de itens de uma nota de
+     * entrada (ver DevolucaoCompraService). Nunca deixa o estoque negativo.
+     */
+    public function registrarSaidaDevolucao(string $produtoId, int $quantidade, string $notaEntradaId, string $usuarioId, string $referencia): Produto
+    {
+        return DB::transaction(function () use ($produtoId, $quantidade, $notaEntradaId, $usuarioId, $referencia) {
+            $produto = Produto::lockForUpdate()->findOrFail($produtoId);
+
+            if ($produto->qty_atual < $quantidade) {
+                throw new \RuntimeException("Estoque atual insuficiente para devolver: {$produto->nome} (em estoque: {$produto->qty_atual}, a devolver: {$quantidade}).");
+            }
+
+            $produto->decrement('qty_atual', $quantidade);
+
+            MovimentacaoEstoque::create([
+                'produto_id'      => $produto->id,
+                'tipo'            => 'SAIDA',
+                'quantidade'      => $quantidade,
+                'motivo'          => 'Devolução ao fornecedor - ' . $referencia,
+                'nota_entrada_id' => $notaEntradaId,
+                'usuario_id'      => $usuarioId,
+            ]);
+
+            $produto = $produto->fresh();
+            if ($produto->qty_atual < $produto->qty_minima) {
+                $this->dispararAlertaEstoque($produto);
+            }
+
+            return $produto;
+        });
+    }
+
+    /**
      * Dá baixa imediata no estoque de um único item de peça da OS.
      * Cria a movimentação de SAIDA e dispara alerta se cruzar o mínimo.
      */

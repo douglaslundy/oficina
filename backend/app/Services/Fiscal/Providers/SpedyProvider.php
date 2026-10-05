@@ -557,7 +557,13 @@ class SpedyProvider implements FiscalProvider, ConsultaNotaTerceiroProvider
             // NotaFiscalData não os carrega (ex.: chamada direta em teste).
             'series'          => $n->serieNf,
             'number'          => $n->numeroAlocado !== null ? (int) $n->numeroAlocado : null,
-            'isFinalCustomer' => true,
+            // Devolução de compra: destinatário é o fornecedor (indFinal=0).
+            'isFinalCustomer' => ! $n->ehDevolucao(),
+            ...($n->ehDevolucao() ? [
+                'purposeType'         => 'devolution',  // finNFe=4
+                'operationType'       => 'outgoing',    // tpNF=1
+                'referencedDocuments' => [['accessKey' => preg_replace('/\D/', '', (string) $n->chaveReferenciada)]], // NFref/refNFe
+            ] : []),
             // Operação presencial (balcão da oficina) — mesma regra já
             // hardcoded em MotorNfe::montarNfe() (`indPres => 1`), agora
             // também mandada pra Spedy (campo `presenceType`, confirmado
@@ -609,9 +615,10 @@ class SpedyProvider implements FiscalProvider, ConsultaNotaTerceiroProvider
                     'cofins' => ['cst' => 49, 'baseTax' => 0, 'rate' => 0, 'amount' => 0],
                 ],
             ], array_keys($n->itens), $n->itens),
+            // Devolução não tem pagamento: tPag=90 (noPayment), valor 0.
             'payments' => [[
-                'method' => $this->mapFormaPagamento($n->formaPagamento),
-                'amount' => $valorTotal,
+                'method' => $n->ehDevolucao() ? 'noPayment' : $this->mapFormaPagamento($n->formaPagamento),
+                'amount' => $n->ehDevolucao() ? 0 : $valorTotal,
             ]],
         ], fn ($v) => $v !== null);
     }

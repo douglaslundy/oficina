@@ -6,6 +6,7 @@ import api, { xsrfHeader } from '@/lib/api'
 import { toast } from '@/hooks/useToast'
 import { useAuth } from '@/hooks/useAuth'
 import { nomeArquivoFiscal } from '@/lib/arquivoFiscal'
+import { imprimirPdf } from '@/lib/imprimir'
 
 interface NotaFiscal {
   id: string
@@ -404,6 +405,15 @@ export default function HistoricoNFPage() {
                           style={{ background: 'none', border: '1px solid var(--border)', color: 'var(--muted)', borderRadius: 6, padding: '4px 10px', cursor: 'pointer', fontSize: 13 }}
                         >
                           📄 PDF
+                        </button>
+                      )}
+                      {nota.modelo === 'NFC-e' && (nota.status === 'AUTORIZADA' || nota.status === 'CONTINGENCIA') && (
+                        <button
+                          onClick={() => imprimirPdf(`/notas-fiscais/${nota.id}/pdf`).catch((e: Error) => toast(e.message, 'danger'))}
+                          title="Imprime o DANFE NFC-e no papel configurado (bobina 80 mm ou A4)"
+                          style={{ background: 'none', border: '1px solid var(--border)', color: 'var(--text)', borderRadius: 6, padding: '4px 10px', cursor: 'pointer', fontSize: 13 }}
+                        >
+                          🖨 Imprimir
                         </button>
                       )}
                       {nota.status === 'AUTORIZADA' && nota.numero && (

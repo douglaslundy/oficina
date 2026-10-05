@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>MecânicaPro — Sistema de Gestão</title>
+<title>MecânicaOficial — Sistema de Gestão</title>
 <link href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@400;600;700;800&family=Barlow:wght@300;400;500;600&family=JetBrains+Mono:wght@400;600&display=swap" rel="stylesheet">
 <style>
   *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
@@ -668,7 +668,7 @@
       <div class="auth-feature"><div class="auth-feature-dot">💰</div>Financeiro e controle de inadimplência</div>
       <div class="auth-feature"><div class="auth-feature-dot">📊</div>Dashboard com indicadores em tempo real</div>
     </div>
-    <div class="auth-copy">© 2026 MecânicaPro · Todos os direitos reservados</div>
+    <div class="auth-copy">© 2026 MecânicaOficial · Todos os direitos reservados</div>
   </div>
 
   <!-- RIGHT — form panel -->
@@ -858,7 +858,7 @@
   <div id="topbar">
     <div>
       <div class="topbar-title" id="page-title">Dashboard</div>
-      <div class="topbar-breadcrumb" id="page-breadcrumb">MecânicaPro › <span>Visão Geral</span></div>
+      <div class="topbar-breadcrumb" id="page-breadcrumb">MecânicaOficial › <span>Visão Geral</span></div>
     </div>
     <div class="topbar-actions">
       <button class="btn btn-ghost" onclick="showToast('Dados sincronizados!')">⟳ Sync</button>
@@ -1459,7 +1459,7 @@ function navigate(key) {
   const cfg = screens[key];
   if (cfg) {
     document.getElementById('page-title').textContent = cfg.title;
-    document.getElementById('page-breadcrumb').innerHTML = 'MecânicaPro › <span>' + cfg.breadcrumb + '</span>';
+    document.getElementById('page-breadcrumb').innerHTML = 'MecânicaOficial › <span>' + cfg.breadcrumb + '</span>';
     document.getElementById('topbar-action').textContent = cfg.action;
   }
 }

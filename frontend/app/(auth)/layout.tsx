@@ -25,7 +25,7 @@ export default function AuthLayout({ children }: { children: React.ReactNode }) 
             fontSize: 32, marginBottom: 24,
           }}>🔧</div>
           <h1 className="font-display" style={{ fontSize: 36, fontWeight: 800, color: 'var(--text)', margin: 0 }}>
-            MecânicaPro
+            MecânicaOficial
           </h1>
           <p style={{ color: 'var(--muted)', marginTop: 8, fontSize: 16 }}>
             Sistema de Gestão para Oficinas Mecânicas

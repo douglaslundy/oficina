@@ -4,8 +4,13 @@ declare(strict_types=1);
 namespace App\Http\Controllers;
 
 use App\Http\Resources\OrdemServicoResource;
+use App\Models\Configuracao;
+use App\Models\NotaFiscal;
 use App\Models\OrdemServico;
 use App\Models\OsPagamento;
+use App\Services\Fiscal\Pdf\CupomPdfService;
+use App\Services\Fiscal\Pdf\CupomRenderer;
+use App\Services\Fiscal\Pdf\NotaFiscalDocumentoService;
 use App\Models\Veiculo;
 use App\Services\AlertaDispatchService;
 use App\Services\ClienteStatusService;
@@ -564,6 +569,52 @@ class OrdemServicoController extends Controller
             ->setPaper('a4', 'portrait');
 
         return $pdf->download('OS-' . $os->numero . '.pdf');
+    }
+
+    /**
+     * Cupom da venda pra impressão (bobina 80 mm ou A4, conforme
+     * `configuracoes.impressora_cupom`). `tipo_cupom` decide o conteúdo:
+     * FISCAL = DANFE da NFC-e autorizada da OS; NAO_FISCAL = cupom sem valor
+     * fiscal só com os dados da venda. `?tipo=` sobrepõe a configuração
+     * (reimpressão pontual).
+     */
+    public function cupom(Request $request, string $id): \Illuminate\Http\Response|JsonResponse
+    {
+        $config = Configuracao::first();
+        $tipo   = in_array($request->query('tipo'), ['FISCAL', 'NAO_FISCAL'], true)
+            ? (string) $request->query('tipo')
+            : ($config?->tipo_cupom === 'NAO_FISCAL' ? 'NAO_FISCAL' : 'FISCAL');
+
+        $os      = OrdemServico::with(['cliente', 'itens', 'pagamentos'])->findOrFail($id);
+        $empresa = $config?->toArray() ?? [];
+
+        if ($tipo === 'NAO_FISCAL') {
+            $dados    = app(CupomRenderer::class)->dadosNaoFiscal($os, $empresa);
+            $conteudo = app(CupomPdfService::class)->gerar('pdf.cupom.nao_fiscal', $dados, $empresa['impressora_cupom'] ?? null);
+            $arquivo  = 'Cupom-OS-' . $os->numero . '.pdf';
+        } else {
+            $nota = NotaFiscal::where('os_id', $os->id)
+                ->where('modelo', 'NFC-e')
+                ->whereIn('status', ['AUTORIZADA', 'CONTINGENCIA'])
+                ->orderByDesc('criado_em')
+                ->first();
+
+            if (! $nota) {
+                return response()->json([
+                    'message' => 'Esta venda não tem NFC-e autorizada. Emita a NFC-e ou escolha "cupom não fiscal" em Configurações.',
+                ], 422);
+            }
+
+            $pdf      = app(NotaFiscalDocumentoService::class)->gerarPdf($nota->load(['cliente', 'itens']));
+            $conteudo = $pdf['conteudo'];
+            $arquivo  = $pdf['filename'];
+        }
+
+        return response($conteudo, 200, [
+            'Content-Type'        => 'application/pdf',
+            'Content-Disposition' => 'inline; filename="' . $arquivo . '"',
+            'X-Cupom-Tipo'        => $tipo,
+        ]);
     }
 
     public function recibo(string $id): \Illuminate\Http\Response

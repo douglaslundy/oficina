@@ -29,7 +29,7 @@ class EnviarEmailRecuperacaoSaas implements ShouldQueue
             "Olá {$this->admin->nome},\n\nClique no link abaixo para redefinir sua senha de administrador:\n{$link}\n\nO link expira em 30 minutos.\n\nSe você não solicitou a redefinição, ignore este e-mail.",
             function ($message) {
                 $message->to($this->admin->email)
-                        ->subject('Redefinição de senha — MecânicaPro Admin');
+                        ->subject('Redefinição de senha — MecânicaOficial Admin');
             }
         );
     }

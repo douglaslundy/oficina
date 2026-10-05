@@ -123,7 +123,7 @@ export function Sidebar({ clientesDevedores = 0, produtosAlerta = 0, isMobile = 
             width: 30, height: 30, borderRadius: 7, background: 'var(--accent)',
             display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 15,
           }}>🔧</div>
-          <span className="font-display" style={{ fontSize: 16, fontWeight: 800, color: 'var(--text)' }}>MecânicaPro</span>
+          <span className="font-display" style={{ fontSize: 16, fontWeight: 800, color: 'var(--text)' }}>MecânicaOficial</span>
         </div>
       </div>
 
