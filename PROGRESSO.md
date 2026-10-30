@@ -1,7 +1,7 @@
 # Progresso do Projeto
 
 ## Última atualização
-2026-10-30 — **Cupom 80mm cortado + modo de impressão (NÃO DEPLOYADO).** Causa: PDF do cupom estava certo
+2026-10-30 — **Cupom 80mm cortado + modo de impressão. DEPLOYADO 2026-10-30 (commit 86da609, backup `/opt/backups/pre-deploy-cupom80-2026-10-30_14-14-40.dump`, migration rodou, health 200).** Causa: PDF do cupom estava certo
 (80x94mm); o visualizador de PDF do navegador imprime no papel padrão do diálogo. Agora térmica imprime
 HTML (`GET /os/{id}/cupom?formato=html`, `CupomPdfService::html`, `@page size 80mm Hmm`). Nova coluna
 `configuracoes.modo_impressao` (PDF|DIALOGO|DIRETO, migration `2026_10_30_000001`), select em Configurações.
