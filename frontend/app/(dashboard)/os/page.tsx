@@ -6,6 +6,7 @@ import { StatusPill } from '@/components/ui/StatusPill'
 import { formatarMoeda, formatarData } from '@/lib/formatters'
 import { usePlanLimites } from '@/hooks/usePlanLimites'
 import api from '@/lib/api'
+import { useImprimirCupomOs } from '@/components/ui/ImprimirCupomOs'
 
 interface OS {
   id: string
@@ -59,6 +60,7 @@ function PlanUsageBar({ atual, limite, label }: { atual: number; limite: number;
 
 export default function OSPage() {
   const router = useRouter()
+  const { imprimir, modal: modalCupom } = useImprimirCupomOs()
   const [os, setOs] = useState<OS[]>([])
   const [loading, setLoading] = useState(true)
   const [search, setSearch] = useState('')
@@ -96,6 +98,15 @@ export default function OSPage() {
     { key: 'pagamento',   label: 'Pagamento', render: r => pagamentoPill(r.valor_pago ?? 0, r.valor_total) },
     { key: 'status',      label: 'Status',   render: r => <StatusPill status={r.status} /> },
     { key: 'criado_em',   label: 'Data',     render: r => formatarData(r.criado_em) },
+    { key: 'imprimir',    label: '',         render: r => (
+      <button
+        onClick={e => { e.stopPropagation(); imprimir(r.id, r.numero) }}
+        title="Imprimir cupom/OS no formato configurado"
+        aria-label={`Imprimir OS #${r.numero}`}
+        style={{ padding: '4px 10px', background: 'transparent', border: '1px solid var(--border)', color: 'var(--text)', borderRadius: 6, cursor: 'pointer', fontSize: 13 }}>
+        🖨
+      </button>
+    ) },
   ]
 
   const temFiltro = !!(search || status || dataInicio || dataFim || mostrarCanceladas)
@@ -154,6 +165,7 @@ export default function OSPage() {
         onRowClick={r => router.push(`/os/${r.id}`)}
         emptyMessage="Nenhuma OS encontrada."
       />
+      {modalCupom}
     </div>
   )
 }

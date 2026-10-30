@@ -9,7 +9,8 @@ import api from '@/lib/api'
 import { useAuth } from '@/hooks/useAuth'
 import { papelPermitido } from '@/lib/roleRules'
 import { nomeArquivoFiscal } from '@/lib/arquivoFiscal'
-import { imprimirPdf } from '@/lib/imprimir'
+import { imprimirCupomOs, type ConfigImpressao } from '@/lib/imprimir'
+import { useImprimirCupomOs } from '@/components/ui/ImprimirCupomOs'
 
 const FORMAS_PAGAMENTO = ['Dinheiro', 'Cartão de Crédito', 'Cartão de Débito', 'PIX', 'Cheque', 'Transferência', 'Boleto']
 
@@ -128,15 +129,8 @@ export default function OSDetailPage() {
 
   // Cupom da venda: o backend decide pelo tipo configurado em Empresa >
   // Impressão (DANFE NFC-e ou cupom não fiscal) e pelo papel (80 mm ou A4).
-  const [imprimindoCupom, setImprimindoCupom] = useState(false)
-  async function imprimirCupom() {
-    setImprimindoCupom(true)
-    try {
-      await imprimirPdf(`/os/${id}/cupom`)
-    } catch (e: unknown) {
-      toast(e instanceof Error ? e.message : 'Erro ao imprimir o cupom.', 'danger')
-    } finally { setImprimindoCupom(false) }
-  }
+  const { imprimir: imprimirCupomConfigurado, modal: modalCupom } = useImprimirCupomOs()
+  const imprimirCupom = () => imprimirCupomConfigurado(id, os?.numero)
   const downloadRecibo = () => downloadFile('recibo', `Recibo-OS-${os?.numero ?? id}.pdf`)
 
   const [novoPag, setNovoPag] = useState({ forma: 'Dinheiro', valor: '', desconto: '' })
@@ -232,8 +226,8 @@ export default function OSDetailPage() {
       // "Imprimir automaticamente" (Empresa > Impressão): abre o cupom já na conclusão.
       // O cupom fiscal só existe depois que a NFC-e é autorizada, então aqui só o não fiscal.
       try {
-        const cfg = await api.get<{ imprimir_automaticamente: boolean; tipo_cupom: string }>('/impressao/config')
-        if (cfg.data.imprimir_automaticamente && cfg.data.tipo_cupom === 'NAO_FISCAL') await imprimirPdf(`/os/${id}/cupom`)
+        const cfg = await api.get<ConfigImpressao>('/impressao/config')
+        if (cfg.data.imprimir_automaticamente && cfg.data.tipo_cupom === 'NAO_FISCAL') await imprimirCupomOs(id, cfg.data)
       } catch { /* impressão automática nunca bloqueia a conclusão */ }
     } catch (e: unknown) {
       const msg = (e as { response?: { data?: { message?: string } } })?.response?.data?.message
@@ -315,6 +309,7 @@ export default function OSDetailPage() {
 
   return (
     <div style={{ maxWidth: 900, margin: '0 auto' }}>
+      {modalCupom}
       {confirmOrc && (
         <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.65)', zIndex: 1000, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 24 }}>
           <div style={{ background: 'var(--card)', border: '1px solid var(--border)', borderRadius: 14, padding: 28, width: 420, maxWidth: '100%' }}>
@@ -416,10 +411,10 @@ export default function OSDetailPage() {
           </button>
         )}
         {os.status !== 'CANCELADA' && (
-          <button onClick={imprimirCupom} disabled={imprimindoCupom}
+          <button onClick={imprimirCupom}
             title="Imprime o cupom da venda (DANFE NFC-e ou cupom não fiscal, conforme a configuração de impressão)"
-            style={{ padding: '6px 14px', background: 'transparent', border: '1px solid var(--border)', color: 'var(--text)', borderRadius: 8, cursor: imprimindoCupom ? 'not-allowed' : 'pointer', fontSize: 13 }}>
-            {imprimindoCupom ? '⟳ Gerando...' : '🖨 Imprimir cupom'}
+            style={{ padding: '6px 14px', background: 'transparent', border: '1px solid var(--border)', color: 'var(--text)', borderRadius: 8, cursor: 'pointer', fontSize: 13 }}>
+            🖨 Imprimir cupom
           </button>
         )}
         {(os.pagamentos ?? []).reduce((s, p) => s + Number(p.valor), 0) > 0 && (

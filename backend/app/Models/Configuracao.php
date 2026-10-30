@@ -33,7 +33,7 @@ class Configuracao extends Model
         'csc_id_producao', 'csc_token_producao_encrypted',
         'modelo_venda_padrao', 'proximo_numero_nfce_nfephp',
         'dist_dfe_ultimo_nsu', 'notas_terceiro_ultima_verificacao',
-        'impressora_cupom', 'tipo_cupom', 'imprimir_automaticamente', 'percentual_tributos_aproximados',
+        'impressora_cupom', 'tipo_cupom', 'modo_impressao', 'imprimir_automaticamente', 'percentual_tributos_aproximados',
     ];
 
     protected $casts = [

@@ -13,6 +13,7 @@ export default function ConfiguracoesPage() {
     atualizar_custo_entrada_nf: true,
     impressora_cupom: '80MM',
     tipo_cupom: 'FISCAL',
+    modo_impressao: 'DIALOGO',
     imprimir_automaticamente: false,
     percentual_tributos_aproximados: '' as string | number,
   })
@@ -29,6 +30,7 @@ export default function ConfiguracoesPage() {
         atualizar_custo_entrada_nf: d.atualizar_custo_entrada_nf ?? true,
         impressora_cupom: d.impressora_cupom ?? '80MM',
         tipo_cupom: d.tipo_cupom ?? 'FISCAL',
+        modo_impressao: d.modo_impressao ?? 'DIALOGO',
         imprimir_automaticamente: d.imprimir_automaticamente ?? false,
         percentual_tributos_aproximados: d.percentual_tributos_aproximados ?? '',
       })
@@ -110,6 +112,20 @@ export default function ConfiguracoesPage() {
           <p style={{ color: 'var(--muted)', fontSize: 12, marginTop: 4 }}>
             O cupom não fiscal sai marcado &quot;SEM VALOR FISCAL&quot;, apenas com itens, valores e pagamento da venda.
             O cupom fiscal só pode ser impresso depois que a NFC-e é autorizada.
+          </p>
+        </div>
+        <div style={{ marginBottom: 20 }}>
+          <label htmlFor="modo_impressao" style={lStyle}>Ao clicar em imprimir</label>
+          <select id="modo_impressao" value={form.modo_impressao}
+            onChange={e => setForm(f => ({ ...f, modo_impressao: e.target.value }))}
+            style={{ ...iStyle, width: '100%', boxSizing: 'border-box' as const }}>
+            <option value="PDF">Gerar o PDF antes de imprimir (abre numa nova aba)</option>
+            <option value="DIALOGO">Abrir a janela de impressão do navegador</option>
+            <option value="DIRETO">Imprimir direto (pede confirmação no sistema)</option>
+          </select>
+          <p style={{ color: 'var(--muted)', fontSize: 12, marginTop: 4 }}>
+            Direto: o sistema pergunta se deseja imprimir; o modal fecha ao imprimir ou mostra o erro. Para o navegador não abrir a
+            janela de impressão, inicie o Chrome com <code>--kiosk-printing</code> (a impressora padrão do Windows é usada).
           </p>
         </div>
         <div style={{ marginBottom: 20 }}>

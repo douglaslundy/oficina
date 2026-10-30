@@ -588,9 +588,14 @@ class OrdemServicoController extends Controller
         $os      = OrdemServico::with(['cliente', 'itens', 'pagamentos'])->findOrFail($id);
         $empresa = $config?->toArray() ?? [];
 
+        $html = $request->query('formato') === 'html';
+
         if ($tipo === 'NAO_FISCAL') {
-            $dados    = app(CupomRenderer::class)->dadosNaoFiscal($os, $empresa);
-            $conteudo = app(CupomPdfService::class)->gerar('pdf.cupom.nao_fiscal', $dados, $empresa['impressora_cupom'] ?? null);
+            $dados   = app(CupomRenderer::class)->dadosNaoFiscal($os, $empresa);
+            $servico = app(CupomPdfService::class);
+            $conteudo = $html
+                ? $servico->html('pdf.cupom.nao_fiscal', $dados, $empresa['impressora_cupom'] ?? null)
+                : $servico->gerar('pdf.cupom.nao_fiscal', $dados, $empresa['impressora_cupom'] ?? null);
             $arquivo  = 'Cupom-OS-' . $os->numero . '.pdf';
         } else {
             $nota = NotaFiscal::where('os_id', $os->id)
@@ -605,13 +610,19 @@ class OrdemServicoController extends Controller
                 ], 422);
             }
 
-            $pdf      = app(NotaFiscalDocumentoService::class)->gerarPdf($nota->load(['cliente', 'itens']));
-            $conteudo = $pdf['conteudo'];
-            $arquivo  = $pdf['filename'];
+            $docs = app(NotaFiscalDocumentoService::class);
+            if ($html) {
+                $conteudo = $docs->gerarCupomNfceHtml($nota->load(['cliente', 'itens']), $empresa);
+                $arquivo  = 'NFCe-' . ($nota->numero ?? $nota->id) . '.html';
+            } else {
+                $pdf      = $docs->gerarPdf($nota->load(['cliente', 'itens']));
+                $conteudo = $pdf['conteudo'];
+                $arquivo  = $pdf['filename'];
+            }
         }
 
         return response($conteudo, 200, [
-            'Content-Type'        => 'application/pdf',
+            'Content-Type'        => $html ? 'text/html; charset=UTF-8' : 'application/pdf',
             'Content-Disposition' => 'inline; filename="' . $arquivo . '"',
             'X-Cupom-Tipo'        => $tipo,
         ]);

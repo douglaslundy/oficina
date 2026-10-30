@@ -39,6 +39,35 @@ class CupomPdfService
             return Pdf::loadView($view, $dados)->setPaper('a4', 'portrait')->output();
         }
 
+        $altura = $this->medirAltura($view, $dados);
+
+        return Pdf::loadView($view, $dados)->setPaper([0, 0, self::LARGURA_80MM_PT, $altura])->output();
+    }
+
+    /**
+     * Mesmo cupom em HTML, para imprimir pelo navegador. `@page size` fixa o
+     * papel (80 mm x altura do conteúdo, ou A4) — o PDF dentro do visualizador
+     * do navegador usa o papel padrão do diálogo e saía cortado, com folga.
+     *
+     * @param array<string, mixed> $dados
+     */
+    public function html(string $view, array $dados, ?string $impressora): string
+    {
+        $impressora = self::impressoraValida($impressora);
+        $dados['papel'] = $impressora;
+
+        if ($impressora === self::IMPRESSORA_80MM) {
+            // pt -> mm, +6 mm de folga: a fonte do navegador pode quebrar linha diferente do DomPDF.
+            $dados['altura_mm'] = (int) ceil($this->medirAltura($view, $dados) * 25.4 / 72) + 6;
+        }
+        $dados['html'] = true;
+
+        return view($view, $dados)->render();
+    }
+
+    /** @param array<string, mixed> $dados */
+    private function medirAltura(string $view, array $dados): float
+    {
         $fimDoConteudo = 0.0;
         $medicao = Pdf::loadView($view, $dados)->setPaper([0, 0, self::LARGURA_80MM_PT, self::ALTURA_MEDICAO]);
         $medicao->getDomPDF()->setCallbacks([[
@@ -52,8 +81,6 @@ class CupomPdfService
         ]]);
         $medicao->output();
 
-        $altura = max(120.0, ceil($fimDoConteudo + self::MARGEM_FINAL_PT));
-
-        return Pdf::loadView($view, $dados)->setPaper([0, 0, self::LARGURA_80MM_PT, $altura])->output();
+        return max(120.0, ceil($fimDoConteudo + self::MARGEM_FINAL_PT));
     }
 }

@@ -163,4 +163,13 @@ class CupomRendererTest extends TestCase
         $this->assertSame('80MM', CupomPdfService::impressoraValida('QUALQUER'));
         $this->assertSame('A4', CupomPdfService::impressoraValida('A4'));
     }
+
+    public function test_html_do_cupom_fixa_o_papel_com_page_size(): void
+    {
+        $dados = (new CupomRenderer())->dadosNaoFiscal($this->os(), $this->empresa());
+        $servico = new CupomPdfService();
+
+        $this->assertMatchesRegularExpression('/@page\s*\{\s*size:\s*80mm \d+mm;/', $servico->html('pdf.cupom.nao_fiscal', $dados, '80MM'));
+        $this->assertStringContainsString('size: A4 portrait', $servico->html('pdf.cupom.nao_fiscal', $dados, 'A4'));
+    }
 }

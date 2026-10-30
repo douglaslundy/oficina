@@ -1,6 +1,13 @@
 # Progresso do Projeto
 
 ## Última atualização
+2026-10-30 — **Cupom 80mm cortado + modo de impressão (NÃO DEPLOYADO).** Causa: PDF do cupom estava certo
+(80x94mm); o visualizador de PDF do navegador imprime no papel padrão do diálogo. Agora térmica imprime
+HTML (`GET /os/{id}/cupom?formato=html`, `CupomPdfService::html`, `@page size 80mm Hmm`). Nova coluna
+`configuracoes.modo_impressao` (PDF|DIALOGO|DIRETO, migration `2026_10_30_000001`), select em Configurações.
+DIRETO = modal de confirmação no sistema (erro aparece no modal); sem diálogo do navegador só com Chrome
+`--kiosk-printing`. Botão 🖨 na listagem de OS (após Data). Front: `lib/imprimir.ts`, `components/ui/ImprimirCupomOs.tsx`.
+
 2026-10-05 (16) — **Último acesso dos usuários + página Mensagens + placeholders da marca. **DEPLOYADO
 2026-10-05** (commit 0440663, backup `/opt/backups/pre-deploy-mensagens-2026-10-05_13-40-15.dump`, migration rodou, 7 containers ok, health 200). Migration nova: `2026_10_05_000002` (alerta_logs.assunto).**
 - **Último acesso**: causa = `ultimo_acesso` fora do `$fillable` de `Usuario`, então `update()` no login

@@ -24,6 +24,7 @@ class ConfiguracaoController extends Controller
         return response()->json([
             'impressora_cupom'         => $config?->impressora_cupom ?? '80MM',
             'tipo_cupom'               => $config?->tipo_cupom ?? 'FISCAL',
+            'modo_impressao'           => $config?->modo_impressao ?? 'DIALOGO',
             'imprimir_automaticamente' => (bool) ($config?->imprimir_automaticamente ?? false),
         ]);
     }
@@ -100,6 +101,7 @@ class ConfiguracaoController extends Controller
             // venda) e abertura automática pra imprimir.
             'impressora_cupom'         => ['nullable', 'in:80MM,A4'],
             'tipo_cupom'               => ['nullable', 'in:FISCAL,NAO_FISCAL'],
+            'modo_impressao'           => ['nullable', 'in:PDF,DIALOGO,DIRETO'],
             'imprimir_automaticamente' => ['nullable', 'boolean'],
             'percentual_tributos_aproximados' => ['nullable', 'numeric', 'min:0', 'max:100'],
             'csc_id_homologacao'    => ['nullable', 'string', 'max:10'],

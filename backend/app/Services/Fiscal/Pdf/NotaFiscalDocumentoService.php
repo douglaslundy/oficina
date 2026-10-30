@@ -134,6 +134,19 @@ class NotaFiscalDocumentoService
     }
 
     /**
+     * DANFE NFC-e em HTML (impressão pelo navegador com `@page size`).
+     *
+     * @param array<string, mixed> $empresa
+     */
+    public function gerarCupomNfceHtml(NotaFiscal $nota, array $empresa): string
+    {
+        $nota->loadMissing(['cliente', 'itens']);
+        $dados = app(CupomRenderer::class)->dadosNfce($nota, $empresa, $this->gerarQrCodeDataUri($nota));
+
+        return app(CupomPdfService::class)->html('pdf.cupom.nfce', $dados, $empresa['impressora_cupom'] ?? null);
+    }
+
+    /**
      * Pedido explícito do usuário (2026-09-14, análise visual comparando com
      * os modelos oficiais em doc_documentos_fiscais/modelo_nota): o DANFE
      * real tem um código de barras Code-128C da chave de acesso, acima do

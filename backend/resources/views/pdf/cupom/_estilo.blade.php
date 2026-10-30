@@ -1,5 +1,11 @@
 <style>
-  @if(($papel ?? '80MM') === 'A4')
+  @if(! empty($html) && ($papel ?? '80MM') !== 'A4')
+  @page { size: 80mm {{ $altura_mm }}mm; margin: 3mm 3mm 0 3mm; }
+  .cupom { width: 100%; }
+  @elseif(! empty($html))
+  @page { size: A4 portrait; margin: 12mm; }
+  .cupom { width: 80mm; margin: 0 auto; }
+  @elseif(($papel ?? '80MM') === 'A4')
   @page { margin: 12mm; }
   .cupom { width: 80mm; margin: 0 auto; }
   @else
