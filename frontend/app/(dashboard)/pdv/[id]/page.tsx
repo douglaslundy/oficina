@@ -3,6 +3,7 @@
 import { useState, useEffect, useCallback } from 'react'
 import { useParams, useRouter } from 'next/navigation'
 import api from '@/lib/api'
+import { AcoesVenda, type NotaResumo } from '@/components/ui/AcoesVenda'
 import { formatarMoeda, formatarData, formatarDataHora } from '@/lib/formatters'
 
 interface Pagamento {
@@ -32,6 +33,7 @@ interface Venda {
   venda_a_prazo: boolean
   prazo_pagamento_dias?: number
   data_vencimento_pagamento?: string
+  notas_fiscais?: NotaResumo[]
   itens: Item[]
   pagamentos: Pagamento[]
   criado_em: string
@@ -174,6 +176,7 @@ export default function VendaDetalhe() {
           </p>
         </div>
         <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+          <AcoesVenda id={venda.id} numero={venda.numero} status={venda.status} notas={venda.notas_fiscais} onChange={load} />
           {venda.venda_a_prazo && temSaldo && (
             <span style={{
               padding: '4px 12px', borderRadius: 999, fontSize: 11, fontWeight: 700,

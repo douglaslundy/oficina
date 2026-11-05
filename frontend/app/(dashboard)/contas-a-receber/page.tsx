@@ -4,6 +4,7 @@ import { useRouter } from 'next/navigation'
 import api from '@/lib/api'
 import { formatarMoeda, formatarData } from '@/lib/formatters'
 import { StatusPill } from '@/components/ui/StatusPill'
+import { AcoesVenda, type NotaResumo } from '@/components/ui/AcoesVenda'
 
 interface Conta {
   id: string
@@ -18,6 +19,7 @@ interface Conta {
   prazo_pagamento_dias?: number
   data_vencimento_pagamento?: string
   criado_em: string
+  notas_fiscais?: NotaResumo[]
 }
 
 type Modo = 'aberto' | 'recebidas'
@@ -127,8 +129,8 @@ export default function ContasAReceberPage() {
   }
 
   const colunas = modo === 'aberto'
-    ? ['#', 'Tipo', 'Cliente', 'Data', 'Total', 'Pago', 'Saldo', 'Vencimento', 'Status']
-    : ['#', 'Tipo', 'Cliente', 'Data', 'Total', 'Recebido', 'Status']
+    ? ['#', 'Tipo', 'Cliente', 'Data', 'Total', 'Pago', 'Saldo', 'Vencimento', 'Status', '']
+    : ['#', 'Tipo', 'Cliente', 'Data', 'Total', 'Recebido', 'Status', '']
 
   function gerarPDF() {
     const area = document.getElementById('print-area')
@@ -343,6 +345,9 @@ export default function ContasAReceberPage() {
                         <td style={{ padding: '11px 14px', fontFamily: 'monospace', fontSize: 13, fontWeight: 700, color: 'var(--success)' }}>{formatarMoeda(recebido)}</td>
                       )}
                       <td style={{ padding: '11px 14px' }}><StatusPill status={c.status} /></td>
+                      <td style={{ padding: '11px 14px' }}>
+                        {c.tipo === 'VENDA_BALCAO' && <AcoesVenda id={c.id} numero={c.numero} status={c.status} notas={c.notas_fiscais} onChange={fetchContas} />}
+                      </td>
                     </tr>
                   )
                 })}
@@ -382,11 +387,11 @@ export default function ContasAReceberPage() {
         {/* Tabela */}
         <table>
           <thead>
-            <tr>{colunas.map(h => <th key={h}>{h}</th>)}</tr>
+            <tr>{colunas.slice(0, -1).map(h => <th key={h}>{h}</th>)}</tr>
           </thead>
           <tbody>
             {contasFiltradas.length === 0 ? (
-              <tr><td colSpan={colunas.length} style={{ textAlign: 'center', padding: 20 }}>Nenhum registro.</td></tr>
+              <tr><td colSpan={colunas.length - 1} style={{ textAlign: 'center', padding: 20 }}>Nenhum registro.</td></tr>
             ) : contasFiltradas.map((c, idx) => {
               const dias = c.data_vencimento_pagamento ? diasParaVencimento(c.data_vencimento_pagamento) : null
               const vencida = dias !== null && dias < 0
