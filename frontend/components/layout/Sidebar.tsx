@@ -35,6 +35,7 @@ const NAV_ITEMS: NavItem[] = [
   { href: '/produtos',         label: 'Produtos',          icon: '📦' },
   { href: '/servicos',         label: 'Serviços',          icon: '🛠️' },
   { href: '/pdv',               label: 'Venda Balcão',      icon: '🛒' },
+  { href: '/vendas',            label: 'Vendas Realizadas', icon: '🧾' },
   { href: '/contas-a-receber', label: 'Contas a Receber',  icon: '💰' },
   { href: '/os',                label: 'Ordens de Serviço', icon: '🔧' },
   { href: '/agendamentos',     label: 'Agendamento',       icon: '📅' },

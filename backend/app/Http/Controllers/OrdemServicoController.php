@@ -34,7 +34,7 @@ class OrdemServicoController extends Controller
 
     public function index(Request $request): AnonymousResourceCollection
     {
-        $query = OrdemServico::with(['cliente', 'mecanico']);
+        $query = OrdemServico::with(['cliente', 'mecanico', 'notasFiscais']);
 
         if ($request->has('cliente_id')) {
             $query->where('cliente_id', $request->cliente_id);

@@ -10,6 +10,7 @@ const BREADCRUMBS: Record<string, string> = {
   '/clientes/novo':       'Clientes / Novo',
   '/produtos':            'Produtos / Estoque',
   '/os':                  'Ordens de Serviço',
+  '/vendas':              'Vendas Realizadas',
   '/os/nova':             'Ordens de Serviço / Nova OS',
   '/agendamentos':        'Agendamento',
   '/fiscal/emitir':       'Fiscal / Emitir NF',
