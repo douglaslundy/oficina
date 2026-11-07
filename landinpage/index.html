@@ -1,0 +1,472 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>MecanicaOficial — Sistema de Gestão para Oficinas Mecânicas</title>
+<meta name="description" content="O sistema completo de gestão para oficinas mecânicas: OS, clientes, estoque, nota fiscal, financeiro e dashboard — tudo em um só lugar.">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@600;700;800&family=Barlow:wght@400;500;600;700&family=JetBrains+Mono:wght@500;600&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --bg:#0e0f11;
+    --surface:#161719;
+    --card:#1c1e21;
+    --border:#2a2d33;
+    --text:#e8eaf0;
+    --muted:#7a8090;
+    --accent:#f5a623;
+    --accent-dark:#c9860f;
+    --danger:#e53935;
+    --success:#43a047;
+    --info:#1e88e5;
+    --radius:14px;
+  }
+  *{box-sizing:border-box; margin:0; padding:0;}
+  html{scroll-behavior:smooth;}
+  body{
+    background:var(--bg);
+    color:var(--text);
+    font-family:'Barlow', sans-serif;
+    line-height:1.55;
+    overflow-x:hidden;
+  }
+  h1,h2,h3,h4{
+    font-family:'Barlow Condensed', sans-serif;
+    font-weight:800;
+    letter-spacing:.2px;
+    line-height:1.1;
+  }
+  .mono{font-family:'JetBrains Mono', monospace;}
+  img{max-width:100%; display:block;}
+  a{color:inherit; text-decoration:none;}
+  .wrap{max-width:1180px; margin:0 auto; padding:0 24px;}
+  .btn{
+    display:inline-flex; align-items:center; justify-content:center; gap:8px;
+    font-family:'Barlow Condensed', sans-serif; font-weight:800; font-size:17px;
+    padding:16px 30px; border-radius:10px; cursor:pointer; border:none;
+    transition:transform .15s ease, box-shadow .15s ease, background .15s ease;
+    white-space:nowrap;
+  }
+  .btn:hover{transform:translateY(-2px);}
+  .btn-accent{background:var(--accent); color:#1a1200; box-shadow:0 8px 24px rgba(245,166,35,.25);}
+  .btn-accent:hover{background:#ffb733;}
+  .btn-success{background:var(--success); color:#04170a; box-shadow:0 8px 24px rgba(67,160,71,.25);}
+  .btn-success:hover{background:#54c05a;}
+  .btn-ghost{background:transparent; color:var(--text); border:1px solid var(--border);}
+  .btn-ghost:hover{border-color:var(--accent); color:var(--accent);}
+  .btn-lg{padding:18px 36px; font-size:19px;}
+
+  /* ===== Top nav ===== */
+  header{
+    position:sticky; top:0; z-index:50;
+    background:rgba(14,15,17,.85); backdrop-filter:blur(10px);
+    border-bottom:1px solid var(--border);
+  }
+  .nav{display:flex; align-items:center; justify-content:space-between; padding:16px 24px;}
+  .brand{display:flex; align-items:center; gap:10px; font-family:'Barlow Condensed'; font-weight:800; font-size:22px;}
+  .brand-mark{
+    width:38px; height:38px; border-radius:10px; background:linear-gradient(145deg, var(--accent), var(--accent-dark));
+    display:flex; align-items:center; justify-content:center; font-size:19px;
+  }
+  .nav-links{display:flex; gap:28px; font-weight:600; font-size:15px; color:var(--muted);}
+  .nav-links a:hover{color:var(--accent);}
+  .nav-cta{display:flex; gap:12px;}
+  @media (max-width:860px){ .nav-links{display:none;} }
+
+  /* ===== Hero ===== */
+  .hero{
+    position:relative; padding:96px 0 80px; overflow:hidden;
+    background:
+      radial-gradient(circle at 15% 20%, rgba(245,166,35,.14), transparent 45%),
+      radial-gradient(circle at 85% 0%, rgba(30,136,229,.10), transparent 40%),
+      var(--surface);
+    border-bottom:1px solid var(--border);
+  }
+  .hero-grid{display:grid; grid-template-columns:1.05fr .95fr; gap:56px; align-items:center;}
+  @media (max-width:960px){ .hero-grid{grid-template-columns:1fr;} }
+  .tag{
+    display:inline-flex; align-items:center; gap:8px; font-size:13px; font-weight:700;
+    color:var(--accent); background:rgba(245,166,35,.12); border:1px solid rgba(245,166,35,.35);
+    padding:7px 14px; border-radius:999px; margin-bottom:22px;
+  }
+  .hero h1{font-size:52px; margin-bottom:20px;}
+  .hero h1 span{color:var(--accent);}
+  @media (max-width:640px){ .hero h1{font-size:36px;} }
+  .hero p.lead{font-size:19px; color:var(--muted); max-width:520px; margin-bottom:32px;}
+  .hero-ctas{display:flex; gap:14px; flex-wrap:wrap; margin-bottom:28px;}
+  .hero-trust{display:flex; gap:22px; flex-wrap:wrap; color:var(--muted); font-size:14px;}
+  .hero-trust b{color:var(--text);}
+  .hero-shot{
+    border-radius:18px; border:1px solid var(--border); background:var(--card);
+    box-shadow:0 30px 70px rgba(0,0,0,.5); overflow:hidden; position:relative;
+  }
+  .hero-shot .browser-bar{display:flex; gap:6px; padding:10px 14px; background:#101113; border-bottom:1px solid var(--border);}
+  .browser-bar span{width:10px; height:10px; border-radius:50%; background:var(--border);}
+  .hero-shot img{width:100%; display:block;}
+  .img-fallback{
+    aspect-ratio:16/10; display:flex; align-items:center; justify-content:center;
+    color:var(--muted); font-size:13px; background:
+      repeating-linear-gradient(45deg, #1a1b1e 0 10px, #17181b 10px 20px);
+  }
+
+  /* ===== Sections generic ===== */
+  section{padding:88px 0;}
+  .eyebrow{color:var(--accent); font-weight:700; font-size:13px; letter-spacing:1.4px; text-transform:uppercase; margin-bottom:12px; display:block;}
+  .section-title{font-size:38px; max-width:680px; margin-bottom:16px;}
+  .section-lead{color:var(--muted); font-size:17px; max-width:640px; margin-bottom:48px;}
+  .center{text-align:center; margin-left:auto; margin-right:auto;}
+
+  /* ===== Problem/Pain ===== */
+  .pain{background:var(--bg);}
+  .pain-grid{display:grid; grid-template-columns:repeat(3,1fr); gap:20px;}
+  @media (max-width:860px){ .pain-grid{grid-template-columns:1fr;} }
+  .pain-card{
+    background:var(--card); border:1px solid var(--border); border-left:3px solid var(--danger);
+    border-radius:var(--radius); padding:24px;
+  }
+  .pain-card .ic{font-size:26px; margin-bottom:12px;}
+  .pain-card h3{font-family:'Barlow'; font-weight:700; font-size:17px; margin-bottom:8px;}
+  .pain-card p{color:var(--muted); font-size:14.5px;}
+
+  /* ===== Features ===== */
+  .features{background:var(--surface); border-top:1px solid var(--border); border-bottom:1px solid var(--border);}
+  .feat-grid{display:grid; grid-template-columns:repeat(3,1fr); gap:20px;}
+  @media (max-width:960px){ .feat-grid{grid-template-columns:repeat(2,1fr);} }
+  @media (max-width:640px){ .feat-grid{grid-template-columns:1fr;} }
+  .feat-card{
+    background:var(--card); border:1px solid var(--border); border-radius:var(--radius);
+    padding:26px; position:relative; overflow:hidden;
+  }
+  .feat-card::before{
+    content:''; position:absolute; top:0; left:0; right:0; height:2px; background:var(--accent);
+  }
+  .feat-card .ic{
+    width:44px; height:44px; border-radius:10px; background:rgba(245,166,35,.12);
+    display:flex; align-items:center; justify-content:center; font-size:21px; margin-bottom:16px;
+  }
+  .feat-card h3{font-family:'Barlow'; font-weight:700; font-size:17.5px; margin-bottom:8px;}
+  .feat-card p{color:var(--muted); font-size:14.5px;}
+
+  /* ===== Screens showcase ===== */
+  .screens-tabs{display:flex; gap:10px; flex-wrap:wrap; margin-bottom:36px;}
+  .screens-tabs button{
+    font-family:'Barlow'; font-weight:600; font-size:14px; color:var(--muted);
+    background:var(--card); border:1px solid var(--border); border-radius:999px;
+    padding:10px 18px; cursor:pointer; transition:.15s;
+  }
+  .screens-tabs button.active{color:#1a1200; background:var(--accent); border-color:var(--accent);}
+  .screen-panel{display:none;}
+  .screen-panel.active{display:block;}
+  .screen-shot{
+    border-radius:16px; border:1px solid var(--border); overflow:hidden; background:var(--card);
+    box-shadow:0 24px 60px rgba(0,0,0,.45);
+  }
+  .screen-caption{margin-top:16px; color:var(--muted); font-size:15px; text-align:center;}
+
+  /* ===== Status pills / stock bar demo (mirrors app design language) ===== */
+  .pill{display:inline-flex; align-items:center; gap:6px; font-size:12px; font-weight:700; padding:4px 10px; border-radius:999px;}
+  .pill-success{background:rgba(67,160,71,.15); color:var(--success);}
+  .pill-danger{background:rgba(229,57,53,.15); color:var(--danger);}
+  .pill-accent{background:rgba(245,166,35,.15); color:var(--accent);}
+
+  /* ===== Stats strip ===== */
+  .stats{background:var(--bg); border-bottom:1px solid var(--border);}
+  .stats-grid{display:grid; grid-template-columns:repeat(4,1fr); gap:20px;}
+  @media (max-width:860px){ .stats-grid{grid-template-columns:repeat(2,1fr);} }
+  .stat-card{
+    background:var(--card); border:1px solid var(--border); border-radius:var(--radius); padding:24px;
+    border-top:2px solid var(--accent);
+  }
+  .stat-card b{font-family:'JetBrains Mono'; font-size:28px; display:block; margin-bottom:6px;}
+  .stat-card span{color:var(--muted); font-size:13.5px;}
+
+  /* ===== For whom ===== */
+  .audience-grid{display:grid; grid-template-columns:repeat(2,1fr); gap:14px;}
+  @media (max-width:640px){ .audience-grid{grid-template-columns:1fr;} }
+  .audience-item{
+    display:flex; gap:12px; align-items:flex-start; background:var(--card);
+    border:1px solid var(--border); border-radius:12px; padding:18px;
+  }
+  .audience-item .check{color:var(--success); font-size:18px;}
+
+  /* ===== CTA banner ===== */
+  .cta-banner{
+    background:linear-gradient(135deg, rgba(245,166,35,.14), rgba(30,136,229,.08));
+    border:1px solid var(--border); border-radius:22px; padding:56px 40px; text-align:center;
+  }
+  .cta-banner h2{font-size:34px; margin-bottom:14px;}
+  .cta-banner p{color:var(--muted); font-size:16.5px; max-width:560px; margin:0 auto 30px;}
+  .cta-row{display:flex; gap:14px; justify-content:center; flex-wrap:wrap;}
+
+  /* ===== FAQ ===== */
+  .faq{background:var(--surface); border-top:1px solid var(--border);}
+  .faq-item{border-bottom:1px solid var(--border);}
+  .faq-q{
+    width:100%; text-align:left; background:none; border:none; color:var(--text);
+    font-family:'Barlow'; font-weight:700; font-size:16.5px; padding:20px 4px;
+    display:flex; justify-content:space-between; align-items:center; cursor:pointer;
+  }
+  .faq-q:after{content:'+'; color:var(--accent); font-size:22px; font-weight:400; transition:transform .2s;}
+  .faq-item.open .faq-q:after{transform:rotate(45deg);}
+  .faq-a{max-height:0; overflow:hidden; transition:max-height .25s ease; color:var(--muted); font-size:15px;}
+  .faq-item.open .faq-a{max-height:240px; padding-bottom:20px;}
+
+  /* ===== Footer ===== */
+  footer{background:var(--bg); border-top:1px solid var(--border); padding:48px 0 28px;}
+  .footer-grid{display:flex; justify-content:space-between; align-items:flex-start; gap:24px; flex-wrap:wrap;}
+  .footer-brand{max-width:340px; color:var(--muted); font-size:14px;}
+  .footer-links{display:flex; gap:36px; flex-wrap:wrap;}
+  .footer-links h4{font-size:14px; margin-bottom:12px; color:var(--text);}
+  .footer-links a{display:block; color:var(--muted); font-size:14px; margin-bottom:8px;}
+  .footer-links a:hover{color:var(--accent);}
+  .footer-bottom{margin-top:36px; padding-top:20px; border-top:1px solid var(--border); color:var(--muted); font-size:13px; display:flex; justify-content:space-between; flex-wrap:wrap; gap:10px;}
+
+  /* ===== WhatsApp floating button ===== */
+  .wa-float{
+    position:fixed; bottom:24px; right:24px; z-index:60;
+    width:60px; height:60px; border-radius:50%; background:var(--success);
+    display:flex; align-items:center; justify-content:center; font-size:28px;
+    box-shadow:0 10px 30px rgba(67,160,71,.45); border:none; cursor:pointer;
+  }
+  .wa-float:hover{transform:scale(1.06);}
+</style>
+</head>
+<body>
+
+<header>
+  <div class="nav wrap">
+    <div class="brand"><span class="brand-mark">🔧</span> MecanicaOficial</div>
+    <nav class="nav-links">
+      <a href="#recursos">Recursos</a>
+      <a href="#telas">Telas do sistema</a>
+      <a href="#publico">Para quem é</a>
+      <a href="#faq">Dúvidas</a>
+    </nav>
+    <div class="nav-cta">
+      <a class="btn btn-ghost" href="https://wa.me/5535984297193?text=Ol%C3%A1!%20Vim%20pelo%20site%20do%20MecanicaOficial%20e%20gostaria%20de%20saber%20mais%20informa%C3%A7%C3%B5es." target="_blank" rel="noopener">Falar no WhatsApp</a>
+      <a class="btn btn-accent" href="https://wa.me/5535984297193?text=Ol%C3%A1!%20Quero%20assinar%20o%20MecanicaOficial%20para%20minha%20oficina.%20Podem%20me%20ajudar%3F" target="_blank" rel="noopener">Assinar agora</a>
+    </div>
+  </div>
+</header>
+
+<section class="hero">
+  <div class="wrap hero-grid">
+    <div>
+      <span class="tag">🚀 Feito para oficinas mecânicas brasileiras</span>
+      <h1>Sua oficina organizada, <span>lucrando</span> e sem depender de caderno.</h1>
+      <p class="lead">OS, clientes, estoque, financeiro e nota fiscal (NF-e/NFS-e) em um único sistema na nuvem. Simples de usar, pronto para o dia a dia da sua oficina.</p>
+      <div class="hero-ctas">
+        <a class="btn btn-accent btn-lg" href="https://wa.me/5535984297193?text=Ol%C3%A1!%20Quero%20assinar%20o%20MecanicaOficial%20para%20minha%20oficina.%20Podem%20me%20ajudar%3F" target="_blank" rel="noopener">✍️ Assinar agora</a>
+        <a class="btn btn-ghost btn-lg" href="https://wa.me/5535984297193?text=Ol%C3%A1!%20Vim%20pelo%20site%20do%20MecanicaOficial%20e%20gostaria%20de%20saber%20mais%20informa%C3%A7%C3%B5es." target="_blank" rel="noopener">💬 Falar no WhatsApp</a>
+      </div>
+      <div class="hero-trust">
+        <span>✅ <b>100% na nuvem</b> — sem instalar nada</span>
+        <span>🧾 <b>Emissão fiscal integrada</b></span>
+        <span>🔒 <b>Dados seguros e com backup</b></span>
+      </div>
+    </div>
+    <div class="hero-shot">
+      <div class="browser-bar"><span></span><span></span><span></span></div>
+      <img id="hero-screenshot" src="imagens/tela-dashboard.png" alt="Dashboard do MecanicaOficial" onerror="this.parentElement.innerHTML+='<div class=&quot;img-fallback&quot;>Screenshot do Dashboard<br>(imagens/tela-dashboard.png)</div>'; this.remove();">
+    </div>
+  </div>
+</section>
+
+<section class="stats">
+  <div class="wrap">
+    <div class="stats-grid">
+      <div class="stat-card"><b>+15</b><span>módulos de gestão integrados</span></div>
+      <div class="stat-card"><b>NF-e / NFS-e</b><span>emissão fiscal direto do sistema</span></div>
+      <div class="stat-card"><b>100%</b><span>na nuvem, acesso de qualquer lugar</span></div>
+      <div class="stat-card"><b>24/7</b><span>seus dados disponíveis, com backup</span></div>
+    </div>
+  </div>
+</section>
+
+<section class="pain">
+  <div class="wrap">
+    <span class="eyebrow center">O problema</span>
+    <h2 class="section-title center">Se sua oficina ainda roda assim, você está perdendo dinheiro</h2>
+    <p class="section-lead center">Não é falta de competência — é falta de sistema. Veja se você se identifica:</p>
+    <div class="pain-grid">
+      <div class="pain-card"><div class="ic">📓</div><h3>Controle no caderno ou planilha</h3><p>Informação espalhada, difícil de achar e fácil de perder — inclusive o que cada cliente te deve.</p></div>
+      <div class="pain-card"><div class="ic">📦</div><h3>Peça que "some" do estoque</h3><p>Venda perdida porque ninguém sabia que a peça tinha acabado — ou pior, descoberto na hora do cliente.</p></div>
+      <div class="pain-card"><div class="ic">🧾</div><h3>Nota fiscal manual ou terceirizada</h3><p>Tempo perdido e risco de erro em valores, ou dependência total do contador para emitir uma nota.</p></div>
+      <div class="pain-card"><div class="ic">❓</div><h3>Sem visão do status das OS</h3><p>Você não sabe, de cabeça, quantas ordens de serviço estão abertas, atrasadas ou concluídas hoje.</p></div>
+      <div class="pain-card"><div class="ic">📉</div><h3>Fecha o mês sem saber o lucro</h3><p>Fatura, mas não sabe se sobrou dinheiro de verdade depois de peça, mão de obra e despesa.</p></div>
+      <div class="pain-card"><div class="ic">📱</div><h3>Cliente cobrando resposta</h3><p>"E meu carro, como está?" — e você sem uma resposta rápida e profissional na ponta da língua.</p></div>
+    </div>
+  </div>
+</section>
+
+<section class="features" id="recursos">
+  <div class="wrap">
+    <span class="eyebrow">A solução</span>
+    <h2 class="section-title">Tudo que sua oficina precisa, em um sistema só</h2>
+    <p class="section-lead">Cada módulo foi desenhado para o fluxo real de uma oficina — sem burocracia, sem telas complicadas.</p>
+    <div class="feat-grid">
+      <div class="feat-card"><div class="ic">🗂️</div><h3>Ordens de Serviço</h3><p>Abra, acompanhe e conclua OS com serviços, peças, mecânico responsável e status em tempo real. Baixa de estoque automática ao concluir.</p></div>
+      <div class="feat-card"><div class="ic">👥</div><h3>Clientes &amp; Veículos</h3><p>Cadastro completo com histórico de OS, veículo vinculado e situação automática: regular, com OS aberta ou devedor — destacado em vermelho.</p></div>
+      <div class="feat-card"><div class="ic">📦</div><h3>Estoque inteligente</h3><p>Estoque mínimo por produto, alerta visual (verde/âmbar/vermelho) e aviso automático por e-mail antes de faltar peça.</p></div>
+      <div class="feat-card"><div class="ic">🧾</div><h3>Nota fiscal (NF-e/NFS-e)</h3><p>Emissão fiscal integrada direto do sistema, com histórico completo, PDF/DANFSe e cancelamento com motivo.</p></div>
+      <div class="feat-card"><div class="ic">💰</div><h3>Financeiro &amp; contas a receber</h3><p>Saldo devedor por cliente, pagamentos parciais e visão clara de quanto você tem para receber.</p></div>
+      <div class="feat-card"><div class="ic">📅</div><h3>Agendamento</h3><p>Agenda visual de serviços que já cria o rascunho da OS ao confirmar o horário com o cliente.</p></div>
+      <div class="feat-card"><div class="ic">🖥️</div><h3>PDV — Frente de caixa</h3><p>Venda balcão de peças integrada ao mesmo estoque da oficina, sem sistema separado.</p></div>
+      <div class="feat-card"><div class="ic">📊</div><h3>Dashboard gerencial</h3><p>Clientes ativos, dívidas em aberto, faturamento do mês e alertas de estoque — tudo em um único painel.</p></div>
+      <div class="feat-card"><div class="ic">🔐</div><h3>Equipe &amp; permissões</h3><p>Perfis de acesso (admin, mecânico, atendente, financeiro) e log de auditoria de cada ação no sistema.</p></div>
+    </div>
+  </div>
+</section>
+
+<section class="screens" id="telas">
+  <div class="wrap">
+    <span class="eyebrow">Conheça o sistema</span>
+    <h2 class="section-title">As principais telas do MecanicaOficial</h2>
+    <p class="section-lead">Interface moderna, escura e direto ao ponto — pensada para o uso diário da oficina.</p>
+
+    <div class="screens-tabs" role="tablist">
+      <button class="active" data-target="p-login">Login</button>
+      <button data-target="p-dashboard">Página inicial</button>
+      <button data-target="p-os">Ordens de Serviço</button>
+      <button data-target="p-veiculos">Consulta de veículos</button>
+      <button data-target="p-fiscal">Histórico de notas fiscais</button>
+    </div>
+
+    <div class="screen-panel active" id="p-login">
+      <div class="screen-shot"><img src="imagens/tela-login.jpg" alt="Tela de login do MecanicaOficial" onerror="this.parentElement.innerHTML='<div class=&quot;img-fallback&quot;>Screenshot da tela de Login<br>(imagens/tela-login.jpg)</div>'"></div>
+      <p class="screen-caption">Acesso seguro por e-mail e senha, com sessão protegida.</p>
+    </div>
+    <div class="screen-panel" id="p-dashboard">
+      <div class="screen-shot"><img src="imagens/tela-dashboard.png" alt="Dashboard do MecanicaOficial" onerror="this.parentElement.innerHTML='<div class=&quot;img-fallback&quot;>Screenshot do Dashboard<br>(imagens/tela-dashboard.png)</div>'"></div>
+      <p class="screen-caption">Visão geral do negócio: clientes, dívidas, faturamento e alertas de estoque.</p>
+    </div>
+    <div class="screen-panel" id="p-os">
+      <div class="screen-shot"><img src="imagens/tela-os.png" alt="Tela de Ordens de Serviço do MecanicaOficial" onerror="this.parentElement.innerHTML='<div class=&quot;img-fallback&quot;>Screenshot da tela de Ordens de Servi&ccedil;o<br>(imagens/tela-os.png)</div>'"></div>
+      <p class="screen-caption">Controle total das ordens de serviço, do status ao valor final.</p>
+    </div>
+    <div class="screen-panel" id="p-veiculos">
+      <div class="screen-shot"><img src="imagens/tela-veiculos.jpg" alt="Tela de consulta de veículos do MecanicaOficial" onerror="this.parentElement.innerHTML='<div class=&quot;img-fallback&quot;>Screenshot da consulta de Ve&iacute;culos<br>(imagens/tela-veiculos.jpg)</div>'"></div>
+      <p class="screen-caption">Histórico completo de cada veículo atendido pela sua oficina.</p>
+    </div>
+    <div class="screen-panel" id="p-fiscal">
+      <div class="screen-shot"><img src="imagens/tela-fiscal-historico.png" alt="Tela de histórico de notas fiscais do MecanicaOficial" onerror="this.parentElement.innerHTML='<div class=&quot;img-fallback&quot;>Screenshot do Hist&oacute;rico de Notas Fiscais<br>(imagens/tela-fiscal-historico.png)</div>'"></div>
+      <p class="screen-caption">Todas as notas emitidas, com situação, valor e PDF disponível.</p>
+    </div>
+  </div>
+</section>
+
+<section class="audience" id="publico">
+  <div class="wrap">
+    <span class="eyebrow">Para quem é</span>
+    <h2 class="section-title">Feito para quem vive o dia a dia de uma oficina</h2>
+    <div class="audience-grid">
+      <div class="audience-item"><span class="check">✔️</span><div>Oficinas mecânicas de carro e moto</div></div>
+      <div class="audience-item"><span class="check">✔️</span><div>Auto centers e centros automotivos</div></div>
+      <div class="audience-item"><span class="check">✔️</span><div>Oficinas que já emitem nota fiscal e querem parar de sofrer com isso</div></div>
+      <div class="audience-item"><span class="check">✔️</span><div>Donos que querem saber, de verdade, se estão tendo lucro</div></div>
+      <div class="audience-item"><span class="check">✔️</span><div>Quem cresceu demais para continuar controlando tudo no papel</div></div>
+      <div class="audience-item"><span class="check">✔️</span><div>Equipes com mais de um usuário (mecânico, atendente, financeiro)</div></div>
+    </div>
+  </div>
+</section>
+
+<section class="cta-mid">
+  <div class="wrap">
+    <div class="cta-banner">
+      <h2>Pronto para organizar sua oficina de verdade?</h2>
+      <p>Fale agora com a gente pelo WhatsApp. Vagas de implantação limitadas por mês para garantir atendimento personalizado.</p>
+      <div class="cta-row">
+        <a class="btn btn-accent btn-lg" href="https://wa.me/5535984297193?text=Ol%C3%A1!%20Quero%20assinar%20o%20MecanicaOficial%20para%20minha%20oficina.%20Podem%20me%20ajudar%3F" target="_blank" rel="noopener">✍️ Assinar agora</a>
+        <a class="btn btn-ghost btn-lg" href="https://wa.me/5535984297193?text=Ol%C3%A1!%20Vim%20pelo%20site%20do%20MecanicaOficial%20e%20gostaria%20de%20saber%20mais%20informa%C3%A7%C3%B5es." target="_blank" rel="noopener">💬 Tenho dúvidas antes</a>
+      </div>
+    </div>
+  </div>
+</section>
+
+<section class="faq" id="faq">
+  <div class="wrap">
+    <span class="eyebrow">Dúvidas frequentes</span>
+    <h2 class="section-title">Perguntas que toda oficina faz antes de assinar</h2>
+    <div class="faq-list">
+      <div class="faq-item open">
+        <button class="faq-q">Preciso instalar algum programa?</button>
+        <div class="faq-a">Não. O MecanicaOficial funciona 100% pela internet, em qualquer computador, notebook ou tablet — sem instalação.</div>
+      </div>
+      <div class="faq-item">
+        <button class="faq-q">Emite nota fiscal de verdade, integrada com a prefeitura/SEFAZ?</button>
+        <div class="faq-a">Sim. A emissão de NF-e e NFS-e é feita direto do sistema, com histórico completo e PDF/DANFSe disponível para download.</div>
+      </div>
+      <div class="faq-item">
+        <button class="faq-q">Serve para oficina pequena ou só para rede grande?</button>
+        <div class="faq-a">Serve para os dois. Você cadastra do jeito que sua oficina funciona hoje e o sistema cresce com você.</div>
+      </div>
+      <div class="faq-item">
+        <button class="faq-q">Meus dados ficam seguros?</button>
+        <div class="faq-a">Sim. Estrutura em nuvem com backup e controle de acesso por usuário — cada funcionário só vê o que precisa.</div>
+      </div>
+      <div class="faq-item">
+        <button class="faq-q">Como eu começo a usar?</button>
+        <div class="faq-a">É simples: chama no WhatsApp (35) 98429-7193, a gente entende sua oficina e coloca você para rodar no sistema.</div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<footer>
+  <div class="wrap">
+    <div class="footer-grid">
+      <div>
+        <div class="brand" style="margin-bottom:12px;"><span class="brand-mark">🔧</span> MecanicaOficial</div>
+        <p class="footer-brand">Sistema de gestão para oficinas mecânicas: ordens de serviço, clientes, estoque, financeiro e nota fiscal em um só lugar.</p>
+      </div>
+      <div class="footer-links">
+        <div>
+          <h4>Navegação</h4>
+          <a href="#recursos">Recursos</a>
+          <a href="#telas">Telas do sistema</a>
+          <a href="#publico">Para quem é</a>
+          <a href="#faq">Dúvidas</a>
+        </div>
+        <div>
+          <h4>Fale com a gente</h4>
+          <a href="https://wa.me/5535984297193" target="_blank" rel="noopener">WhatsApp: (35) 98429-7193</a>
+        </div>
+      </div>
+    </div>
+    <div class="footer-bottom">
+      <span>© <span id="ano"></span> MecanicaOficial. Todos os direitos reservados.</span>
+      <span>Gestão de oficina de verdade, sem complicação.</span>
+    </div>
+  </div>
+</footer>
+
+<a class="wa-float" href="https://wa.me/5535984297193?text=Ol%C3%A1!%20Vim%20pelo%20site%20do%20MecanicaOficial%20e%20gostaria%20de%20saber%20mais%20informa%C3%A7%C3%B5es." target="_blank" rel="noopener" aria-label="Falar no WhatsApp">💬</a>
+
+<script>
+  document.getElementById('ano').textContent = new Date().getFullYear();
+
+  // Tabs (telas do sistema)
+  document.querySelectorAll('.screens-tabs button').forEach(function(btn){
+    btn.addEventListener('click', function(){
+      document.querySelectorAll('.screens-tabs button').forEach(function(b){ b.classList.remove('active'); });
+      document.querySelectorAll('.screen-panel').forEach(function(p){ p.classList.remove('active'); });
+      btn.classList.add('active');
+      document.getElementById(btn.dataset.target).classList.add('active');
+    });
+  });
+
+  // FAQ accordion
+  document.querySelectorAll('.faq-item .faq-q').forEach(function(q){
+    q.addEventListener('click', function(){
+      var item = q.closest('.faq-item');
+      var wasOpen = item.classList.contains('open');
+      document.querySelectorAll('.faq-item').forEach(function(i){ i.classList.remove('open'); });
+      if(!wasOpen) item.classList.add('open');
+    });
+  });
+</script>
+
+</body>
+</html>
