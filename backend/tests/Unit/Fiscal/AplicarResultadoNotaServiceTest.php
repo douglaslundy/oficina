@@ -83,6 +83,32 @@ class AplicarResultadoNotaServiceTest extends TestCase
         ];
     }
 
+    /**
+     * Bug real de produção (2026-11-16, NF-e #22 NFEPHP): o polling de status
+     * leu a nota ainda PROCESSANDO, o job gravou o resultado real da SEFAZ, e
+     * o polling então aplicou seu "ainda processando" (chave/xml vazios) por
+     * cima — a nota ficou PROCESSANDO pra sempre e o resultado real se perdeu.
+     */
+    public function test_resultado_processando_atrasado_nao_apaga_resultado_ja_gravado(): void
+    {
+        [, $nota] = $this->cenario();
+        $service = app(AplicarResultadoNotaService::class);
+
+        $service->aplicar($nota, $this->resultadoAutorizada(), 'PRODUCAO');
+        // $nota em memória continua PROCESSANDO — igual ao polling que leu antes do job gravar.
+        $service->aplicar($nota, [
+            'status' => 'PROCESSANDO', 'chave' => '', 'protocolo' => '',
+            'numero' => null, 'xml_retorno' => '', 'qrcode_url' => null, 'mensagem_erro' => null,
+        ], 'PRODUCAO');
+
+        $fresh = $nota->fresh();
+        $this->assertSame('AUTORIZADA', $fresh->status);
+        $this->assertSame('CHAVE1', $fresh->chave_acesso);
+        $this->assertSame('P1', $fresh->protocolo);
+        $this->assertSame('<xml/>', $fresh->xml_retorno);
+        $this->assertNotNull($fresh->emitido_em);
+    }
+
     public function test_duas_chamadas_para_a_mesma_transicao_geram_so_uma_cobranca_de_excedente(): void
     {
         [, $nota] = $this->cenario();

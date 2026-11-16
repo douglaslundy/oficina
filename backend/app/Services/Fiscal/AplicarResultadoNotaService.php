@@ -61,6 +61,12 @@ class AplicarResultadoNotaService
             $travada = NotaFiscal::lockForUpdate()->findOrFail($nota->id);
             $statusAnterior = $travada->status;
 
+            // Corrida job × polling (NF-e #22, 2026-11-16): um "ainda processando"
+            // atrasado não pode sobrescrever o resultado real já gravado.
+            if ($resultado['status'] === 'PROCESSANDO' && $statusAnterior !== 'PROCESSANDO') {
+                return $travada;
+            }
+
             $travada->update([
                 'status'        => $resultado['status'],
                 'chave_acesso'  => $resultado['chave'] ?? $travada->chave_acesso,

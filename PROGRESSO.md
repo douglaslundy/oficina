@@ -1,6 +1,21 @@
 # Progresso do Projeto
 
 ## Última atualização
+2026-11-16 — **EM ANDAMENTO: NF-e #22 (NFEPHP, PRODUÇÃO, oficina 4330592c, nota id 8c285a23) presa em
+PROCESSANDO. Fix NÃO commitado/deployado; nota #22 NÃO destravada (depende de confirmação do usuário).**
+- Causa (confirmada no banco/logs de produção): corrida job × polling. `GET /notas-fiscais/{id}/status`
+  leu a nota ainda PROCESSANDO; `NfeService::consultarStatus()` pra NFEPHP sem chave devolve um
+  PROCESSANDO sintético (chave/protocolo/xml = `''`); o `EmitirNotaFiscalJob` gravou o resultado real da
+  SEFAZ; o polling então rodou `AplicarResultadoNotaService::aplicar()` por cima. Evidência: 2 updates no
+  `activity_log` às 11:05:56, `chave_acesso`/`xml_retorno` = `''` (não NULL), job DONE em 3s sem log de erro.
+- Resultado real da SEFAZ pra #22 foi PERDIDO (não há log da resposta; cNF é aleatório, não dá pra
+  reconstruir a chave). Pode existir NF-e real de R$ 420 autorizada sem registro. `proximo_numero_nfe`=23.
+- Fix: `aplicar()` ignora resultado PROCESSANDO se a linha travada já não está PROCESSANDO. Teste:
+  `AplicarResultadoNotaServiceTest::test_resultado_processando_atrasado_nao_apaga_resultado_ja_gravado`.
+- Destravar #22 (pendente): marcar REJEITADA e reemitir pela tela — reusa o nº 22; se a SEFAZ já tem a
+  22 autorizada devolve cStat=539 com a chave (sem duplicar), senão autoriza agora.
+- Testes com banco: Postgres efêmero `pgtest-debug` na VPS + túnel 15432 (`DB_PORT=15432`); derrubar ao fim.
+
 2026-10-30 — **Cupom 80mm cortado + modo de impressão. DEPLOYADO 2026-10-30 (commit 86da609, backup `/opt/backups/pre-deploy-cupom80-2026-10-30_14-14-40.dump`, migration rodou, health 200).** Causa: PDF do cupom estava certo
 (80x94mm); o visualizador de PDF do navegador imprime no papel padrão do diálogo. Agora térmica imprime
 HTML (`GET /os/{id}/cupom?formato=html`, `CupomPdfService::html`, `@page size 80mm Hmm`). Nova coluna
