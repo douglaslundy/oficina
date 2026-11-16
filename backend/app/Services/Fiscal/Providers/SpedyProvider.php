@@ -553,6 +553,13 @@ class SpedyProvider implements FiscalProvider, ConsultaNotaTerceiroProvider
             // — ver comentário lá.
             'integrationId'   => $this->integrationIdDe($n->referenciaExterna),
             'additionalInformation' => $n->informacoesComplementares, // NF-e/NFC-e: infCpl (doc Spedy)
+            // Placa do veículo da OS no bloco "Transportador" do DANFE
+            // (transport.vehicle, schema SefazInvoiceTransportDto; freightModality
+            // `free` = modFrete 9, igual ao NFEPHP).
+            'transport'       => $n->veiculoPlaca !== null && $n->veiculoUf !== null ? [
+                'freightModality' => 'free',
+                'vehicle'         => ['plate' => $n->veiculoPlaca, 'state' => strtolower($n->veiculoUf)],
+            ] : null,
             // series/number: ver docblock acima — omitidos (null) quando
             // NotaFiscalData não os carrega (ex.: chamada direta em teste).
             'series'          => $n->serieNf,

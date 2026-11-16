@@ -273,6 +273,38 @@ class MotorNfeMontarNfeTest extends TestCase
      * Qualquer outro erro de schema (PIS/COFINS, ICMS, etc.) faz este teste
      * falhar, protegendo também as Tasks 5/6 que dependem deste XML.
      */
+    private function notaComVeiculo(): NotaFiscalData
+    {
+        return new NotaFiscalData(...array_merge(
+            get_object_vars($this->notaVenda()),
+            ['veiculoPlaca' => 'ABC1D23', 'veiculoUf' => 'MG'],
+        ));
+    }
+
+    public function test_veiculo_da_os_vai_no_grupo_transp_e_o_xml_continua_valido(): void
+    {
+        $xml = (new MotorNfe())->montarNfe($this->notaComVeiculo(), $this->configuracaoSimplesNacional(), 'HOMOLOGACAO', 1, 1);
+
+        $this->assertStringContainsString('<modFrete>9</modFrete><veicTransp><placa>ABC1D23</placa><UF>MG</UF></veicTransp>', $xml);
+
+        libxml_use_internal_errors(true);
+        libxml_clear_errors();
+        $dom = new \DOMDocument('1.0', 'UTF-8');
+        $dom->loadXML($xml);
+        $dom->schemaValidate(base_path('vendor/nfephp-org/sped-nfe/schemes/PL_009_V4/nfe_v4.00.xsd'));
+        $erros = array_map(static fn ($e) => trim($e->message), libxml_get_errors());
+        libxml_clear_errors();
+        $this->assertCount(1, $erros, 'Erros de schema inesperados: ' . implode(' | ', $erros));
+        $this->assertStringContainsString('Signature', $erros[0]);
+    }
+
+    public function test_sem_veiculo_nao_gera_veic_transp(): void
+    {
+        $xml = (new MotorNfe())->montarNfe($this->notaVenda(), $this->configuracaoSimplesNacional(), 'HOMOLOGACAO', 1, 1);
+
+        $this->assertStringNotContainsString('veicTransp', $xml);
+    }
+
     public function test_xml_gerado_e_valido_contra_xsd_oficial_exceto_assinatura_ausente(): void
     {
         $cfg = $this->configuracaoSimplesNacional();

@@ -19,6 +19,30 @@ use App\Models\NotaFiscal;
  */
 class DanfeRenderer
 {
+    /**
+     * Veículo do grupo transp/veicTransp do XML autorizado (o DANFE imprime o
+     * que foi autorizado, não uma coluna paralela).
+     *
+     * @return array{placa: string, uf: string}|null
+     */
+    public static function veiculoTransporteDoXml(?string $xml): ?array
+    {
+        if ($xml === null || $xml === '') {
+            return null;
+        }
+        $sxml = @simplexml_load_string($xml);
+        if ($sxml === false) {
+            return null;
+        }
+        $sxml->registerXPathNamespace('nfe', 'http://www.portalfiscal.inf.br/nfe');
+        $v = $sxml->xpath('//nfe:transp/nfe:veicTransp')[0] ?? null;
+        if ($v === null || (string) $v->placa === '') {
+            return null;
+        }
+
+        return ['placa' => (string) $v->placa, 'uf' => (string) $v->UF];
+    }
+
     public function dadosParaTemplate(NotaFiscal $nota): array
     {
         // simplexml_load_string() retorna `false` (não `null`) quando o XML

@@ -9,6 +9,7 @@ use App\Services\Fiscal\Data\NotaFiscalData;
 use App\Services\Fiscal\FiscalProviderManager;
 use App\Services\Fiscal\IndicadorIeDestinatarioResolver;
 use App\Services\Fiscal\InformacoesComplementaresResolver;
+use App\Services\Fiscal\VeiculoTransporteResolver;
 use Illuminate\Support\Facades\DB;
 
 class NfeService
@@ -127,6 +128,8 @@ class NfeService
             $ieDestinatario = $resolvido['inscricao_estadual'];
         }
 
+        $veiculoTransp = $modeloInterno === 'NFE' ? VeiculoTransporteResolver::resolver($nota, $config) : null;
+
         return new NotaFiscalData(
             tipo: 'NFSE',
             tomador: [
@@ -209,6 +212,8 @@ class NfeService
             codigoIbgeEmitente: $config?->codigo_ibge,
             finalidade: $nota->finalidade === 'DEVOLUCAO' ? 'DEVOLUCAO' : 'NORMAL',
             chaveReferenciada: $nota->finalidade === 'DEVOLUCAO' ? $nota->chave_referenciada : null,
+            veiculoPlaca: $veiculoTransp['placa'] ?? null,
+            veiculoUf: $veiculoTransp['uf'] ?? null,
             informacoesComplementares: InformacoesComplementaresResolver::montar(
                 $nota,
                 $config,

@@ -419,6 +419,10 @@ class MotorNfe
         ]);
 
         $make->tagtransp((object) ['modFrete' => 9]); // Sem frete
+        // Placa do veículo da OS no bloco "Transportador" do DANFE.
+        if (!empty($nota->veiculoPlaca) && !empty($nota->veiculoUf)) {
+            $make->tagveicTransp((object) ['placa' => $nota->veiculoPlaca, 'UF' => $nota->veiculoUf]);
+        }
 
         // Bug real de produção (2026-09-15, "cStat=441: Rejeicao: Descricao
         // do pagamento obrigatoria para meio de pagamento 99-outros"):

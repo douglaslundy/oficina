@@ -1318,6 +1318,19 @@ XML;
         return new NotaFiscalData(...array_merge(get_object_vars($base), ['informacoesComplementares' => self::INFO_CORREIOS]));
     }
 
+    public function test_payload_nfe_manda_placa_do_veiculo_em_transport(): void
+    {
+        $p = new SpedyProvider('https://sandbox-api.spedy.com.br/v1', 'master', 'tok', 'emp-1');
+        $base = $this->notaNfeSimplesNacional();
+        $nota = new NotaFiscalData(...array_merge(get_object_vars($base), ['veiculoPlaca' => 'ABC1D23', 'veiculoUf' => 'MG']));
+
+        $this->assertSame(
+            ['freightModality' => 'free', 'vehicle' => ['plate' => 'ABC1D23', 'state' => 'mg']],
+            $p->montarPayloadNfe($nota)['transport'],
+        );
+        $this->assertArrayNotHasKey('transport', $p->montarPayloadNfe($base));
+    }
+
     public function test_payload_nfse_manda_informacoes_adicionais(): void
     {
         $p = new SpedyProvider('https://sandbox-api.spedy.com.br/v1', 'master', 'tok', 'emp-1');

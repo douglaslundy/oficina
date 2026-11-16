@@ -90,6 +90,10 @@ final class NotaFiscalData
         // fica 1 como nas notas normais. Cada motor aplica o mesmo conjunto.
         public readonly string $finalidade = 'NORMAL',
         public readonly ?string $chaveReferenciada = null,
+        // Veículo da OS no grupo de transporte da NF-e (transp/veicTransp:
+        // placa + UF). Só NF-e; ver VeiculoTransporteResolver.
+        public readonly ?string $veiculoPlaca = null,
+        public readonly ?string $veiculoUf = null,
     ) {}
 
     public function ehDevolucao(): bool

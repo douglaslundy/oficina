@@ -247,6 +247,7 @@
 </table>
 
 <!-- Transportador -->
+@php $veicTransp = \App\Services\Fiscal\Pdf\DanfeRenderer::veiculoTransporteDoXml($nota->xml_retorno ?? null); @endphp
 <div class="section-lbl">Transportador / Volumes Transportados</div>
 <table class="grid">
   <tr>
@@ -260,11 +261,11 @@
     </td>
     <td style="width:20%; border-right:0.75px solid #000;">
       <div class="lbl">Placa do veículo</div>
-      <div class="val-sm">-</div>
+      <div class="val-sm">{{ $veicTransp['placa'] ?? '-' }}</div>
     </td>
     <td style="width:20%; border-right:0.75px solid #000;">
       <div class="lbl">UF</div>
-      <div class="val-sm">-</div>
+      <div class="val-sm">{{ $veicTransp['uf'] ?? '-' }}</div>
     </td>
     <td style="width:20%;">
       <div class="lbl">CNPJ / CPF</div>

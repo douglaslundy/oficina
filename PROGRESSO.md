@@ -1,20 +1,17 @@
 # Progresso do Projeto
 
 ## Última atualização
-2026-11-16 — **EM ANDAMENTO: NF-e #22 (NFEPHP, PRODUÇÃO, oficina 4330592c, nota id 8c285a23) presa em
-PROCESSANDO. Fix NÃO commitado/deployado; nota #22 NÃO destravada (depende de confirmação do usuário).**
-- Causa (confirmada no banco/logs de produção): corrida job × polling. `GET /notas-fiscais/{id}/status`
-  leu a nota ainda PROCESSANDO; `NfeService::consultarStatus()` pra NFEPHP sem chave devolve um
-  PROCESSANDO sintético (chave/protocolo/xml = `''`); o `EmitirNotaFiscalJob` gravou o resultado real da
-  SEFAZ; o polling então rodou `AplicarResultadoNotaService::aplicar()` por cima. Evidência: 2 updates no
-  `activity_log` às 11:05:56, `chave_acesso`/`xml_retorno` = `''` (não NULL), job DONE em 3s sem log de erro.
-- Resultado real da SEFAZ pra #22 foi PERDIDO (não há log da resposta; cNF é aleatório, não dá pra
-  reconstruir a chave). Pode existir NF-e real de R$ 420 autorizada sem registro. `proximo_numero_nfe`=23.
-- Fix: `aplicar()` ignora resultado PROCESSANDO se a linha travada já não está PROCESSANDO. Teste:
-  `AplicarResultadoNotaServiceTest::test_resultado_processando_atrasado_nao_apaga_resultado_ja_gravado`.
-- Destravar #22 (pendente): marcar REJEITADA e reemitir pela tela — reusa o nº 22; se a SEFAZ já tem a
-  22 autorizada devolve cStat=539 com a chave (sem duplicar), senão autoriza agora.
-- Testes com banco: Postgres efêmero `pgtest-debug` na VPS + túnel 15432 (`DB_PORT=15432`); derrubar ao fim.
+2026-11-16 (b) — **Placa do veículo da OS no bloco "Transportador" da NF-e. Commitado, NÃO deployado.**
+- Causa: a placa só ia no infCpl (observações). O XML saía com `<transp><modFrete>9</modFrete></transp>` sem
+  `veicTransp`, e o DANFE (`partials/danfe_corpo`) tinha "Placa do veículo"/"UF" fixos em "-".
+- Novo `VeiculoTransporteResolver` (placa da OS ou do veículo cadastrado; formato AAA9999/AAA9A99; só operação
+  dentro da UF do emitente — veicTransp interestadual dá rejeição 868; UF = a do emitente, o cadastro do
+  veículo não tem UF). `NotaFiscalData::veiculoPlaca/veiculoUf`; NFEPHP emite `veicTransp` (XML validado no
+  XSD); Spedy manda `transport.vehicle` (freightModality `free`); DANFE lê placa/UF do XML autorizado.
+- Limites: Focus NFe sem campo confirmado → segue só com infCpl. NFC-e/NFS-e não alterados. Efeito de
+  `veicTransp` com modFrete=9 na SEFAZ não confirmado em doc oficial → testar em homologação antes de produção.
+- Antes (mesmo dia): #22 resolvida — fix da corrida job×polling deployado (308aaae); #22 gravada AUTORIZADA
+  (chave 31261150388509000121550010000000221301437536, protocolo 131268097863100); falta XML/DANFE e e-mail.
 
 2026-10-30 — **Cupom 80mm cortado + modo de impressão. DEPLOYADO 2026-10-30 (commit 86da609, backup `/opt/backups/pre-deploy-cupom80-2026-10-30_14-14-40.dump`, migration rodou, health 200).** Causa: PDF do cupom estava certo
 (80x94mm); o visualizador de PDF do navegador imprime no papel padrão do diálogo. Agora térmica imprime
