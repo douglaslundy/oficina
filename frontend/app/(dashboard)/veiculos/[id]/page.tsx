@@ -13,7 +13,7 @@ interface Proprietario { id: string; nome: string; telefone?: string | null }
 interface HistoricoProprietario { cliente_id: string; cliente_nome: string | null; data_inicio: string | null; data_fim: string | null }
 interface OsHistorico { id: string; numero: number; tipo: string; status: string; km_atual: number | null; valor_total: number; valor_pago: number; mecanico: string | null; criado_em: string }
 interface VeiculoDetalhe {
-  id: string; modelo: string; ano: number | null; placa: string | null; chassi: string | null; ativo: boolean
+  id: string; modelo: string; ano: number | null; placa: string | null; chassi: string | null; uf?: string | null; ativo: boolean
   km_ultimo: number | null
   proprietario_atual: Proprietario | null
   historico_proprietarios: HistoricoProprietario[]
@@ -94,6 +94,11 @@ export default function VeiculoDetailPage() {
         {veiculo.placa && (
           <span className="font-mono" style={{ color: 'var(--accent)', fontSize: 18, fontWeight: 700 }}>
             {formatarPlaca(veiculo.placa)}
+          </span>
+        )}
+        {veiculo.placa && (
+          <span title="UF de emplacamento — editar no cadastro do cliente" style={{ color: veiculo.uf ? 'var(--muted)' : 'var(--accent)', fontSize: 13, fontWeight: 600 }}>
+            {veiculo.uf ? `UF ${veiculo.uf}` : 'UF pendente'}
           </span>
         )}
       </div>

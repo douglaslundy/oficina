@@ -29,6 +29,7 @@ class VeiculoController extends Controller
             'ano'    => ['nullable', 'integer', 'min:1900', 'max:2100'],
             'placa'  => ['nullable', 'string', 'max:10'],
             'chassi' => ['nullable', 'string', 'max:20'],
+            'uf'     => ['nullable', 'string', 'size:2', 'in:AC,AL,AP,AM,BA,CE,DF,ES,GO,MA,MT,MS,MG,PA,PB,PR,PE,PI,RJ,RN,RS,RO,RR,SC,SP,SE,TO'],
         ]);
 
         try {
@@ -82,6 +83,7 @@ class VeiculoController extends Controller
             'ano'    => ['nullable', 'integer', 'min:1900', 'max:2100'],
             'placa'  => ['nullable', 'string', 'max:10'],
             'chassi' => ['nullable', 'string', 'max:20'],
+            'uf'     => ['nullable', 'string', 'size:2', 'in:AC,AL,AP,AM,BA,CE,DF,ES,GO,MA,MT,MS,MG,PA,PB,PR,PE,PI,RJ,RN,RS,RO,RR,SC,SP,SE,TO'],
             'ativo'  => ['nullable', 'boolean'],
         ]);
 
@@ -168,6 +170,7 @@ class VeiculoController extends Controller
             'ano'    => $veiculo->ano,
             'placa'  => $veiculo->placa,
             'chassi' => $veiculo->chassi,
+            'uf'     => $veiculo->uf,
             'ativo'  => $veiculo->ativo,
             'km_ultimo' => $veiculo->km_ultimo,
             'proprietario_atual' => $clienteAtual ? [
@@ -223,6 +226,7 @@ class VeiculoController extends Controller
             'ano'       => $v->ano,
             'placa'     => $v->placa,
             'chassi'    => $v->chassi,
+            'uf'        => $v->uf,
             'ativo'     => $v->ativo,
             'km_ultimo' => $v->km_ultimo,
             'criado_em' => $v->criado_em?->format('d/m/Y'),

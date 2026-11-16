@@ -1,13 +1,16 @@
 # Progresso do Projeto
 
 ## Última atualização
-2026-11-16 (b) — **Placa do veículo da OS no bloco "Transportador" da NF-e. Commitado, NÃO deployado.**
+2026-11-16 (b) — **Placa do veículo da OS no bloco "Transportador" da NF-e. Commitado, NÃO deployado (requer migration).**
 - Causa: a placa só ia no infCpl (observações). O XML saía com `<transp><modFrete>9</modFrete></transp>` sem
   `veicTransp`, e o DANFE (`partials/danfe_corpo`) tinha "Placa do veículo"/"UF" fixos em "-".
-- Novo `VeiculoTransporteResolver` (placa da OS ou do veículo cadastrado; formato AAA9999/AAA9A99; só operação
-  dentro da UF do emitente — veicTransp interestadual dá rejeição 868; UF = a do emitente, o cadastro do
-  veículo não tem UF). `NotaFiscalData::veiculoPlaca/veiculoUf`; NFEPHP emite `veicTransp` (XML validado no
-  XSD); Spedy manda `transport.vehicle` (freightModality `free`); DANFE lê placa/UF do XML autorizado.
+- REGRA (padrão nacional, sem presumir dado): `veicTransp` só vai quando o veículo cadastrado tem
+  `veiculos.uf` (UF de emplacamento; migration `2026_11_16_000001`, NULL = **pendente** em todos os veículos
+  existentes), placa válida (AAA9999/AAA9A99) e operação dentro da UF do emitente (interestadual = rej. 868).
+  OS só com placa digitada (sem veículo cadastrado) ou veículo pendente: placa segue só no infCpl.
+  Sem fallback pra UF do emitente. UF editável no cadastro do cliente (ClienteForm, select "UF da placa",
+  mostra "Pendente") e exibida na tela do veículo. `NotaFiscalData::veiculoPlaca/veiculoUf`; NFEPHP emite
+  `veicTransp` (XML validado no XSD); Spedy manda `transport.vehicle`; DANFE lê placa/UF do XML autorizado.
 - Limites: Focus NFe sem campo confirmado → segue só com infCpl. NFC-e/NFS-e não alterados. Efeito de
   `veicTransp` com modFrete=9 na SEFAZ não confirmado em doc oficial → testar em homologação antes de produção.
 - Antes (mesmo dia): #22 resolvida — fix da corrida job×polling deployado (308aaae); #22 gravada AUTORIZADA

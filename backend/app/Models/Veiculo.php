@@ -22,7 +22,7 @@ class Veiculo extends Model
     public $timestamps = false;
 
     protected $fillable = [
-        'cliente_id', 'oficina_id', 'modelo', 'ano', 'placa', 'chassi', 'ativo', 'km_ultimo',
+        'cliente_id', 'oficina_id', 'modelo', 'ano', 'placa', 'chassi', 'uf', 'ativo', 'km_ultimo',
     ];
 
     protected $casts = [

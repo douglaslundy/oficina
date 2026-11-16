@@ -35,6 +35,7 @@ class ClienteResource extends JsonResource
                 'ano'    => $v->ano,
                 'placa'  => $v->placa,
                 'chassi' => $v->chassi,
+                'uf'     => $v->uf,
                 'ativo'  => $v->ativo,
             ])),
         ];

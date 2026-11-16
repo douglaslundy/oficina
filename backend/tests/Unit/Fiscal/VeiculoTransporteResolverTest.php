@@ -25,8 +25,15 @@ class VeiculoTransporteResolverTest extends TestCase
         return $c;
     }
 
-    private function nota(?string $placa, ?string $ufCliente = 'MG', ?Veiculo $veiculo = null): NotaFiscal
+    private function nota(?string $placa, ?string $ufCliente = 'MG', ?string $ufVeiculo = 'MG', bool $comVeiculo = true): NotaFiscal
     {
+        $veiculo = null;
+        if ($comVeiculo) {
+            $veiculo = new Veiculo();
+            $veiculo->placa = $placa;
+            $veiculo->uf = $ufVeiculo;
+        }
+
         $os = new OrdemServico();
         $os->veiculo_placa = $placa;
         $os->setRelation('veiculo', $veiculo);
@@ -41,17 +48,20 @@ class VeiculoTransporteResolverTest extends TestCase
         return $n;
     }
 
-    public function test_placa_da_os_vira_veiculo_com_uf_do_emitente(): void
+    public function test_placa_da_os_com_uf_do_veiculo(): void
     {
-        $this->assertSame(['placa' => 'ABC1D23', 'uf' => 'MG'], R::resolver($this->nota('abc-1d23'), $this->cfg()));
+        // UF vem do veículo (RJ), não do emitente (MG): operação interna de MG com placa emplacada no RJ.
+        $this->assertSame(['placa' => 'ABC1D23', 'uf' => 'RJ'], R::resolver($this->nota('abc-1d23', 'MG', 'rj'), $this->cfg()));
     }
 
-    public function test_cai_na_placa_do_veiculo_cadastrado(): void
+    public function test_veiculo_sem_uf_pendente_nao_vai_pro_xml(): void
     {
-        $v = new Veiculo();
-        $v->placa = 'BRA2E19';
+        $this->assertNull(R::resolver($this->nota('ABC1D23', 'MG', null), $this->cfg()));
+    }
 
-        $this->assertSame('BRA2E19', R::resolver($this->nota(null, 'MG', $v), $this->cfg())['placa']);
+    public function test_os_so_com_placa_digitada_sem_veiculo_cadastrado_nao_vai_pro_xml(): void
+    {
+        $this->assertNull(R::resolver($this->nota('ABC1D23', 'MG', null, false), $this->cfg()));
     }
 
     public function test_sem_os_ou_sem_placa_retorna_null(): void

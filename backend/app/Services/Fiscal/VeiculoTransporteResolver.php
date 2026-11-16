@@ -8,16 +8,17 @@ use App\Models\NotaFiscal;
 
 /**
  * Veículo da OS de origem para o grupo de transporte da NF-e
- * (`transp/veicTransp`: placa + UF) — o bloco "Placa do veículo" do DANFE.
- * Fonte única pros motores (NFEPHP, Spedy); a Focus não tem campo confirmado
- * na documentação e segue só com o infCpl.
+ * (`transp/veicTransp`: placa + UF de emplacamento) — o bloco "Placa do
+ * veículo" do DANFE. Fonte única pros motores (NFEPHP, Spedy); a Focus não
+ * tem campo confirmado na documentação e segue só com o infCpl.
  *
- * Só devolve algo quando é seguro pro XML:
+ * Só devolve algo quando é correto pro XML — nunca presume dado fiscal:
  *  - placa no padrão antigo (AAA9999) ou Mercosul (AAA9A99): o XSD só aceita isso;
+ *  - UF de emplacamento cadastrada no veículo (`veiculos.uf`). Veículo sem UF
+ *    (pendente) ou OS só com placa digitada, sem veículo cadastrado, não
+ *    leva o grupo — a placa segue só no infCpl;
  *  - operação dentro da UF do emitente: veicTransp em operação interestadual
- *    é rejeitado pela SEFAZ (rej. 868);
- *  - UF do emitente conhecida: o XSD exige a UF do veículo e o cadastro do
- *    veículo não guarda UF — usa-se a do emitente (limite conhecido).
+ *    é rejeitado pela SEFAZ (rej. 868).
  */
 final class VeiculoTransporteResolver
 {
@@ -29,18 +30,20 @@ final class VeiculoTransporteResolver
             return null;
         }
 
-        $placa = strtoupper((string) preg_replace('/[^A-Za-z0-9]/', '', (string) ($os->veiculo_placa ?: $os->veiculo?->placa)));
+        $veiculo = $os->veiculo;
+        $placa = strtoupper((string) preg_replace('/[^A-Za-z0-9]/', '', (string) ($os->veiculo_placa ?: $veiculo?->placa)));
         if (!preg_match('/^[A-Z]{3}[0-9][A-Z0-9][0-9]{2}$/', $placa)) {
             return null;
         }
 
-        $uf = strtoupper(trim((string) ($config?->uf ?? '')));
+        $uf = strtoupper(trim((string) ($veiculo?->uf ?? '')));
         if (strlen($uf) !== 2) {
             return null;
         }
 
-        $ufCliente = strtoupper(trim((string) ($nota->cliente?->uf ?? '')));
-        if ($ufCliente !== '' && $ufCliente !== $uf) {
+        $ufEmitente = strtoupper(trim((string) ($config?->uf ?? '')));
+        $ufCliente  = strtoupper(trim((string) ($nota->cliente?->uf ?? '')));
+        if ($ufEmitente === '' || ($ufCliente !== '' && $ufCliente !== $ufEmitente)) {
             return null;
         }
 

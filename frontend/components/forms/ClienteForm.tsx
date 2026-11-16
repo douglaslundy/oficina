@@ -46,6 +46,7 @@ interface VeiculoRow {
   ano: string
   placa: string
   chassi: string
+  uf: string
   _delete?: boolean
 }
 
@@ -85,7 +86,7 @@ export function ClienteForm({ initialData, onSuccess }: ClienteFormProps) {
     if (!isEdit || !initialData?.id) return
     api.get(`/clientes/${initialData.id}/veiculos`)
       .then(res => {
-        const list: Array<{ id: string; modelo: string; ano?: number | null; placa?: string | null; chassi?: string | null; ativo: boolean }> =
+        const list: Array<{ id: string; modelo: string; ano?: number | null; placa?: string | null; chassi?: string | null; uf?: string | null; ativo: boolean }> =
           Array.isArray(res.data) ? res.data : (res.data?.data ?? [])
         setVeiculos(list.map(v => ({
           id: v.id,
@@ -93,6 +94,7 @@ export function ClienteForm({ initialData, onSuccess }: ClienteFormProps) {
           ano: v.ano != null ? String(v.ano) : '',
           placa: v.placa ?? '',
           chassi: v.chassi ?? '',
+          uf: v.uf ?? '',
         })))
       })
       .catch(() => {})
@@ -122,7 +124,7 @@ export function ClienteForm({ initialData, onSuccess }: ClienteFormProps) {
   }, [cep, setValue])
 
   function addVeiculo() {
-    setVeiculos(prev => [...prev, { modelo: '', ano: '', placa: '', chassi: '' }])
+    setVeiculos(prev => [...prev, { modelo: '', ano: '', placa: '', chassi: '', uf: '' }])
   }
 
   function removeVeiculo(idx: number) {
@@ -156,6 +158,7 @@ export function ClienteForm({ initialData, onSuccess }: ClienteFormProps) {
         ano: v.ano ? parseInt(v.ano, 10) : undefined,
         placa: v.placa || undefined,
         chassi: v.chassi || undefined,
+        uf: v.uf || (v.id ? null : undefined),
       }
 
       if (v.id) {
@@ -282,7 +285,7 @@ export function ClienteForm({ initialData, onSuccess }: ClienteFormProps) {
             return (
               <div
                 key={idx}
-                style={{ display: 'grid', gridTemplateColumns: '2fr 80px 100px 1fr auto', gap: 8, marginBottom: 8, alignItems: 'end' }}
+                style={{ display: 'grid', gridTemplateColumns: '2fr 80px 100px 1fr 90px auto', gap: 8, marginBottom: 8, alignItems: 'end' }}
               >
                 <div>
                   {idx === 0 && <label style={labelStyle}>Modelo *</label>}
@@ -323,6 +326,18 @@ export function ClienteForm({ initialData, onSuccess }: ClienteFormProps) {
                     placeholder="Número do chassi"
                     style={inputStyle}
                   />
+                </div>
+                <div>
+                  {idx === 0 && <label style={labelStyle}>UF da placa</label>}
+                  <select
+                    value={v.uf}
+                    onChange={e => updateVeiculo(idx, 'uf', e.target.value)}
+                    title={v.uf ? 'UF de emplacamento' : 'Pendente: sem a UF a placa não vai no campo de transporte da NF-e'}
+                    style={{ ...inputStyle, ...(v.placa && !v.uf ? { borderColor: 'var(--accent)' } : {}) }}
+                  >
+                    <option value="">{v.placa ? 'Pendente' : '—'}</option>
+                    {['AC','AL','AP','AM','BA','CE','DF','ES','GO','MA','MT','MS','MG','PA','PB','PR','PE','PI','RJ','RN','RS','RO','RR','SC','SP','SE','TO'].map(u => <option key={u} value={u}>{u}</option>)}
+                  </select>
                 </div>
                 <button
                   type="button"
