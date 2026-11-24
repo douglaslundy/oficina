@@ -1,7 +1,7 @@
 # Progresso do Projeto
 
 ## Última atualização
-2026-11-24 — **Detalhar fatura + suíte 100% verde + venda #37. NÃO commitado/deployado ainda.**
+2026-11-24 — **Detalhar fatura + CPF/CNPJ/SKU únicos por oficina + suíte verde + venda #37. DEPLOYADO 2026-11-24 (commits 301a5f5, 41a0701, 6286c6d; backup `/opt/backups/pre-deploy-fatura-detalhe-unique-2026-11-24_08-18-11.dump`; migration 2026_11_24_000001 rodou; health 200; novos índices conferidos no banco).**
 - Minhas faturas: botão "Detalhar" em toda linha; modal "Detalhes da Fatura" mostra composição
   (mensalidade/anuidade do plano = valor − soma dos itens; cada excedente "NF-e nº X (série Y) emitida em
   dd/mm/aaaa" + texto explicando excedente). `GET /assinatura/faturas` passou a mandar `itens` (excedentes
