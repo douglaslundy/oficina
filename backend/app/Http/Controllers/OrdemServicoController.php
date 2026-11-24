@@ -129,6 +129,10 @@ class OrdemServicoController extends Controller
         if ($isVendaBalcao) {
             $validated['status'] = 'CONCLUIDA';
             $validated['tipo']   = 'VENDA_BALCAO';
+            $erro = $this->validarFechamentoVendaBalcao($validated);
+            if ($erro !== null) {
+                return response()->json(['message' => $erro, 'errors' => ['pagamentos' => [$erro]]], 422);
+            }
         }
 
         // O frontend pode enviar um id sintético "__proprio_<clienteId>" quando o
@@ -375,6 +379,49 @@ class OrdemServicoController extends Controller
      * Usado por addItem/updateItem/removeItem — nenhum deles altera o
      * desconto em si, só o subtotal que ele é aplicado sobre.
      */
+    /**
+     * Venda balcão nasce CONCLUIDA, então precisa fechar de verdade: ter item,
+     * valor > 0 depois do desconto e, se não for a prazo, pagamento cobrindo o
+     * total. Pagamento acima do total só é aceito como troco em dinheiro.
+     * Retorna a mensagem de erro, ou null se a venda pode ser finalizada.
+     */
+    private function validarFechamentoVendaBalcao(array $v): ?string
+    {
+        $itens = $v['itens'] ?? [];
+        if (count($itens) === 0) {
+            return 'Adicione pelo menos um produto à venda.';
+        }
+
+        $subtotal = round(array_sum(array_map(fn ($i) => $i['quantidade'] * $i['valor_unitario'], $itens)), 2);
+        $desconto = round((float) ($v['desconto'] ?? 0), 2);
+        $total    = round($subtotal - $desconto, 2);
+        if ($total <= 0) {
+            return 'O desconto não pode zerar a venda. O valor da venda deve ser maior que zero.';
+        }
+
+        if (!empty($v['venda_a_prazo'])) {
+            return null;
+        }
+
+        $pago     = round(array_sum(array_map(fn ($p) => (float) $p['valor'], $v['pagamentos'] ?? [])), 2);
+        $dinheiro = round(array_sum(array_map(
+            fn ($p) => $p['forma_pagamento'] === 'DINHEIRO' ? (float) $p['valor'] : 0,
+            $v['pagamentos'] ?? []
+        )), 2);
+        $fmt = fn (float $x) => 'R$ ' . number_format($x, 2, ',', '.');
+
+        if ($pago < $total) {
+            return "Pagamento insuficiente: a venda é de {$fmt($total)} e foi informado {$fmt($pago)}. "
+                . 'Informe o valor total ou aplique desconto.';
+        }
+        if (round($pago - $total, 2) > $dinheiro) {
+            return "Pagamento maior que a venda ({$fmt($pago)} para {$fmt($total)}). "
+                . 'Só é permitido valor a mais em dinheiro (troco).';
+        }
+
+        return null;
+    }
+
     private function recalcularTotalComDesconto(OrdemServico $os): void
     {
         $subtotal = (float) $os->itens()->sum(DB::raw('quantidade * valor_unitario'));

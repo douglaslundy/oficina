@@ -1,7 +1,18 @@
 # Progresso do Projeto
 
 ## Última atualização
-2026-11-16 (b) — **Placa do veículo da OS no bloco "Transportador" da NF-e. Commitado, NÃO deployado (requer migration).**
+2026-11-23 — **Venda balcão: total 0 na listagem + validação de pagamento. Em validação, NÃO commitado.**
+- Causa (dado real, stuntmotos): vendas 31, 36–41 com `desconto` = subtotal (ex.: #41 itens R$45, desconto R$45)
+  → `valor_total` 0. Operador digitava o pagamento no campo "Desconto (R$)" (fica logo acima dos pagamentos).
+  Backend clampava desconto no subtotal e aceitava. Também havia pagamento em dobro (#41: 2× R$45 débito).
+- REGRA nova (back `OrdemServicoController::validarFechamentoVendaBalcao` + front `pdv/page.tsx`): venda balcão
+  exige item, total pós-desconto > 0; se não for a prazo, soma dos pagamentos >= total; excedente só como
+  troco em DINHEIRO (excedente > parte em dinheiro = 422). A prazo dispensa pagamento.
+- Testes: `VendaBalcaoFechamentoTest` (8); `OrdemServicoKmAtualTest` venda passou a mandar pagamento.
+  Rodados contra Postgres descartável na VPS (container `pgtest-vendas`, 127.0.0.1:59432, via túnel SSH).
+- Dados antigos (vendas com total 0) NÃO corrigidos: precisa decisão do usuário.
+
+(anterior) 2026-11-16 (b) — **Placa do veículo da OS no bloco "Transportador" da NF-e. Commitado, NÃO deployado (requer migration).**
 - Causa: a placa só ia no infCpl (observações). O XML saía com `<transp><modFrete>9</modFrete></transp>` sem
   `veicTransp`, e o DANFE (`partials/danfe_corpo`) tinha "Placa do veículo"/"UF" fixos em "-".
 - REGRA (padrão nacional, sem presumir dado): `veicTransp` só vai quando o veículo cadastrado tem

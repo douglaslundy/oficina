@@ -108,6 +108,7 @@ class OrdemServicoKmAtualTest extends TestCase
             'itens'      => [[
                 'tipo' => 'SERVICO', 'descricao' => 'Mão de obra', 'quantidade' => 1, 'valor_unitario' => 100,
             ]],
+            'pagamentos' => [['forma_pagamento' => 'PIX', 'valor' => 100]],
         ]);
 
         $response->assertStatus(201);

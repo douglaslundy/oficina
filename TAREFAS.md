@@ -417,3 +417,10 @@ Sobras conhecidas (documentadas, não bloqueiam ninguém, ninguém pediu):
 - Bloco IBS/CBS na NF-e (obrigatório só em 2027), CSC pra QR Code da NFC-e (precisa credencial SEFAZ-MG — motor já implementado, só falta a oficina cadastrar o CSC real quando ativar NFC-e via NFePHP em produção).
 - GTIN/NCM por base pública (Cosmos Bluesoft) — pesquisado 2026-09-14, não implementado por decisão do usuário (limite de 25 consultas/dia grátis não escala multi-tenant).
 - `infRespTec` (Responsável Técnico, NT 2018.005) na NF-e/NFC-e — achado 2026-09-15 (Rodada 50), **decisão deliberada do usuário de NÃO implementar**: o sistema é considerado propriedade da própria oficina emissora, não de terceiro, então a condição que tornaria o grupo obrigatório não se aplica. Já é o comportamento atual (nunca chamado). Se um dia aparecer rejeição real "cStat=972", revisitar (opções: CNPJ da própria oficina, ou formalizar CNPJ da plataforma e usar o mesmo valor pra todas as oficinas).
+
+## PRÓXIMA (pedida 2026-11-23, após deploy da validação de venda balcão)
+Faturas SaaS: nota fiscal / serviço excedente do plano NÃO gera cobrança avulsa imediata. Tudo que exceder
+entra na próxima mensalidade (fatura única, paga só na totalidade). Na data de geração da fatura da oficina,
+agregar todas as notas/serviços excedentes pendentes; o que for gerado depois vai para a fatura seguinte.
+Depois: na oficina stuntmotos, unificar a fatura de mensalidade aberta hoje com as faturas avulsas de notas
+abertas (hoje 3 faturas pendentes: 1 mensalidade + 1 por nota).

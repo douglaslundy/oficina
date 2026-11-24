@@ -176,10 +176,23 @@ export default function PdvPage() {
       showToast('Adicione pelo menos um produto.', 'danger')
       return
     }
+    if (totalComDesconto <= 0) {
+      showToast('O desconto não pode zerar a venda. O valor da venda deve ser maior que zero.', 'danger')
+      return
+    }
     if (!vendaAPrazo) {
-      const validos = pagamentos.filter(p => parseFloat(p.valor) > 0)
-      if (validos.length === 0) {
-        showToast('Informe pelo menos um valor de pagamento.', 'danger')
+      // Centavos inteiros: evita ruído de ponto flutuante na comparação.
+      const pagoC = Math.round(totalPago * 100)
+      const totalC = Math.round(totalComDesconto * 100)
+      const dinheiroC = Math.round(pagamentos
+        .filter(p => p.forma_pagamento === 'DINHEIRO')
+        .reduce((s, p) => s + (parseFloat(p.valor) || 0), 0) * 100)
+      if (pagoC < totalC) {
+        showToast(`Pagamento insuficiente: falta ${formatarMoeda((totalC - pagoC) / 100)}. Informe o valor total ou aplique desconto.`, 'danger')
+        return
+      }
+      if (pagoC - totalC > dinheiroC) {
+        showToast('Pagamento maior que a venda. Só é permitido valor a mais em dinheiro (troco).', 'danger')
         return
       }
     }
@@ -424,8 +437,13 @@ export default function PdvPage() {
                 placeholder="0,00"
                 value={desconto}
                 onChange={e => setDesconto(e.target.value)}
-                style={inputStyle}
+                style={{ ...inputStyle, borderColor: total > 0 && descontoNum >= total ? 'var(--danger)' : undefined }}
               />
+              {total > 0 && descontoNum >= total && (
+                <p style={{ fontSize: 12, color: 'var(--danger)', marginTop: 6 }}>
+                  Desconto não pode ser igual ou maior que o total. O valor pago vai em &quot;Pagamento&quot; abaixo.
+                </p>
+              )}
             </div>
 
             {vendaAPrazo ? (
