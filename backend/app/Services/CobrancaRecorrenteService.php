@@ -6,6 +6,7 @@ namespace App\Services;
 use App\Models\Cobranca;
 use App\Models\Oficina;
 use App\Models\SaasConfig;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Str;
 
@@ -172,6 +173,12 @@ class CobrancaRecorrenteService
             ? round((float) $oficina->plano->preco_mensal * 12 * (1 - (float) $cfg->desconto_anual_pct / 100), 2)
             : (float) $oficina->plano->preco_mensal;
 
+        // Excedentes gerados até agora entram nesta fatura (fatura única, paga
+        // na totalidade); os gerados depois ficam para a próxima.
+        $excedentes = Cobranca::excedentesAFaturar($oficina->id)->get(['id', 'valor']);
+        $valorExcedentes = round((float) $excedentes->sum('valor'), 2);
+        $valor = round($valor + $valorExcedentes, 2);
+
         $cobrancaId = (string) Str::uuid();
         $vencimento = $oficina->proximo_vencimento->toDateString();
 
@@ -191,22 +198,81 @@ class CobrancaRecorrenteService
         $descricao = $oficina->ciclo_cobranca === 'ANUAL'
             ? sprintf('Assinatura anual %d–%d', $oficina->proximo_vencimento->year, $oficina->proximo_vencimento->year + 1)
             : sprintf('Mensalidade %s/%d', self::MESES_PT[$oficina->proximo_vencimento->month], $oficina->proximo_vencimento->year);
+        $descricao .= self::sufixoExcedentes($excedentes->count(), $valorExcedentes);
 
-        Cobranca::create([
-            'id'               => $cobrancaId,
-            'oficina_id'       => $oficina->id,
-            'tipo'             => 'ASSINATURA',
-            'descricao'        => $descricao,
-            'mes_referencia'   => $oficina->proximo_vencimento->copy()->startOfMonth(),
-            'valor'            => $valor,
-            'status'           => 'PENDENTE',
-            'gateway'          => $gateway,
-            'asaas_payment_id' => $gateway === 'ASAAS' ? ($payment['id'] ?? null) : null,
-            'mp_payment_id'    => $gateway === 'MERCADOPAGO' ? ($payment['id'] ?? null) : null,
-            'vencimento'       => $vencimento,
-            'link_pagamento'   => $linkPagamento,
-        ]);
+        DB::transaction(function () use ($cobrancaId, $oficina, $descricao, $valor, $gateway, $payment, $vencimento, $linkPagamento, $excedentes) {
+            Cobranca::create([
+                'id'               => $cobrancaId,
+                'oficina_id'       => $oficina->id,
+                'tipo'             => 'ASSINATURA',
+                'descricao'        => $descricao,
+                'mes_referencia'   => $oficina->proximo_vencimento->copy()->startOfMonth(),
+                'valor'            => $valor,
+                'status'           => 'PENDENTE',
+                'gateway'          => $gateway,
+                'asaas_payment_id' => $gateway === 'ASAAS' ? ($payment['id'] ?? null) : null,
+                'mp_payment_id'    => $gateway === 'MERCADOPAGO' ? ($payment['id'] ?? null) : null,
+                'vencimento'       => $vencimento,
+                'link_pagamento'   => $linkPagamento,
+            ]);
+            Cobranca::whereIn('id', $excedentes->pluck('id'))->update(['fatura_id' => $cobrancaId, 'status' => 'FATURADA']);
+        });
 
         return true;
+    }
+
+    public static function sufixoExcedentes(int $qtd, float $valor): string
+    {
+        if ($qtd === 0) {
+            return '';
+        }
+        return sprintf(' + %d excedente%s (R$ %s)', $qtd, $qtd > 1 ? 's' : '', number_format($valor, 2, ',', '.'));
+    }
+
+    /**
+     * Inclui numa fatura de assinatura já gerada (e ainda em aberto) os
+     * excedentes a faturar: soma no valor e recria a cobrança no gateway com o
+     * valor novo, invalidando o link antigo. Usado para corrigir faturas
+     * geradas antes da regra de fatura única.
+     */
+    public function agruparExcedentesNaFatura(Cobranca $fatura): int
+    {
+        if ($fatura->tipo !== 'ASSINATURA' || $fatura->status !== 'PENDENTE') {
+            return 0;
+        }
+        $oficina = Oficina::findOrFail($fatura->oficina_id);
+        $excedentes = Cobranca::excedentesAFaturar($oficina->id)->get(['id', 'valor']);
+        if ($excedentes->isEmpty()) {
+            return 0;
+        }
+
+        $jaIncluidos = $fatura->itens()->get(['valor']);
+        $valorItens = round((float) $jaIncluidos->sum('valor') + (float) $excedentes->sum('valor'), 2);
+        $valor = round((float) $fatura->valor + (float) $excedentes->sum('valor'), 2);
+        $vencimento = $fatura->vencimento->toDateString();
+
+        if ($fatura->gateway === 'MERCADOPAGO') {
+            $payment = $this->mercadoPago->criarCobrancaAvulsa((string) $oficina->mp_customer_id, $valor, $vencimento, $fatura->id);
+            if ($fatura->mp_payment_id) {
+                $this->mercadoPago->expirarPreferencia($fatura->mp_payment_id);
+            }
+            $gw = ['mp_payment_id' => $payment['id'] ?? null, 'link_pagamento' => $payment['init_point'] ?? null];
+        } else {
+            $payment = $this->asaas->criarCobrancaAvulsa((string) $oficina->asaas_customer_id, $valor, $vencimento, $fatura->id);
+            if ($fatura->asaas_payment_id) {
+                $this->asaas->cancelarPagamento($fatura->asaas_payment_id);
+            }
+            $gw = ['asaas_payment_id' => $payment['id'] ?? null, 'link_pagamento' => $payment['invoiceUrl'] ?? null];
+        }
+
+        $descricao = preg_replace('/ \+ \d+ excedentes? \(R\$ [\d.,]+\)$/u', '', (string) $fatura->descricao)
+            . self::sufixoExcedentes($jaIncluidos->count() + $excedentes->count(), $valorItens);
+
+        DB::transaction(function () use ($fatura, $gw, $valor, $descricao, $excedentes) {
+            $fatura->update($gw + ['valor' => $valor, 'descricao' => $descricao]);
+            Cobranca::whereIn('id', $excedentes->pluck('id'))->update(['fatura_id' => $fatura->id, 'status' => 'FATURADA']);
+        });
+
+        return $excedentes->count();
     }
 }

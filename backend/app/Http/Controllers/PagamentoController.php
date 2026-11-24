@@ -80,6 +80,10 @@ class PagamentoController extends Controller
             return response()->json(['message' => 'Esta fatura não está mais em aberto.'], 422);
         }
 
+        if (in_array($cobranca->tipo, Cobranca::TIPOS_EXCEDENTE, true)) {
+            return response()->json(['message' => 'Excedentes são cobrados na próxima fatura, não separadamente.'], 422);
+        }
+
         if ($cobranca->gateway !== 'MERCADOPAGO') {
             return response()->json(['message' => 'Esta fatura não é do Mercado Pago.'], 422);
         }

@@ -12,7 +12,7 @@ interface Fatura {
   tipo_label: string
   descricao: string
   valor: string
-  status: 'PENDENTE' | 'VENCIDA' | 'PAGA' | 'CANCELADA'
+  status: 'PENDENTE' | 'VENCIDA' | 'PAGA' | 'CANCELADA' | 'A_FATURAR'
   vencimento: string | null
   pago_em: string | null
   link_pagamento: string | null

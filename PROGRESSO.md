@@ -1,7 +1,7 @@
 # Progresso do Projeto
 
 ## Última atualização
-2026-11-23 — **Venda balcão: total 0 na listagem + validação de pagamento. Em validação, NÃO commitado.**
+2026-11-23 — **Venda balcão: total 0 na listagem + validação de pagamento. DEPLOYADO 2026-11-23 (commit fe454a7, backup `/opt/backups/pre-deploy-venda-pagamento-2026-11-23_22-16-35.dump`, sem migration, health 200).**
 - Causa (dado real, stuntmotos): vendas 31, 36–41 com `desconto` = subtotal (ex.: #41 itens R$45, desconto R$45)
   → `valor_total` 0. Operador digitava o pagamento no campo "Desconto (R$)" (fica logo acima dos pagamentos).
   Backend clampava desconto no subtotal e aceitava. Também havia pagamento em dobro (#41: 2× R$45 débito).
@@ -11,6 +11,20 @@
 - Testes: `VendaBalcaoFechamentoTest` (8); `OrdemServicoKmAtualTest` venda passou a mandar pagamento.
   Rodados contra Postgres descartável na VPS (container `pgtest-vendas`, 127.0.0.1:59432, via túnel SSH).
 - Dados antigos (vendas com total 0) NÃO corrigidos: precisa decisão do usuário.
+- Armadilha: `ssh ... 'pgrep -f "bash deploy-vps.sh"'` casa com o próprio comando; e `timeout` local mata
+  o ssh mas o deploy segue na VPS. Conferir pelo código dentro do container.
+
+2026-11-23 (b) — **Fatura única: excedentes entram na mensalidade. Em validação, NÃO commitado.**
+- Antes: cada NOTA_EXCEDENTE virava cobrança própria (stuntmotos: Dez/2026 R$299 + 2× R$4,50 pendentes).
+- Agora: `cobrancas.fatura_id` (migration `2026_11_23_000001`). `CobrancaRecorrenteService::criarCobranca`
+  soma `Cobranca::excedentesAFaturar()` (PENDENTE/VENCIDA sem fatura) no valor e marca os itens FATURADA
+  com `fatura_id`; excedente criado depois fica para a próxima. Model `Cobranca` (evento updated/deleting):
+  fatura PAGA quita itens; CANCELADA/ESTORNADA/apagada devolve itens para a faturar.
+  Minhas faturas: itens faturados somem da lista; excedente a faturar aparece "Próxima fatura" sem pagar;
+  `PagamentoController` recusa pagar excedente avulso.
+- Corrigir fatura já aberta: `php artisan cobrancas:agrupar-excedentes {slug} [--dry-run]` (recria cobrança
+  no gateway com valor total; MP: expira preference antiga via `MercadoPagoService::expirarPreferencia`).
+- Testes: `Saas/FaturaUnicaExcedentesTest` (5) ok.
 
 (anterior) 2026-11-16 (b) — **Placa do veículo da OS no bloco "Transportador" da NF-e. Commitado, NÃO deployado (requer migration).**
 - Causa: a placa só ia no infCpl (observações). O XML saía com `<transp><modFrete>9</modFrete></transp>` sem

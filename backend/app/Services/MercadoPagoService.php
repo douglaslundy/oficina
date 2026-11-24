@@ -144,6 +144,16 @@ class MercadoPagoService
         ];
     }
 
+    /** Expira um link de pagamento (preference) para não poder mais ser pago. */
+    public function expirarPreferencia(string $preferenceId): void
+    {
+        $response = $this->http()->put('/checkout/preferences/' . $preferenceId, [
+            'expires'            => true,
+            'expiration_date_to' => now()->subMinute()->format('Y-m-d\TH:i:s.000P'),
+        ]);
+        $this->throwIfFailed($response, 'expirar link de pagamento');
+    }
+
     /**
      * Checkout transparente — cria o pagamento diretamente via API (sem
      * redirecionar para uma página do Mercado Pago), a partir do formData

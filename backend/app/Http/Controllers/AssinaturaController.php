@@ -87,7 +87,9 @@ class AssinaturaController extends Controller
 
         $this->conciliarEmAberto($oficina);
 
+        // Excedentes já incluídos numa fatura aparecem só como parte dela.
         $cobrancas = Cobranca::where('oficina_id', $oficina->id)
+            ->whereNull('fatura_id')
             ->orderByDesc('vencimento')
             ->get();
 
@@ -98,8 +100,10 @@ class AssinaturaController extends Controller
                 'tipo_label'     => $this->tipoLabel($c),
                 'descricao'      => $c->descricao ?: ($c->tipo === 'ASSINATURA' ? 'Mensalidade/Anuidade' : 'Cobrança avulsa'),
                 'valor'          => number_format((float) $c->valor, 2, '.', ''),
-                'status'         => $c->status,
-                'vencimento'     => $c->vencimento?->toDateString(),
+                // Excedente ainda não faturado não se paga sozinho: entra na próxima fatura.
+                'status'         => in_array($c->tipo, Cobranca::TIPOS_EXCEDENTE, true) && in_array($c->status, ['PENDENTE', 'VENCIDA'], true)
+                    ? 'A_FATURAR' : $c->status,
+                'vencimento'     => in_array($c->tipo, Cobranca::TIPOS_EXCEDENTE, true) ? null : $c->vencimento?->toDateString(),
                 'pago_em'        => $c->pago_em?->toIso8601String(),
                 'link_pagamento' => $c->link_pagamento,
                 'gateway'        => $c->gateway,
@@ -117,6 +121,9 @@ class AssinaturaController extends Controller
      */
     private function tipoLabel(Cobranca $c): string
     {
+        if (in_array($c->tipo, Cobranca::TIPOS_EXCEDENTE, true)) {
+            return 'Excedente';
+        }
         if ($c->tipo !== 'ASSINATURA') {
             return 'Avulsa';
         }
