@@ -97,6 +97,11 @@ class Cobranca extends Model
         return $this->hasMany(Cobranca::class, 'fatura_id');
     }
 
+    public function notaFiscal(): BelongsTo
+    {
+        return $this->belongsTo(NotaFiscal::class, 'nota_fiscal_id');
+    }
+
     public function oficina(): BelongsTo
     {
         return $this->belongsTo(Oficina::class);

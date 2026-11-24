@@ -4,6 +4,10 @@ declare(strict_types=1);
 namespace Tests\Feature\Saas;
 
 use App\Models\Cobranca;
+use App\Models\NotaFiscal;
+use App\Models\Usuario;
+use App\Tenancy\TenancyContext;
+use Illuminate\Support\Facades\Hash;
 use App\Models\Oficina;
 use App\Models\Plano;
 use App\Models\SaasConfig;
@@ -123,5 +127,47 @@ class FaturaUnicaExcedentesTest extends TestCase
         $this->assertSame('pay_2', $fatura->asaas_payment_id);
         $this->assertSame('https://x/2', $fatura->link_pagamento);
         $this->assertSame(0, Cobranca::excedentesAFaturar($o->id)->count());
+    }
+
+    public function test_lista_de_faturas_detalha_excedentes_com_a_nota_de_origem(): void
+    {
+        $o = $this->oficina();
+        TenancyContext::set($o->id, $o->slug);
+        $usuario = Usuario::create([
+            'nome' => 'Fulano', 'email' => 'fulano@' . uniqid() . '.com', 'cpf' => '52998224725',
+            'role' => 'ADMIN', 'status' => 'ATIVO', 'senha_hash' => Hash::make('senha123'),
+        ]);
+        $nota = NotaFiscal::create([
+            'numero' => 21, 'serie' => '1', 'modelo' => 'NF-e', 'status' => 'AUTORIZADA',
+            'emitido_em' => '2026-11-10 14:30:00',
+        ]);
+        TenancyContext::clear();
+
+        $fatura = Cobranca::create([
+            'oficina_id' => $o->id, 'tipo' => 'ASSINATURA', 'valor' => 308, 'status' => 'PENDENTE',
+            'descricao' => 'Mensalidade + 2 excedentes', 'vencimento' => now()->addDays(3)->toDateString(),
+        ]);
+        foreach ([$nota->id, null] as $notaId) {
+            Cobranca::create([
+                'oficina_id' => $o->id, 'tipo' => 'NOTA_EXCEDENTE', 'valor' => 4.5, 'status' => 'FATURADA',
+                'fatura_id' => $fatura->id, 'nota_fiscal_id' => $notaId, 'descricao' => 'Nota fiscal excedente',
+                'vencimento' => now()->endOfMonth()->toDateString(),
+            ]);
+        }
+        $avulso = $this->excedente($o);
+
+        $res = $this->withHeaders(['X-Tenant' => $o->slug])->actingAs($usuario)
+            ->getJson('/api/assinatura/faturas')->assertOk();
+
+        $linhas = collect($res->json('data'))->keyBy('id');
+        $this->assertCount(2, $linhas); // itens faturados não aparecem soltos
+        $itens = collect($linhas[$fatura->id]['itens']);
+        $this->assertCount(2, $itens);
+        $comNota = $itens->firstWhere('nota_numero', 21);
+        $this->assertSame('NF-e', $comNota['nota_modelo']);
+        $this->assertSame('4.50', $comNota['valor']);
+        $this->assertStringStartsWith('2026-11-10', $comNota['nota_emitida_em']);
+        $this->assertNull($itens->firstWhere('nota_numero', null)['nota_modelo']);
+        $this->assertCount(1, $linhas[$avulso->id]['itens']); // excedente a faturar detalha a si mesmo
     }
 }

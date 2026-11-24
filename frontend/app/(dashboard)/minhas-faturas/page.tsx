@@ -6,6 +6,16 @@ import { formatarMoeda, formatarDataUTC, formatarDataHora } from '@/lib/formatte
 import { StatusPill } from '@/components/ui/StatusPill'
 import { PagamentoTransparenteModal } from '@/components/PagamentoTransparenteModal'
 
+interface ItemFatura {
+  id: string
+  descricao: string | null
+  valor: string
+  nota_numero: number | null
+  nota_serie: string | null
+  nota_modelo: string | null
+  nota_emitida_em: string | null
+}
+
 interface Fatura {
   id: string
   tipo: 'ASSINATURA' | 'AVULSA'
@@ -18,6 +28,8 @@ interface Fatura {
   link_pagamento: string | null
   gateway: 'ASAAS' | 'MERCADOPAGO' | null
   id_pagamento: string | null
+  mes_referencia: string | null
+  itens: ItemFatura[]
 }
 
 function Sk({ w, h }: { w?: string | number; h?: number }) {
@@ -204,17 +216,17 @@ export default function MinhasFaturasPage() {
                                 Pagar
                               </a>
                             )}
-                            {f.status === 'PAGA' && (
-                              <button
-                                onClick={() => setDetalhe(f)}
-                                style={{ padding: '5px 14px', borderRadius: 6, fontSize: 12, fontWeight: 700, background: 'none', border: '1px solid var(--success)', color: 'var(--success)', cursor: 'pointer' }}
-                              >
-                                Ver Detalhes
-                              </button>
-                            )}
-                            {f.status === 'CANCELADA' && (
-                              <span style={{ fontSize: 12, color: 'var(--muted)' }}>—</span>
-                            )}
+                            <button
+                              onClick={() => setDetalhe(f)}
+                              style={{
+                                marginLeft: f.status === 'PENDENTE' || f.status === 'VENCIDA' ? 8 : 0,
+                                padding: '5px 14px', borderRadius: 6, fontSize: 12, fontWeight: 700, background: 'none', cursor: 'pointer',
+                                border: `1px solid ${f.status === 'PAGA' ? 'var(--success)' : 'var(--border)'}`,
+                                color: f.status === 'PAGA' ? 'var(--success)' : 'var(--text)',
+                              }}
+                            >
+                              Detalhar
+                            </button>
                           </td>
                         </tr>
                       )
@@ -233,10 +245,10 @@ export default function MinhasFaturasPage() {
           onClick={e => { if (e.target === e.currentTarget) setDetalhe(null) }}
           style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,.6)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000, padding: 20 }}
         >
-          <div style={{ background: 'var(--card)', border: '1px solid var(--border)', borderRadius: 12, padding: 28, width: '100%', maxWidth: 420 }}>
+          <div style={{ background: 'var(--card)', border: '1px solid var(--border)', borderRadius: 12, padding: 28, width: '100%', maxWidth: 520, maxHeight: '90vh', overflowY: 'auto' }}>
             <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 20 }}>
               <h3 className="font-display" style={{ fontSize: 18, fontWeight: 800, color: 'var(--text)', margin: 0 }}>
-                Detalhes do Pagamento
+                Detalhes da Fatura
               </h3>
               <button onClick={() => setDetalhe(null)} style={{ background: 'none', border: 'none', color: 'var(--muted)', fontSize: 20, cursor: 'pointer', padding: 4, lineHeight: 1 }}>
                 ✕
@@ -249,9 +261,11 @@ export default function MinhasFaturasPage() {
                 ['Tipo', detalhe.tipo_label],
                 ['Valor', formatarMoeda(Number(detalhe.valor))],
                 ['Vencimento', formatarDataUTC(detalhe.vencimento)],
-                ['Pago em', formatarDataHora(detalhe.pago_em)],
-                ['Gateway', detalhe.gateway === 'MERCADOPAGO' ? 'Mercado Pago' : detalhe.gateway === 'ASAAS' ? 'Asaas' : '—'],
-                ['ID do Pagamento', detalhe.id_pagamento ?? '—'],
+                ...(detalhe.status === 'PAGA' ? [
+                  ['Pago em', formatarDataHora(detalhe.pago_em)],
+                  ['Gateway', detalhe.gateway === 'MERCADOPAGO' ? 'Mercado Pago' : detalhe.gateway === 'ASAAS' ? 'Asaas' : '—'],
+                  ['ID do Pagamento', detalhe.id_pagamento ?? '—'],
+                ] : []),
               ].map(([label, value]) => (
                 <div key={label} style={{ display: 'flex', justifyContent: 'space-between', padding: '8px 0', borderBottom: '1px solid var(--border)' }}>
                   <span style={{ fontSize: 13, color: 'var(--muted)' }}>{label}</span>
@@ -261,6 +275,8 @@ export default function MinhasFaturasPage() {
                 </div>
               ))}
             </div>
+
+            <ComposicaoFatura fatura={detalhe} />
 
             <button
               onClick={() => setDetalhe(null)}
@@ -282,5 +298,47 @@ export default function MinhasFaturasPage() {
         />
       )}
     </>
+  )
+}
+
+function descricaoNota(i: ItemFatura): string {
+  if (i.nota_numero == null) return i.descricao ?? 'Nota fiscal excedente'
+  const modelo = i.nota_modelo ?? 'Nota fiscal'
+  const serie = i.nota_serie ? ` (série ${i.nota_serie})` : ''
+  const data = i.nota_emitida_em ? ` emitida em ${formatarDataHora(i.nota_emitida_em)}` : ''
+  return `${modelo} nº ${i.nota_numero}${serie}${data}`
+}
+
+/** O que compõe o valor: mensalidade/anuidade do plano + notas emitidas acima do limite do plano. */
+function ComposicaoFatura({ fatura }: { fatura: Fatura }) {
+  const itens = fatura.itens ?? []
+  if (itens.length === 0) return null
+  const somaItens = itens.reduce((s, i) => s + Number(i.valor), 0)
+  const base = Number(fatura.valor) - somaItens
+  const linha: React.CSSProperties = { display: 'flex', justifyContent: 'space-between', gap: 12, padding: '8px 0', borderBottom: '1px solid var(--border)', fontSize: 13 }
+  const mono: React.CSSProperties = { fontFamily: "'JetBrains Mono', monospace", whiteSpace: 'nowrap' }
+
+  return (
+    <div style={{ marginTop: 18 }}>
+      <p style={{ ...labelStyle, margin: '0 0 6px' }}>Composição</p>
+      {fatura.tipo === 'ASSINATURA' && base > 0.004 && (
+        <div style={linha}>
+          <span>{fatura.tipo_label} do plano</span>
+          <span style={mono}>{formatarMoeda(base)}</span>
+        </div>
+      )}
+      {itens.map(i => (
+        <div key={i.id} style={linha}>
+          <span>
+            Nota excedente — {descricaoNota(i)}
+          </span>
+          <span style={mono}>{formatarMoeda(Number(i.valor))}</span>
+        </div>
+      ))}
+      <p style={{ fontSize: 12, color: 'var(--muted)', margin: '10px 0 0', lineHeight: 1.5 }}>
+        Excedente é a nota fiscal autorizada depois que a oficina já atingiu o limite de notas do mês incluído no plano.
+        Cada nota acima do limite é cobrada à parte e entra na próxima fatura da mensalidade.
+      </p>
+    </div>
   )
 }

@@ -90,6 +90,7 @@ class AssinaturaController extends Controller
         // Excedentes já incluídos numa fatura aparecem só como parte dela.
         $cobrancas = Cobranca::where('oficina_id', $oficina->id)
             ->whereNull('fatura_id')
+            ->with(['notaFiscal', 'itens.notaFiscal'])
             ->orderByDesc('vencimento')
             ->get();
 
@@ -108,8 +109,27 @@ class AssinaturaController extends Controller
                 'link_pagamento' => $c->link_pagamento,
                 'gateway'        => $c->gateway,
                 'id_pagamento'   => $c->asaas_payment_id ?? $c->mp_payment_id,
+                'mes_referencia' => $c->mes_referencia?->toDateString(),
+                // Composição da fatura: a própria cobrança (excedente avulso) ou os excedentes agrupados nela.
+                'itens'          => (in_array($c->tipo, Cobranca::TIPOS_EXCEDENTE, true) ? collect([$c]) : $c->itens)
+                    ->map(fn (Cobranca $i) => $this->itemFatura($i))->values(),
             ])->values(),
         ]);
+    }
+
+    private function itemFatura(Cobranca $i): array
+    {
+        $nota = $i->notaFiscal;
+
+        return [
+            'id'                 => $i->id,
+            'descricao'          => $i->descricao,
+            'valor'              => number_format((float) $i->valor, 2, '.', ''),
+            'nota_numero'        => $nota?->numero,
+            'nota_serie'         => $nota?->serie,
+            'nota_modelo'        => $nota?->modelo,
+            'nota_emitida_em'    => $nota?->emitido_em?->toIso8601String(),
+        ];
     }
 
     /**
