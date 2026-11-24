@@ -32,7 +32,7 @@ class ConfiguracaoNfceTest extends TestCase
     {
         $config = Configuracao::create(['razao_social' => 'Oficina X']);
 
-        $this->assertSame('NF-e', $config->modelo_venda_padrao);
+        $this->assertSame('NF-e', $config->refresh()->modelo_venda_padrao);
     }
 
     public function test_show_nunca_expoe_csc_em_texto_puro(): void

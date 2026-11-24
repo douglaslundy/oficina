@@ -81,9 +81,9 @@ class LoginTest extends TestCase
 
         $cookies = collect($response->headers->getCookies())->keyBy(fn ($c) => $c->getName());
         $this->assertTrue($cookies->has('oficina_logado'), 'Logout precisa expirar o cookie de presença.');
-        $this->assertLessThanOrEqual(0, $cookies->get('oficina_logado')->getExpiresTime());
+        $this->assertLessThan(time(), $cookies->get('oficina_logado')->getExpiresTime());
         $this->assertTrue($cookies->has('oficina_role'), 'Logout precisa expirar o cookie de role.');
-        $this->assertLessThanOrEqual(0, $cookies->get('oficina_role')->getExpiresTime());
+        $this->assertLessThan(time(), $cookies->get('oficina_role')->getExpiresTime());
     }
 
     public function test_login_sem_origem_reconhecida_nao_ativa_sessao_stateful(): void
@@ -105,7 +105,7 @@ class LoginTest extends TestCase
     {
         $this->criarUsuario();
 
-        $response = $this->postJson('/api/auth/login', [
+        $response = $this->withHeader('referer', 'http://localhost')->postJson('/api/auth/login', [
             'email' => 'admin@mecanicapro.com',
             'senha' => 'senhaerrada',
         ]);
@@ -118,7 +118,7 @@ class LoginTest extends TestCase
     {
         $this->criarUsuario(['email' => 'inativo@test.com', 'cpf' => '11111111111', 'status' => 'INATIVO']);
 
-        $response = $this->postJson('/api/auth/login', [
+        $response = $this->withHeader('referer', 'http://localhost')->postJson('/api/auth/login', [
             'email' => 'inativo@test.com',
             'senha' => 'admin123',
         ]);
@@ -140,7 +140,7 @@ class LoginTest extends TestCase
         $oficina = $this->criarOficina('INADIMPLENTE');
         $this->criarUsuario(['email' => 'inadimplente@test.com', 'cpf' => '22222222222', 'oficina_id' => $oficina->id]);
 
-        $response = $this->postJson('/api/auth/login', [
+        $response = $this->withHeader('referer', 'http://localhost')->postJson('/api/auth/login', [
             'email' => 'inadimplente@test.com',
             'senha' => 'admin123',
         ]);
@@ -153,7 +153,7 @@ class LoginTest extends TestCase
         $oficina = $this->criarOficina('SUSPENSA');
         $this->criarUsuario(['email' => 'suspensa@test.com', 'cpf' => '33333333333', 'oficina_id' => $oficina->id]);
 
-        $response = $this->postJson('/api/auth/login', [
+        $response = $this->withHeader('referer', 'http://localhost')->postJson('/api/auth/login', [
             'email' => 'suspensa@test.com',
             'senha' => 'admin123',
         ]);

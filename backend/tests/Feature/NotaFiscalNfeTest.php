@@ -153,7 +153,7 @@ class NotaFiscalNfeTest extends TestCase
         // não os encontraria se criados fora de contexto.
         \App\Tenancy\TenancyContext::set($oficina->id, $oficina->slug);
         $this->criarConfiguracao(['uf' => 'SP']);
-        $cliente = $this->criarCliente(['uf' => 'SP']);
+        $cliente = $this->criarCliente(['uf' => 'SP', 'inscricao_estadual' => '110042490114']); // PJ precisa de IE (ou isento)
         $produto = $this->criarProduto();
         \App\Tenancy\TenancyContext::clear();
 

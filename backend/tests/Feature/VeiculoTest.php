@@ -107,6 +107,7 @@ class VeiculoTest extends TestCase
         $token2 = $this->loginAdmin($oficina2->id, 'admin2@test.com', '22233344409');
         $cliente2 = $this->criarCliente($oficina2->id, 'Maria Souza', '33333333333');
 
+        \Illuminate\Support\Facades\Auth::forgetGuards(); // troca de usuário no mesmo teste
         $response = $this->withToken($token2)->withHeaders(['X-Tenant' => $oficina2->slug])
             ->postJson("/api/clientes/{$cliente2->id}/veiculos", [
                 'modelo' => 'Toyota Corolla', 'placa' => 'ABC1234',
@@ -280,6 +281,7 @@ class VeiculoTest extends TestCase
         $oficinaB = $this->criarOficina('oficina-b', 'Oficina B');
         $tokenB = $this->loginAdmin($oficinaB->id, 'adminB@test.com', '22222222222');
 
+        \Illuminate\Support\Facades\Auth::forgetGuards(); // troca de usuário no mesmo teste
         // show() não deve encontrar veículo de outra oficina.
         $this->withToken($tokenB)->withHeaders(['X-Tenant' => $oficinaB->slug])
             ->getJson("/api/veiculos/{$veiculoId}")

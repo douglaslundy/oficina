@@ -118,10 +118,12 @@ class EmissaoOrquestradorService
             }
         }
 
-        // "Nada a fazer" (tudo que a OS tem já está satisfeito, ou a OS não
-        // tem peça/serviço nenhum) é diferente de "bloqueado" — só lança
-        // exceção se havia algo pendente de gerar e nada saiu.
-        $tudoJaSatisfeito = ($pecas->isEmpty() || $nfeJaSatisfeita) && ($servicos->isEmpty() || $nfseJaSatisfeita);
+        // "Nada a fazer" (tudo que a OS tem já está satisfeito) é diferente de
+        // "bloqueado" — só lança exceção se havia algo pendente de gerar e
+        // nada saiu. OS sem peça/serviço emitível é bloqueio, não sucesso.
+        $temEmitivel      = $pecas->isNotEmpty() || $servicos->isNotEmpty();
+        $tudoJaSatisfeito = $temEmitivel
+            && ($pecas->isEmpty() || $nfeJaSatisfeita) && ($servicos->isEmpty() || $nfseJaSatisfeita);
 
         if ($nfeId === null && $nfseId === null && !$tudoJaSatisfeito) {
             throw new EmissaoBloqueadaException(

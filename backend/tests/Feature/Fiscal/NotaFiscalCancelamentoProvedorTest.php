@@ -135,13 +135,17 @@ class NotaFiscalCancelamentoProvedorTest extends TestCase
     public function test_cancelamento_de_nfe_spedy_usa_o_recurso_product_invoices(): void
     {
         [$token, $oficina, $nota] = $this->montarCenario('NF-e', 'SPEDY');
-        Http::fake(['*/product-invoices/nf-abc' => Http::response([], 200)]);
+        // Spedy: busca o id real por integrationId e só então faz o DELETE.
+        Http::fake([
+            '*/product-invoices?*'          => Http::response(['items' => [['id' => 'spedy-nf-1']]], 200),
+            '*/product-invoices/spedy-nf-1' => Http::response([], 200),
+        ]);
 
         $this->req($token, $oficina)
             ->postJson("/api/notas-fiscais/{$nota->id}/cancelar", ['motivo' => 'Erro no valor lancado na nota'])
             ->assertStatus(200);
 
-        Http::assertSent(fn ($r) => str_contains($r->url(), '/product-invoices/nf-abc') && $r['reason'] === 'Erro no valor lancado na nota');
+        Http::assertSent(fn ($r) => str_contains($r->url(), '/product-invoices/spedy-nf-1') && $r['reason'] === 'Erro no valor lancado na nota');
         $this->assertDatabaseHas('notas_fiscais', ['id' => $nota->id, 'status' => 'CANCELADA']);
     }
 }

@@ -32,7 +32,7 @@ class TenantIsolationTest extends TestCase
             'slug' => 'oficina-' . $sufixo . '-' . uniqid(), 'status' => 'ATIVA',
         ]);
         $usuario = Usuario::create([
-            'nome' => "Usuario {$sufixo}", 'email' => "user{$sufixo}@" . uniqid() . '.com', 'cpf' => '52998224725',
+            'nome' => "Usuario {$sufixo}", 'email' => "user{$sufixo}@" . uniqid() . '.com', 'cpf' => (string) mt_rand(10000000000, 99999999999),
             'role' => 'ADMIN', 'status' => 'ATIVO', 'senha_hash' => Hash::make('senha123'),
             'oficina_id' => $oficina->id,
         ]);

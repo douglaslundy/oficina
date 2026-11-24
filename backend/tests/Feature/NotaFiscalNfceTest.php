@@ -250,9 +250,10 @@ class NotaFiscalNfceTest extends TestCase
 
         Http::fake([
             '*/consumer-invoices' => Http::response(['id' => 'inv-1', 'status' => 'enqueued'], 202),
-            '*/consumer-invoices/*' => Http::response([
-                'status' => 'authorized', 'accessKey' => 'CHAVE-POLL', 'number' => '3',
-            ], 200),
+            // Consulta Spedy lista por ?integrationId= (não GET por id).
+            '*/consumer-invoices?*' => Http::response(['items' => [[
+                'id' => 'inv-1', 'status' => 'authorized', 'accessKey' => 'CHAVE-POLL', 'number' => '3',
+            ]]], 200),
         ]);
 
         $criar  = $this->withToken($token)->withHeaders($headers)->postJson('/api/notas-fiscais', $this->payloadVenda($cliente->id, $produto->id));

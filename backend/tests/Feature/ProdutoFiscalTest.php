@@ -426,6 +426,7 @@ class ProdutoFiscalTest extends TestCase
                 ['categoria' => 'Motor', 'ncm' => '84099090', 'origem' => 0, 'tributacao_icms' => 'NORMAL'],
             ]])->assertStatus(200);
 
+        \Illuminate\Support\Facades\Auth::forgetGuards(); // troca de usuário no mesmo teste
         $indexB = $this->withToken($tokenB)->withHeaders(['X-Tenant' => $oficinaB->slug])
             ->getJson('/api/categorias-fiscais');
 

@@ -1,7 +1,37 @@
 # Progresso do Projeto
 
 ## Última atualização
-2026-11-23 — **Venda balcão: total 0 na listagem + validação de pagamento. DEPLOYADO 2026-11-23 (commit fe454a7, backup `/opt/backups/pre-deploy-venda-pagamento-2026-11-23_22-16-35.dump`, sem migration, health 200).**
+2026-11-24 — **Detalhar fatura + suíte 100% verde + venda #37. NÃO commitado/deployado ainda.**
+- Minhas faturas: botão "Detalhar" em toda linha; modal "Detalhes da Fatura" mostra composição
+  (mensalidade/anuidade do plano = valor − soma dos itens; cada excedente "NF-e nº X (série Y) emitida em
+  dd/mm/aaaa" + texto explicando excedente). `GET /assinatura/faturas` passou a mandar `itens` (excedentes
+  agrupados, ou o próprio excedente "a faturar") com dados da nota; relação `Cobranca::notaFiscal()`.
+  Teste: `FaturaUnicaExcedentesTest::test_lista_de_faturas_detalha_excedentes_com_a_nota_de_origem`.
+- `e0c634a` (pagamento líquido/troco) CONFIRMADO em produção (código no container, health ok, backup
+  `pre-deploy-pagamento-liquido-2026-11-24_01-09-28.dump`).
+- Suíte: 865 → 864 testes, 0 falhas (era 24). Bugs reais corrigidos:
+  - `EmissaoOrquestradorService`: OS sem peça/serviço emitível dava 202 (sucesso vazio); agora 422.
+  - ISS: PHP 8.4 (produção) tirou o pre-rounding do `round()` → 150×2,01% = 3,015 virava 3,01. Agora
+    `round(round(base*aliq, 4)/100, 2)` em `CriarNotaFiscalService` e `SpedyProvider` (issAmount).
+    ARMADILHA: PHP local < 8.4 dá 3,02 e esconde o bug; outros `round()` de dinheiro podem ter o mesmo caso.
+  - Logout: sem sessão dava 500; cookies agora vão direto na resposta (`withCookie`, não `Cookie::queue`).
+  - Resto eram testes desatualizados: referer stateful no login, `Auth::forgetGuards()` ao trocar de usuário
+    no mesmo teste, SKU/CPF repetido no setup, fakes Spedy por `?integrationId=`, IE de cliente PJ,
+    Configuracao com CNPJ em /recebidas, teste "NFePHP não suporta recebidas" removido (agora suporta).
+- CORRIGIDO (pedido do usuário): `clientes.cpf_cnpj`, `produtos.sku`, `usuarios.cpf` eram UNIQUE globais
+  (banco e validação): cliente/SKU de uma oficina bloqueava outra e o 422 revelava o documento de outra
+  oficina. Migration `2026_11_24_000001_scope_unique_documentos_por_oficina` → unique(oficina_id, col) +
+  índice parcial `..._sem_oficina_unique` (WHERE oficina_id IS NULL). Validação via
+  `Rule::unique(...)->where('oficina_id', TenancyContext::get())` em Cliente/Produto/UsuarioController.
+  E-mail de usuário segue único global (login por e-mail). Teste `DocumentoUnicoPorOficinaTest` (3).
+  Suíte: 867 ok. Migration testada up/down/up (precisa `CACHE_STORE=array` fora do phpunit por causa da
+  migration do spatie).
+- Venda #37 stuntmotos: backup mostrou desconto 1150 (pagamento digitado no desconto) e R$1149,98 em dinheiro.
+  Gravado desconto 0,02 / total 1149,98 → saldo 0.
+- Receita de testes: tar do backend → /tmp/mp-suite na VPS, rede `mp-suite-net` + `postgres:16-alpine`,
+  imagem `mecanicapro-backend` com `composer install` (COMPOSER_MEMORY_LIMIT=-1) e phpunit `-d memory_limit=1G`.
+
+(anterior) 2026-11-23 — **Venda balcão: total 0 na listagem + validação de pagamento. DEPLOYADO 2026-11-23 (commit fe454a7, backup `/opt/backups/pre-deploy-venda-pagamento-2026-11-23_22-16-35.dump`, sem migration, health 200).**
 - Causa (dado real, stuntmotos): vendas 31, 36–41 com `desconto` = subtotal (ex.: #41 itens R$45, desconto R$45)
   → `valor_total` 0. Operador digitava o pagamento no campo "Desconto (R$)" (fica logo acima dos pagamentos).
   Backend clampava desconto no subtotal e aceitava. Também havia pagamento em dobro (#41: 2× R$45 débito).

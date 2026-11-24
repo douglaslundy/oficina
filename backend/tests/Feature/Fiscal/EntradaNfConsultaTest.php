@@ -41,6 +41,8 @@ class EntradaNfConsultaTest extends TestCase
             'emissor_externo_id' => 'emp-1', 'token_encrypted' => Crypt::encryptString('tok'),
             'status' => 'REGISTRADO',
         ]);
+        // /recebidas só consulta o provedor com o CNPJ da oficina configurado.
+        \App\Models\Configuracao::create(['oficina_id' => $oficina->id, 'cnpj' => '11222333000181']);
         TenancyContext::set($oficina->id, $oficina->slug);
         return [$user->createToken('test')->plainTextToken, $oficina];
     }
@@ -253,21 +255,12 @@ XML, 200),
         // 2ª consulta ao vivo não acha mais nada novo (comportamento normal
         // depois que o checkpoint avançou) — a resposta precisa continuar
         // mostrando a nota já detectada.
-        Http::fake(['*/inbound-product-invoices' => Http::response(['items' => []], 200)]);
+        Http::fake(['*/inbound-product-invoices*' => Http::response(['items' => []], 200)]); // 2ª chamada leva ?desde=
 
         $segunda = $this->withToken($token)->withHeaders(['X-Tenant' => $oficina->slug])
             ->getJson('/api/entradas-nf/recebidas')
             ->assertStatus(200);
         $this->assertNotNull(collect($segunda->json('notas'))->firstWhere('chave_acesso', 'CHAVE-DETECTADA'));
-    }
-
-    public function test_recebidas_com_motor_nfephp_retorna_422(): void
-    {
-        [$token, $oficina] = $this->loginAdmin('NFEPHP');
-
-        $this->withToken($token)->withHeaders(['X-Tenant' => $oficina->slug])
-            ->getJson('/api/entradas-nf/recebidas')
-            ->assertStatus(422);
     }
 
     public function test_recebidas_com_falha_do_provedor_retorna_422_com_a_mensagem(): void

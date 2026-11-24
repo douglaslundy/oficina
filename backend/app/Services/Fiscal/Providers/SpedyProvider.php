@@ -302,7 +302,7 @@ class SpedyProvider implements FiscalProvider, ConsultaNotaTerceiroProvider
             'total' => [
                 'invoiceAmount' => $n->valorServicos,
                 'issRate'       => $n->aliquotaIss / 100,
-                'issAmount'     => round($n->valorServicos * $n->aliquotaIss / 100, 2),
+                'issAmount'     => round(round($n->valorServicos * $n->aliquotaIss, 4) / 100, 2),
                 'issWithheld'   => $n->issRetido,
             ],
         ];

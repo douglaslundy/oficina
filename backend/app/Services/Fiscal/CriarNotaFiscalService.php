@@ -130,7 +130,7 @@ class CriarNotaFiscalService
         // Empresa > 5% (teto legal) só se nem isso existir (oficina sem
         // Configuracao cadastrada — não deveria acontecer em produção).
         $aliquota   = (float) ($dados['aliquota_iss'] ?? $configuracao?->aliquota_iss ?? 5.00);
-        $valorIss   = $ehVenda ? 0.0 : round((($subtotal - $desconto) * $aliquota) / 100, 2);
+        $valorIss   = $ehVenda ? 0.0 : round(round(($subtotal - $desconto) * $aliquota, 4) / 100, 2);
         // ISS é "por dentro" (LC 116/2003, art. 7º: "a base de cálculo do
         // imposto é o preço do serviço") — não é somado ao preço cobrado do
         // cliente, é uma fração dele. Bug real reportado pelo usuário

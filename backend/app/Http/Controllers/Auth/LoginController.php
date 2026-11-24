@@ -110,12 +110,15 @@ class LoginController extends Controller
     public function logout(Request $request): JsonResponse
     {
         Auth::guard('web')->logout();
-        $request->session()->invalidate();
-        $request->session()->regenerateToken();
-        Cookie::queue(Cookie::forget('oficina_logado'));
-        Cookie::queue(Cookie::forget('oficina_role'));
-
-        return response()->json(['message' => 'Logout realizado com sucesso.']);
+        // Sem sessão (requisição fora da origem stateful) não há o que invalidar; sair mesmo assim, sem 500.
+        if ($request->hasSession()) {
+            $request->session()->invalidate();
+            $request->session()->regenerateToken();
+        }
+        // Direto na resposta: Cookie::queue só é aplicado no stack stateful.
+        return response()->json(['message' => 'Logout realizado com sucesso.'])
+            ->withCookie(Cookie::forget('oficina_logado'))
+            ->withCookie(Cookie::forget('oficina_role'));
     }
 
     public function me(Request $request): JsonResponse

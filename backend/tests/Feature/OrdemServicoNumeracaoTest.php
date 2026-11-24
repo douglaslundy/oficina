@@ -45,7 +45,8 @@ class OrdemServicoNumeracaoTest extends TestCase
             ->postJson('/api/os', ['cliente_id' => $clienteA->id, 'status' => 'ABERTA', 'km_atual' => 1000]);
         $respA->assertStatus(201)->assertJsonPath('data.numero', 1);
 
-        $respB = $this->withToken($tokenB)->withHeaders(['X-Tenant' => $oficinaB->slug])
+        \Illuminate\Support\Facades\Auth::forgetGuards(); // troca de usuário no mesmo teste
+        $respB =$this->withToken($tokenB)->withHeaders(['X-Tenant' => $oficinaB->slug])
             ->postJson('/api/os', ['cliente_id' => $clienteB->id, 'status' => 'ABERTA', 'km_atual' => 1000]);
         $respB->assertStatus(201)->assertJsonPath('data.numero', 1);
     }

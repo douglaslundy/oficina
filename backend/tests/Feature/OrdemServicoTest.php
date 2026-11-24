@@ -46,7 +46,7 @@ class OrdemServicoTest extends TestCase
     private function criarProduto(int $qtyAtual = 10): Produto
     {
         return Produto::create([
-            'nome' => 'Filtro', 'sku' => 'FLT01', 'categoria' => 'Filtros',
+            'nome' => 'Filtro', 'sku' => 'FLT' . uniqid(), 'categoria' => 'Filtros',
             'qty_atual' => $qtyAtual, 'qty_minima' => 3, 'preco_venda' => 50,
         ]);
     }

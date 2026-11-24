@@ -103,9 +103,9 @@ class VerificarNotasTerceirosRecebidasTest extends TestCase
 
     public function test_nota_ja_notificada_anteriormente_nao_alerta_de_novo(): void
     {
-        $this->oficinaComCnpj();
+        $of = $this->oficinaComCnpj();
         $chave = str_repeat('3', 44);
-        \App\Models\NotaTerceiroNotificada::create(['chave_acesso' => $chave, 'fornecedor_nome' => 'X', 'valor_total' => 10]);
+        \App\Models\NotaTerceiroNotificada::create(['chave_acesso' => $chave, 'fornecedor_nome' => 'X', 'valor_total' => 10, 'oficina_id' => $of->id]);
         $provider = $this->fakeProvider([$this->resumo($chave)]);
 
         $this->mock(FiscalProviderManager::class, fn ($m) => $m->shouldReceive('forTenant')->andReturn($provider));
