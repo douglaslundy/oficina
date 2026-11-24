@@ -192,8 +192,22 @@ class OrdemServicoController extends Controller
                 $total    = round($total - $desconto, 2);
 
                 // Processar pagamentos múltiplos
+                $pagamentos = $validated['pagamentos'] ?? [];
+                if (($osData['tipo'] ?? null) === 'VENDA_BALCAO' && empty($osData['venda_a_prazo'])) {
+                    // Troco não é receita: desconta do dinheiro para os pagamentos
+                    // gravados somarem exatamente o total da venda.
+                    $troco = round(array_sum(array_column($pagamentos, 'valor')) - $total, 2);
+                    foreach ($pagamentos as $i => $pag) {
+                        if ($troco <= 0) break;
+                        if ($pag['forma_pagamento'] !== 'DINHEIRO') continue;
+                        $abate = min($troco, (float) $pag['valor']);
+                        $pagamentos[$i]['valor'] = round((float) $pag['valor'] - $abate, 2);
+                        $troco = round($troco - $abate, 2);
+                    }
+                    $pagamentos = array_filter($pagamentos, fn ($p) => (float) $p['valor'] > 0);
+                }
                 $totalPago = 0;
-                foreach ($validated['pagamentos'] ?? [] as $pag) {
+                foreach ($pagamentos as $pag) {
                     OsPagamento::create([
                         'os_id'           => $os->id,
                         'forma_pagamento' => $pag['forma_pagamento'],

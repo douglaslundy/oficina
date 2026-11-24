@@ -73,6 +73,17 @@ class VendaBalcaoFechamentoTest extends TestCase
         $this->postVenda(['pagamentos' => [['forma_pagamento' => 'DINHEIRO', 'valor' => 100]]])
             ->assertStatus(201)
             ->assertJsonPath('data.valor_pago', 50);
+        $this->assertEquals(50, (float) \App\Models\OsPagamento::sum('valor'));
+    }
+
+    public function test_troco_sai_do_dinheiro_e_cartao_fica_integral(): void
+    {
+        $this->postVenda(['pagamentos' => [
+            ['forma_pagamento' => 'CARTAO_CREDITO', 'valor' => 30],
+            ['forma_pagamento' => 'DINHEIRO', 'valor' => 50],
+        ]])->assertStatus(201);
+        $this->assertEquals(30, (float) \App\Models\OsPagamento::where('forma_pagamento', 'CARTAO_CREDITO')->sum('valor'));
+        $this->assertEquals(20, (float) \App\Models\OsPagamento::where('forma_pagamento', 'DINHEIRO')->sum('valor'));
     }
 
     public function test_a_prazo_sem_pagamento_e_aceito(): void
