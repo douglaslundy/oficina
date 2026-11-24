@@ -14,7 +14,10 @@
 - Armadilha: `ssh ... 'pgrep -f "bash deploy-vps.sh"'` casa com o próprio comando; e `timeout` local mata
   o ssh mas o deploy segue na VPS. Conferir pelo código dentro do container.
 
-2026-11-23 (b) — **Fatura única: excedentes entram na mensalidade. Em validação, NÃO commitado.**
+2026-11-23 (b) — **Fatura única: excedentes entram na mensalidade. DEPLOYADO 2026-11-24 (commit 1284a51, backup `/opt/backups/pre-deploy-fatura-unica-2026-11-24_01-01-41.dump`, migration rodou, health 200).**
+- stuntmotos: fatura Dez/2026 unificada = R$308,00 (299 + 2×4,50), link MP novo, antigo expirado; notas #21/#23 FATURADA.
+- Vendas antigas corrigidas (stuntmotos #29,31,36–41): desconto 0, valor_total = itens, valor_pago = min(pagos, total). #37 ficou saldo R$0,02 (pago 1149,98). Cliente BENTO recalculado: REGULAR.
+- Testes: suíte completa rodada em container temporário na VPS (imagem do backend + Postgres descartável, rede isolada): 863 testes, 24 falhas; as 2 de `OrdemServicoTest` confirmadas iguais no código anterior. Receita mais rápida que túnel SSH (14s vs ~6min/arquivo).
 - Antes: cada NOTA_EXCEDENTE virava cobrança própria (stuntmotos: Dez/2026 R$299 + 2× R$4,50 pendentes).
 - Agora: `cobrancas.fatura_id` (migration `2026_11_23_000001`). `CobrancaRecorrenteService::criarCobranca`
   soma `Cobranca::excedentesAFaturar()` (PENDENTE/VENCIDA sem fatura) no valor e marca os itens FATURADA
