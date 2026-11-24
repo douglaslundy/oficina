@@ -80,7 +80,7 @@ class ProdutoController extends Controller
 
         $validated = $request->validate(array_merge([
             'nome'          => ['required', 'string', 'max:150'],
-            'sku'           => ['nullable', 'string', 'max:30', 'unique:produtos,sku'],
+            'sku'           => ['nullable', 'string', 'max:30', Rule::unique('produtos', 'sku')->where('oficina_id', TenancyContext::get())],
             'codigo_barras' => ['nullable', 'string', 'max:20', Rule::unique('produtos', 'codigo_barras')->where('oficina_id', TenancyContext::get())],
             'categoria'     => ['required', 'string', 'max:40'],
             'unidade'       => ['nullable', 'string', 'max:10'],
@@ -131,7 +131,7 @@ class ProdutoController extends Controller
         $produto   = Produto::findOrFail($id);
         $validated = $request->validate(array_merge([
             'nome'          => ['sometimes', 'required', 'string', 'max:150'],
-            'sku'           => ['sometimes', 'required', 'string', 'max:30', "unique:produtos,sku,{$id}"],
+            'sku'           => ['sometimes', 'required', 'string', 'max:30', Rule::unique('produtos', 'sku')->where('oficina_id', TenancyContext::get())->ignore($id)],
             'codigo_barras' => ['nullable', 'string', 'max:20', Rule::unique('produtos', 'codigo_barras')->where('oficina_id', TenancyContext::get())->ignore($id)],
             'categoria'     => ['sometimes', 'required', 'string', 'max:40'],
             'unidade'       => ['nullable', 'string', 'max:10'],

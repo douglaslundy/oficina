@@ -13,6 +13,7 @@ use App\Tenancy\TenancyContext;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Http\Resources\Json\AnonymousResourceCollection;
+use Illuminate\Validation\Rule;
 
 class ClienteController extends Controller
 {
@@ -57,7 +58,7 @@ class ClienteController extends Controller
 
         $validated = $request->validate([
             'nome'           => ['required', 'string', 'max:150'],
-            'cpf_cnpj'       => ['required', 'string', 'unique:clientes,cpf_cnpj', $rule],
+            'cpf_cnpj'       => ['required', 'string', Rule::unique('clientes', 'cpf_cnpj')->where('oficina_id', TenancyContext::get()), $rule],
             'telefone'       => ['nullable', 'string', 'max:15'],
             'email'          => ['nullable', 'email', 'max:120'],
             // Bug real de produção (2026-09-14): um CEP de 7 dígitos (faltando
@@ -107,7 +108,7 @@ class ClienteController extends Controller
 
         $validated = $request->validate([
             'nome'           => ['sometimes', 'required', 'string', 'max:150'],
-            'cpf_cnpj'       => ['sometimes', 'required', 'string', "unique:clientes,cpf_cnpj,{$id}", $rule],
+            'cpf_cnpj'       => ['sometimes', 'required', 'string', Rule::unique('clientes', 'cpf_cnpj')->where('oficina_id', TenancyContext::get())->ignore($id), $rule],
             'telefone'       => ['nullable', 'string', 'max:15'],
             'email'          => ['nullable', 'email', 'max:120'],
             // Bug real de produção (2026-09-14): um CEP de 7 dígitos (faltando

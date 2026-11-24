@@ -8,6 +8,8 @@ use App\Services\PlanLimitService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Hash;
+use App\Tenancy\TenancyContext;
+use Illuminate\Validation\Rule;
 
 class UsuarioController extends Controller
 {
@@ -33,7 +35,7 @@ class UsuarioController extends Controller
         $validated = $request->validate([
             'nome'     => ['required', 'string', 'max:120'],
             'email'    => ['required', 'email', 'unique:usuarios,email'],
-            'cpf'      => ['required', 'string', 'size:11', 'unique:usuarios,cpf'],
+            'cpf'      => ['required', 'string', 'size:11', Rule::unique('usuarios', 'cpf')->where('oficina_id', TenancyContext::get())],
             'telefone' => ['nullable', 'string', 'max:15'],
             'role'     => ['required', 'in:ADMIN,MECANICO,ATENDENTE,FINANCEIRO'],
             'senha'    => ['required', 'string', 'min:8'],
